@@ -1,7 +1,7 @@
 export type CollectibleType = "coin" | "landmark" | "mountain_pass";
 export type CollectibleRarity = "common" | "rare" | "epic";
 export type CollectibleStatus = "published" | "archived";
-export type CollectibleCategory = "viewpoint" | "peak" | "castle" | "waterfall" | "mountain_pass";
+export type CollectibleCategory = "viewpoint" | "peak" | "castle" | "waterfall" | "place" | "mountain_pass";
 
 export interface CollectibleSource {
   sourceType: string;

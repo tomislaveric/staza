@@ -14,6 +14,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   with a 2.5D Collect effect, reward, and generated audio Chime.
 - [Coming soon](features/coming-soon/README.md) — add a reusable multi-language
   "Coming Soon" annotation and remove the unsupported Komoot external-route feature.
+- [Extend OSM/Wikidata Collectibles](features/extend-osm-wikidata-collectibles/README.md)
+  — import named places, improve source retry/cache behavior, and trigger
+  private-network DEV/PROD imports manually.
 - [GameEvent instead of Coin](features/gameevent-instead-of-coin/README.md) —
   generalize downstream Coin-passage records into typed game events.
 - [Highlight planner](features/highlight-planner/README.md) — formalize selected
@@ -65,7 +68,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   — idempotent, manual importer that seeds World with mountain passes from the
   official ODbL quäldich GeoJSON, preserving source identity and attribution.
 - [Milestone 15.6 — Automated OSM/Wikidata Collectible Pipeline](features/milestone-15-6-automated-osm-wikidata-collectible-pipeline/README.md)
-  — conservative cached Germany Overpass ingestion, Wikidata enrichment, and scored manual
+  — conservative Germany OSM extract ingestion, Wikidata enrichment, and scored manual
   World catalog import.
 - [Milestone 15 — Staza World v1](features/milestone-15-staza-world-v1/README.md)
   — replace the mock World map with a real MapLibre basemap, viewport-driven
@@ -258,6 +261,42 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
   imported; do not replace this GeoJSON import with website scraping without a
   separate licensing review. See
   [Milestone 15.4](features/milestone-15-4-quaeldich-pass-import/README.md).
+
+- **OSM extract snapshot:** The importer reads a committed OpenStreetMap extract
+  instead of querying a live API. Download the Geofabrik Germany PBF
+  (`https://download.geofabrik.de/europe/germany-latest.osm.pbf`, ODbL 1.0),
+  install `osmium-tool`, then run `npm run extract:osm-germany [path/to.pbf]`.
+  It filters the seven imported object classes, exports geometries (non-point
+  objects collapse to their bounding-box center), keeps only the retained tag
+  keys, and writes `fixtures/osm-germany.json` with `metadata` (source URL,
+  extract version, attribution, license, selectors, counts) plus `records`.
+  Commit that file and redeploy so the image carries it; refreshing the catalog
+  means regenerating and committing a new snapshot. Downloaded `*.osm.pbf`
+  files stay ignored.
+- **OSM/Wikidata collectible catalog:** `npm run import:osm-wikidata` imports the
+  committed snapshot (override with `-- --snapshot <file>` or `OSM_SNAPSHOT_FILE`)
+  of German OpenStreetMap landmarks (`© OpenStreetMap contributors`), enriches it
+  with Wikidata, and writes `landmark` records into the `collectibles` table.
+  Besides viewpoints, peaks, castles, and waterfalls it imports named
+  `place=square`, `place=quarter`, and named `tourism=attraction` objects as the
+  `place` primary category; existing categories still win for objects that match
+  both, and place candidates without a meaningful name are rejected. Add
+  `-- --dry-run` for a report without database writes and `-- --force-refresh`
+  to refresh Wikidata. The importer is manual, idempotent, never deletes missing
+  records, and only upserts `AUTO_PUBLISH` candidates. Uncached Wikidata batches
+  wait `WIKIDATA_BATCH_DELAY_MS` (default `5000`) between requests; transient
+  errors, timeouts, HTTP 429, and HTTP 5xx retry up to `WIKIDATA_MAX_ATTEMPTS`
+  (default `5`) with exponential backoff that honors `Retry-After`, while
+  non-transient client errors fail immediately. Exhausted lookups fall back to
+  validated stale cache where available and are reported. While running, the
+  importer logs timestamped UTC progress lines
+  (`[12:00:00Z] [wikidata] batch 7/96: resolved 50 QIDs`) for every batch,
+  pacing wait, retry, and phase, so a long pause is always attributable. The
+  Wikidata cache lives under ignored `data/` by default and can be moved with
+  `OSM_WIKIDATA_CACHE_DIR`. On servers the manual
+  "Import OSM/Wikidata collectibles" GitHub workflow runs the deployed image as
+  a one-off Compose container on the private network; see
+  [the deployment guide](ops/app/README.md#manual-osmwikidata-collectible-import).
 
 The app derives the event in three steps:
 

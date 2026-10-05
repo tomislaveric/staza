@@ -5,16 +5,15 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Collectible } from "../domain.js";
 import { normalizeOSMJsonLines, normalizeOSMRecord } from "./normalize.js";
-import { planOSMImport } from "./import.js";
+import { formatOSMImportReport, planOSMImport } from "./import.js";
 import { scoreCandidate } from "./score.js";
 import { enrichCandidates, WikidataClient } from "./wikidata.js";
 
 const extractionMetadata = {
-  sourceUrl: "https://overpass-api.de/api/interpreter",
-  sourceVersion: "overpass-de-v1",
+  sourceUrl: "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
+  sourceVersion: "geofabrik-germany-2026-10-01",
+  generatedAt: "2026-10-01T08:00:00.000Z",
   coverageComplete: true,
-  requestedRegions: 100,
-  completedRegions: 100,
   scanned: 10
 };
 const temporaryDirectories: string[] = [];
@@ -23,7 +22,7 @@ afterEach(async () => {
     rm(directory, { recursive: true, force: true })));
 });
 
-const buildPlan = async (existing: Collectible[] = [], fetchedAt = "2026-10-01T08:00:00.000Z") => {
+const buildPlan = async (existing: Collectible[] = []) => {
   const records = normalizeOSMJsonLines(await readFile("fixtures/osm-wikidata/candidates.jsonl", "utf8"));
   const fixtureEntities = JSON.parse(
     await readFile("fixtures/osm-wikidata/wikidata-entities.json", "utf8")
@@ -46,7 +45,7 @@ const buildPlan = async (existing: Collectible[] = [], fetchedAt = "2026-10-01T0
     directQidCount: enriched.directQidCount,
     resolvedQidCount: enriched.resolvedQidCount,
     unmatchedQidCount: enriched.unmatchedQidCount,
-    extractMetadata: { ...extractionMetadata, regions: [{ fetchedAt }] }
+    extractMetadata: extractionMetadata
   });
 };
 
@@ -62,7 +61,7 @@ describe("OSM import planning", () => {
     const castle = plan.created.find((item) => item.id === "osm:way:3001");
     expect(castle).toMatchObject({
       primaryCategory: "castle",
-      tags: ["historic", "viewpoint"],
+      tags: ["attraction", "historic", "viewpoint"],
       source: { sourceType: "osm", sourceExternalId: "way:3001" },
       wikidataQid: "Q1003",
       wikipediaReference: "de:Schloss_Beispiel",
@@ -146,6 +145,47 @@ describe("OSM import planning", () => {
       coverageComplete: false
     });
     expect(plan.missingUpstream).toEqual([]);
+  });
+
+  it("counts and reports place candidates alongside the existing categories", () => {
+    const records = [
+      { osmId: "600", tags: { place: "square", name: "Marktplatz Beispiel", heritage: "4", wikidata: "Q9", access: "yes" } },
+      { osmId: "601", tags: { tourism: "attraction", name: "Beispielbrunnen" } }
+    ].map(({ osmId, tags }, index) => {
+      const normalized = normalizeOSMRecord({
+        osmType: "node", osmId, latitude: 48 + index, longitude: 8, tags
+      });
+      if (!normalized.ok) throw new Error(normalized.rejection.reason);
+      return normalized.candidate;
+    });
+    const scored = records.map((candidate, index) =>
+      scoreCandidate(index === 0 ? { ...candidate, wikipediaSitelinkMatched: true } : candidate));
+    const plan = planOSMImport({
+      scanned: 2,
+      candidates: records,
+      scored,
+      rejected: [],
+      existing: [],
+      directQidCount: 1,
+      resolvedQidCount: 1,
+      unmatchedQidCount: 0,
+      extractMetadata: {}
+    });
+
+    expect(plan.categories.place).toBe(2);
+    expect(plan.created).toEqual([expect.objectContaining({
+      id: "osm:node:600",
+      primaryCategory: "place",
+      type: "landmark",
+      tags: ["historic", "square"],
+      value: 25,
+      radiusMeters: 70
+    })]);
+    expect(formatOSMImportReport(plan, {
+      dryRun: true,
+      sourceUrl: "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
+      extractMetadata: {}
+    })).toContain("viewpoint / peak / castle / waterfall / place: 0 / 0 / 0 / 0 / 2");
   });
 
   it("reports close same-name candidates without merging or publishing them", () => {

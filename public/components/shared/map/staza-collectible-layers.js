@@ -15,6 +15,7 @@ const CATEGORY_FILL = ["match", ["get", "category"],
   "peak", "#6d9f55",
   "castle", "#c47a44",
   "waterfall", "#397fc4",
+  "place", "#b06ea8",
   UNVISITED_FILL];
 
 /** Rarity is carried by the ring so the map never becomes a field of bright tokens. */

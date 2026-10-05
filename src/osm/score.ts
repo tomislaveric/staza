@@ -120,6 +120,22 @@ export const scoreCandidate = (candidate: OSMCandidate): ScoredCandidate => {
       }
       break;
     }
+    case "place": {
+      if (candidate.tags.place === "square" || candidate.tags.place === "quarter") {
+        categoryEvidence += 10;
+        reasons.push(`Explicit place=${candidate.tags.place} classification: +10`);
+      }
+      if (candidate.tags.heritage || candidate.tags["heritage:operator"] || candidate.tags.historic) {
+        categoryEvidence += 10;
+        reasons.push("Structured heritage/historic identity: +10");
+      }
+      if (candidate.tags.website || candidate.tags["contact:website"] ||
+        candidate.tags.operator || candidate.tags.ref) {
+        categoryEvidence += 5;
+        reasons.push("Official website/operator reference: +5");
+      }
+      break;
+    }
   }
   score += categoryEvidence;
   score = Math.max(0, Math.min(100, score));

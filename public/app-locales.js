@@ -359,6 +359,7 @@ const germanCopy = {
   Peak: "Gipfel",
   Castle: "Burg",
   Waterfall: "Wasserfall",
+  Place: "Ort",
   Draft: "Entwurf",
   Complete: "Abgeschlossen",
   "No collectibles yet": "Noch keine Sammelobjekte",

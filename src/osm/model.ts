@@ -3,21 +3,23 @@ import type { Collectible, CollectibleCategory } from "../domain.js";
 export const OSM_SOURCE_TYPE = "osm";
 export const OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 export const OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright";
-export const OVERPASS_API_URL = "https://overpass-api.de/api/interpreter";
 
+/** Existing categories win over the broader `place` fallback for overlapping objects. */
 export const OSM_CATEGORY_ORDER: Exclude<CollectibleCategory, "mountain_pass">[] =
-  ["castle", "peak", "waterfall", "viewpoint"];
+  ["castle", "peak", "waterfall", "viewpoint", "place"];
 export const COLLECTIBLE_VALUES: Record<Exclude<CollectibleCategory, "mountain_pass">, number> = {
   viewpoint: 20,
   peak: 50,
   castle: 35,
-  waterfall: 35
+  waterfall: 35,
+  place: 25
 };
 export const COLLECTIBLE_RADII: Record<Exclude<CollectibleCategory, "mountain_pass">, number> = {
   viewpoint: 60,
   peak: 90,
   castle: 75,
-  waterfall: 75
+  waterfall: 75,
+  place: 70
 };
 
 export interface OSMRecord {

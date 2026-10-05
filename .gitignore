@@ -81,3 +81,7 @@ data/
 tmp/
 dev.env
 prod.env
+
+# Local OpenStreetMap extracts used to build fixtures/osm-germany.json
+*.osm.pbf
+*.osm.pbf.md5

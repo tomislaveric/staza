@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { OVERPASS_API_URL } from "./osm/model.js";
+import { DEFAULT_OSM_SNAPSHOT_FILE } from "./osm/snapshot.js";
 
 const envFile = path.resolve(".env");
 if (existsSync(envFile)) process.loadEnvFile(envFile);
@@ -123,8 +123,10 @@ export const config = {
     "QUAELDICH_GEOJSON_URL",
     "https://www.quaeldich.de/common/js/paesse_geojson.php?license=odbl"
   ),
-  overpassApiUrl: httpsUrlEnv("OVERPASS_API_URL", OVERPASS_API_URL),
-  wikidataBatchDelayMs: nonNegativeIntegerEnv("WIKIDATA_BATCH_DELAY_MS", 1_000),
+  osmSnapshotFile: path.resolve(process.env.OSM_SNAPSHOT_FILE?.trim() || DEFAULT_OSM_SNAPSHOT_FILE),
+  wikidataCacheDir: path.resolve(process.env.OSM_WIKIDATA_CACHE_DIR ?? "./data/osm-wikidata-cache"),
+  wikidataBatchDelayMs: nonNegativeIntegerEnv("WIKIDATA_BATCH_DELAY_MS", 5_000),
+  wikidataMaxAttempts: integerEnv("WIKIDATA_MAX_ATTEMPTS", 5),
   mountainPassDefaultRadiusMeters: decimalEnv("MOUNTAIN_PASS_DEFAULT_RADIUS_M", 90),
   databaseUrl: process.env.DATABASE_URL?.trim(),
   defaultPlayerId: uuidEnv("DEFAULT_PLAYER_ID", "00000000-0000-4000-8000-000000000001"),

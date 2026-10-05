@@ -106,6 +106,49 @@ container diagnostics. DEV deployments use concurrency group `app-dev` and
 cancel older in-progress deployments; PROD uses `app-prod` and does not cancel
 an active release deployment.
 
+## Manual OSM/Wikidata collectible import
+
+`.github/workflows/import-osm-wikidata.yml` is a manual `workflow_dispatch`
+workflow that runs the collectible importer on one server. Inputs:
+
+| Input | Meaning |
+| --- | --- |
+| `target` | `dev` or `prod`; selects the `app-dev` or `app-prod` GitHub environment. |
+| `dry_run` | Defaults to `true`. Reports a plan and writes nothing to PostgreSQL. |
+
+The job reuses the environment secrets `SSH_HOST`, `SSH_USER`,
+`SSH_PRIVATE_KEY` and variables `REMOTE_PATH` and `SSH_PORT` that the
+deployment workflows already require. No database credential is configured in
+GitHub: `scripts/import-osm-wikidata.sh` connects over SSH and starts a one-off
+container with `docker compose run --rm app node
+dist/persistence/importOSMWikidata.js`, so Compose supplies `DATABASE_URL`
+privately on the server's internal network. GitHub-hosted runners never reach
+PostgreSQL. The script fails if `DATABASE_URL` is present in the runner
+environment.
+
+The one-off container uses the image tag currently recorded in the server
+`.env`, so the updated app image must be deployed to that environment before
+its import run can use new importer behavior. The import never pulls, deploys,
+recreates, or restarts the app service. PROD environment protection and
+approval rules continue to apply.
+
+OSM objects come from the committed `fixtures/osm-germany.json` extract that
+ships inside the deployed image, so the run contacts only Wikidata. The job
+fails early if the image carries no snapshot. Refreshing the catalog means
+regenerating the snapshot locally (`npm run extract:osm-germany`), committing
+it, and redeploying the image before running the import.
+
+The Wikidata cache persists under the mounted app-data volume at
+`/data/osm-cache/wikidata` (`OSM_WIKIDATA_CACHE_DIR`), so repeated one-off
+containers reuse validated entities. Uncached batches are paced
+(`WIKIDATA_BATCH_DELAY_MS`, 5000 ms) and transient failures retry up to
+`WIKIDATA_MAX_ATTEMPTS` (5) with exponential backoff honoring `Retry-After`.
+The workflow log streams timestamped UTC progress lines for each batch, pacing
+wait, and retry, so a long-running job can be followed live.
+
+Run a dry run first, read its report, then rerun with `dry_run: false` on DEV
+before selecting PROD.
+
 ## Manual commands
 
 Run each command for only one environment at a time. For DEV:

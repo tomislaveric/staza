@@ -80,6 +80,7 @@ describe("collectible source and layers", () => {
         "peak", "#6d9f55",
         "castle", "#c47a44",
         "waterfall", "#397fc4",
+        "place", "#b06ea8",
         "#171a20"]
     ]);
     const stroke = JSON.stringify(paint["circle-stroke-color"]);

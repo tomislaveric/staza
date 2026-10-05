@@ -3,11 +3,12 @@ import { createInterface } from "node:readline";
 import type { CollectibleCategory } from "../domain.js";
 import { OSM_CATEGORY_ORDER, type OSMCandidate, type OSMRecord } from "./model.js";
 
-const categoryTags: Record<Exclude<CollectibleCategory, "mountain_pass">, [string, string]> = {
-  viewpoint: ["tourism", "viewpoint"],
-  peak: ["natural", "peak"],
-  castle: ["historic", "castle"],
-  waterfall: ["waterway", "waterfall"]
+const categoryMatchers: Record<Exclude<CollectibleCategory, "mountain_pass">, (tags: Record<string, string>) => boolean> = {
+  viewpoint: (tags) => tags.tourism === "viewpoint",
+  peak: (tags) => tags.natural === "peak",
+  castle: (tags) => tags.historic === "castle",
+  waterfall: (tags) => tags.waterway === "waterfall",
+  place: (tags) => tags.place === "square" || tags.place === "quarter" || tags.tourism === "attraction"
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -53,19 +54,19 @@ export const normalizeOSMRecord = (input: unknown): OSMNormalizeResult => {
     return { ok: false, rejection: { ...identity, reason: "Invalid OSM tags." } };
   }
   const tags = input.tags as Record<string, string>;
-  const categories = OSM_CATEGORY_ORDER.filter((category) => {
-    const [key, value] = categoryTags[category];
-    return tags[key] === value;
-  });
+  const categories = OSM_CATEGORY_ORDER.filter((category) => categoryMatchers[category](tags));
   if (categories.length === 0) {
     return { ok: false, rejection: { ...identity, reason: "Object does not match an imported category." } };
   }
   const rawName = tags["name:de"]?.trim() || tags.name?.trim();
-  const meaningfulName = rawName && !/^(?:unnamed|unbenannt|unknown|no name|ohne namen|namenlos|peak|castle|burg|schloss|ruine|waterfall|wasserfall|viewpoint|aussicht|aussichtspunkt|gipfel|\?|-|n\/a)$/i.test(rawName)
+  const meaningfulName = rawName && !/^(?:unnamed|unbenannt|unknown|no name|ohne namen|namenlos|peak|castle|burg|schloss|ruine|waterfall|wasserfall|viewpoint|aussicht|aussichtspunkt|gipfel|platz|marktplatz|square|quarter|viertel|stadtteil|altstadt|attraction|sehenswürdigkeit|\?|-|n\/a)$/i.test(rawName)
     ? rawName
     : undefined;
   if (rawName && !meaningfulName) {
     return { ok: false, rejection: { ...identity, reason: "OSM name is not meaningful." } };
+  }
+  if (categories[0] === "place" && !meaningfulName) {
+    return { ok: false, rejection: { ...identity, reason: "Place candidate has no meaningful name." } };
   }
   const wikidataQid = tags.wikidata?.trim();
   if (wikidataQid && !/^Q[1-9]\d*$/.test(wikidataQid)) {
@@ -76,6 +77,9 @@ export const normalizeOSMRecord = (input: unknown): OSMNormalizeResult => {
   if (tags.tourism === "viewpoint") catalogTags.add("viewpoint");
   if (tags.historic || tags.heritage) catalogTags.add("historic");
   if (tags.natural === "peak") catalogTags.add("summit");
+  if (tags.place === "square") catalogTags.add("square");
+  if (tags.place === "quarter") catalogTags.add("quarter");
+  if (tags.tourism === "attraction") catalogTags.add("attraction");
   catalogTags.delete(categories[0]);
   const elevationMeters = parseMeasurement(tags.ele);
   if (tags.ele !== undefined && (

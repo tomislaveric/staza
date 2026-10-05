@@ -54,6 +54,51 @@ describe("OSM normalization", () => {
     if (unnamed.ok) expect(unnamed.candidate).not.toHaveProperty("name");
   });
 
+  it("imports named squares, quarters, and standalone attractions as place candidates", () => {
+    const square = normalizeOSMRecord({
+      osmType: "way", osmId: "500", latitude: 48, longitude: 8,
+      tags: { place: "square", name: "Marktplatz Beispiel", heritage: "4" }
+    });
+    expect(square.ok && square.candidate.primaryCategory).toBe("place");
+    expect(square.ok && square.candidate.categories).toEqual(["place"]);
+    expect(square.ok && square.candidate.tagsForCatalog).toEqual(["historic", "square"]);
+
+    const quarter = normalizeOSMRecord({
+      osmType: "relation", osmId: "501", latitude: 48, longitude: 8,
+      tags: { place: "quarter", name: "Beispielviertel" }
+    });
+    expect(quarter.ok && quarter.candidate.primaryCategory).toBe("place");
+    expect(quarter.ok && quarter.candidate.tagsForCatalog).toEqual(["quarter"]);
+
+    const attraction = normalizeOSMRecord({
+      osmType: "node", osmId: "502", latitude: 48, longitude: 8,
+      tags: { tourism: "attraction", name: "Beispielbrunnen" }
+    });
+    expect(attraction.ok && attraction.candidate.primaryCategory).toBe("place");
+    expect(attraction.ok && attraction.candidate.tagsForCatalog).toEqual(["attraction"]);
+  });
+
+  it("keeps existing categories ahead of place and requires a meaningful place name", () => {
+    const castle = normalizeOSMRecord({
+      osmType: "way", osmId: "503", latitude: 48, longitude: 8,
+      tags: { historic: "castle", tourism: "attraction", place: "square", name: "Schloss Beispiel" }
+    });
+    expect(castle.ok && castle.candidate.primaryCategory).toBe("castle");
+    expect(castle.ok && castle.candidate.categories).toEqual(["castle", "place"]);
+    expect(castle.ok && castle.candidate.tagsForCatalog).toEqual(["attraction", "historic", "square"]);
+
+    for (const tags of [
+      { tourism: "attraction" },
+      { place: "square" },
+      { tourism: "attraction", name: "Attraction" },
+      { place: "square", name: "Marktplatz" }
+    ]) {
+      expect(normalizeOSMRecord({
+        osmType: "node", osmId: "504", latitude: 48, longitude: 8, tags
+      })).toMatchObject({ ok: false });
+    }
+  });
+
   it("reports malformed JSON and duplicate OSM object identities without overriding the first", async () => {
     const fixture = await readFile("fixtures/osm-wikidata/candidates.jsonl", "utf8");
     const normalized = normalizeOSMJsonLines(fixture);
@@ -120,6 +165,33 @@ describe("explainable collectible scoring", () => {
       waterway: "waterfall", name: "Small Fall", wikidata: "Q4", access: "yes", height: "10"
     })).score).toBe(65);
     expect(scoreCandidate(candidate({ waterway: "waterfall", height: "3" })).score).toBe(0);
+  });
+
+  it("scores places from deterministic, explainable evidence without lowering thresholds", () => {
+    const squareAuto = candidate({
+      place: "square", name: "Marktplatz Beispiel", wikidata: "Q5", wikipedia: "de:Marktplatz",
+      heritage: "4", access: "yes"
+    }, "505");
+    const scoredAuto = scoreCandidate({ ...squareAuto, wikipediaSitelinkMatched: true });
+    expect(scoredAuto).toMatchObject({ score: 90, decision: "AUTO_PUBLISH" });
+    expect(scoredAuto.reasons).toContain("Explicit place=square classification: +10");
+    expect(scoredAuto.reasons).toContain("Structured heritage/historic identity: +10");
+
+    const quarterReview = scoreCandidate({
+      ...candidate({ place: "quarter", name: "Beispielviertel", wikidata: "Q6", wikipedia: "de:Viertel" }, "506"),
+      wikipediaSitelinkMatched: true
+    });
+    expect(quarterReview).toMatchObject({ score: 70, decision: "REVIEW" });
+
+    const attractionWeak = scoreCandidate(candidate({
+      tourism: "attraction", name: "Beispielbrunnen"
+    }, "507"));
+    expect(attractionWeak).toMatchObject({ score: 25, decision: "IGNORE" });
+    expect(attractionWeak.reasons).not.toContain("Explicit place=square classification: +10");
+
+    expect(scoreCandidate(candidate({
+      place: "square", name: "Privater Platz", access: "private"
+    }, "508")).decision).toBe("REJECT");
   });
 
   it("does not award stacked elevation/prominence or score access-conflicted targets", () => {

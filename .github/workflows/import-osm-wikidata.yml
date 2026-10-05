@@ -1,0 +1,45 @@
+name: Import OSM/Wikidata collectibles
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Target environment
+        type: choice
+        required: true
+        default: dev
+        options:
+          - dev
+          - prod
+      dry_run:
+        description: Report only; never write to the database
+        type: boolean
+        required: true
+        default: true
+
+concurrency:
+  group: import-osm-wikidata-${{ inputs.target }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    environment:
+      name: app-${{ inputs.target }}
+    steps:
+      - name: Check out the workflow commit
+        uses: actions/checkout@v6
+
+      - name: Run the importer on the selected server
+        env:
+          IMPORT_TARGET: ${{ inputs.target }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          REMOTE_PATH: ${{ vars.REMOTE_PATH }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PORT: ${{ vars.SSH_PORT }}
+        run: ./scripts/import-osm-wikidata.sh

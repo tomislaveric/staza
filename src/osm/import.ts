@@ -356,7 +356,8 @@ export const planOSMImport = (input: {
     viewpoint: 0,
     peak: 0,
     castle: 0,
-    waterfall: 0
+    waterfall: 0,
+    place: 0
   };
   for (const candidate of input.candidates) {
     for (const category of candidate.categories) categories[category] += 1;
@@ -402,40 +403,20 @@ export const formatOSMImportReport = (
     writeBlocked?: boolean;
   }
 ): string => {
-  const failedRegions = Array.isArray(options.extractMetadata.failedRegions)
-    ? options.extractMetadata.failedRegions
-    : [];
-  const fetchedAtValues = Array.isArray(options.extractMetadata.regions)
-    ? options.extractMetadata.regions.flatMap((item) => {
-        const region = item && typeof item === "object" && !Array.isArray(item)
-          ? item as Record<string, unknown>
-          : undefined;
-        return typeof region?.fetchedAt === "string" ? [region.fetchedAt] : [];
-      }).sort()
-    : [];
-  const cacheSnapshot = fetchedAtValues.length === 0
-    ? "provided input"
-    : fetchedAtValues[0] === fetchedAtValues[fetchedAtValues.length - 1]
-      ? fetchedAtValues[0]
-      : `${fetchedAtValues[0]} to ${fetchedAtValues[fetchedAtValues.length - 1]}`;
   const lines = [
     options.writeBlocked
-      ? "OSM + Wikidata import blocked: incomplete Overpass coverage"
+      ? "OSM + Wikidata import blocked: incomplete source coverage"
       : options.dryRun
         ? "OSM + Wikidata import (dry run) complete"
         : "OSM + Wikidata import complete",
     "",
     `Source:                  ${options.sourceUrl}`,
     `Coverage complete:       ${String(options.extractMetadata.coverageComplete ?? true)}`,
-    `Overpass regions:        ${String(options.extractMetadata.completedRegions ?? "provided")} / ${String(options.extractMetadata.requestedRegions ?? "provided")}`,
-    `Cache hits / fetched:    ${String(options.extractMetadata.cacheHits ?? "n/a")} / ${String(options.extractMetadata.fetchedRegions ?? "n/a")}`,
-    `Cache snapshot:          ${cacheSnapshot}`,
-    `Stale cache fallbacks:   ${String(options.extractMetadata.staleFallbackRegions ?? 0)}`,
-    `Failed regions:          ${failedRegions.length}`,
-    `Tile overlap duplicates: ${String(options.extractMetadata.duplicateObjects ?? 0)}`,
+    `Extract version:         ${String(options.extractMetadata.sourceVersion ?? "provided input")}`,
+    `Extract generated:       ${String(options.extractMetadata.generatedAt ?? "provided input")}`,
     `OSM objects scanned:     ${plan.scanned}`,
     `Category candidates:     ${Object.values(plan.categories).reduce((sum, count) => sum + count, 0)}`,
-    `  viewpoint / peak / castle / waterfall: ${plan.categories.viewpoint} / ${plan.categories.peak} / ${plan.categories.castle} / ${plan.categories.waterfall}`,
+    `  viewpoint / peak / castle / waterfall / place: ${plan.categories.viewpoint} / ${plan.categories.peak} / ${plan.categories.castle} / ${plan.categories.waterfall} / ${plan.categories.place}`,
     `Direct Wikidata Q-IDs:   ${plan.directQidCount}`,
     `Resolved Wikidata:       ${plan.resolvedQidCount}`,
     `Unmatched Wikidata:      ${plan.unmatchedQidCount}`,
@@ -491,13 +472,8 @@ export const formatOSMImportReport = (
     lines.push("", "Sample missing upstream (not deleted or archived):");
     sample(plan.missingUpstream, (item) => `${item.name} (${item.id})`);
   }
-  if (failedRegions.length > 0) {
-    lines.push("", "Failed Overpass regions:");
-    sample(failedRegions, (item) => {
-      const failure = item as Record<string, unknown>;
-      return `${String(failure.regionId ?? "?")} (${String(failure.stateName ?? "?")}, ${String(failure.attempts ?? "?")} attempts): ${String(failure.error ?? "unknown error")}`;
-    });
-    lines.push("Missing-upstream conclusions are suppressed until coverage is complete.");
+  if (options.extractMetadata.coverageComplete === false) {
+    lines.push("", "Source coverage is incomplete; missing-upstream conclusions are suppressed.");
   }
   return lines.join("\n");
 };

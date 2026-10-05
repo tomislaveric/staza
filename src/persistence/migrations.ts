@@ -323,4 +323,14 @@ export const migrations: Migration[] = [{
       DROP TABLE IF EXISTS quest_external_routes;
     `);
   }
+}, {
+  id: "015_place_primary_category",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE collectibles DROP CONSTRAINT collectibles_primary_category_check;
+      ALTER TABLE collectibles ADD CONSTRAINT collectibles_primary_category_check
+        CHECK (primary_category IS NULL OR primary_category IN
+          ('viewpoint', 'peak', 'castle', 'waterfall', 'place', 'mountain_pass'));
+    `);
+  }
 }];

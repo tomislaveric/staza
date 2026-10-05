@@ -85,19 +85,81 @@ describe("Wikidata enrichment", () => {
     const cacheDirectory = await makeCache();
     const cacheClient = new WikidataClient({
       cacheDirectory,
+      sleeper: async () => undefined,
       fetcher: async () => new Response(JSON.stringify({ entities: { Q1001: entities.Q1001 } }), { status: 200 })
     });
     await cacheClient.lookup(["Q1001"]);
     const offlineClient = new WikidataClient({
       cacheDirectory,
-      fetcher: async () => { throw new Error("offline"); }
+      fetcher: async () => { throw new Error("offline"); },
+      sleeper: async () => undefined,
+      random: () => 0
     });
     const result = await offlineClient.lookup(["Q1001", "Q1002"], { forceRefresh: true });
-    expect(result.get("Q1001")).toMatchObject({ stale: true, cacheHit: true, entity: { id: "Q1001" } });
-    expect(result.get("Q1002")).toMatchObject({ error: "offline" });
+    expect(result.get("Q1001")).toMatchObject({
+      stale: true,
+      cacheHit: true,
+      entity: { id: "Q1001" },
+      attempts: 5
+    });
+    expect(result.get("Q1002")).toMatchObject({ error: "offline", attempts: 5 });
   });
 
-  it("waits between uncached batches but not before the first request", async () => {
+  it("retries transient Wikidata failures, honors Retry-After, and stops at five attempts", async () => {
+    const delays: number[] = [];
+    const sleeper = vi.fn(async (milliseconds: number) => {
+      delays.push(milliseconds);
+    });
+    let calls = 0;
+    const fetcher = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) return new Response("slow down", { status: 429, headers: { "retry-after": "3" } });
+      if (calls === 2) return new Response("server error", { status: 503 });
+      return new Response(JSON.stringify({ entities: { Q1001: { id: "Q1001" } } }), { status: 200 });
+    });
+    const client = new WikidataClient({
+      cacheDirectory: await makeCache(),
+      fetcher,
+      sleeper,
+      random: () => 0,
+      now: () => new Date("2026-10-01T08:00:00.000Z")
+    });
+
+    const result = await client.lookup(["Q1001"]);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(delays).toEqual([3000, 2000]);
+    expect(result.get("Q1001")).toMatchObject({ entity: { id: "Q1001" }, attempts: 3 });
+
+    const exhausted = new WikidataClient({
+      cacheDirectory: await makeCache(),
+      fetcher: async () => new Response("server error", { status: 503 }),
+      sleeper: async () => undefined,
+      random: () => 0
+    });
+    expect((await exhausted.lookup(["Q1001"])).get("Q1001")).toMatchObject({
+      error: "Wikidata returned HTTP 503.",
+      attempts: 5
+    });
+  });
+
+  it("does not retry non-transient Wikidata client errors", async () => {
+    const fetcher = vi.fn(async () => new Response("bad request", { status: 400 }));
+    const client = new WikidataClient({
+      cacheDirectory: await makeCache(),
+      fetcher,
+      sleeper: async () => {
+        throw new Error("non-transient failures must not back off");
+      }
+    });
+
+    expect((await client.lookup(["Q1001"])).get("Q1001")).toMatchObject({
+      error: "Wikidata returned HTTP 400.",
+      attempts: 1
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits five seconds between uncached batches by default but not before the first request", async () => {
     const qids = Array.from({ length: 51 }, (_value, index) => `Q${index + 1}`);
     const sleeper = vi.fn(async () => undefined);
     const fetcher = vi.fn(async (url: string | URL | Request) => {
@@ -119,5 +181,14 @@ describe("Wikidata enrichment", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(sleeper).toHaveBeenCalledTimes(1);
     expect(sleeper).toHaveBeenCalledWith(750);
+
+    const defaultSleeper = vi.fn(async () => undefined);
+    const defaultClient = new WikidataClient({
+      cacheDirectory: await makeCache(),
+      fetcher,
+      sleeper: defaultSleeper
+    });
+    await defaultClient.lookup(qids);
+    expect(defaultSleeper).toHaveBeenCalledWith(5000);
   });
 });
