@@ -261,8 +261,8 @@ echo "Migration: running compiled one-off migration."
 compose run --rm app node dist/persistence/migrate.js
 echo "Migration: completed."
 
-echo "Recreating Compose services."
-compose up -d
+echo "Recreating app service with the current image and environment."
+compose up -d --force-recreate app
 
 echo "Waiting for app container health."
 health_status=unknown
