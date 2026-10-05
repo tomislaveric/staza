@@ -34,7 +34,6 @@ export const QuestCard = (quest, selectedQuestId) => `
       <span class="quest-card-meta">
         <small>${escapeHtml(quest.collectibleCount)} collectibles</small>
         ${quest.hasRoute ? "<small>Route</small>" : ""}
-        ${quest.hasExternalRoute ? "<small>External route</small>" : ""}
       </span>
     </button>
   </li>

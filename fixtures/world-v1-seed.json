@@ -536,12 +536,7 @@
         "rathaus-karlsruhe",
         "stadtkirche",
         "staatstheater"
-      ],
-      "externalRoute": {
-        "provider": "komoot",
-        "url": "https://www.komoot.com/smarttour/e1194285/karlsruhe-city-loop",
-        "title": "Karlsruhe city loop"
-      }
+      ]
     },
     {
       "title": "Durlach and the Turmberg",
@@ -553,12 +548,7 @@
         "karlsburg-durlach",
         "turmbergbahn",
         "turmberg"
-      ],
-      "externalRoute": {
-        "provider": "komoot",
-        "url": "https://www.komoot.com/smarttour/e1194286/durlach-turmberg",
-        "title": "Durlach and Turmberg"
-      }
+      ]
     },
     {
       "title": "Rhine and Harbour",

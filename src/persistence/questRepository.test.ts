@@ -63,7 +63,7 @@ const result = (activityId: string): ActivityResult => ({
 describePersistence("World catalog and quests", () => {
   beforeEach(async () => {
     await migrate(pool!);
-    await pool!.query("TRUNCATE quest_external_routes, quest_routes, quest_collectibles, quests, collectibles, activity_events, activities, players CASCADE");
+    await pool!.query("TRUNCATE quest_routes, quest_collectibles, quests, collectibles, activity_events, activities, players CASCADE");
     await pool!.query("INSERT INTO players (id, display_name) VALUES ($1, $2), ($3, $4)", [
       creatorId, "Creator", otherPlayerId, "Explorer"
     ]);
@@ -170,7 +170,7 @@ describePersistence("World catalog and quests", () => {
 
     it("lets only the creator edit, publish, and delete", async () => {
       const questId = await quests!.create(creatorId, { title: "Mine", collectibleIds: ["schloss"] });
-      await expect(quests!.update(otherPlayerId, questId, { title: "Stolen", externalRouteProvided: false }))
+      await expect(quests!.update(otherPlayerId, questId, { title: "Stolen" }))
         .rejects.toBeInstanceOf(QuestNotFoundError);
       await expect(quests!.setStatus(otherPlayerId, questId, "published"))
         .rejects.toBeInstanceOf(QuestNotFoundError);
@@ -178,32 +178,24 @@ describePersistence("World catalog and quests", () => {
       expect((await quests!.get(creatorId, questId, [])).title).toBe("Mine");
     });
 
-    it("edits title, description, collectibles, and the external route", async () => {
+    it("edits title, description, and collectibles", async () => {
       const questId = await quests!.create(creatorId, { title: "Draft", collectibleIds: ["schloss"] });
       await quests!.update(creatorId, questId, {
         title: "Edited",
-        description: "Now with a link",
-        collectibleIds: ["turmberg", "rheinhafen"],
-        externalRouteProvided: true,
-        externalRoute: { provider: "komoot", url: "https://www.komoot.com/tour/1", title: "Loop" }
+        description: "Now updated",
+        collectibleIds: ["turmberg", "rheinhafen"]
       });
       const edited = await quests!.get(creatorId, questId, []);
       expect(edited.title).toBe("Edited");
-      expect(edited.description).toBe("Now with a link");
+      expect(edited.description).toBe("Now updated");
       expect(edited.collectibles.map((item) => item.id).sort()).toEqual(["rheinhafen", "turmberg"]);
-      expect(edited.externalRoute).toEqual({ provider: "komoot", url: "https://www.komoot.com/tour/1", title: "Loop" });
-      expect(edited.hasExternalRoute).toBe(true);
-
-      await quests!.update(creatorId, questId, { externalRouteProvided: true });
-      expect((await quests!.get(creatorId, questId, [])).externalRoute).toBeUndefined();
     });
 
     it("recentres a quest when its collectibles change", async () => {
       const questId = await quests!.create(creatorId, { title: "Moves", collectibleIds: ["schloss"] });
       await quests!.setStatus(creatorId, questId, "published");
       await quests!.update(creatorId, questId, {
-        collectibleIds: ["freiburg-muenster"],
-        externalRouteProvided: false
+        collectibleIds: ["freiburg-muenster"]
       });
       expect(await quests!.listWithinBounds(otherPlayerId, karlsruhe, [], 300)).toEqual([]);
       expect(await quests!.listWithinBounds(otherPlayerId, freiburg, [], 300)).toHaveLength(1);

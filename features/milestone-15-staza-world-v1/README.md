@@ -1,5 +1,12 @@
 # Milestone 15 — Staza World v1
 
+> **Update (superseded):** The curated external route links / Komoot provider
+> described below were removed from the product. The quest "View route" CTA is now a
+> "Create route" placeholder marked Coming Soon. See
+> [`features/coming-soon`](../coming-soon/README.md). Sections mentioning external
+> routes, the `quest_external_routes` table, or Komoot are retained for historical
+> context only and no longer reflect the codebase.
+
 ## Goal
 
 Build the first real Staza World experience around a simple product idea:

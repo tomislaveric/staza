@@ -4,8 +4,6 @@ import type {
   ActivityType,
   Collectible,
   CollectibleCategory,
-  ExternalRoute,
-  ExternalRouteProvider,
   QuestDetail,
   QuestRoute,
   QuestStatus,
@@ -20,7 +18,6 @@ export interface QuestWriteInput {
   description?: string;
   sourceActivityId?: string;
   collectibleIds: string[];
-  externalRoute?: ExternalRoute;
   route?: QuestRoute;
 }
 
@@ -28,8 +25,6 @@ export interface QuestPatchInput {
   title?: string;
   description?: string;
   collectibleIds?: string[];
-  externalRoute?: ExternalRoute;
-  externalRouteProvided: boolean;
 }
 
 interface QuestRow {
@@ -77,14 +72,6 @@ interface QuestRouteRow {
   activity_type: ActivityType | null;
 }
 
-interface ExternalRouteRow {
-  quest_id: string;
-  provider: ExternalRouteProvider;
-  url: string;
-  title: string | null;
-  distance_meters: number | null;
-}
-
 export class QuestNotFoundError extends Error {
   constructor() {
     super("Quest not found.");
@@ -127,13 +114,6 @@ const mapRoute = (row: QuestRouteRow): QuestRoute => ({
   geometry: row.geometry,
   ...(row.distance_meters === null ? {} : { distanceMeters: row.distance_meters }),
   ...(row.activity_type === null ? {} : { activityType: row.activity_type })
-});
-
-const mapExternalRoute = (row: ExternalRouteRow): ExternalRoute => ({
-  provider: row.provider,
-  url: row.url,
-  ...(row.title === null ? {} : { title: row.title }),
-  ...(row.distance_meters === null ? {} : { distanceMeters: row.distance_meters })
 });
 
 const toWorldCollectible = (collectible: Collectible, collectedIds: Set<string>): WorldCollectible => ({
@@ -180,7 +160,6 @@ export class QuestRepository {
           ]
         );
       }
-      if (input.externalRoute) await this.replaceExternalRoute(client, id, input.externalRoute);
       await client.query("COMMIT");
       return id;
     } catch (error) {
@@ -229,10 +208,6 @@ export class QuestRepository {
         );
       }
 
-      if (patch.externalRouteProvided) {
-        if (patch.externalRoute) await this.replaceExternalRoute(client, questId, patch.externalRoute);
-        else await client.query("DELETE FROM quest_external_routes WHERE quest_id = $1", [questId]);
-      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -315,7 +290,7 @@ export class QuestRepository {
     );
     if (result.rowCount !== 1) throw new QuestNotFoundError();
     const row = result.rows[0];
-    const [collectibleRows, routeResult, externalResult] = await Promise.all([
+    const [collectibleRows, routeResult] = await Promise.all([
       this.pool.query<QuestCollectibleRow>(
         `SELECT quest_collectibles.quest_id, quest_collectibles.collectible_id, quest_collectibles.order_index,
                 collectibles.name, collectibles.collectible_type, collectibles.rarity, collectibles.latitude,
@@ -332,16 +307,11 @@ export class QuestRepository {
       this.pool.query<QuestRouteRow>(
         "SELECT quest_id, source_activity_id, geometry, distance_meters, activity_type FROM quest_routes WHERE quest_id = $1",
         [questId]
-      ),
-      this.pool.query<ExternalRouteRow>(
-        "SELECT quest_id, provider, url, title, distance_meters FROM quest_external_routes WHERE quest_id = $1",
-        [questId]
       )
     ]);
     const collected = new Set(collectedSourceIds);
     const collectibles = collectibleRows.rows.map(mapCollectible);
     const route = routeResult.rowCount === 1 ? mapRoute(routeResult.rows[0]) : undefined;
-    const externalRoute = externalResult.rowCount === 1 ? mapExternalRoute(externalResult.rows[0]) : undefined;
     return {
       id: row.id,
       title: row.title,
@@ -353,12 +323,10 @@ export class QuestRepository {
       centerLongitude: row.center_longitude,
       collectibleCount: collectibles.length,
       hasRoute: route !== undefined,
-      hasExternalRoute: externalRoute !== undefined,
       progress: deriveQuestProgress(collectibles.map((collectible) => collectible.id), collected),
       ...(row.source_activity_id === null ? {} : { sourceActivityId: row.source_activity_id }),
       collectibles: collectibles.map((collectible) => toWorldCollectible(collectible, collected)),
-      ...(route === undefined ? {} : { route }),
-      ...(externalRoute === undefined ? {} : { externalRoute })
+      ...(route === undefined ? {} : { route })
     };
   }
 
@@ -369,17 +337,13 @@ export class QuestRepository {
   ): Promise<QuestSummary[]> {
     if (rows.length === 0) return [];
     const questIds = rows.map((row) => row.id);
-    const [collectibleRows, routeRows, externalRows] = await Promise.all([
+    const [collectibleRows, routeRows] = await Promise.all([
       this.pool.query<{ quest_id: string; collectible_id: string }>(
         "SELECT quest_id, collectible_id FROM quest_collectibles WHERE quest_id = ANY($1::uuid[])",
         [questIds]
       ),
       this.pool.query<{ quest_id: string }>(
         "SELECT quest_id FROM quest_routes WHERE quest_id = ANY($1::uuid[])",
-        [questIds]
-      ),
-      this.pool.query<{ quest_id: string }>(
-        "SELECT quest_id FROM quest_external_routes WHERE quest_id = ANY($1::uuid[])",
         [questIds]
       )
     ]);
@@ -391,7 +355,6 @@ export class QuestRepository {
       else byQuest.set(row.quest_id, [row.collectible_id]);
     }
     const withRoute = new Set(routeRows.rows.map((row) => row.quest_id));
-    const withExternalRoute = new Set(externalRows.rows.map((row) => row.quest_id));
     return rows.map((row) => {
       const ids = byQuest.get(row.id) ?? [];
       return {
@@ -405,7 +368,6 @@ export class QuestRepository {
         centerLongitude: row.center_longitude,
         collectibleCount: ids.length,
         hasRoute: withRoute.has(row.id),
-        hasExternalRoute: withExternalRoute.has(row.id),
         progress: deriveQuestProgress(ids, collected)
       };
     });
@@ -432,18 +394,5 @@ export class QuestRepository {
         [questId, collectibleId, index]
       );
     }
-  }
-
-  private async replaceExternalRoute(client: PoolClient, questId: string, route: ExternalRoute): Promise<void> {
-    await client.query(
-      `INSERT INTO quest_external_routes (id, quest_id, provider, url, title, distance_meters)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (quest_id) DO UPDATE SET
-         provider = EXCLUDED.provider,
-         url = EXCLUDED.url,
-         title = EXCLUDED.title,
-         distance_meters = EXCLUDED.distance_meters`,
-      [randomUUID(), questId, route.provider, route.url, route.title ?? null, route.distanceMeters ?? null]
-    );
   }
 }

@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { normalizeCollectibles } from "../coin.js";
 import { config } from "../config.js";
-import { parseExternalRoute } from "../quest.js";
 import { createDatabasePool } from "./database.js";
 import { migrate } from "./migrate.js";
 import { CollectibleRepository } from "./collectibleRepository.js";
@@ -14,7 +13,6 @@ interface SeedQuest {
   title: string;
   description?: string;
   collectibleIds: string[];
-  externalRoute?: unknown;
 }
 
 interface SeedDocument {
@@ -61,14 +59,12 @@ const seedQuests = async (pool: Pool, curatorId: string, quests: SeedQuest[]): P
   );
   const byTitle = new Map(existing.rows.map((row) => [row.title, row.id]));
   for (const quest of quests) {
-    const externalRoute = parseExternalRoute(quest.externalRoute);
     const questId = byTitle.get(quest.title);
     if (questId === undefined) {
       const created = await repository.create(curatorId, {
         title: quest.title,
         description: quest.description,
-        collectibleIds: quest.collectibleIds,
-        externalRoute
+        collectibleIds: quest.collectibleIds
       });
       await repository.setStatus(curatorId, created, "published");
       continue;
@@ -76,9 +72,7 @@ const seedQuests = async (pool: Pool, curatorId: string, quests: SeedQuest[]): P
     await repository.update(curatorId, questId, {
       title: quest.title,
       description: quest.description ?? "",
-      collectibleIds: quest.collectibleIds,
-      externalRoute,
-      externalRouteProvided: true
+      collectibleIds: quest.collectibleIds
     });
     await repository.setStatus(curatorId, questId, "published");
   }

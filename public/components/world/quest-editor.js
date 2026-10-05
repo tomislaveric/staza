@@ -9,8 +9,6 @@ export const buildQuestPayload = (state) => {
       .map((collectible) => collectible.id)
   };
   if (state.sourceActivityId) payload.sourceActivityId = state.sourceActivityId;
-  const url = state.externalRouteUrl.trim();
-  payload.externalRoute = url === "" ? null : { provider: state.externalRouteProvider, url };
   return payload;
 };
 
@@ -23,8 +21,6 @@ export const initialEditorState = ({ draft, quest }) => {
       description: quest.description ?? "",
       collectibles: quest.collectibles ?? [],
       selectedIds: (quest.collectibles ?? []).map((collectible) => collectible.id),
-      externalRouteProvider: quest.externalRoute?.provider ?? "komoot",
-      externalRouteUrl: quest.externalRoute?.url ?? "",
       status: quest.status ?? "draft"
     };
   }
@@ -35,8 +31,6 @@ export const initialEditorState = ({ draft, quest }) => {
     collectibles: draft.collectibles ?? [],
     selectedIds: (draft.collectibles ?? []).map((collectible) => collectible.id),
     sourceActivityId: draft.sourceActivityId,
-    externalRouteProvider: "komoot",
-    externalRouteUrl: "",
     status: "draft"
   };
 };
@@ -69,11 +63,6 @@ export const QuestEditor = (state, message) => `
     <label class="quest-editor-field">
       <span>Description</span>
       <textarea name="description" maxlength="2000" rows="3" data-user-content>${escapeHtml(state.description)}</textarea>
-    </label>
-    <label class="quest-editor-field">
-      <span>External route link (optional)</span>
-      <input type="url" name="externalRouteUrl" placeholder="https://www.komoot.com/tour/..."
-        value="${escapeHtml(state.externalRouteUrl)}">
     </label>
     <fieldset class="quest-editor-collectibles">
       <legend>Collectibles <small>${state.selectedIds.length} of ${state.collectibles.length} selected</small></legend>
@@ -110,9 +99,6 @@ export const mountQuestEditor = (host, { draft, quest, onSaved, onCancel }) => {
     });
     form.querySelector('[name="description"]').addEventListener("input", (event) => {
       state.description = event.target.value;
-    });
-    form.querySelector('[name="externalRouteUrl"]').addEventListener("input", (event) => {
-      state.externalRouteUrl = event.target.value;
     });
     form.querySelectorAll("[data-quest-collectible]").forEach((input) => {
       input.addEventListener("change", () => {

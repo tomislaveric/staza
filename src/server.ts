@@ -914,7 +914,6 @@ app.post("/api/quests", requirePlayer, requireCsrf, async (request: UploadReques
       ...(input.description === undefined ? {} : { description: input.description }),
       ...(input.sourceActivityId === undefined ? {} : { sourceActivityId: input.sourceActivityId }),
       collectibleIds: input.collectibleIds,
-      ...(input.externalRoute === undefined ? {} : { externalRoute: input.externalRoute }),
       ...(route === undefined ? {} : { route })
     });
     const collected = await loadCollectedIds(playerId);
@@ -943,9 +942,7 @@ app.patch("/api/quests/:id", requirePlayer, requireCsrf, async (request: UploadR
     await questRepository.update(playerId, String(request.params.id), {
       ...(input.title === undefined ? {} : { title: input.title }),
       ...(input.description === undefined ? {} : { description: input.description }),
-      ...(collectibleIdsProvided ? { collectibleIds: input.collectibleIds } : {}),
-      externalRouteProvided: input.externalRouteProvided,
-      ...(input.externalRoute === undefined ? {} : { externalRoute: input.externalRoute })
+      ...(collectibleIdsProvided ? { collectibleIds: input.collectibleIds } : {})
     });
     const collected = await loadCollectedIds(playerId);
     response.json(await questRepository.get(playerId, String(request.params.id), collected));

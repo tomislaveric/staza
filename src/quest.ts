@@ -2,8 +2,6 @@ import type {
   Activity,
   ActivityType,
   Collectible,
-  ExternalRoute,
-  ExternalRouteProvider,
   QuestProgress,
   QuestRoute,
   TrackPoint
@@ -14,13 +12,6 @@ import { distanceMeters } from "./geometry.js";
 export const MAX_QUEST_TITLE_LENGTH = 120;
 export const MAX_QUEST_DESCRIPTION_LENGTH = 2000;
 export const MAX_QUEST_COLLECTIBLES = 50;
-export const MAX_EXTERNAL_ROUTE_URL_LENGTH = 2048;
-
-const externalRouteHosts: Record<ExternalRouteProvider, readonly string[]> = {
-  komoot: ["komoot.com", "www.komoot.com", "komoot.de", "www.komoot.de"]
-};
-
-export const externalRouteProviders = Object.keys(externalRouteHosts) as ExternalRouteProvider[];
 
 export const deriveQuestProgress = (
   questCollectibleIds: Iterable<string>,
@@ -150,55 +141,10 @@ export const createQuestRouteSnapshot = (
   };
 };
 
-export const parseExternalRoute = (value: unknown): ExternalRoute | undefined => {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw new UserInputError("An external route must be an object.");
-  }
-  const candidate = value as Record<string, unknown>;
-  const provider = candidate.provider;
-  if (typeof provider !== "string" || !externalRouteProviders.includes(provider as ExternalRouteProvider)) {
-    throw new UserInputError(`An external route provider must be one of: ${externalRouteProviders.join(", ")}.`);
-  }
-  if (typeof candidate.url !== "string" || candidate.url.trim() === "") {
-    throw new UserInputError("An external route needs a URL.");
-  }
-  const rawUrl = candidate.url.trim();
-  if (rawUrl.length > MAX_EXTERNAL_ROUTE_URL_LENGTH) {
-    throw new UserInputError("The external route URL is too long.");
-  }
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new UserInputError("The external route URL is not a valid URL.");
-  }
-  if (url.protocol !== "https:") throw new UserInputError("The external route URL must use https.");
-  const allowedHosts = externalRouteHosts[provider as ExternalRouteProvider];
-  if (!allowedHosts.includes(url.hostname.toLowerCase())) {
-    throw new UserInputError(`The external route URL must point to ${allowedHosts[0]}.`);
-  }
-  if (candidate.title !== undefined && (typeof candidate.title !== "string" || candidate.title.trim() === "")) {
-    throw new UserInputError("An external route title must be a nonblank string when provided.");
-  }
-  if (candidate.distanceMeters !== undefined &&
-    (typeof candidate.distanceMeters !== "number" || !Number.isFinite(candidate.distanceMeters) || candidate.distanceMeters < 0)) {
-    throw new UserInputError("An external route distance must be a nonnegative number when provided.");
-  }
-  return {
-    provider: provider as ExternalRouteProvider,
-    url: url.toString(),
-    ...(candidate.title === undefined ? {} : { title: (candidate.title as string).trim() }),
-    ...(candidate.distanceMeters === undefined ? {} : { distanceMeters: candidate.distanceMeters as number })
-  };
-};
-
 export interface ParsedQuestInput {
   title: string;
   description?: string;
   collectibleIds: string[];
-  externalRoute?: ExternalRoute;
-  externalRouteProvided: boolean;
   sourceActivityId?: string;
 }
 
@@ -254,13 +200,6 @@ export const parseQuestInput = (body: unknown, options: { requireTitle: boolean 
     ...(title === undefined ? {} : { title }),
     ...(description === undefined ? {} : { description }),
     collectibleIds,
-    externalRouteProvided: candidate.externalRoute !== undefined,
-    ...(candidate.externalRoute === undefined
-      ? {}
-      : (() => {
-        const externalRoute = parseExternalRoute(candidate.externalRoute);
-        return externalRoute === undefined ? {} : { externalRoute };
-      })()),
     ...(typeof candidate.sourceActivityId === "string" ? { sourceActivityId: candidate.sourceActivityId.trim() } : {})
   } as ParsedQuestInput;
 };

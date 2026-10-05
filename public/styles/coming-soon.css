@@ -1,0 +1,24 @@
+.coming-soon-tooltip {
+  background: var(--world-map-background, #0b0c0f);
+  border: 1px solid var(--accent-yellow, #f5c518);
+  border-radius: 8px;
+  color: var(--text-primary, #fff);
+  font-family: var(--font-display, inherit);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  padding: 6px 10px;
+  pointer-events: none;
+  position: fixed;
+  text-transform: uppercase;
+  white-space: nowrap;
+  z-index: 1000;
+}
+
+.coming-soon-tooltip[hidden] {
+  display: none;
+}
+
+[data-coming-soon] {
+  cursor: default;
+}

@@ -9,6 +9,7 @@ import { mountProfilePage } from "./components/profile/profile-page.js";
 import { startAuthentication, startRegistration } from "/shared/webauthn/index.js";
 import { mountAuthFlow, mountAuthSessionLoading } from "./components/auth/auth-flow.js";
 import { appPath, localizeAppUi, parseAppPath, setAppLocale } from "./app-locales.js";
+import { initComingSoon } from "./components/shared/coming-soon.js";
 
 const app = document.querySelector("#app");
 const nativeFetch = window.fetch.bind(window);
@@ -138,6 +139,7 @@ if (currentRoute.legacy) {
   currentRoute = parseAppPath(currentRoute.path, navigator.languages);
 }
 setDocumentLocale(currentRoute.locale);
+initComingSoon();
 mountAuthSessionLoading(app);
 nativeFetch("/api/auth/session").then((response) => response.json()).then((session) => {
   sessionChecked = true;

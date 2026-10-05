@@ -316,4 +316,11 @@ export const migrations: Migration[] = [{
       CREATE INDEX collectibles_primary_category_index ON collectibles (primary_category);
     `);
   }
+}, {
+  id: "014_drop_external_routes",
+  async up(client) {
+    await client.query(`
+      DROP TABLE IF EXISTS quest_external_routes;
+    `);
+  }
 }];

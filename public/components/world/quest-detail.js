@@ -5,21 +5,11 @@ const formatDistance = (meters) => meters === undefined || meters === null
   ? undefined
   : `${(meters / 1000).toFixed(1)} km`;
 
-export const externalRouteLabel = (externalRoute) => {
-  if (!externalRoute) return undefined;
-  const provider = externalRoute.provider.charAt(0).toUpperCase() + externalRoute.provider.slice(1);
-  return externalRoute.title ? `${externalRoute.title} \u00b7 ${provider}` : `Open route on ${provider}`;
-};
-
-export const ExternalRouteCta = (externalRoute) => {
-  const label = externalRouteLabel(externalRoute);
-  if (!label) return "";
-  return `
-    <a class="quest-route-cta" href="${escapeHtml(externalRoute.url)}" target="_blank" rel="noopener noreferrer">
-      VIEW ROUTE<small>${escapeHtml(label)}</small>
-    </a>
+export const CreateRouteCta = () => `
+    <button type="button" class="quest-route-cta" data-coming-soon aria-haspopup="true">
+      CREATE ROUTE<small>Coming soon</small>
+    </button>
   `;
-};
 
 export const QuestCollectibleRow = (collectible) => CollectionRow({
   id: collectible.id,
@@ -58,6 +48,6 @@ export const QuestDetail = (quest) => {
       state: collectible.found ? "completed" : "unvisited",
       interactive: true
     })),
-    footer: `${ExternalRouteCta(quest.externalRoute)}${ownerActions}`
+    footer: `${CreateRouteCta()}${ownerActions}`
   });
 };

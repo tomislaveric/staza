@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatProgressPercent, questProgressLabel, QuestCard, QuestList, QuestStatusBadge } from "./quest-list.js";
-import { ExternalRouteCta, externalRouteLabel, QuestDetail } from "./quest-detail.js";
+import { CreateRouteCta, QuestDetail } from "./quest-detail.js";
 import { buildQuestPayload, initialEditorState } from "./quest-editor.js";
 import { markerLabel, WorldLegend } from "./world-markers.js";
 import { QuestCollectibleRow } from "./quest-detail.js";
@@ -24,7 +24,6 @@ const quest = (overrides = {}) => ({
   centerLongitude: 8.4,
   collectibleCount: 8,
   hasRoute: true,
-  hasExternalRoute: false,
   progress: progress(4, 8),
   collectibles: [],
   ...overrides
@@ -67,20 +66,18 @@ describe("quests nearby list", () => {
   });
 });
 
-describe("external route CTA", () => {
-  it("renders a CTA only when a valid external route exists", () => {
-    expect(ExternalRouteCta(undefined)).toBe("");
-    expect(externalRouteLabel(undefined)).toBeUndefined();
-    const cta = ExternalRouteCta({ provider: "komoot", url: "https://www.komoot.com/tour/1" });
-    expect(cta).toContain("VIEW ROUTE");
-    expect(cta).toContain("Open route on Komoot");
+describe("create route CTA", () => {
+  it("renders a Coming Soon placeholder button", () => {
+    const cta = CreateRouteCta();
+    expect(cta).toContain("CREATE ROUTE");
+    expect(cta).toContain("data-coming-soon");
+    expect(cta).toContain("Coming soon");
   });
 
-  it("opens external providers safely in a new context", () => {
-    const cta = ExternalRouteCta({ provider: "komoot", url: "https://www.komoot.com/tour/1", title: "Ridge" });
-    expect(cta).toContain('target="_blank"');
-    expect(cta).toContain('rel="noopener noreferrer"');
-    expect(cta).toContain("Ridge \u00b7 Komoot");
+  it("does not navigate to any external location", () => {
+    const cta = CreateRouteCta();
+    expect(cta).not.toContain("href");
+    expect(cta).toContain("<button");
   });
 });
 
@@ -89,9 +86,12 @@ describe("quest detail", () => {
     collectibles: [
       { id: "a", name: "Turmberg", type: "landmark", rarity: "epic", value: 50, found: true },
       { id: "b", name: "Rheinbrücke", type: "coin", value: 10, found: false }
-    ],
-    hasExternalRoute: true,
-    externalRoute: { provider: "komoot", url: "https://www.komoot.com/tour/1" }
+    ]
+  });
+
+  it("renders the Create route Coming Soon button", () => {
+    expect(QuestDetail(detailQuest)).toContain("CREATE ROUTE");
+    expect(QuestDetail(detailQuest)).toContain("data-coming-soon");
   });
 
   it("shows per-collectible completed state and subtle creator attribution", () => {
@@ -134,28 +134,16 @@ describe("quest editor state", () => {
       title: "Ride",
       description: "",
       collectibleIds: ["b"],
-      sourceActivityId: "activity-1",
-      externalRoute: null
-    });
-  });
-
-  it("sends an external route only when the creator provided a link", () => {
-    const state = initialEditorState({ draft: { title: "Ride", collectibles } });
-    expect(buildQuestPayload(state).externalRoute).toBeNull();
-    state.externalRouteUrl = " https://www.komoot.com/tour/1 ";
-    expect(buildQuestPayload(state).externalRoute).toEqual({
-      provider: "komoot",
-      url: "https://www.komoot.com/tour/1"
+      sourceActivityId: "activity-1"
     });
   });
 
   it("loads an existing quest for editing without a source activity", () => {
     const state = initialEditorState({
-      quest: quest({ isOwner: true, status: "draft", collectibles, externalRoute: { provider: "komoot", url: "https://www.komoot.com/tour/9" } })
+      quest: quest({ isOwner: true, status: "draft", collectibles })
     });
     expect(state.mode).toBe("edit");
     expect(state.questId).toBe("quest-1");
-    expect(state.externalRouteUrl).toBe("https://www.komoot.com/tour/9");
     expect(buildQuestPayload(state).sourceActivityId).toBeUndefined();
   });
 });

@@ -233,14 +233,6 @@ export interface WorldQueryDiagnostics {
 }
 
 export type QuestStatus = "draft" | "published";
-export type ExternalRouteProvider = "komoot";
-
-export interface ExternalRoute {
-  provider: ExternalRouteProvider;
-  url: string;
-  title?: string;
-  distanceMeters?: number;
-}
 
 export interface QuestRoute {
   sourceActivityId?: string;
@@ -267,7 +259,6 @@ export interface QuestSummary {
   centerLongitude: number;
   collectibleCount: number;
   hasRoute: boolean;
-  hasExternalRoute: boolean;
   progress: QuestProgress;
 }
 
@@ -275,7 +266,6 @@ export interface QuestDetail extends QuestSummary {
   sourceActivityId?: string;
   collectibles: WorldCollectible[];
   route?: QuestRoute;
-  externalRoute?: ExternalRoute;
 }
 
 export interface QuestDraftSuggestion {
@@ -293,7 +283,6 @@ export interface QuestInput {
   description?: string;
   sourceActivityId?: string;
   collectibleIds: string[];
-  externalRoute?: ExternalRoute | null;
 }
 
 export interface WorldViewportResponse extends WorldSnapshot {

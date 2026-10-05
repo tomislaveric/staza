@@ -3,7 +3,6 @@ import {
   createQuestRouteSnapshot,
   deriveQuestCenter,
   deriveQuestProgress,
-  parseExternalRoute,
   parseQuestInput,
   routeLengthMeters,
   simplifyRoute,
@@ -107,31 +106,6 @@ describe("route snapshots", () => {
   });
 });
 
-describe("external routes", () => {
-  it("accepts a valid provider URL and normalizes optional metadata", () => {
-    expect(parseExternalRoute({ provider: "komoot", url: "https://www.komoot.com/tour/123", title: " Loop " }))
-      .toEqual({ provider: "komoot", url: "https://www.komoot.com/tour/123", title: "Loop" });
-  });
-
-  it("rejects non-https URLs, foreign hosts, unknown providers, and malformed input", () => {
-    expect(() => parseExternalRoute({ provider: "komoot", url: "http://www.komoot.com/tour/1" })).toThrow(UserInputError);
-    expect(() => parseExternalRoute({ provider: "komoot", url: "https://evil.example.com/tour/1" })).toThrow(UserInputError);
-    expect(() => parseExternalRoute({ provider: "strava", url: "https://www.komoot.com/tour/1" })).toThrow(UserInputError);
-    expect(() => parseExternalRoute({ provider: "komoot", url: "not a url" })).toThrow(UserInputError);
-    expect(() => parseExternalRoute({ provider: "komoot" })).toThrow(UserInputError);
-  });
-
-  it("rejects an overly long URL", () => {
-    const url = `https://www.komoot.com/tour/${"1".repeat(2100)}`;
-    expect(() => parseExternalRoute({ provider: "komoot", url })).toThrow(UserInputError);
-  });
-
-  it("treats a missing external route as absent", () => {
-    expect(parseExternalRoute(undefined)).toBeUndefined();
-    expect(parseExternalRoute(null)).toBeUndefined();
-  });
-});
-
 describe("quest input parsing", () => {
   it("accepts a complete create payload and removes duplicate collectible ids", () => {
     const parsed = parseQuestInput({
@@ -144,7 +118,6 @@ describe("quest input parsing", () => {
     expect(parsed.description).toBe("Ride the ridge");
     expect(parsed.collectibleIds).toEqual(["a", "b"]);
     expect(parsed.sourceActivityId).toBe("activity-1");
-    expect(parsed.externalRouteProvided).toBe(false);
   });
 
   it("requires a title and collectible list when creating", () => {
@@ -153,11 +126,9 @@ describe("quest input parsing", () => {
     expect(() => parseQuestInput({ title: "Ok" }, { requireTitle: true })).toThrow(UserInputError);
   });
 
-  it("allows partial patches and distinguishes a cleared external route from an untouched one", () => {
-    expect(parseQuestInput({ title: "New" }, { requireTitle: false }).externalRouteProvided).toBe(false);
-    const cleared = parseQuestInput({ externalRoute: null }, { requireTitle: false });
-    expect(cleared.externalRouteProvided).toBe(true);
-    expect(cleared.externalRoute).toBeUndefined();
+  it("allows partial patches", () => {
+    expect(parseQuestInput({ title: "New" }, { requireTitle: false }).title).toBe("New");
+    expect(parseQuestInput({ description: "Updated" }, { requireTitle: false }).description).toBe("Updated");
   });
 
   it("rejects malformed collectible lists and oversized text", () => {

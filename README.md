@@ -12,6 +12,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   readable score/events, next-item context, and completion presentation.
 - [Coin collection](features/coin-collection/README.md) — animate Coin pickups
   with a 2.5D Collect effect, reward, and generated audio Chime.
+- [Coming soon](features/coming-soon/README.md) — add a reusable multi-language
+  "Coming Soon" annotation and remove the unsupported Komoot external-route feature.
 - [GameEvent instead of Coin](features/gameevent-instead-of-coin/README.md) —
   generalize downstream Coin-passage records into typed game events.
 - [Highlight planner](features/highlight-planner/README.md) — formalize selected
