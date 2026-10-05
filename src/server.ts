@@ -50,12 +50,22 @@ await migrate(databasePool);
 const activityRepository = new ActivityRepository(databasePool);
 const collectibleRepository = new CollectibleRepository(databasePool);
 const questRepository = new QuestRepository(databasePool);
+const smtpConfig = config.smtpHost && config.smtpUser && config.smtpPassword && config.mailFrom
+  ? {
+      host: config.smtpHost,
+      port: config.smtpPort,
+      secure: config.smtpSecure,
+      user: config.smtpUser,
+      password: config.smtpPassword,
+      from: config.mailFrom
+    }
+  : undefined;
 const authService = new AuthService(databasePool, {
   rpId: config.webauthnRpId,
   rpName: config.webauthnRpName,
   origin: config.webauthnOrigin,
   production: config.nodeEnv === "production"
-}, new EmailSender(config.nodeEnv === "production"));
+}, new EmailSender(config.nodeEnv === "production", smtpConfig));
 await activityRepository.markInterruptedActivityVideos();
 
 const jobFile = (directory: string): string => path.join(directory, "job.json");

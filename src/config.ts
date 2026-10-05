@@ -71,6 +71,18 @@ const uuidEnv = (name: string, fallback: string): string => {
   return value;
 };
 
+const smtpPasswordEnv = (): string | undefined => {
+  const encoded = process.env.SMTP_PASSWORD_BASE64?.trim();
+  if (encoded) {
+    const decoded = Buffer.from(encoded, "base64").toString("utf8");
+    if (Buffer.from(decoded, "utf8").toString("base64") !== encoded) {
+      throw new Error("SMTP_PASSWORD_BASE64 must be valid base64.");
+    }
+    return decoded;
+  }
+  return process.env.SMTP_PASSWORD || undefined;
+};
+
 export const config = {
   port: integerEnv("PORT", 3000),
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data/jobs"),
@@ -123,7 +135,13 @@ export const config = {
   webauthnOrigin: optionalUrlEnv("WEBAUTHN_ORIGIN"),
   devAuthEmail: process.env.DEV_AUTH_EMAIL?.trim().toLowerCase(),
   devAuthPlayerId: process.env.DEV_AUTH_PLAYER_ID?.trim(),
-  devAuthPlayerName: process.env.DEV_AUTH_PLAYER_NAME?.trim() || "Development player"
+  devAuthPlayerName: process.env.DEV_AUTH_PLAYER_NAME?.trim() || "Development player",
+  smtpHost: process.env.SMTP_HOST?.trim() || undefined,
+  smtpPort: integerEnv("SMTP_PORT", 587),
+  smtpSecure: booleanEnv("SMTP_SECURE", false),
+  smtpUser: process.env.SMTP_USER?.trim() || undefined,
+  smtpPassword: smtpPasswordEnv(),
+  mailFrom: process.env.MAIL_FROM?.trim() || undefined
 };
 
 if (config.nodeEnv === "production") {
@@ -131,4 +149,7 @@ if (config.nodeEnv === "production") {
     throw new Error("Production requires HTTPS WEBAUTHN_RP_ID, WEBAUTHN_RP_NAME, and WEBAUTHN_ORIGIN.");
   }
   if (config.devAuthEmail || config.devAuthPlayerId) throw new Error("Development authentication bootstrap is not allowed in production.");
+  if (!config.smtpHost || !config.smtpUser || !config.smtpPassword || !config.mailFrom) {
+    throw new Error("Production requires SMTP_HOST, SMTP_USER, SMTP_PASSWORD (or SMTP_PASSWORD_BASE64), and MAIL_FROM for email delivery.");
+  }
 }

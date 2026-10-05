@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+import { createTransport, type Transporter } from "nodemailer";
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -45,16 +46,57 @@ const canonicalEmail = (value: unknown): string => {
 const token = (): string => randomBytes(32).toString("base64url");
 const opaqueTokenHash = (value: string): string => codeHash(value);
 
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
+  from: string;
+}
+
 export class EmailSender {
-  constructor(private readonly production: boolean) {}
+  private readonly transport?: Transporter;
+  private readonly from?: string;
+
+  constructor(private readonly production: boolean, smtp?: SmtpConfig) {
+    if (smtp) {
+      this.transport = createTransport({
+        host: smtp.host,
+        port: smtp.port,
+        secure: smtp.secure,
+        auth: { user: smtp.user, pass: smtp.password }
+      });
+      this.from = smtp.from;
+    }
+  }
 
   async sendAuthenticationCode(email: string, code: string): Promise<void> {
+    if (this.transport && this.from) {
+      await this.transport.sendMail({
+        from: this.from,
+        to: email,
+        subject: "Your Staza sign-in code",
+        text: `Your Staza verification code is ${code}.\n\nIt expires in 10 minutes. If you did not request this code, you can ignore this email.`
+      });
+      return;
+    }
     if (this.production) throw new Error("No production EmailSender has been configured.");
     console.info(`Development authentication code issued for ${email}: ${code}`);
   }
 
-  async sendSecurityNotification(_email: string, _message: string): Promise<void> {
+  async sendSecurityNotification(email: string, message: string): Promise<void> {
+    if (this.transport && this.from) {
+      await this.transport.sendMail({
+        from: this.from,
+        to: email,
+        subject: "Staza security notification",
+        text: message
+      });
+      return;
+    }
     if (this.production) throw new Error("No production EmailSender has been configured.");
+    console.info(`Development security notification for ${email}: ${message}`);
   }
 }
 

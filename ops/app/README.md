@@ -52,6 +52,13 @@ environment. Required variables:
 | `WEBAUTHN_RP_ID` | Public hostname for the environment. |
 | `WEBAUTHN_RP_NAME` | WebAuthn relying-party display name. |
 | `WEBAUTHN_ORIGIN` | Exact HTTPS origin for the environment. |
+| `SMTP_HOST` | Hostname of the existing mail server used to send auth codes. |
+| `SMTP_PORT` | SMTP submission port (587 for STARTTLS, 465 for implicit TLS). |
+| `SMTP_SECURE` | `true` for implicit TLS (465) or `false` for STARTTLS (587). |
+| `SMTP_USER` | Mailbox/username that authenticates to the mail server. |
+| `SMTP_PASSWORD` | Raw password for `SMTP_USER`. Avoid if it contains `"`, `'`, `#`, or `$` (parser-unsafe). |
+| `SMTP_PASSWORD_BASE64` | Base64 of the password; preferred for passwords with special characters. Takes precedence over `SMTP_PASSWORD`. Generate with `printf '%s' 'the#pass' \| base64`. |
+| `MAIL_FROM` | Sender address for outgoing mail, e.g. `auth@staza.world`. |
 
 Compose sets `NODE_ENV=production`, `PORT=3000`, `DATA_DIR=/data/jobs`, and
 `MEDIA_DIR=/data/media`. The app container uses an environment-specific named

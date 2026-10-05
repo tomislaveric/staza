@@ -101,6 +101,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Staza landing page localization](features/staza-landing-page-localization/README.md)
   — render the public landing page in English and German with localized URLs
   while preserving one shared page structure and the existing app routes.
+- [SMTP auth email delivery](features/smtp-auth-email-delivery/README.md)
+  — send authentication codes and security notifications by real email via
+  nodemailer SMTP against the existing mail server in production.
 - [Synchronization diagnostics](features/synchronization-diagnostics/README.md)
   — make FIT/GPS5 synchronization failures explicit and operationally visible.
 - [World Collectible Domain Model V1](features/world-collectible-domain-model-v1/README.md)
