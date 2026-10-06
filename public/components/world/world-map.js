@@ -4,6 +4,11 @@ import {
   ensureCollectibleLayers,
   setCollectibleData
 } from "../shared/map/staza-collectible-layers.js";
+import {
+  bindFartlekInteractions,
+  ensureFartlekLayers,
+  setFartlekData
+} from "../shared/map/staza-fartlek-layers.js";
 import { createStazaMap, DEFAULT_CENTER, DEFAULT_ZOOM } from "../shared/map/staza-map.js";
 import { stazaRouteLayers } from "../shared/map/staza-route-layers.js";
 import { boundsToParameter, pointsToBounds, readBounds, routeToGeoJson } from "../shared/map/staza-map-utils.js";
@@ -32,12 +37,15 @@ export {
  * Thin World map. It owns the World viewport events and quest-route plumbing only, over the
  * shared Staza map foundation; Staza gameplay rules stay in the World page.
  */
-export const createWorldMap = async (container, { styleUrl, attribution, onViewportChange, onCollectibleSelect }) => {
+export const createWorldMap = async (container, {
+  styleUrl, attribution, onViewportChange, onCollectibleSelect, onFartlekSelect
+}) => {
   const staza = await createStazaMap(container, { styleUrl, attribution });
   const { map } = staza;
 
   let styleReady = false;
   let pendingCollectibles = EMPTY_FEATURE_COLLECTION;
+  let pendingFartleks = EMPTY_FEATURE_COLLECTION;
   let panelInset = 0;
 
   const framingPadding = () => ({
@@ -56,10 +64,14 @@ export const createWorldMap = async (container, { styleUrl, attribution, onViewp
   await staza.ready;
   styleReady = true;
   ensureRouteLayers();
+  // Fartlek segment layers draw above routes/activity layers but under point collectibles.
+  ensureFartlekLayers(map);
+  setFartlekData(map, pendingFartleks);
   ensureCollectibleLayers(map);
   setCollectibleData(map, pendingCollectibles);
 
   if (onCollectibleSelect) bindCollectibleInteractions(map, { onSelect: onCollectibleSelect });
+  if (onFartlekSelect) bindFartlekInteractions(map, { onSelect: onFartlekSelect });
 
   map.on("moveend", () => onViewportChange(readBounds(map)));
 
@@ -71,6 +83,12 @@ export const createWorldMap = async (container, { styleUrl, attribution, onViewp
       if (!styleReady) return;
       ensureCollectibleLayers(map);
       setCollectibleData(map, pendingCollectibles);
+    },
+    setFartleks(featureCollection) {
+      pendingFartleks = featureCollection ?? EMPTY_FEATURE_COLLECTION;
+      if (!styleReady) return;
+      ensureFartlekLayers(map);
+      setFartlekData(map, pendingFartleks);
     },
     setRoute(route) {
       if (!styleReady) return;

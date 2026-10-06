@@ -50,7 +50,8 @@ const result = (activityId: string, value = 25): ActivityResult => ({
     value: 10,
     rarity: "epic",
     minimumDistanceMeters: 73.25
-  }]
+  }],
+  fartlekCompletions: []
 });
 
 describePersistence("ActivityRepository", () => {
@@ -262,5 +263,48 @@ describePersistence("ActivityRepository", () => {
     await expect(repository!.persistCompletedActivity(playerId, activity(id), invalid)).rejects.toThrow();
     expect(await repository!.listActivities(playerId)).toEqual([]);
     expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 0 });
+  });
+
+  it("awards Fartlek completion XP atomically and idempotently alongside activity XP", async () => {
+    await pool!.query(
+      `INSERT INTO fartleks (
+        id, name, geometry, start_latitude, start_longitude, end_latitude, end_longitude, length_meters,
+        status, source_type, source_external_id, suitability_score, mapping_confidence
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', 'osm', 'way:1', 90, 95)`,
+      [
+        "fartlek-1", "Harbour Straight",
+        JSON.stringify({ type: "LineString", coordinates: [[12.5683, 55.6761], [12.5693, 55.6771]] }),
+        55.6761, 12.5683, 55.6771, 12.5693, 3_000
+      ]
+    );
+    const id = "f".repeat(48);
+    const fartlekResult: ActivityResult = {
+      ...result(id, 0),
+      totalPoints: 50,
+      collectedCount: 0,
+      collectibles: [],
+      events: [],
+      fartlekCompletions: [{
+        fartlekId: "fartlek-1",
+        fartlekName: "Harbour Straight",
+        completedAtTimestampMs: Date.parse("2026-01-02T03:14:05.000Z"),
+        elapsedTimeS: 600,
+        averageSpeedMps: 5,
+        traversalDirection: "a_to_b",
+        fartlekLengthMSnapshot: 3_000,
+        fartlekGeometryVersionSnapshot: 1
+      }]
+    };
+
+    await repository!.persistCompletedActivity(playerId, activity(id), fartlekResult);
+    expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 50 });
+    const completions = await pool!.query("SELECT fartlek_id, elapsed_time_s FROM fartlek_completions WHERE player_id = $1", [playerId]);
+    expect(completions.rows).toEqual([{ fartlek_id: "fartlek-1", elapsed_time_s: 600 }]);
+
+    // Reprocessing the same activity (e.g. a replay) must not double-grant Fartlek XP or insert a duplicate row.
+    await expect(repository!.persistCompletedActivity(playerId, activity(id), fartlekResult))
+      .resolves.toMatchObject({ inserted: false });
+    expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 50 });
+    expect((await pool!.query("SELECT 1 FROM fartlek_completions WHERE player_id = $1", [playerId])).rowCount).toBe(1);
   });
 });

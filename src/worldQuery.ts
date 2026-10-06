@@ -59,6 +59,19 @@ export const getRelevantCollectibles = (
   });
 };
 
+/** Fartleks whose geometry touches the padded route bbox, mirroring getRelevantCollectibles. */
+export const getRelevantFartleks = <T extends { geometry: { coordinates: [number, number][] } }>(
+  allFartleks: T[],
+  route: TrackPoint[],
+  paddingMeters: number
+): T[] => {
+  const bounds = getRouteBounds(route);
+  if (!bounds) return [];
+  const paddedBounds = padGeoBounds(bounds, paddingMeters);
+  return allFartleks.filter((fartlek) =>
+    fartlek.geometry.coordinates.some(([longitude, latitude]) => isWithinBounds({ latitude, longitude }, paddedBounds)));
+};
+
 export interface LongitudeRange {
   minLongitude: number;
   maxLongitude: number;

@@ -105,6 +105,92 @@ export interface Activity {
   duration?: number;
 }
 
+export type FartlekStatus = "published" | "archived";
+export type FartlekTraversalDirection = "a_to_b" | "b_to_a";
+
+export interface FartlekSource {
+  sourceType: string;
+  sourceExternalId: string;
+  sourceAttribution?: string;
+}
+
+export interface FartlekGeometry {
+  type: "LineString";
+  coordinates: [number, number][];
+}
+
+/** A linear World challenge completed by traversing the full segment, in either direction (v1). */
+export interface Fartlek {
+  id: string;
+  name: string;
+  geometry: FartlekGeometry;
+  startLatitude: number;
+  startLongitude: number;
+  endLatitude: number;
+  endLongitude: number;
+  lengthMeters: number;
+  status: FartlekStatus;
+  /** Reserved for future one-way enforcement; always falsy in v1 (bidirectional). */
+  directionRestricted?: boolean;
+  source: FartlekSource;
+  sourceMetadata?: Record<string, unknown>;
+  suitabilityScore: number;
+  suitabilityReasons: string[];
+  mappingConfidence: number;
+  /** Bumped whenever the source geometry is refreshed; snapshotted onto completions. */
+  geometryVersion: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FartlekCompletionSummary {
+  completedAt: string;
+  elapsedTimeS: number;
+  averageSpeedMps: number;
+  maxSpeedMps?: number;
+}
+
+/** A Fartlek as rendered in World: a LineString challenge, never a point collectible. */
+export interface WorldFartlek {
+  id: string;
+  name: string;
+  geometry: FartlekGeometry;
+  lengthMeters: number;
+  status: FartlekStatus;
+  source: FartlekSource;
+  completed: boolean;
+  completionCount: number;
+  bestElapsedTimeS?: number;
+  latestCompletion?: FartlekCompletionSummary;
+}
+
+export interface FartlekCompletion {
+  id: string;
+  fartlekId: string;
+  playerId: string;
+  activityId: string;
+  completedAt: string;
+  elapsedTimeS: number;
+  averageSpeedMps: number;
+  maxSpeedMps?: number;
+  traversalDirection?: FartlekTraversalDirection;
+  fartlekLengthMSnapshot: number;
+  fartlekGeometryVersionSnapshot: number;
+}
+
+/** A not-yet-persisted completion produced by the activity processing pipeline. */
+export interface FartlekCompletionDraft {
+  fartlekId: string;
+  fartlekName: string;
+  completedAtTimestampMs: number;
+  elapsedTimeS: number;
+  averageSpeedMps: number;
+  maxSpeedMps?: number;
+  traversalDirection: FartlekTraversalDirection;
+  fartlekLengthMSnapshot: number;
+  fartlekGeometryVersionSnapshot: number;
+}
+
 export interface ActivityResult {
   activityId: string;
   distance?: number;
@@ -114,6 +200,7 @@ export interface ActivityResult {
   collectibles: Collectible[];
   events: GameEvent[];
   nearMisses: NearMissCollectible[];
+  fartlekCompletions: FartlekCompletionDraft[];
 }
 
 export interface PlayerProgress {
@@ -288,6 +375,7 @@ export interface QuestInput {
 export interface WorldViewportResponse extends WorldSnapshot {
   quests: QuestSummary[];
   truncated: boolean;
+  fartleks: WorldFartlek[];
 }
 
 export type JobState = "processing" | "awaiting_selection" | "rendering" | "succeeded" | "failed";

@@ -76,6 +76,10 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Milestone 16.0 — Staza Landing Page](features/milestone-16-0-staza-landing-page/README.md)
   — add an isolated public landing page at `/` while preserving the existing
   authenticated app under `/app` and `/sign-in`.
+- [Milestone 18 — Fartlek Segment Challenges](features/milestone-18-fartlek-segment-challenges/README.md)
+  — introduce a linear, traversal-based World challenge type backed by a
+  conservative OSM candidate pipeline, native MapLibre line rendering, and
+  speed-independent completion and XP.
 - [Multi Clip creation](features/multi-clip-creation/README.md) — select detected
   Coin passages and combine them into one chronological highlight video.
 - [Persistent activities player state v1](features/persistent-activities-player-state-v1/README.md)

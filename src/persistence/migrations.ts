@@ -340,4 +340,56 @@ export const migrations: Migration[] = [{
       UPDATE collectibles SET radius_meters = 100 WHERE radius_meters <> 100;
     `);
   }
+}, {
+  id: "019_fartleks",
+  async up(client) {
+    await client.query(`
+      CREATE TABLE fartleks (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        geometry JSONB NOT NULL,
+        start_latitude DOUBLE PRECISION NOT NULL CHECK (start_latitude BETWEEN -90 AND 90),
+        start_longitude DOUBLE PRECISION NOT NULL CHECK (start_longitude BETWEEN -180 AND 180),
+        end_latitude DOUBLE PRECISION NOT NULL CHECK (end_latitude BETWEEN -90 AND 90),
+        end_longitude DOUBLE PRECISION NOT NULL CHECK (end_longitude BETWEEN -180 AND 180),
+        length_meters DOUBLE PRECISION NOT NULL CHECK (length_meters > 0),
+        status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published', 'archived')),
+        direction_restricted BOOLEAN,
+        source_type TEXT NOT NULL,
+        source_external_id TEXT NOT NULL,
+        source_attribution TEXT,
+        source_metadata JSONB,
+        suitability_score DOUBLE PRECISION NOT NULL CHECK (suitability_score BETWEEN 0 AND 100),
+        suitability_reasons TEXT[] NOT NULL DEFAULT '{}',
+        mapping_confidence DOUBLE PRECISION NOT NULL CHECK (mapping_confidence BETWEEN 0 AND 100),
+        geometry_version INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX fartleks_source_identity_unique
+        ON fartleks (source_type, source_external_id);
+      CREATE INDEX fartleks_bbox_index
+        ON fartleks (start_latitude, start_longitude, end_latitude, end_longitude);
+
+      CREATE TABLE fartlek_completions (
+        id UUID PRIMARY KEY,
+        fartlek_id TEXT NOT NULL REFERENCES fartleks(id) ON DELETE CASCADE,
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        activity_id TEXT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+        completed_at TIMESTAMPTZ NOT NULL,
+        elapsed_time_s DOUBLE PRECISION NOT NULL CHECK (elapsed_time_s > 0),
+        average_speed_mps DOUBLE PRECISION NOT NULL CHECK (average_speed_mps >= 0),
+        max_speed_mps DOUBLE PRECISION CHECK (max_speed_mps IS NULL OR max_speed_mps >= 0),
+        traversal_direction TEXT CHECK (traversal_direction IS NULL OR traversal_direction IN ('a_to_b', 'b_to_a')),
+        fartlek_length_m_snapshot DOUBLE PRECISION NOT NULL CHECK (fartlek_length_m_snapshot > 0),
+        fartlek_geometry_version_snapshot INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (activity_id, fartlek_id)
+      );
+      CREATE INDEX fartlek_completions_player_index
+        ON fartlek_completions (player_id, completed_at DESC);
+      CREATE INDEX fartlek_completions_fartlek_index
+        ON fartlek_completions (fartlek_id);
+    `);
+  }
 }];

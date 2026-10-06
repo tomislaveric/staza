@@ -2,21 +2,27 @@ import { getAppLocale } from "../app-locales.js";
 import { escapeHtml } from "./collected-list.js";
 import { markerLabel, WorldLegend } from "./world/world-markers.js";
 import { collectiblesToFeatureCollection } from "./world/collectible-features.js";
+import { fartleksToFeatureCollection } from "./world/fartlek-features.js";
 import { boundsToParameter, createWorldMap } from "./world/world-map.js";
 import { QuestList } from "./world/quest-list.js";
 import { QuestDetail } from "./world/quest-detail.js";
 import { CollectibleDetail } from "./world/collectible-detail.js";
+import { FartlekDetail } from "./world/fartlek-detail.js";
 import { mountQuestEditor } from "./world/quest-editor.js";
 
-export const worldFilters = ["all", "found", "unfound", "rare", "epic"];
+export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks"];
 
 const filterLabels = {
   all: "All",
   found: "Found",
   unfound: "Unfound",
   rare: "Rare",
-  epic: "Epic"
+  epic: "Epic",
+  fartleks: "Fartleks"
 };
+
+/** Found/Unfound/Rare/Epic and category filters apply to point collectibles only. */
+const COLLECTIBLE_ONLY_FILTERS = new Set(["found", "unfound", "rare", "epic"]);
 
 const formatNumber = (value) => new Intl.NumberFormat(getAppLocale()).format(value);
 
@@ -24,11 +30,20 @@ export const visibleWorldCollectibles = (collectibles) =>
   collectibles.filter((collectible) => collectible.visibility !== "hidden");
 
 export const filteredWorldCollectibles = (collectibles, activeFilter) => visibleWorldCollectibles(collectibles).filter((collectible) => {
+  if (activeFilter === "fartleks") return false;
   if (activeFilter === "found") return collectible.found;
   if (activeFilter === "unfound") return !collectible.found;
   if (activeFilter === "rare" || activeFilter === "epic") return collectible.rarity === activeFilter;
   return true;
 });
+
+/**
+ * Fartleks are a distinct challenge type with their own completed/uncompleted state; the
+ * collectible-only filters (Found/Unfound/Rare/Epic) leave them unaffected by hiding them
+ * while one of those collectible-focused filters is active.
+ */
+export const filteredWorldFartleks = (fartleks, activeFilter) =>
+  COLLECTIBLE_ONLY_FILTERS.has(activeFilter) ? [] : fartleks;
 
 /** Collectibles drawn on the map: the filtered viewport set plus the selected quest's own. */
 export const mappedWorldCollectibles = (collectibles, activeFilter, questCollectibles = []) => {
@@ -123,6 +138,7 @@ export const mountWorldPage = async (mountPoint) => {
   let quests = [];
   let stats = emptyStats;
   let truncated = false;
+  let fartleks = [];
   let selection;
   let selectedQuest;
   let requestToken = 0;
@@ -144,25 +160,41 @@ export const mountWorldPage = async (mountPoint) => {
 
   const collectibleById = (id) => collectibles.find((collectible) => collectible.id === id)
     ?? selectedQuest?.collectibles?.find((collectible) => collectible.id === id);
+  const fartlekById = (id) => fartleks.find((fartlek) => fartlek.id === id);
 
   const renderCollectibles = () => {
-    const selectedId = selection?.kind === "collectible" ? selection.id : undefined;
+    const selectedCollectibleId = selection?.kind === "collectible" ? selection.id : undefined;
     const questCollectibles = selectedQuest?.collectibles ?? [];
     const mapped = mappedWorldCollectibles(collectibles, activeFilter, questCollectibles);
     const questCollectibleIds = selectedQuest ? questCollectibles.map((item) => item.id) : undefined;
-    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { selectedId, questCollectibleIds }));
-    renderCollectibleList(mapped, selectedId);
+    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { selectedId: selectedCollectibleId, questCollectibleIds }));
+
+    const selectedFartlekId = selection?.kind === "fartlek" ? selection.id : undefined;
+    const mappedFartleks = filteredWorldFartleks(fartleks, activeFilter);
+    worldMap?.setFartleks(fartleksToFeatureCollection(mappedFartleks, { selectedId: selectedFartlekId }));
+
+    renderCollectibleList(mapped, selectedCollectibleId, mappedFartleks, selectedFartlekId);
   };
 
-  const renderCollectibleList = (mapped, selectedId) => {
-    collectibleListHost.innerHTML = mapped.map((collectible) => `
+  const renderCollectibleList = (mapped, selectedCollectibleId, mappedFartleks, selectedFartlekId) => {
+    const collectibleItems = mapped.map((collectible) => `
       <li>
         <button type="button" data-world-marker="${escapeHtml(collectible.id)}"
-          aria-pressed="${collectible.id === selectedId}" data-user-content>${escapeHtml(markerLabel(collectible))}</button>
+          aria-pressed="${collectible.id === selectedCollectibleId}" data-user-content>${escapeHtml(markerLabel(collectible))}</button>
       </li>
     `).join("");
+    const fartlekItems = mappedFartleks.map((fartlek) => `
+      <li>
+        <button type="button" class="world-fartlek-marker" data-world-fartlek="${escapeHtml(fartlek.id)}"
+          aria-pressed="${fartlek.id === selectedFartlekId}" data-user-content>${escapeHtml(fartlek.name)}, ${fartlek.completed ? "completed" : "not completed"}</button>
+      </li>
+    `).join("");
+    collectibleListHost.innerHTML = collectibleItems + fartlekItems;
     collectibleListHost.querySelectorAll("[data-world-marker]").forEach((button) => {
       button.addEventListener("click", () => selectCollectible(button.dataset.worldMarker));
+    });
+    collectibleListHost.querySelectorAll("[data-world-fartlek]").forEach((button) => {
+      button.addEventListener("click", () => selectFartlek(button.dataset.worldFartlek));
     });
   };
 
@@ -181,6 +213,15 @@ export const mountWorldPage = async (mountPoint) => {
         return;
       }
       detailHost.innerHTML = QuestDetail(selectedQuest);
+    } else if (selection.kind === "fartlek") {
+      const fartlek = fartlekById(selection.id);
+      if (!fartlek) {
+        detailHost.hidden = true;
+        detailHost.innerHTML = "";
+        worldMap?.setDetailPanelOpen(false);
+        return;
+      }
+      detailHost.innerHTML = FartlekDetail(fartlek);
     } else {
       const collectible = collectibleById(selection.id);
       if (!collectible) {
@@ -232,6 +273,14 @@ export const mountWorldPage = async (mountPoint) => {
     selection = selection?.kind === "collectible" && selection.id === id
       ? undefined
       : { kind: "collectible", id };
+    renderCollectibles();
+    renderDetail();
+  }
+
+  function selectFartlek(id) {
+    selection = selection?.kind === "fartlek" && selection.id === id
+      ? undefined
+      : { kind: "fartlek", id };
     renderCollectibles();
     renderDetail();
   }
@@ -302,8 +351,10 @@ export const mountWorldPage = async (mountPoint) => {
       quests = snapshot.quests;
       stats = snapshot.stats;
       truncated = snapshot.truncated;
-      setStatus(collectibles.length === 0 && quests.length === 0 ? "Nothing curated here yet." : undefined);
+      fartleks = snapshot.fartleks ?? [];
+      setStatus(collectibles.length === 0 && quests.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);
       if (selection?.kind === "collectible" && !collectibleById(selection.id)) selection = undefined;
+      if (selection?.kind === "fartlek" && !fartlekById(selection.id)) selection = undefined;
       renderCollectibles();
       renderSidePanels();
       renderDetail();
@@ -326,6 +377,10 @@ export const mountWorldPage = async (mountPoint) => {
         && !filteredWorldCollectibles(collectibles, activeFilter).some((item) => item.id === selection.id)) {
         selection = undefined;
       }
+      if (selection?.kind === "fartlek"
+        && !filteredWorldFartleks(fartleks, activeFilter).some((item) => item.id === selection.id)) {
+        selection = undefined;
+      }
       renderFilters();
       renderCollectibles();
       renderDetail();
@@ -339,7 +394,8 @@ export const mountWorldPage = async (mountPoint) => {
       styleUrl: basemap.styleUrl,
       attribution: basemap.attribution,
       onViewportChange: scheduleViewportLoad,
-      onCollectibleSelect: (id) => selectCollectible(id)
+      onCollectibleSelect: (id) => selectCollectible(id),
+      onFartlekSelect: (id) => selectFartlek(id)
     });
   } catch (error) {
     mapContainer.innerHTML = `<p class="world-load-error" role="alert">Unable to load the map: ${escapeHtml(error.message)}</p>`;

@@ -1,6 +1,8 @@
 import { mountReplayMap, mountReplayStill } from "./activity-replay-map.js";
 import { getActivityLabel } from "./activity-labels.js";
 import { CollectionPanel, collectionProgressLabel, collectionProgressPercent, collectionStateLabel } from "./shared/collection-panel.js";
+import { escapeHtml } from "./collected-list.js";
+import { formatDistance, formatElapsed, formatSpeed } from "./world/fartlek-detail.js";
 
 /** Ride Detail replay: the shared Staza map with an activity route, position and collection. */
 export const ReplayTab = () => `
@@ -89,6 +91,33 @@ export const rowStateAt = (row, timestampMs) => {
 
 const replayPanelTitle = (activity) => activity?.title || getActivityLabel(activity?.type);
 
+/**
+ * Completed Fartleks for this activity: name, length, elapsed time, average speed/pace, and
+ * optional max speed. Rendered inside the existing REPLAY panel (no new tab, no map overlay),
+ * per the Fartlek milestone's Activity Detail integration.
+ */
+export const FartlekCompletionsSection = (fartlekCompletions = []) => {
+  if (fartlekCompletions.length === 0) return "";
+  return `
+    <div class="activity-replay-fartleks" aria-label="Completed Fartleks">
+      <h3>Fartleks completed</h3>
+      <ul>
+        ${fartlekCompletions.map((completion) => `
+          <li class="activity-replay-fartlek is-completed" data-user-content>
+            <span class="activity-replay-fartlek-name">${escapeHtml(completion.fartlekName)}</span>
+            <span class="activity-replay-fartlek-stats">
+              <small>${escapeHtml(formatDistance(completion.fartlekLengthMSnapshot))}</small>
+              <small>${escapeHtml(formatElapsed(completion.elapsedTimeS))}</small>
+              <small>${escapeHtml(formatSpeed(completion.averageSpeedMps))}</small>
+              ${completion.maxSpeedMps !== undefined ? `<small>max ${escapeHtml(formatSpeed(completion.maxSpeedMps))}</small>` : ""}
+            </span>
+          </li>
+        `).join("")}
+      </ul>
+    </div>
+  `;
+};
+
 const mountReplayPanel = (host, replay) => {
   const rows = replayPanelRows(replay);
   const total = rows.filter((row) => row.kind === "collectible").length;
@@ -100,7 +129,8 @@ const mountReplayPanel = (host, replay) => {
     closable: true,
     ariaLabel: "Replay collection",
     emptyMessage: "No collectibles on this activity.",
-    rows: rows.map((row) => ({ id: row.id, name: row.name, rarity: row.rarity, state: "unvisited" }))
+    rows: rows.map((row) => ({ id: row.id, name: row.name, rarity: row.rarity, state: "unvisited" })),
+    footer: FartlekCompletionsSection(replay.activityResult.fartlekCompletions)
   });
 
   const rowElements = [...host.querySelectorAll("[data-collection-row]")];

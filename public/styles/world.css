@@ -209,6 +209,17 @@
 .collectible-detail-quests ul { display: grid; gap: 4px; list-style: none; margin: 0; padding: 0; }
 .collectible-detail-quests button { background: transparent; border: 0; color: var(--accent-yellow); cursor: pointer; font-family: var(--font-display); font-size: 13px; padding: 0; text-align: left; }
 
+/* Fartlek: a linear road/path segment challenge, distinct from point collectibles. */
+.world-fartlek-marker { color: var(--text-primary); }
+.fartlek-detail-state { font-family: var(--font-display); font-size: 12px; letter-spacing: .1em; margin: 0; text-transform: uppercase; }
+.fartlek-detail-state.is-completed { color: var(--accent-yellow); }
+.fartlek-detail-state.is-uncompleted { color: var(--text-muted); }
+.fartlek-detail-hint { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0; }
+.fartlek-detail-stats { display: grid; gap: 6px; grid-template-columns: repeat(2, 1fr); margin: 0; }
+.fartlek-detail-stats div { display: grid; gap: 2px; }
+.fartlek-detail-stats dt { color: var(--text-muted); font-family: var(--font-display); font-size: 9px; letter-spacing: .12em; margin: 0; text-transform: uppercase; }
+.fartlek-detail-stats dd { color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; margin: 0; }
+
 .quest-badge { border-radius: 999px; font-family: var(--font-display); font-size: 9px; letter-spacing: .12em; padding: 3px 7px; text-transform: uppercase; }
 .quest-badge.is-draft { background: rgb(255 255 255 / 8%); color: var(--text-muted); }
 .quest-badge.is-complete { background: var(--accent-yellow); color: var(--world-map-background); }
@@ -242,6 +253,14 @@
 .quest-collectible.is-found button { color: var(--text-primary); }
 .quest-collectible-name { flex: 1; font-family: var(--font-display); font-size: 13px; }
 .quest-collectible-state { font-family: var(--font-display); font-size: 9px; letter-spacing: .1em; opacity: .7; text-transform: uppercase; }
+
+/* Fartlek completions inside the Activity Detail REPLAY panel, alongside Collected/Near Misses. */
+.activity-replay-fartleks { border-top: 1px solid var(--border-faint); margin-top: 10px; padding-top: 10px; }
+.activity-replay-fartleks h3 { color: var(--text-muted); font-family: var(--font-display); font-size: 10px; letter-spacing: .2em; margin: 0 0 6px; text-transform: uppercase; }
+.activity-replay-fartleks ul { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.activity-replay-fartlek { color: var(--text-primary); display: grid; gap: 2px; }
+.activity-replay-fartlek-name { font-family: var(--font-display); font-size: 13px; }
+.activity-replay-fartlek-stats { color: var(--text-muted); display: flex; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; gap: 8px; }
 .quest-detail-owner-actions { display: flex; gap: 8px; }
 .quest-detail-owner-actions button {
   background: transparent;

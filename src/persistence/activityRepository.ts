@@ -16,6 +16,7 @@ import type {
   ReplaySnapshot
 } from "../domain.js";
 import { getLevelProgress, getTotalXpRequiredForLevel } from "../progression.js";
+import { FartlekCompletionRepository } from "./fartlekCompletionRepository.js";
 
 interface ActivityRow {
   id: string;
@@ -106,7 +107,11 @@ const mapVideo = (row: VideoRow): ActivityVideo => ({
 });
 
 export class ActivityRepository {
-  constructor(private readonly pool: Pool) {}
+  private readonly fartlekCompletionRepository: FartlekCompletionRepository;
+
+  constructor(private readonly pool: Pool) {
+    this.fartlekCompletionRepository = new FartlekCompletionRepository(pool);
+  }
 
   async persistCompletedActivity(
     playerId: string,
@@ -170,6 +175,11 @@ export class ActivityRepository {
             event.collectible.rarity ?? null,
             event.collectible.type
           ]
+        );
+      }
+      if (result.fartlekCompletions.length > 0) {
+        await this.fartlekCompletionRepository.insertManyWithClient(
+          client, playerId, activity.id, result.fartlekCompletions
         );
       }
       const player = await client.query<{ total_xp: number }>(

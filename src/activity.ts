@@ -1,6 +1,8 @@
-import type { Activity, ActivityResult, ActivityType, Collectible, GameEvent, NearMissCollectible, TrackPoint } from "./domain.js";
+import type { Activity, ActivityResult, ActivityType, Collectible, Fartlek, GameEvent, NearMissCollectible, TrackPoint } from "./domain.js";
 import type { FitMetadata } from "./fit.js";
 import { distanceMeters, detectFirstCollectiblePassages, minimumRouteDistanceMeters } from "./geometry.js";
+import { deriveFartlekCompletionDrafts } from "./fartlekDetection.js";
+import { FARTLEK_COMPLETION_XP } from "./fartlek.js";
 
 export const NEAR_MISS_THRESHOLD_METERS = 200;
 export const MAX_NEAR_MISSES = 5;
@@ -64,7 +66,11 @@ export const deriveNearMisses = (
     .slice(0, MAX_NEAR_MISSES);
 };
 
-export const deriveActivityResult = (activity: Activity, collectibles: Collectible[]): ActivityResult => {
+export const deriveActivityResult = (
+  activity: Activity,
+  collectibles: Collectible[],
+  fartleks: Fartlek[] = []
+): ActivityResult => {
   const passages = detectFirstCollectiblePassages(activity.route, collectibles);
   const events: GameEvent[] = passages.map((passage) => ({
     id: passage.collectible.id,
@@ -80,14 +86,17 @@ export const deriveActivityResult = (activity: Activity, collectibles: Collectib
     longitude: passage.collectible.longitude,
     activityTimestamp: passage.timestampMs
   }));
+  const fartlekCompletions = deriveFartlekCompletionDrafts(activity.route, fartleks);
   return {
     activityId: activity.id,
     distance: activity.distance,
     duration: activity.duration,
     collectedCount: events.length,
-    totalPoints: events.reduce((total, event) => total + event.value, 0),
+    totalPoints: events.reduce((total, event) => total + event.value, 0)
+      + fartlekCompletions.length * FARTLEK_COMPLETION_XP,
     collectibles,
     events,
-    nearMisses: deriveNearMisses(activity, collectibles, events)
+    nearMisses: deriveNearMisses(activity, collectibles, events),
+    fartlekCompletions
   };
 };

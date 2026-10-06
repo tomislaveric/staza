@@ -57,7 +57,8 @@ const result = (activityId: string): ActivityResult => ({
     longitude: 8.4044,
     activityTimestamp: Date.parse("2026-02-12T09:10:00.000Z")
   }],
-  nearMisses: []
+  nearMisses: [],
+  fartlekCompletions: []
 });
 
 describePersistence("World catalog and quests", () => {

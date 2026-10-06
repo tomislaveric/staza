@@ -8,7 +8,7 @@ import path from "node:path";
 import multer from "multer";
 import { deriveActivity, deriveActivityResult } from "./activity.js";
 import { config } from "./config.js";
-import type { ActivityImportResult, ActivityVideo, HudTimeline, Job, MappedGameEvent, PersistedActivity } from "./domain.js";
+import type { ActivityImportResult, ActivityVideo, Fartlek, HudTimeline, Job, MappedGameEvent, PersistedActivity, WorldFartlek } from "./domain.js";
 import { UserInputError } from "./errors.js";
 import { parseFitTrack, parseFitMetadata } from "./fit.js";
 import { extractGps5Times, mapToVideoSecond } from "./gpmf.js";
@@ -20,11 +20,14 @@ import {
 import { createHudTimeline, loadHudTimeline, saveHudTimeline } from "./hud/timeline.js";
 import { ActivityRepository } from "./persistence/activityRepository.js";
 import { CollectibleRepository } from "./persistence/collectibleRepository.js";
+import { FartlekRepository } from "./persistence/fartlekRepository.js";
+import { FartlekCompletionRepository } from "./persistence/fartlekCompletionRepository.js";
 import { QuestNotFoundError, QuestRepository } from "./persistence/questRepository.js";
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
-import { getRelevantCollectibles, parseBoundsParameter } from "./worldQuery.js";
+import { getRelevantCollectibles, getRelevantFartleks, parseBoundsParameter } from "./worldQuery.js";
+import { toWorldFartlek } from "./fartlek.js";
 import { createWorldSnapshot } from "./world.js";
 import { getBasemapConfig, getBasemapOrigins } from "./basemap.js";
 import {
@@ -49,6 +52,8 @@ const databasePool = createDatabasePool(config.databaseUrl);
 await migrate(databasePool);
 const activityRepository = new ActivityRepository(databasePool);
 const collectibleRepository = new CollectibleRepository(databasePool);
+const fartlekRepository = new FartlekRepository(databasePool);
+const fartlekCompletionRepository = new FartlekCompletionRepository(databasePool);
 const questRepository = new QuestRepository(databasePool);
 const smtpConfig = config.smtpHost && config.smtpUser && config.smtpPassword && config.mailFrom
   ? {
@@ -164,12 +169,16 @@ const processDetection = async (
   playerId: string
 ): Promise<void> => {
   try {
-    const collectibles = await collectibleRepository.listAll();
+    const [collectibles, fartleks] = await Promise.all([
+      collectibleRepository.listAll(),
+      fartlekRepository.listPublished()
+    ]);
     const fit = path.join(directory, "track.fit");
     const [track, metadata] = await Promise.all([parseFitTrack(fit), parseFitMetadata(fit)]);
     const activity = deriveActivity(job.token, track, "unknown", metadata);
     const relevantCollectibles = getRelevantCollectibles(collectibles, track, config.worldQueryPaddingMeters);
-    const activityResult = deriveActivityResult(activity, relevantCollectibles);
+    const relevantFartleks = getRelevantFartleks(fartleks, track, config.worldQueryPaddingMeters);
+    const activityResult = deriveActivityResult(activity, relevantCollectibles, relevantFartleks);
     job.activity = activity;
     job.activityResult = activityResult;
     job.world = {
@@ -417,14 +426,16 @@ const importActivity = async (
   }
 
   try {
-    const [collectibles, track, metadata] = await Promise.all([
+    const [collectibles, fartleks, track, metadata] = await Promise.all([
       collectibleRepository.listAll(),
+      fartlekRepository.listPublished(),
       parseFitTrack(fit.path),
       parseFitMetadata(fit.path)
     ]);
     const activity = deriveActivity(randomUUID(), track, "unknown", metadata);
     const relevantCollectibles = getRelevantCollectibles(collectibles, track, config.worldQueryPaddingMeters);
-    const activityResult = deriveActivityResult(activity, relevantCollectibles);
+    const relevantFartleks = getRelevantFartleks(fartleks, track, config.worldQueryPaddingMeters);
+    const activityResult = deriveActivityResult(activity, relevantCollectibles, relevantFartleks);
     const persisted = await activityRepository.persistCompletedActivity(playerId, activity, activityResult, importKey);
     let importedActivity = persisted.activity;
     let videoError: string | undefined;
@@ -796,24 +807,36 @@ app.get("/api/world/basemap", requirePlayer, (_request: UploadRequest, response)
   response.json(getBasemapConfig());
 });
 
+const worldFartleksForPlayer = async (playerId: string, fartleks: Fartlek[]): Promise<WorldFartlek[]> => {
+  const stats = await fartlekCompletionRepository.statsForPlayer(playerId, fartleks.map((fartlek) => fartlek.id));
+  return fartleks.map((fartlek) => toWorldFartlek(fartlek, stats.get(fartlek.id)));
+};
+
 app.get("/api/world", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
     const playerId = request.user!.playerId;
     const bounds = parseBoundsParameter(request.query.bbox);
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
-      const collectibles = await collectibleRepository.listAll();
-      response.json({ ...createWorldSnapshot(collectibles, discoveredSourceIds), quests: [], truncated: false });
+      const [collectibles, allFartleks] = await Promise.all([
+        collectibleRepository.listAll(),
+        fartlekRepository.listAll()
+      ]);
+      const fartleks = await worldFartleksForPlayer(playerId, allFartleks);
+      response.json({ ...createWorldSnapshot(collectibles, discoveredSourceIds), quests: [], truncated: false, fartleks });
       return;
     }
-    const [viewport, quests] = await Promise.all([
+    const [viewport, quests, fartlekCandidates] = await Promise.all([
       collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      questRepository.listWithinBounds(playerId, bounds, discoveredSourceIds, config.worldViewportLimit)
+      questRepository.listWithinBounds(playerId, bounds, discoveredSourceIds, config.worldViewportLimit),
+      fartlekRepository.listWithinBounds(bounds)
     ]);
+    const fartleks = await worldFartleksForPlayer(playerId, fartlekCandidates);
     response.json({
       ...createWorldSnapshot(viewport.collectibles, discoveredSourceIds),
       quests,
-      truncated: viewport.truncated
+      truncated: viewport.truncated,
+      fartleks
     });
   } catch (error) {
     next(error);
