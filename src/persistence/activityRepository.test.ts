@@ -1,6 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { Activity, ActivityResult } from "../domain.js";
-import { JourneyBoundaryError } from "../errors.js";
 import { createDatabasePool } from "./database.js";
 import { ActivityRepository } from "./activityRepository.js";
 import { migrate } from "./migrate.js";
@@ -111,41 +110,6 @@ describePersistence("ActivityRepository", () => {
     expect(await repository!.listActivities(playerId)).toHaveLength(1);
     expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 40 });
     expect((await repository!.getActivity(playerId, originalId))?.events).toHaveLength(1);
-  });
-
-  it("establishes the journey boundary with the first activity and rejects older imports atomically", async () => {
-    const first = activity("j".repeat(48));
-    await repository!.persistCompletedActivity(playerId, first, result(first.id));
-    expect(await repository!.getJourneyStartedAt(playerId)).toEqual(new Date(first.startedAt));
-
-    const older = { ...activity("k".repeat(48)), startedAt: first.startedAt - 1 };
-    let processed = false;
-    await expect(repository!.persistCompletedActivityWithResult(playerId, older, () => {
-      processed = true;
-      return result(older.id);
-    }))
-      .rejects.toBeInstanceOf(JourneyBoundaryError);
-    expect(processed).toBe(false);
-    const equal = { ...activity("l".repeat(48)), startedAt: first.startedAt };
-    await expect(repository!.persistCompletedActivity(playerId, equal, result(equal.id))).resolves.toMatchObject({
-      inserted: true
-    });
-    expect(await repository!.listActivities(playerId)).toHaveLength(2);
-    expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 50 });
-    expect(await repository!.getJourneyStartedAt(playerId)).toEqual(new Date(first.startedAt));
-  });
-
-  it("uses a Strava external activity id for source-scoped idempotency", async () => {
-    const first = { ...activity("m".repeat(48)), source: "strava" as const };
-    const repeated = { ...activity("n".repeat(48)), source: "strava" as const };
-    const accepted = await repository!.persistCompletedActivity(playerId, first, result(first.id), undefined, "987654");
-    const retried = await repository!.persistCompletedActivity(playerId, repeated, result(repeated.id), undefined, "987654");
-
-    expect(accepted.inserted).toBe(true);
-    expect(retried.inserted).toBe(false);
-    expect(retried.activity.id).toBe(first.id);
-    expect(await repository!.listActivities(playerId)).toHaveLength(1);
-    expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 25 });
   });
 
   it("reconstructs durable state from a new repository and marks video separately", async () => {

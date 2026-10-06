@@ -63,18 +63,6 @@ const httpsUrlEnv = (name: string, fallback: string): string => {
   return parsed.toString();
 };
 
-const optionalAbsoluteUrlEnv = (name: string): string | undefined => {
-  const value = process.env[name]?.trim();
-  if (!value) return undefined;
-  try {
-    const parsed = new URL(value);
-    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
-    return parsed.toString();
-  } catch {
-    throw new Error(`${name} must be a valid absolute URL.`);
-  }
-};
-
 const uuidEnv = (name: string, fallback: string): string => {
   const value = process.env[name] ?? fallback;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
@@ -155,20 +143,8 @@ export const config = {
   smtpSecure: booleanEnv("SMTP_SECURE", false),
   smtpUser: process.env.SMTP_USER?.trim() || undefined,
   smtpPassword: smtpPasswordEnv(),
-  mailFrom: process.env.MAIL_FROM?.trim() || undefined,
-  stravaClientId: process.env.STRAVA_CLIENT_ID?.trim() || undefined,
-  stravaClientSecret: process.env.STRAVA_CLIENT_SECRET?.trim() || undefined,
-  stravaRedirectUri: optionalAbsoluteUrlEnv("STRAVA_REDIRECT_URI")
+  mailFrom: process.env.MAIL_FROM?.trim() || undefined
 };
-
-const stravaConfigCount = [
-  config.stravaClientId,
-  config.stravaClientSecret,
-  config.stravaRedirectUri
-].filter(Boolean).length;
-if (stravaConfigCount !== 0 && stravaConfigCount !== 3) {
-  throw new Error("STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, and STRAVA_REDIRECT_URI must be configured together.");
-}
 
 if (config.nodeEnv === "production") {
   if (!config.webauthnRpId || !config.webauthnRpName || !config.webauthnOrigin || !config.webauthnOrigin.startsWith("https://")) {
@@ -177,9 +153,5 @@ if (config.nodeEnv === "production") {
   if (config.devAuthEmail || config.devAuthPlayerId) throw new Error("Development authentication bootstrap is not allowed in production.");
   if (!config.smtpHost || !config.smtpUser || !config.smtpPassword || !config.mailFrom) {
     throw new Error("Production requires SMTP_HOST, SMTP_USER, SMTP_PASSWORD (or SMTP_PASSWORD_BASE64), and MAIL_FROM for email delivery.");
-  }
-  if (!config.stravaClientId || !config.stravaClientSecret || !config.stravaRedirectUri ||
-      !config.stravaRedirectUri.startsWith("https://")) {
-    throw new Error("Production requires STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, and an HTTPS STRAVA_REDIRECT_URI.");
   }
 }

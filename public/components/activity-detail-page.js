@@ -20,7 +20,7 @@ export const replayInputs = (activity) => {
   const replay = activity.replay;
   if (
     replay?.version !== 1
-    || !["fit", "strava"].includes(replay.activity?.source)
+    || replay.activity?.source !== "fit"
     || !Array.isArray(replay.activity.route)
     || replay.activity.route.length < 2
     || !Array.isArray(replay.activityResult?.collectibles)

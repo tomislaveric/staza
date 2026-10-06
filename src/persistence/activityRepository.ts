@@ -16,7 +16,6 @@ import type {
   ReplaySnapshot
 } from "../domain.js";
 import { getLevelProgress, getTotalXpRequiredForLevel } from "../progression.js";
-import { validateActivityImportEligibility } from "../activity.js";
 
 interface ActivityRow {
   id: string;
@@ -113,31 +112,11 @@ export class ActivityRepository {
     playerId: string,
     activity: Activity,
     result: ActivityResult,
-    importKey?: string,
-    sourceExternalId?: string
-  ): Promise<{ activity: PersistedActivity; progress: PlayerProgress; inserted: boolean; result: ActivityResult }> {
-    return this.persistCompletedActivityWithResult(
-      playerId, activity, async () => result, importKey, sourceExternalId
-    );
-  }
-
-  async persistCompletedActivityWithResult(
-    playerId: string,
-    activity: Activity,
-    buildResult: () => Promise<ActivityResult> | ActivityResult,
-    importKey?: string,
-    sourceExternalId?: string
-  ): Promise<{ activity: PersistedActivity; progress: PlayerProgress; inserted: boolean; result: ActivityResult }> {
+    importKey?: string
+  ): Promise<{ activity: PersistedActivity; progress: PlayerProgress; inserted: boolean }> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const journey = await client.query<{ journey_started_at: Date | null }>(
-        "SELECT journey_started_at FROM players WHERE id = $1 FOR UPDATE",
-        [playerId]
-      );
-      if (journey.rowCount !== 1) throw new Error("Player does not exist.");
-      validateActivityImportEligibility(journey.rows[0].journey_started_at, activity.startedAt);
-      const result = await buildResult();
       const inserted = await client.query<ActivityRow>(
         `INSERT INTO activities (
           id, player_id, source_type, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count,
@@ -156,20 +135,20 @@ export class ActivityRepository {
           result.totalPoints,
           result.collectedCount,
           JSON.stringify(createReplaySnapshot(activity, result)),
-          sourceExternalId ?? importKey ?? null
+          importKey ?? null
         ]
       );
 
       if (inserted.rowCount === 0) {
-        const persistedId = importKey || sourceExternalId
-          ? await this.getActivityIdByExternalIdWithClient(
-            client, playerId, activity.source, sourceExternalId ?? importKey!
-          )
-          : activity.id;
-        const persisted = await this.getActivityWithClient(client, playerId, persistedId);
+        const persisted = await this.getActivityWithClient(
+          client, playerId,
+          importKey
+            ? await this.getActivityIdByImportKeyWithClient(client, playerId, importKey)
+            : activity.id
+        );
         const progress = await this.getProgressWithClient(client, playerId);
         await client.query("COMMIT");
-        return { activity: persisted, progress, inserted: false, result };
+        return { activity: persisted, progress, inserted: false };
       }
 
       for (const event of result.events) {
@@ -194,16 +173,13 @@ export class ActivityRepository {
         );
       }
       const player = await client.query<{ total_xp: number }>(
-        `UPDATE players
-         SET total_xp = total_xp + $1,
-             journey_started_at = COALESCE(journey_started_at, $3)
-         WHERE id = $2 RETURNING total_xp`,
-        [result.totalPoints, playerId, new Date(activity.startedAt)]
+        "UPDATE players SET total_xp = total_xp + $1 WHERE id = $2 RETURNING total_xp",
+        [result.totalPoints, playerId]
       );
       if (player.rowCount !== 1) throw new Error("Default player does not exist.");
       const persisted = await this.getActivityWithClient(client, playerId, activity.id);
       await client.query("COMMIT");
-      return { activity: persisted, progress: getLevelProgress(player.rows[0].total_xp), inserted: true, result };
+      return { activity: persisted, progress: getLevelProgress(player.rows[0].total_xp), inserted: true };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -212,36 +188,14 @@ export class ActivityRepository {
     }
   }
 
-  async getActivityByImportKey(
-    playerId: string,
-    importKey: string,
-    source: Activity["source"] = "fit"
-  ): Promise<PersistedActivity | undefined> {
+  async getActivityByImportKey(playerId: string, importKey: string): Promise<PersistedActivity | undefined> {
     const result = await this.pool.query<{ id: string }>(
       `SELECT id FROM activities
-       WHERE player_id = $1 AND source_type = $2 AND source_external_id = $3`,
-      [playerId, source, importKey]
+       WHERE player_id = $1 AND source_type = 'fit' AND source_external_id = $2`,
+      [playerId, importKey]
     );
     if (result.rowCount !== 1) return undefined;
     return this.getActivity(playerId, result.rows[0].id);
-  }
-
-  async getJourneyStartedAt(playerId: string): Promise<Date | null> {
-    const result = await this.pool.query<{ journey_started_at: Date | null }>(
-      "SELECT journey_started_at FROM players WHERE id = $1",
-      [playerId]
-    );
-    if (result.rowCount !== 1) throw new Error("Player does not exist.");
-    return result.rows[0].journey_started_at;
-  }
-
-  async listImportedExternalIds(playerId: string, source: Activity["source"]): Promise<string[]> {
-    const result = await this.pool.query<{ source_external_id: string }>(
-      `SELECT source_external_id FROM activities
-       WHERE player_id = $1 AND source_type = $2 AND source_external_id IS NOT NULL`,
-      [playerId, source]
-    );
-    return result.rows.map((row) => row.source_external_id);
   }
 
   async listActivities(playerId: string): Promise<ActivityHistoryItem[]> {
@@ -448,16 +402,11 @@ export class ActivityRepository {
     return getLevelProgress(result.rows[0].total_xp);
   }
 
-  private async getActivityIdByExternalIdWithClient(
-    client: PoolClient,
-    playerId: string,
-    source: Activity["source"],
-    externalId: string
-  ): Promise<string> {
+  private async getActivityIdByImportKeyWithClient(client: PoolClient, playerId: string, importKey: string): Promise<string> {
     const result = await client.query<{ id: string }>(
       `SELECT id FROM activities
-       WHERE player_id = $1 AND source_type = $2 AND source_external_id = $3`,
-      [playerId, source, externalId]
+       WHERE player_id = $1 AND source_type = 'fit' AND source_external_id = $2`,
+      [playerId, importKey]
     );
     if (result.rowCount !== 1) throw new Error("Persisted import not found.");
     return result.rows[0].id;

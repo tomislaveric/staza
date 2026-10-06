@@ -1,7 +1,6 @@
 import type { Activity, ActivityResult, ActivityType, Collectible, GameEvent, NearMissCollectible, TrackPoint } from "./domain.js";
 import type { FitMetadata } from "./fit.js";
 import { distanceMeters, detectFirstCollectiblePassages, minimumRouteDistanceMeters } from "./geometry.js";
-import { JourneyBoundaryError } from "./errors.js";
 
 export const NEAR_MISS_THRESHOLD_METERS = 200;
 export const MAX_NEAR_MISSES = 5;
@@ -17,27 +16,11 @@ const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
 /** A human label for an activity type, used as a title fallback when the FIT carries no name. */
 export const activityTypeLabel = (type: ActivityType): string => ACTIVITY_TYPE_LABELS[type] ?? ACTIVITY_TYPE_LABELS.unknown;
 
-export const validateActivityImportEligibility = (
-  journeyStartedAt: number | Date | string | null | undefined,
-  activityStartedAt: number | Date | string
-): void => {
-  if (journeyStartedAt == null) return;
-  const boundary = journeyStartedAt instanceof Date ? journeyStartedAt.getTime()
-    : typeof journeyStartedAt === "number" ? journeyStartedAt : Date.parse(journeyStartedAt);
-  const startedAt = typeof activityStartedAt === "number" ? activityStartedAt
-    : activityStartedAt instanceof Date ? activityStartedAt.getTime() : Date.parse(activityStartedAt);
-  if (!Number.isFinite(boundary) || !Number.isFinite(startedAt)) {
-    throw new Error("Activity and journey start timestamps must be valid.");
-  }
-  if (startedAt < boundary) throw new JourneyBoundaryError();
-};
-
 export const deriveActivity = (
   id: string,
   route: TrackPoint[],
   type: ActivityType = "unknown",
-  metadata: FitMetadata = {},
-  source: Activity["source"] = "fit"
+  metadata: FitMetadata = {}
 ): Activity => {
   const distance = route.slice(1).reduce(
     (total, point, index) =>
@@ -49,7 +32,7 @@ export const deriveActivity = (
   const title = metadata.title ?? activityTypeLabel(type);
   return {
     id,
-    source,
+    source: "fit",
     type,
     title,
     ...(metadata.description === undefined ? {} : { description: metadata.description }),

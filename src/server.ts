@@ -6,10 +6,10 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simp
 import { access, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import multer from "multer";
-import { deriveActivity, deriveActivityResult, validateActivityImportEligibility } from "./activity.js";
+import { deriveActivity, deriveActivityResult } from "./activity.js";
 import { config } from "./config.js";
 import type { ActivityImportResult, ActivityVideo, HudTimeline, Job, MappedGameEvent, PersistedActivity } from "./domain.js";
-import { JourneyBoundaryError, UserInputError } from "./errors.js";
+import { UserInputError } from "./errors.js";
 import { parseFitTrack, parseFitMetadata } from "./fit.js";
 import { extractGps5Times, mapToVideoSecond } from "./gpmf.js";
 import {
@@ -34,15 +34,6 @@ import {
 } from "./quest.js";
 import { AuthService, EmailSender, type SessionUser } from "./auth.js";
 import { translateLandingTemplate } from "./landing/locales.js";
-import {
-  hasRequiredStravaScopes,
-  createStravaAuthorizationUrl,
-  normalizeStravaActivity,
-  normalizeStravaStreams,
-  StravaApiError,
-  stravaJson,
-  type StravaActivitySummary
-} from "./strava.js";
 
 interface UploadRequest extends Request {
   job?: Job;
@@ -176,24 +167,17 @@ const processDetection = async (
     const collectibles = await collectibleRepository.listAll();
     const fit = path.join(directory, "track.fit");
     const [track, metadata] = await Promise.all([parseFitTrack(fit), parseFitMetadata(fit)]);
-    validateActivityImportEligibility(
-      await repository.getJourneyStartedAt(playerId),
-      track[0].timestampMs
-    );
     const activity = deriveActivity(job.token, track, "unknown", metadata);
     const relevantCollectibles = getRelevantCollectibles(collectibles, track, config.worldQueryPaddingMeters);
-    const persisted = await repository.persistCompletedActivityWithResult(playerId, activity, () => {
-      const activityResult = deriveActivityResult(activity, relevantCollectibles);
-      job.activity = activity;
-      job.activityResult = activityResult;
-      job.world = {
-        totalCollectibles: collectibles.length,
-        relevantCollectibles: relevantCollectibles.length
-      };
-      return activityResult;
-    });
-    const activityResult = persisted.result;
+    const activityResult = deriveActivityResult(activity, relevantCollectibles);
+    job.activity = activity;
+    job.activityResult = activityResult;
+    job.world = {
+      totalCollectibles: collectibles.length,
+      relevantCollectibles: relevantCollectibles.length
+    };
     job.resultMode = hasVideo ? "video" : "activity";
+    await repository.persistCompletedActivity(playerId, activity, activityResult);
 
     if (!hasVideo) {
       job.state = "succeeded";
@@ -438,17 +422,10 @@ const importActivity = async (
       parseFitTrack(fit.path),
       parseFitMetadata(fit.path)
     ]);
-    validateActivityImportEligibility(
-      await activityRepository.getJourneyStartedAt(playerId),
-      track[0].timestampMs
-    );
     const activity = deriveActivity(randomUUID(), track, "unknown", metadata);
     const relevantCollectibles = getRelevantCollectibles(collectibles, track, config.worldQueryPaddingMeters);
-    const persisted = await activityRepository.persistCompletedActivityWithResult(
-      playerId, activity,
-      () => deriveActivityResult(activity, relevantCollectibles),
-      importKey
-    );
+    const activityResult = deriveActivityResult(activity, relevantCollectibles);
+    const persisted = await activityRepository.persistCompletedActivity(playerId, activity, activityResult, importKey);
     let importedActivity = persisted.activity;
     let videoError: string | undefined;
     if (persisted.inserted && uploadedVideo) {
@@ -649,347 +626,6 @@ app.get("/api/auth/session", (request: UploadRequest, response) => {
     user: { email: request.user.email, emailVerified: request.user.emailVerified },
     csrfToken: request.user.csrfToken
   } : { authenticated: false });
-});
-interface StravaConnectionRow {
-  strava_athlete_id: string;
-  access_token: string;
-  refresh_token: string;
-  expires_at: Date;
-  scope: string;
-  needs_reconnect: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
-
-interface StravaTokenResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_at: number;
-  scope?: string;
-  athlete?: { id: number };
-}
-
-const stravaConfigured = Boolean(
-  config.stravaClientId && config.stravaClientSecret && config.stravaRedirectUri
-);
-const readStravaConnection = async (playerId: string): Promise<StravaConnectionRow | undefined> => {
-  const result = await databasePool.query<StravaConnectionRow>(
-    `SELECT strava_athlete_id, access_token, refresh_token, expires_at, scope,
-            needs_reconnect, created_at, updated_at
-     FROM strava_connections WHERE player_id = $1`,
-    [playerId]
-  );
-  return result.rows[0];
-};
-const refreshStravaAccessToken = async (playerId: string): Promise<{ accessToken: string; connection: StravaConnectionRow }> => {
-  const client = await databasePool.connect();
-  let committed = false;
-  try {
-    await client.query("BEGIN");
-    const stored = await client.query<StravaConnectionRow>(
-      `SELECT strava_athlete_id, access_token, refresh_token, expires_at, scope,
-              needs_reconnect, created_at, updated_at
-       FROM strava_connections WHERE player_id = $1 FOR UPDATE`,
-      [playerId]
-    );
-    const connection = stored.rows[0];
-    if (!connection) throw new StravaApiError(409, "Connect Strava before importing activities.", "STRAVA_NOT_CONNECTED");
-    if (connection.needs_reconnect) {
-      throw new StravaApiError(409, "Your Strava connection needs to be renewed. Reconnect Strava to continue.", "STRAVA_RECONNECT_REQUIRED");
-    }
-    if (!hasRequiredStravaScopes(connection.scope)) {
-      throw new StravaApiError(409, "Reconnect Strava and approve access to your activities.", "STRAVA_RECONNECT_REQUIRED");
-    }
-    if (connection.expires_at.getTime() > Date.now() + 60_000) {
-      await client.query("COMMIT");
-      committed = true;
-      return { accessToken: connection.access_token, connection };
-    }
-    let renewed: StravaTokenResponse;
-    try {
-      renewed = await stravaJson<StravaTokenResponse>("https://www.strava.com/oauth/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: config.stravaClientId!,
-          client_secret: config.stravaClientSecret!,
-          grant_type: "refresh_token",
-          refresh_token: connection.refresh_token
-        })
-      });
-    } catch (error) {
-      if (!(error instanceof StravaApiError) || error.status !== 400) throw error;
-      await client.query(
-        "UPDATE strava_connections SET needs_reconnect = true, updated_at = now() WHERE player_id = $1",
-        [playerId]
-      );
-      await client.query("COMMIT");
-      committed = true;
-      throw new StravaApiError(409, "Your Strava connection needs to be renewed. Reconnect Strava to continue.", "STRAVA_RECONNECT_REQUIRED");
-    }
-    const renewedScope = renewed.scope ?? connection.scope;
-    if (!renewed.access_token || !renewed.refresh_token || !Number.isFinite(renewed.expires_at) ||
-        renewed.expires_at <= Date.now() / 1000 ||
-        !hasRequiredStravaScopes(renewedScope)) {
-      await client.query(
-        "UPDATE strava_connections SET needs_reconnect = true, updated_at = now() WHERE player_id = $1",
-        [playerId]
-      );
-      await client.query("COMMIT");
-      committed = true;
-      throw new StravaApiError(409, "Your Strava connection needs to be renewed. Reconnect Strava to continue.", "STRAVA_RECONNECT_REQUIRED");
-    }
-    const refreshedConnection: StravaConnectionRow = {
-      ...connection,
-      access_token: renewed.access_token,
-      refresh_token: renewed.refresh_token,
-      expires_at: new Date(renewed.expires_at * 1000),
-      scope: renewedScope,
-      needs_reconnect: false
-    };
-    await client.query(
-      `UPDATE strava_connections
-       SET access_token = $2, refresh_token = $3, expires_at = $4,
-           scope = $5, needs_reconnect = false, updated_at = now()
-       WHERE player_id = $1`,
-      [
-        playerId,
-        renewed.access_token,
-        renewed.refresh_token,
-        refreshedConnection.expires_at,
-        refreshedConnection.scope
-      ]
-    );
-    await client.query("COMMIT");
-    committed = true;
-    return { accessToken: refreshedConnection.access_token, connection: refreshedConnection };
-  } catch (error) {
-    if (!committed) await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-};
-const stravaApi = async <T>(playerId: string, accessToken: string, path: string): Promise<T> => {
-  try {
-    return await stravaJson<T>(`https://www.strava.com/api/v3${path}`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-  } catch (error) {
-    if (error instanceof StravaApiError && error.status === 401) {
-      await databasePool.query(
-        `UPDATE strava_connections SET needs_reconnect = true, updated_at = now()
-         WHERE player_id = $1 AND access_token = $2`,
-        [playerId, accessToken]
-      );
-      throw new StravaApiError(409, "Your Strava connection needs to be renewed. Reconnect Strava to continue.", "STRAVA_RECONNECT_REQUIRED");
-    }
-    throw error;
-  }
-};
-
-app.get("/api/integrations/strava/status", requirePlayer, async (request: UploadRequest, response, next) => {
-  try {
-    const connection = await readStravaConnection(request.user!.playerId);
-    response.json({
-      configured: stravaConfigured,
-      connected: Boolean(connection),
-      ...(connection ? {
-        athleteId: connection.strava_athlete_id,
-        scope: connection.scope,
-        connectedAt: connection.created_at.toISOString(),
-        updatedAt: connection.updated_at.toISOString(),
-        reconnectRequired: connection.needs_reconnect
-      } : {})
-    });
-  } catch (error) { next(error); }
-});
-
-app.get("/api/integrations/strava/connect", requirePlayer, async (request: UploadRequest, response, next) => {
-  try {
-    if (!stravaConfigured) throw new UserInputError("Strava is not configured for this environment.");
-    const state = randomBytes(32).toString("base64url");
-    await databasePool.query(
-      `INSERT INTO strava_oauth_states (state, player_id, expires_at)
-       VALUES ($1, $2, now() + interval '10 minutes')`,
-      [state, request.user!.playerId]
-    );
-    response.redirect(302, createStravaAuthorizationUrl(
-      config.stravaClientId!,
-      config.stravaRedirectUri!,
-      state
-    ));
-  } catch (error) { next(error); }
-});
-
-app.get("/api/integrations/strava/callback", async (request: UploadRequest, response, next) => {
-  try {
-    const code = request.query.code;
-    const state = request.query.state;
-    if (typeof code !== "string" || typeof state !== "string" || !request.user) {
-      response.status(400).send("Strava connection could not be verified. Return to Staza and try connecting again.");
-      return;
-    }
-    const pending = await databasePool.query<{ player_id: string }>(
-      `DELETE FROM strava_oauth_states
-       WHERE state = $1 AND player_id = $2 AND expires_at > now()
-       RETURNING player_id`,
-      [state, request.user.playerId]
-    );
-    if (pending.rowCount !== 1) {
-      response.status(400).send("Strava connection expired or could not be verified. Return to Staza and try again.");
-      return;
-    }
-    const tokenResult = await stravaJson<StravaTokenResponse>("https://www.strava.com/oauth/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: config.stravaClientId!,
-        client_secret: config.stravaClientSecret!,
-        code,
-        grant_type: "authorization_code"
-      })
-    });
-    if (!tokenResult.athlete || !Number.isSafeInteger(tokenResult.athlete.id) ||
-        !tokenResult.access_token || !tokenResult.refresh_token ||
-        !Number.isFinite(tokenResult.expires_at) || tokenResult.expires_at <= Date.now() / 1000 ||
-        !tokenResult.scope || !hasRequiredStravaScopes(tokenResult.scope)) {
-      throw new UserInputError("Strava did not grant the required activity permissions. Reconnect and approve activity access.");
-    }
-    await databasePool.query(
-      `INSERT INTO strava_connections
-         (player_id, strava_athlete_id, access_token, refresh_token, expires_at, scope, needs_reconnect)
-       VALUES ($1, $2, $3, $4, $5, $6, false)
-       ON CONFLICT (player_id) DO UPDATE SET
-         strava_athlete_id = EXCLUDED.strava_athlete_id,
-         access_token = EXCLUDED.access_token,
-         refresh_token = EXCLUDED.refresh_token,
-         expires_at = EXCLUDED.expires_at,
-         scope = EXCLUDED.scope,
-         needs_reconnect = false,
-         updated_at = now()`,
-      [
-        request.user.playerId,
-        tokenResult.athlete.id,
-        tokenResult.access_token,
-        tokenResult.refresh_token,
-        new Date(tokenResult.expires_at * 1000),
-        tokenResult.scope
-      ]
-    );
-    response.redirect(303, "/en/add-activity?strava=connected");
-  } catch (error) { next(error); }
-});
-
-app.post("/api/integrations/strava/disconnect", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    await databasePool.query("DELETE FROM strava_connections WHERE player_id = $1", [request.user!.playerId]);
-    response.status(204).end();
-  } catch (error) { next(error); }
-});
-
-app.get("/api/integrations/strava/activities", requirePlayer, async (request: UploadRequest, response, next) => {
-  try {
-    const { accessToken, connection } = await refreshStravaAccessToken(request.user!.playerId);
-    const [summaries, journeyStartedAt, importedIds] = await Promise.all([
-      stravaApi<StravaActivitySummary[]>(request.user!.playerId, accessToken, "/athlete/activities?per_page=20&page=1"),
-      activityRepository.getJourneyStartedAt(request.user!.playerId),
-      activityRepository.listImportedExternalIds(request.user!.playerId, "strava")
-    ]);
-    const imported = new Set(importedIds);
-    const journeyTimestamp = journeyStartedAt?.getTime();
-    const activities = summaries.flatMap((summary) => {
-      const normalized = normalizeStravaActivity(summary);
-      if (!normalized) return [];
-      const beforeJourneyStart = journeyTimestamp !== undefined &&
-        Date.parse(normalized.startedAt) < journeyTimestamp;
-      const alreadyImported = imported.has(normalized.externalId);
-      return [{
-        externalId: normalized.externalId,
-        name: normalized.name,
-        sportType: normalized.sportType,
-        startedAt: normalized.startedAt,
-        distance: normalized.distance,
-        elevationGain: normalized.elevationGain,
-        duration: normalized.duration,
-        alreadyImported,
-        beforeJourneyStart,
-        importable: !alreadyImported && !beforeJourneyStart
-      }];
-    });
-    if (!hasRequiredStravaScopes(connection.scope)) {
-      throw new StravaApiError(409, "Reconnect Strava and approve access to your activities.", "STRAVA_RECONNECT_REQUIRED");
-    }
-    response.json({ activities });
-  } catch (error) { next(error); }
-});
-
-app.post("/api/integrations/strava/activities/:externalId/import", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const externalId = String(request.params.externalId);
-    if (!/^[1-9]\d{0,19}$/.test(externalId)) throw new UserInputError("A valid Strava activity id is required.");
-    const existing = await activityRepository.getActivityByImportKey(playerId, externalId, "strava");
-    if (existing) {
-      response.json({ activity: attachVideoUrls(existing), inserted: false });
-      return;
-    }
-    const { accessToken, connection } = await refreshStravaAccessToken(playerId);
-    const recent = await stravaApi<StravaActivitySummary[]>(
-      playerId,
-      accessToken,
-      "/athlete/activities?per_page=20&page=1"
-    );
-    if (!recent.some((item) => String(item.id) === externalId)) {
-      response.status(404).json({ error: "Only your recent Strava activities can be imported." });
-      return;
-    }
-    const detail = await stravaApi<StravaActivitySummary & {
-      athlete?: { id: number };
-      start_date: string;
-      sport_type: string;
-    }>(playerId, accessToken, `/activities/${encodeURIComponent(externalId)}`);
-    if (String(detail.id) !== externalId || detail.athlete?.id !== Number(connection.strava_athlete_id)) {
-      response.status(404).json({ error: "Strava activity not found for this connected athlete." });
-      return;
-    }
-    const normalized = normalizeStravaActivity(detail);
-    if (!normalized) throw new UserInputError("This Strava activity type cannot be imported into Staza.");
-    validateActivityImportEligibility(
-      await activityRepository.getJourneyStartedAt(playerId),
-      Date.parse(normalized.startedAt)
-    );
-    const streams = await stravaApi<Record<string, { data?: unknown }>>(
-      playerId,
-      accessToken,
-      `/activities/${encodeURIComponent(externalId)}/streams?keys=latlng,time&key_by_type=true`
-    );
-    const track = normalizeStravaStreams(
-      normalized.startedAt,
-      streams.latlng?.data,
-      streams.time?.data
-    );
-    const collectibles = await collectibleRepository.listAll();
-    const activity = deriveActivity(
-      randomUUID(),
-      track,
-      normalized.type,
-      { title: normalized.name },
-      "strava"
-    );
-    const relevantCollectibles = getRelevantCollectibles(collectibles, track, config.worldQueryPaddingMeters);
-    const persisted = await activityRepository.persistCompletedActivityWithResult(
-      playerId,
-      activity,
-      () => deriveActivityResult(activity, relevantCollectibles),
-      undefined,
-      externalId
-    );
-    response.status(persisted.inserted ? 201 : 200).json({
-      activity: attachVideoUrls(persisted.activity),
-      inserted: persisted.inserted
-    });
-  } catch (error) { next(error); }
 });
 app.post("/api/auth/logout", requireUser, requireCsrf, async (request: UploadRequest, response, next) => {
   try { await authService.logout(request.sessionToken); clearSession(response); response.status(204).end(); } catch (error) { next(error); }
@@ -1558,16 +1194,11 @@ app.get("/api/jobs/:token/download", requirePlayer, async (request: UploadReques
 });
 
 app.use((error: Error, request: UploadRequest, response: Response, _next: NextFunction) => {
-  if (error instanceof StravaApiError) {
-    response.status(error.status).json({ error: error.message, code: error.code });
-    return;
-  }
   console.error("Request failed:", error);
   if (request.jobDir) void cleanupReservation(request);
   const isInputError = error instanceof multer.MulterError || error instanceof UserInputError;
-  response.status(error instanceof JourneyBoundaryError ? 409 : isInputError ? 400 : 500).json({
-    error: error instanceof multer.MulterError ? `Upload rejected: ${error.message}` : error.message,
-    ...(error instanceof JourneyBoundaryError ? { code: error.code } : {})
+  response.status(isInputError ? 400 : 500).json({
+    error: error instanceof multer.MulterError ? `Upload rejected: ${error.message}` : error.message
   });
 });
 
