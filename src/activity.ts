@@ -2,7 +2,7 @@ import type { Activity, ActivityResult, ActivityType, Collectible, GameEvent, Ne
 import type { FitMetadata } from "./fit.js";
 import { distanceMeters, detectFirstCollectiblePassages, minimumRouteDistanceMeters } from "./geometry.js";
 
-export const NEAR_MISS_THRESHOLD_METERS = 100;
+export const NEAR_MISS_THRESHOLD_METERS = 200;
 export const MAX_NEAR_MISSES = 5;
 
 const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {

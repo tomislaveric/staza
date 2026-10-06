@@ -8,6 +8,10 @@ const route = [
 ];
 
 describe("activity derivation", () => {
+  it("uses a 200 m near-miss threshold", () => {
+    expect(NEAR_MISS_THRESHOLD_METERS).toBe(200);
+  });
+
   it("derives route measurements and canonical timestamp-ordered events", () => {
     const activity = deriveActivity("ride", route);
     const result = deriveActivityResult(activity, [
@@ -47,12 +51,30 @@ describe("activity derivation", () => {
     expect(result.events.every((event) => result.collectibles.some((item) => item.id === event.sourceId))).toBe(true);
   });
 
+  it("collects within 100 m and reports misses within 200 m", () => {
+    const metersToLatitude = (meters: number) => meters / 6_371_000 * 180 / Math.PI;
+    const routeAt97Meters = [
+      { latitude: metersToLatitude(97), longitude: -0.001, timestampMs: 1_000 },
+      { latitude: metersToLatitude(97), longitude: 0, timestampMs: 2_000 },
+      { latitude: metersToLatitude(97), longitude: 0.001, timestampMs: 3_000 }
+    ];
+    const result = deriveActivityResult(deriveActivity("radius-check", routeAt97Meters), [
+      { id: "within-100m", name: "Within collection radius", type: "landmark", latitude: 0, longitude: 0, radiusMeters: 100, value: 10 },
+      { id: "within-200m", name: "Nearby miss", type: "landmark", latitude: metersToLatitude(247), longitude: 0, radiusMeters: 100, value: 20 }
+    ]);
+
+    expect(result.events.map((event) => event.sourceId)).toEqual(["within-100m"]);
+    expect(result.nearMisses).toMatchObject([
+      { collectibleId: "within-200m", minimumDistanceMeters: expect.closeTo(150, 0) }
+    ]);
+  });
+
   it("derives bounded, distance-sorted near misses without changing collected results", () => {
     const metersToLatitude = (meters: number) => meters / 6_371_000 * 180 / Math.PI;
     const collected = { id: "collected", name: "Collected", type: "coin" as const, latitude: 0, longitude: 0.00095, radiusMeters: 10, value: 10 };
     const atFiftyMeters = { id: "fifty", name: "Fifty", type: "coin" as const, latitude: metersToLatitude(50), longitude: 0.001, radiusMeters: 1, value: 20 };
     const atThreshold = { id: "threshold", name: "Threshold", type: "landmark" as const, latitude: metersToLatitude(NEAR_MISS_THRESHOLD_METERS), longitude: 0.001, radiusMeters: 1, value: 30 };
-    const beyondThreshold = { id: "beyond", name: "Beyond", type: "coin" as const, latitude: metersToLatitude(101), longitude: 0.001, radiusMeters: 1, value: 40 };
+    const beyondThreshold = { id: "beyond", name: "Beyond", type: "coin" as const, latitude: metersToLatitude(201), longitude: 0.001, radiusMeters: 1, value: 40 };
     const extraNearMisses = Array.from({ length: 5 }, (_, index) => ({
       id: `extra-${index}`,
       name: `Extra ${index}`,

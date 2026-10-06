@@ -43,7 +43,7 @@ review.
   `1500–1999 → 400`, `2000+ → 600`. Kept isolated so it can be rebalanced later without
   changing imported source data. Elevation missing/invalid → lowest tier default.
 - **Rarity:** neutral default `common` (never derived from altitude).
-- **Collection radius:** centralized `MOUNTAIN_PASS_DEFAULT_RADIUS_M = 90`. Existing
+- **Collection radius:** centralized `MOUNTAIN_PASS_DEFAULT_RADIUS_M = 100`. Existing
   outside→inside trigger semantics unchanged.
 - **Identity:** source-derived stable id `quaeldich:<TextID>`, with
   `source_type = "quaeldich"`, `source_external_id = <TextID>`. Uniqueness enforced on

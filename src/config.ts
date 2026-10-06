@@ -127,7 +127,7 @@ export const config = {
   wikidataCacheDir: path.resolve(process.env.OSM_WIKIDATA_CACHE_DIR ?? "./data/osm-wikidata-cache"),
   wikidataBatchDelayMs: nonNegativeIntegerEnv("WIKIDATA_BATCH_DELAY_MS", 5_000),
   wikidataMaxAttempts: integerEnv("WIKIDATA_MAX_ATTEMPTS", 5),
-  mountainPassDefaultRadiusMeters: decimalEnv("MOUNTAIN_PASS_DEFAULT_RADIUS_M", 90),
+  mountainPassDefaultRadiusMeters: decimalEnv("MOUNTAIN_PASS_DEFAULT_RADIUS_M", 100),
   databaseUrl: process.env.DATABASE_URL?.trim(),
   defaultPlayerId: uuidEnv("DEFAULT_PLAYER_ID", "00000000-0000-4000-8000-000000000001"),
   defaultPlayerName: process.env.DEFAULT_PLAYER_NAME?.trim() || "Local player",

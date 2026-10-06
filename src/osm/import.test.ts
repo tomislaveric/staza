@@ -67,7 +67,7 @@ describe("OSM import planning", () => {
       wikipediaReference: "de:Schloss_Beispiel",
       rarity: "common",
       value: 35,
-      radiusMeters: 75
+      radiusMeters: 100
     });
     expect(plan.possibleDuplicates).toContainEqual(expect.objectContaining({
       candidateId: "osm:node:3002",
@@ -111,7 +111,7 @@ describe("OSM import planning", () => {
       primaryCategory: "viewpoint",
       latitude: 48,
       longitude: 8,
-      radiusMeters: 60,
+      radiusMeters: 100,
       value: 20,
       source: { sourceType: "osm", sourceExternalId: "node:old" }
     };
@@ -127,7 +127,7 @@ describe("OSM import planning", () => {
       type: "landmark",
       latitude: 48,
       longitude: 8,
-      radiusMeters: 60,
+      radiusMeters: 100,
       value: 20,
       source: { sourceType: "osm", sourceExternalId: "node:old" }
     };
@@ -179,7 +179,7 @@ describe("OSM import planning", () => {
       type: "landmark",
       tags: ["historic", "square"],
       value: 25,
-      radiusMeters: 70
+      radiusMeters: 100
     })]);
     expect(formatOSMImportReport(plan, {
       dryRun: true,

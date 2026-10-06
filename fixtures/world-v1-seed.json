@@ -9,7 +9,7 @@
       "type": "coin",
       "latitude": 49.037319123170775,
       "longitude": 8.390135488290847,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 10,
       "description": "Placed about 8 m from raw-data/straede.fit."
     },
@@ -19,7 +19,7 @@
       "type": "coin",
       "latitude": 49.03611449887123,
       "longitude": 8.389488859425505,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 20,
       "description": "Placed about 149 m from raw-data/straede.fit."
     },
@@ -29,7 +29,7 @@
       "type": "coin",
       "latitude": 49.027206953575266,
       "longitude": 8.384708420589588,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 30,
       "description": "Placed about 775 m from raw-data/straede.fit."
     },
@@ -39,7 +39,7 @@
       "type": "coin",
       "latitude": 49.03224393725395,
       "longitude": 8.406321918591857,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 15,
       "rarity": "common",
       "description": "Placed directly on the early riverside portion of raw-data/straede.fit."
@@ -50,7 +50,7 @@
       "type": "landmark",
       "latitude": 49.032603261,
       "longitude": 8.406321918591857,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 35,
       "rarity": "rare",
       "description": "Placed near an early route segment; the return route collects it."
@@ -61,7 +61,7 @@
       "type": "coin",
       "latitude": 49.089778,
       "longitude": 8.46102791838348,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 25,
       "rarity": "common",
       "description": "Placed about 30 m from raw-data/straede.fit for near-miss testing."
@@ -72,7 +72,7 @@
       "type": "landmark",
       "latitude": 49.077847,
       "longitude": 8.586468966677785,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 50,
       "rarity": "epic",
       "description": "Placed about 48 m from raw-data/straede.fit for near-miss testing."
@@ -83,7 +83,7 @@
       "type": "coin",
       "latitude": 49.0537079796195,
       "longitude": 8.63273799419403,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 20,
       "rarity": "rare",
       "description": "Placed directly on the eastern portion of raw-data/straede.fit."
@@ -94,7 +94,7 @@
       "type": "landmark",
       "latitude": 49.060009,
       "longitude": 8.516044970601797,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 40,
       "rarity": "rare",
       "description": "Placed about 55 m from raw-data/straede.fit for near-miss testing."
@@ -105,7 +105,7 @@
       "type": "landmark",
       "latitude": 49.03545,
       "longitude": 8.430359959602356,
-      "radius_m": 15,
+      "radius_m": 100,
       "value": 60,
       "rarity": "epic",
       "description": "Placed about 73 m from raw-data/straede.fit for near-miss testing."
@@ -116,7 +116,7 @@
       "type": "landmark",
       "latitude": 49.01348,
       "longitude": 8.40444,
-      "radius_m": 40,
+      "radius_m": 100,
       "value": 50,
       "rarity": "epic",
       "description": "The palace at the centre of the fan-shaped city."
@@ -127,7 +127,7 @@
       "type": "coin",
       "latitude": 49.01562,
       "longitude": 8.40403,
-      "radius_m": 20,
+      "radius_m": 100,
       "value": 15,
       "description": "In the gardens behind the palace."
     },
@@ -137,7 +137,7 @@
       "type": "landmark",
       "latitude": 49.0093,
       "longitude": 8.40372,
-      "radius_m": 25,
+      "radius_m": 100,
       "value": 35,
       "rarity": "rare",
       "description": "The red sandstone pyramid on Marktplatz."
@@ -148,7 +148,7 @@
       "type": "landmark",
       "latitude": 49.00892,
       "longitude": 8.40245,
-      "radius_m": 25,
+      "radius_m": 100,
       "value": 25,
       "rarity": "rare",
       "description": "West side of Marktplatz."
@@ -159,7 +159,7 @@
       "type": "landmark",
       "latitude": 49.00905,
       "longitude": 8.40514,
-      "radius_m": 25,
+      "radius_m": 100,
       "value": 25,
       "description": "East side of Marktplatz."
     },
@@ -169,7 +169,7 @@
       "type": "landmark",
       "latitude": 49.00033,
       "longitude": 8.38385,
-      "radius_m": 35,
+      "radius_m": 100,
       "value": 30,
       "rarity": "rare",
       "description": "Centre for art and media in the Hallenbau."
@@ -180,7 +180,7 @@
       "type": "landmark",
       "latitude": 49.00298,
       "longitude": 8.40877,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 25,
       "description": "Ettlinger Tor."
     },
@@ -190,7 +190,7 @@
       "type": "landmark",
       "latitude": 48.99947,
       "longitude": 8.49051,
-      "radius_m": 45,
+      "radius_m": 100,
       "value": 60,
       "rarity": "epic",
       "description": "Durlach viewpoint above the Rhine plain."
@@ -201,7 +201,7 @@
       "type": "landmark",
       "latitude": 48.99893,
       "longitude": 8.48575,
-      "radius_m": 25,
+      "radius_m": 100,
       "value": 30,
       "rarity": "rare",
       "description": "Germany's oldest funicular still running."
@@ -212,7 +212,7 @@
       "type": "landmark",
       "latitude": 49.00003,
       "longitude": 8.47374,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 25,
       "description": "Old town centre of Durlach."
     },
@@ -222,7 +222,7 @@
       "type": "landmark",
       "latitude": 48.99925,
       "longitude": 8.4719,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 25,
       "description": "The margravial palace in Durlach."
     },
@@ -232,7 +232,7 @@
       "type": "landmark",
       "latitude": 49.01693,
       "longitude": 8.33052,
-      "radius_m": 40,
+      "radius_m": 100,
       "value": 30,
       "rarity": "rare",
       "description": "Working inland harbour on the Rhine."
@@ -243,7 +243,7 @@
       "type": "landmark",
       "latitude": 49.03779,
       "longitude": 8.30503,
-      "radius_m": 40,
+      "radius_m": 100,
       "value": 40,
       "rarity": "epic",
       "description": "The Rhine crossing to the Palatinate."
@@ -254,7 +254,7 @@
       "type": "coin",
       "latitude": 49.00131,
       "longitude": 8.30706,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 20,
       "description": "Riverside nature reserve in the Rhine floodplain."
     },
@@ -264,7 +264,7 @@
       "type": "coin",
       "latitude": 49.00025,
       "longitude": 8.37046,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 15,
       "description": "Park along the Alb."
     },
@@ -274,7 +274,7 @@
       "type": "coin",
       "latitude": 49.00062,
       "longitude": 8.3379,
-      "radius_m": 20,
+      "radius_m": 100,
       "value": 15,
       "description": "Alb crossing on the west route."
     },
@@ -284,7 +284,7 @@
       "type": "coin",
       "latitude": 49.04823,
       "longitude": 8.4026,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 20,
       "description": "Pine forest north of the city."
     },
@@ -294,7 +294,7 @@
       "type": "coin",
       "latitude": 49.03471,
       "longitude": 8.41258,
-      "radius_m": 25,
+      "radius_m": 100,
       "value": 15,
       "description": "Trail junction in the Hardtwald."
     },
@@ -304,7 +304,7 @@
       "type": "landmark",
       "latitude": 49.02189,
       "longitude": 8.41262,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 25,
       "description": "The KSC ground at the Wildpark."
     },
@@ -314,7 +314,7 @@
       "type": "landmark",
       "latitude": 49.00979,
       "longitude": 8.41682,
-      "radius_m": 35,
+      "radius_m": 100,
       "value": 25,
       "description": "The university campus."
     },
@@ -324,7 +324,7 @@
       "type": "landmark",
       "latitude": 49.09374,
       "longitude": 8.43128,
-      "radius_m": 45,
+      "radius_m": 100,
       "value": 35,
       "rarity": "rare",
       "description": "Research campus at the north edge."
@@ -335,7 +335,7 @@
       "type": "coin",
       "latitude": 48.99631,
       "longitude": 8.40147,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 15,
       "description": "Park next to the main station."
     },
@@ -345,7 +345,7 @@
       "type": "landmark",
       "latitude": 48.99374,
       "longitude": 8.40177,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 20,
       "description": "The main station."
     },
@@ -355,7 +355,7 @@
       "type": "coin",
       "latitude": 48.98596,
       "longitude": 8.39938,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 20,
       "description": "Forest south of the Stadtgarten."
     },
@@ -365,7 +365,7 @@
       "type": "coin",
       "latitude": 48.99148,
       "longitude": 8.39325,
-      "radius_m": 20,
+      "radius_m": 100,
       "value": 15,
       "description": "Gateway to the Alb valley."
     },
@@ -375,7 +375,7 @@
       "type": "landmark",
       "latitude": 48.94048,
       "longitude": 8.40663,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 30,
       "rarity": "rare",
       "description": "South of Karlsruhe on the Alb."
@@ -386,7 +386,7 @@
       "type": "coin",
       "latitude": 48.94152,
       "longitude": 8.40824,
-      "radius_m": 25,
+      "radius_m": 100,
       "value": 20,
       "description": "Old town on the Alb valley route."
     },
@@ -396,7 +396,7 @@
       "type": "landmark",
       "latitude": 48.93365,
       "longitude": 8.42558,
-      "radius_m": 35,
+      "radius_m": 100,
       "value": 45,
       "rarity": "epic",
       "description": "First real climb in the Black Forest foothills."
@@ -407,7 +407,7 @@
       "type": "coin",
       "latitude": 48.96694,
       "longitude": 8.44506,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 25,
       "description": "Ridge trail above Rüppurr."
     },
@@ -417,7 +417,7 @@
       "type": "landmark",
       "latitude": 49.00812,
       "longitude": 8.49879,
-      "radius_m": 25,
+      "radius_m": 100,
       "value": 20,
       "description": "Village church east of Durlach."
     },
@@ -427,7 +427,7 @@
       "type": "coin",
       "latitude": 49.00544,
       "longitude": 8.48841,
-      "radius_m": 20,
+      "radius_m": 100,
       "value": 15,
       "description": "Pfinz crossing towards Grötzingen."
     },
@@ -437,7 +437,7 @@
       "type": "coin",
       "latitude": 48.97538,
       "longitude": 8.45632,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 25,
       "description": "Hill village on the eastern ramp."
     },
@@ -447,7 +447,7 @@
       "type": "landmark",
       "latitude": 48.97066,
       "longitude": 8.48486,
-      "radius_m": 35,
+      "radius_m": 100,
       "value": 40,
       "rarity": "rare",
       "description": "High point east of the city."
@@ -458,7 +458,7 @@
       "type": "coin",
       "latitude": 49.05327,
       "longitude": 8.37656,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 20,
       "description": "Open fields north-west."
     },
@@ -468,7 +468,7 @@
       "type": "coin",
       "latitude": 49.04478,
       "longitude": 8.32234,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 20,
       "description": "Rhine bank at Knielingen."
     },
@@ -478,7 +478,7 @@
       "type": "coin",
       "latitude": 49.08166,
       "longitude": 8.37421,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 25,
       "description": "Flood dam path heading north."
     },
@@ -488,7 +488,7 @@
       "type": "landmark",
       "latitude": 49.13179,
       "longitude": 8.32895,
-      "radius_m": 40,
+      "radius_m": 100,
       "value": 35,
       "rarity": "rare",
       "description": "Rhine meander at the northern edge."
@@ -499,7 +499,7 @@
       "type": "coin",
       "latitude": 49.05365,
       "longitude": 8.5259,
-      "radius_m": 25,
+      "radius_m": 100,
       "value": 20,
       "description": "Eastern edge of the curated area."
     },
@@ -509,7 +509,7 @@
       "type": "landmark",
       "latitude": 49.12766,
       "longitude": 8.59262,
-      "radius_m": 40,
+      "radius_m": 100,
       "value": 45,
       "rarity": "epic",
       "description": "Baroque palace at the far north-east."
@@ -520,7 +520,7 @@
       "type": "coin",
       "latitude": 48.97613,
       "longitude": 8.32895,
-      "radius_m": 30,
+      "radius_m": 100,
       "value": 20,
       "description": "Exhibition grounds south-west."
     }

@@ -15,11 +15,11 @@ export const COLLECTIBLE_VALUES: Record<Exclude<CollectibleCategory, "mountain_p
   place: 25
 };
 export const COLLECTIBLE_RADII: Record<Exclude<CollectibleCategory, "mountain_pass">, number> = {
-  viewpoint: 60,
-  peak: 90,
-  castle: 75,
-  waterfall: 75,
-  place: 70
+  viewpoint: 100,
+  peak: 100,
+  castle: 100,
+  waterfall: 100,
+  place: 100
 };
 
 export interface OSMRecord {

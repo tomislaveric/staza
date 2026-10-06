@@ -100,7 +100,7 @@ Restart resets active feedback and replays this state naturally.
 
 Near misses are compact, derived post-ride presentation data. An uncollected
 collectible from the existing relevant subset is a near miss when its minimum
-distance to the activity route is at most `NEAR_MISS_THRESHOLD_METERS` (100 m).
+distance to the activity route is at most `NEAR_MISS_THRESHOLD_METERS` (200 m).
 This threshold is independent of world-query padding and does not change precise
 collection-radius detection, events, scoring, or XP.
 
@@ -169,7 +169,7 @@ shell, upload flow, and video-selection layout are not redesigned.
 - Test event-time score change, final-score equality, zero-collectible state, and
   replay completion state.
 - Test collected-event fallback visibility when world sources are filtered/absent.
-- Test collected exclusion, 50 m and 100 m near-miss thresholds, over-threshold
+- Test collected exclusion, 50 m and 200 m near-miss thresholds, over-threshold
   exclusion, ascending order, five-item cap, zero-list presentation, and unchanged
   score/count.
 - Run focused replay tests, `npm run build`, and `npm test`.

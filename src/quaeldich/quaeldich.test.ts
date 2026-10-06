@@ -10,7 +10,7 @@ import {
 import { planQuaeldichImport, formatImportReport } from "./import.js";
 import type { Collectible } from "../domain.js";
 
-const OPTIONS = { radiusMeters: 90 };
+const OPTIONS = { radiusMeters: 100 };
 
 const feature = (overrides: Record<string, unknown> = {}) => ({
   type: "Feature",
@@ -50,7 +50,7 @@ describe("normalizeQuaeldichFeature", () => {
     expect(c.type).toBe("mountain_pass");
     expect(c.latitude).toBe(44.68382263183594);
     expect(c.longitude).toBe(6.979551792144775);
-    expect(c.radiusMeters).toBe(90);
+    expect(c.radiusMeters).toBe(100);
     expect(c.elevationMeters).toBe(2744);
     expect(c.value).toBe(600);
     expect(c.rarity).toBe("common");
@@ -126,7 +126,7 @@ const sourced = (id: string, name: string, over: Partial<Collectible> = {}): Col
   type: "mountain_pass",
   latitude: 47,
   longitude: 8,
-  radiusMeters: 90,
+  radiusMeters: 100,
   value: 250,
   rarity: "common",
   status: "published",

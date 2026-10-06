@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { normalizeOSMJsonLines, normalizeOSMRecord } from "./normalize.js";
 import { scoreCandidate } from "./score.js";
+import { COLLECTIBLE_RADII } from "./model.js";
 
 const candidate = (tags: Record<string, string>, id = "10") => {
   const result = normalizeOSMRecord({
@@ -16,6 +17,16 @@ const candidate = (tags: Record<string, string>, id = "10") => {
 };
 
 describe("OSM normalization", () => {
+  it("uses a 100 m collection radius for every OSM category", () => {
+    expect(COLLECTIBLE_RADII).toEqual({
+      viewpoint: 100,
+      peak: 100,
+      castle: 100,
+      waterfall: 100,
+      place: 100
+    });
+  });
+
   it("accepts only the four explicit source classes and applies category precedence", () => {
     const castle = normalizeOSMRecord({
       osmType: "way",

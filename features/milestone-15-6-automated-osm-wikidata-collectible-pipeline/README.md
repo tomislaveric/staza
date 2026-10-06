@@ -197,8 +197,8 @@ legal access.
   castle **35**, waterfall **35**. These are deliberately modest relative to
   the existing quäldich elevation curve of 100–600 and the 100-XP first-level
   progression step. Candidate score never determines XP.
-- Centralize radii: viewpoint **60 m**, peak **90 m**, castle **75 m**,
-  waterfall **75 m**. Preserve quäldich's current 90 m default.
+- All collectibles use a **100 m** collection radius, including OSM places,
+  landmarks, and mountain passes.
 
 ### Licensing and attribution
 

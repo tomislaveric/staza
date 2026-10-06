@@ -333,4 +333,11 @@ export const migrations: Migration[] = [{
           ('viewpoint', 'peak', 'castle', 'waterfall', 'place', 'mountain_pass'));
     `);
   }
+}, {
+  id: "016_global_collectible_radius_100m",
+  async up(client) {
+    await client.query(`
+      UPDATE collectibles SET radius_meters = 100 WHERE radius_meters <> 100;
+    `);
+  }
 }];
