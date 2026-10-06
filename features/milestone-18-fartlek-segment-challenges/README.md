@@ -271,6 +271,41 @@ Fartlek source metadata identifies the relevant OSM ways/nodes, candidate-genera
 version, and scoring version. Existing OpenStreetMap, OpenFreeMap, and quäldich
 attribution is preserved unchanged.
 
+### Running the pipeline
+
+Implemented as `src/osm/fartlekSelectors.ts`, `fartlekNormalize.ts`,
+`fartlekSnapshot.ts`, `buildFartlekSnapshot.ts`, and `fartlekCandidates.ts` — parallel
+to the existing point-collectible pipeline (`snapshot.ts`/`normalize.ts`/`model.ts`),
+but preserving full way `LineString` geometry instead of collapsing to a centroid.
+
+```bash
+# 1. Download a Geofabrik extract (once; large file, not committed).
+curl -O https://download.geofabrik.de/europe/germany-latest.osm.pbf
+
+# 2. Extract + build the committed way-geometry snapshot (requires osmium-tool).
+npm run extract:osm-germany-fartleks -- germany-latest.osm.pbf
+# writes fixtures/osm-germany-fartleks.json
+
+# 3. Generate candidates, score them, and publish AUTO_PUBLISH results.
+npm run import:fartleks -- --snapshot fixtures/osm-germany-fartleks.json \
+  --write-review tmp/fartlek-review.jsonl
+```
+
+`--snapshot` runs `buildFartlekCandidates` (chain-building between `ref`/`name`
+identity, splitting at `traffic_sign=city_limit` boundary nodes, counting junctions
+and nearby traffic-control nodes) and `scoreFartlekCandidate` per candidate; only
+`AUTO_PUBLISH` candidates are upserted. `--write-review <file>` writes the scored
+REVIEW/IGNORE/REJECT candidates (one JSON object per line) for manual inspection.
+Add `--dry-run` to preview without touching the database. `--candidates <file>` and
+`--fartleks <file>` remain available for hand-authored/manually-curated input.
+
+Known simplifications (documented in code, not fully spec-literal): `mostlyNonUrban`
+is a heuristic from `highway=residential`/`lit`/`maxspeed` tags (OSM ways rarely carry
+reliable `landuse`); junction detection matches way endpoints by coordinate rather
+than true OSM node IDs (unavailable from `osmium export` GeoJSON); chains with no
+boundary-node hits still produce one whole-chain candidate with
+`hasClearBoundaries: false` rather than being discarded.
+
 ## World API
 
 `/api/world` response gains `fartleks: WorldFartlek[]` (LineString geometry, name,
