@@ -33,6 +33,58 @@ describe("AddActivityPage", () => {
     expect(page).toContain("Activity Ready");
     expect(page).toContain("Your activity was saved, but video processing could not start");
   });
+
+  it("shows recent Strava activities with older activities disabled", () => {
+    const page = AddActivityPage({
+      stravaLoading: false,
+      strava: { configured: true, connected: true },
+      stravaActivities: [
+        {
+          externalId: "123",
+          name: "Morning ride",
+          sportType: "Ride",
+          startedAt: "2026-06-01T08:00:00.000Z",
+          distance: 12000,
+          alreadyImported: false,
+          beforeJourneyStart: false,
+          importable: true
+        },
+        {
+          externalId: "456",
+          name: "Older ride",
+          sportType: "Ride",
+          startedAt: "2025-06-01T08:00:00.000Z",
+          distance: 12000,
+          alreadyImported: false,
+          beforeJourneyStart: true,
+          importable: false
+        }
+      ]
+    });
+    expect(page).toContain("Morning ride");
+    expect(page).toContain("Older ride");
+    expect(page).toContain("Before your Staza journey");
+    expect(page).toContain("IMPORT SELECTED ACTIVITY");
+    expect(page).toContain('value="456"');
+    expect(page).toContain('disabled');
+  });
+
+  it("escapes Strava-provided activity names before rendering them", () => {
+    const page = AddActivityPage({
+      stravaLoading: false,
+      strava: { configured: true, connected: true },
+      stravaActivities: [{
+        externalId: "123",
+        name: '<img src=x onerror="alert(1)">',
+        sportType: "Ride",
+        startedAt: "2026-06-01T08:00:00.000Z",
+        distance: 12000,
+        importable: true
+      }]
+    });
+    expect(page).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+    expect(page).not.toContain('<img src=x onerror="alert(1)">');
+  });
 });
 
 describe("ProcessingState", () => {

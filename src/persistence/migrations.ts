@@ -2,7 +2,7 @@ import type { PoolClient } from "pg";
 
 export interface Migration {
   id: string;
-  up(client: PoolClient): Promise<void>;
+  up(client: Pick<PoolClient, "query">): Promise<void>;
 }
 
 export const migrations: Migration[] = [{
@@ -338,6 +338,52 @@ export const migrations: Migration[] = [{
   async up(client) {
     await client.query(`
       UPDATE collectibles SET radius_meters = 100 WHERE radius_meters <> 100;
+    `);
+  }
+}, {
+  id: "017_strava_connection_journey_boundary",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE players ADD COLUMN journey_started_at TIMESTAMPTZ;
+      UPDATE players
+      SET journey_started_at = (
+        SELECT MIN(activities.started_at)
+        FROM activities
+        WHERE activities.player_id = players.id
+      )
+      WHERE journey_started_at IS NULL
+        AND EXISTS (SELECT 1 FROM activities WHERE activities.player_id = players.id);
+
+      ALTER TABLE activities DROP CONSTRAINT activities_source_type_check;
+      ALTER TABLE activities ADD CONSTRAINT activities_source_type_check
+        CHECK (source_type IN ('fit', 'strava'));
+
+      CREATE TABLE strava_connections (
+        player_id UUID PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+        strava_athlete_id BIGINT NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        scope TEXT NOT NULL,
+        needs_reconnect BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE strava_oauth_states (
+        state TEXT PRIMARY KEY,
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX strava_oauth_states_expires_at_index ON strava_oauth_states (expires_at);
+    `);
+  }
+}, {
+  id: "018_strava_connection_reconnect_state",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE strava_connections
+        ADD COLUMN IF NOT EXISTS needs_reconnect BOOLEAN NOT NULL DEFAULT false;
     `);
   }
 }];

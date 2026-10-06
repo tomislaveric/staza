@@ -300,8 +300,11 @@ export class AuthService {
   }
 
   async exportAccount(user: SessionUser): Promise<unknown> {
-    const [player, activities, events] = await Promise.all([
-      this.pool.query("SELECT id, display_name, total_xp, created_at FROM players WHERE id = $1", [user.playerId]),
+    const [player, activities, events, stravaConnection] = await Promise.all([
+      this.pool.query(
+        "SELECT id, display_name, total_xp, journey_started_at, created_at FROM players WHERE id = $1",
+        [user.playerId]
+      ),
       this.pool.query(
         `SELECT id, source_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video, created_at
          FROM activities WHERE player_id = $1 ORDER BY created_at`, [user.playerId]
@@ -311,6 +314,11 @@ export class AuthService {
                 events.latitude, events.longitude, events.collectible_name, events.collectible_rarity, events.collectible_type
          FROM activity_events AS events INNER JOIN activities ON activities.id = events.activity_id
          WHERE activities.player_id = $1 ORDER BY events.activity_timestamp, events.id`, [user.playerId]
+      ),
+      this.pool.query(
+        `SELECT strava_athlete_id, scope, needs_reconnect, created_at, updated_at
+         FROM strava_connections WHERE player_id = $1`,
+        [user.playerId]
       )
     ]);
     return {
@@ -318,7 +326,10 @@ export class AuthService {
       account: { email: user.email },
       player: player.rows[0],
       activities: activities.rows,
-      events: events.rows
+      events: events.rows,
+      integrations: {
+        strava: stravaConnection.rows[0] ?? null
+      }
     };
   }
 
@@ -360,6 +371,7 @@ export class AuthService {
         );
       }
       await client.query("UPDATE deletion_intents SET completed_at = now() WHERE id = $1", [intent.rows[0].id]);
+      await client.query("DELETE FROM strava_connections WHERE player_id = $1", [user.playerId]);
       await client.query("DELETE FROM players WHERE user_id = $1", [user.id]);
       await client.query("DELETE FROM users WHERE id = $1", [user.id]);
       await client.query("COMMIT");

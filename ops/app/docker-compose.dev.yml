@@ -21,6 +21,9 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_PASSWORD_BASE64: ${SMTP_PASSWORD_BASE64:-}
       MAIL_FROM: ${MAIL_FROM}
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID:-}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
+      STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI:-}
     volumes:
       - app-data:/data
     depends_on:

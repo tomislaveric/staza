@@ -94,7 +94,7 @@ export type ActivityType = "cycling" | "running" | "hiking" | "walking" | "unkno
 
 export interface Activity {
   id: string;
-  source: "fit";
+  source: "fit" | "strava";
   type: ActivityType;
   title?: string;
   description?: string;

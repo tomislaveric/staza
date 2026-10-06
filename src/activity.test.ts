@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { deriveActivity, deriveActivityResult, MAX_NEAR_MISSES, NEAR_MISS_THRESHOLD_METERS } from "./activity.js";
+import {
+  deriveActivity,
+  deriveActivityResult,
+  MAX_NEAR_MISSES,
+  NEAR_MISS_THRESHOLD_METERS,
+  validateActivityImportEligibility
+} from "./activity.js";
+import { JourneyBoundaryError } from "./errors.js";
 
 const route = [
   { latitude: 0, longitude: 0, timestampMs: 1_000 },
@@ -8,6 +15,15 @@ const route = [
 ];
 
 describe("activity derivation", () => {
+  it("allows equal/newer timestamps and rejects activities before the journey boundary", () => {
+    const boundary = Date.parse("2026-01-02T03:04:05.000Z");
+    expect(() => validateActivityImportEligibility(boundary, boundary)).not.toThrow();
+    expect(() => validateActivityImportEligibility(boundary, boundary + 1)).not.toThrow();
+    expect(() => validateActivityImportEligibility(boundary, boundary - 1)).toThrow(JourneyBoundaryError);
+    expect(new JourneyBoundaryError()).toMatchObject({ code: "ACTIVITY_BEFORE_JOURNEY_START" });
+    expect(() => validateActivityImportEligibility(null, boundary - 1)).not.toThrow();
+  });
+
   it("uses a 200 m near-miss threshold", () => {
     expect(NEAR_MISS_THRESHOLD_METERS).toBe(200);
   });

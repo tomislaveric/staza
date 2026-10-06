@@ -59,12 +59,24 @@ environment. Required variables:
 | `SMTP_PASSWORD` | Raw password for `SMTP_USER`. Avoid if it contains `"`, `'`, `#`, or `$` (parser-unsafe). |
 | `SMTP_PASSWORD_BASE64` | Base64 of the password; preferred for passwords with special characters. Takes precedence over `SMTP_PASSWORD`. Generate with `printf '%s' 'the#pass' \| base64`. |
 | `MAIL_FROM` | Sender address for outgoing mail, e.g. `auth@staza.world`. |
+| `STRAVA_CLIENT_ID` | Strava developer application client ID. |
+| `STRAVA_CLIENT_SECRET` | Strava developer application secret; keep it only in the server-side `.env`. |
+| `STRAVA_REDIRECT_URI` | Exact callback registered with Strava: `https://<environment-host>/api/integrations/strava/callback`. |
 
 Compose sets `NODE_ENV=production`, `PORT=3000`, `DATA_DIR=/data/jobs`, and
 `MEDIA_DIR=/data/media`. The app container uses an environment-specific named
 volume for `/data`; PostgreSQL uses a different named volume for its data
 directory. Never reuse database credentials or `DATABASE_URL` between DEV and
-PROD.
+PROD. Register each DEV/PROD redirect URI with the Strava app and configure all
+three Strava variables. Production startup fails if Strava configuration is
+missing. The app requests only athlete read access and read access to activities;
+tokens remain server-side.
+
+If consent succeeds but activity requests return `STRAVA_APPLICATION_INACTIVE`,
+Strava is denying API access because the developer application is inactive
+(`Application / Status / Inactive`). Check the application's status at
+`https://www.strava.com/settings/api` and resolve activation with Strava if needed.
+Reconnecting the athlete account does not activate the developer application.
 
 The VPS must already be authenticated to GHCR if the package is private. The
 deployment workflows rely on that existing Docker credential storage and do

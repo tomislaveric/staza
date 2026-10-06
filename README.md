@@ -76,6 +76,10 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Milestone 16.0 — Staza Landing Page](features/milestone-16-0-staza-landing-page/README.md)
   — add an isolated public landing page at `/` while preserving the existing
   authenticated app under `/app` and `/sign-in`.
+- [Milestone 17 — Strava Connection + Recent Activity Import](features/milestone-17-strava-connection-recent-activity-import/README.md)
+  — connect Strava via OAuth, import one recent activity at a time through the
+  existing canonical pipeline, and enforce a shared, permanent journey-start
+  boundary across FIT and Strava imports.
 - [Multi Clip creation](features/multi-clip-creation/README.md) — select detected
   Coin passages and combine them into one chronological highlight video.
 - [Persistent activities player state v1](features/persistent-activities-player-state-v1/README.md)
