@@ -1,5 +1,6 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import { createReadStream } from "node:fs";
+import { mkdir, rename } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { once } from "node:events";
 import path from "node:path";
 import {
   DEFAULT_FARTLEK_OSM_SNAPSHOT_FILE,
@@ -65,17 +66,22 @@ const run = async (): Promise<void> => {
   const target = path.resolve(args.output);
   await mkdir(path.dirname(target), { recursive: true });
   const temporary = `${target}.${process.pid}.tmp`;
-  const lines = [
-    "{",
-    `  "metadata": ${JSON.stringify(metadata, null, 2).split("\n").join("\n  ")},`,
-    '  "records": [',
-    ...parsed.records.map((record, index) =>
-      `    ${JSON.stringify(record)}${index === parsed.records.length - 1 ? "" : ","}`),
-    "  ]",
-    "}",
-    ""
-  ];
-  await writeFile(temporary, lines.join("\n"), "utf8");
+  // Stream the write (rather than building one giant joined string) to avoid doubling peak
+  // memory on top of the already-large in-memory records array for a country-scale extract.
+  const out = createWriteStream(temporary, { encoding: "utf8" });
+  const write = async (chunk: string): Promise<void> => {
+    if (!out.write(chunk)) await once(out, "drain");
+  };
+  await write("{\n");
+  await write(`  "metadata": ${JSON.stringify(metadata, null, 2).split("\n").join("\n  ")},\n`);
+  await write('  "records": [\n');
+  for (let index = 0; index < parsed.records.length; index += 1) {
+    const suffix = index === parsed.records.length - 1 ? "\n" : ",\n";
+    await write(`    ${JSON.stringify(parsed.records[index])}${suffix}`);
+  }
+  await write("  ]\n}\n");
+  out.end();
+  await once(out, "finish");
   await rename(temporary, target);
   const wayCount = parsed.records.filter((record) => record.osmType === "way").length;
   const nodeCount = parsed.records.length - wayCount;

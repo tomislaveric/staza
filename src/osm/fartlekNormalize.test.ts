@@ -34,6 +34,19 @@ describe("Fartlek OSM export conversion", () => {
     )))).toBeUndefined();
   });
 
+  it("drops residential and cycleway ways at bulk-extraction time (too voluminous country-wide)", () => {
+    expect(fartlekRecordFromExportFeature(JSON.parse(feature(
+      "w3004",
+      { type: "LineString", coordinates: [[11, 48], [12, 49]] },
+      { highway: "residential" }
+    )))).toBeUndefined();
+    expect(fartlekRecordFromExportFeature(JSON.parse(feature(
+      "w3005",
+      { type: "LineString", coordinates: [[11, 48], [12, 49]] },
+      { highway: "cycleway" }
+    )))).toBeUndefined();
+  });
+
   it("keeps boundary and traffic-control nodes as single-point records", () => {
     const boundary = fartlekRecordFromExportFeature(JSON.parse(feature(
       "n1001",
@@ -65,8 +78,8 @@ describe("Fartlek OSM export conversion", () => {
 
   it("streams geojsonseq lines into deduplicated sorted records", async () => {
     const lines = [
-      `\u001e${feature("w1", { type: "LineString", coordinates: [[11, 48], [12, 49]] }, { highway: "residential" })}`,
-      feature("w1", { type: "LineString", coordinates: [[11, 48], [12, 49]] }, { highway: "residential" }),
+      `\u001e${feature("w1", { type: "LineString", coordinates: [[11, 48], [12, 49]] }, { highway: "secondary" })}`,
+      feature("w1", { type: "LineString", coordinates: [[11, 48], [12, 49]] }, { highway: "secondary" }),
       feature("n2", { type: "Point", coordinates: [12, 49] }, { highway: "stop" }),
       "not json",
       ""

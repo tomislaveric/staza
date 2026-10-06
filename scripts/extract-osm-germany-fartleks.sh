@@ -33,7 +33,7 @@ EXPORTED="$WORK_DIR/filtered.geojsonseq"
 # split candidates and score them. Must stay in sync with src/osm/fartlekSelectors.ts.
 echo "Filtering $PBF ..."
 osmium tags-filter --overwrite --output "$FILTERED" "$PBF" \
-  w/highway=primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,unclassified,residential,cycleway \
+  w/highway=primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,unclassified \
   n/traffic_sign=city_limit \
   n/highway=traffic_signals,stop,give_way \
   n/traffic_calming
@@ -49,7 +49,10 @@ fi
 SOURCE_VERSION="geofabrik-germany-$EXTRACT_DATE"
 
 echo "Building snapshot $OUTPUT ..."
-npx tsx src/osm/buildFartlekSnapshot.ts \
+# Nationwide extraction still holds every kept way's full geometry in memory at once; raise the
+# heap ceiling well above the default (~2GB) as a safety net. Override with NODE_MAX_OLD_SPACE_MB
+# if you still hit "JavaScript heap out of memory" (e.g. for a larger country/extract).
+NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_MB:-8192}" npx tsx src/osm/buildFartlekSnapshot.ts \
   --input "$EXPORTED" \
   --output "$OUTPUT" \
   --source-url "https://download.geofabrik.de/europe/germany-latest.osm.pbf" \

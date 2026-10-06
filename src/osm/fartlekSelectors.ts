@@ -5,13 +5,23 @@
  * generation (`fartlekCandidates.ts`).
  */
 
-/** Highway classes plausible for a cycling Fartlek. Unsuitable classes (motorway, trunk, ...) are
- * deliberately excluded from extraction — they would be hard-rejected by scoring anyway. */
+/**
+ * Highway classes plausible for a cycling Fartlek. Unsuitable classes (motorway, trunk, ...) are
+ * deliberately excluded from extraction — they would be hard-rejected by scoring anyway.
+ *
+ * `residential` and `cycleway` are also excluded here (even though scoring still recognizes them
+ * as a positive signal for hand-authored/manually-curated candidates — see
+ * `SUITABLE_HIGHWAY_CLASSES` in `fartlekScore.ts`): at country scale, residential ways
+ * alone number in the millions and extracting their full way geometry exhausts the Node heap
+ * during a nationwide extract. Fartlek segments are meant to be continuous rural roads between
+ * settlements, not in-town residential streets, so narrowing the bulk-extraction selector to
+ * through-roads is both a practical necessity and consistent with the spec's intent.
+ */
 export const FARTLEK_HIGHWAY_CLASSES = new Set([
   "primary", "primary_link",
   "secondary", "secondary_link",
   "tertiary", "tertiary_link",
-  "unclassified", "residential", "cycleway"
+  "unclassified"
 ]);
 
 /** Node tags marking a logical segment boundary (candidate generation walks between these). */

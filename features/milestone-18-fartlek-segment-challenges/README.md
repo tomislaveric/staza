@@ -306,6 +306,17 @@ than true OSM node IDs (unavailable from `osmium export` GeoJSON); chains with n
 boundary-node hits still produce one whole-chain candidate with
 `hasClearBoundaries: false` rather than being discarded.
 
+The bulk-extraction highway selector (`FARTLEK_HIGHWAY_CLASSES`) intentionally omits
+`residential` and `cycleway`: nationwide, residential ways alone number in the
+millions, and keeping full way geometry for all of them exhausts the Node heap during
+a country-scale extract. Fartlek segments are meant to be continuous rural roads
+between settlements, so restricting extraction to primary/secondary/tertiary/
+unclassified through-roads is both a practical necessity and consistent with intent.
+(Hand-authored `--candidates`/`--fartleks` input can still include residential/
+cycleway ways — only the bulk OSM selector is narrowed.) If a future nationwide
+extract still runs out of memory, raise
+`NODE_MAX_OLD_SPACE_MB=16384 npm run extract:osm-germany-fartleks -- <pbf>`.
+
 ## World API
 
 `/api/world` response gains `fartleks: WorldFartlek[]` (LineString geometry, name,
