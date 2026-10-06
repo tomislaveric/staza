@@ -106,20 +106,21 @@ describe("Fartlek OSM snapshot round-trip", () => {
     const { readFartlekOSMSnapshot, FARTLEK_OSM_SNAPSHOT_VERSION } = await import("./fartlekSnapshot.js");
     const directory = await mkdtemp(path.join(os.tmpdir(), "staza-fartlek-snapshot-"));
     temporaryDirectories.push(directory);
-    const file = path.join(directory, "osm-germany-fartleks.json");
-    await writeFile(file, JSON.stringify({
-      metadata: {
-        snapshotVersion: FARTLEK_OSM_SNAPSHOT_VERSION,
-        sourceUrl: "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
-        sourceVersion: "geofabrik-germany-2026-10-05",
-        generatedAt: "2026-10-05T18:00:00.000Z",
-        selectors: ["highway=secondary"],
-        scanned: 1
-      },
-      records: [
-        { osmType: "way", osmId: "1", coordinates: [[11, 48], [12, 49]], tags: { highway: "secondary" } }
-      ]
-    }), "utf8");
+    const file = path.join(directory, "osm-germany-fartleks.ndjson");
+    const lines = [
+      JSON.stringify({
+        metadata: {
+          snapshotVersion: FARTLEK_OSM_SNAPSHOT_VERSION,
+          sourceUrl: "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
+          sourceVersion: "geofabrik-germany-2026-10-05",
+          generatedAt: "2026-10-05T18:00:00.000Z",
+          selectors: ["highway=secondary"],
+          scanned: 1
+        }
+      }),
+      JSON.stringify({ osmType: "way", osmId: "1", coordinates: [[11, 48], [12, 49]], tags: { highway: "secondary" } })
+    ];
+    await writeFile(file, `${lines.join("\n")}\n`, "utf8");
 
     const snapshot = await readFartlekOSMSnapshot(file);
     expect(snapshot.metadata.coverageComplete).toBe(true);
@@ -132,24 +133,20 @@ describe("Fartlek OSM snapshot round-trip", () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "staza-fartlek-snapshot-"));
     temporaryDirectories.push(directory);
 
-    const wrongVersion = path.join(directory, "wrong-version.json");
-    await writeFile(wrongVersion, JSON.stringify({
-      metadata: { snapshotVersion: "fartlek-osm-snapshot-v0", sourceUrl: "https://example.test/extract" },
-      records: []
-    }), "utf8");
+    const wrongVersion = path.join(directory, "wrong-version.ndjson");
+    await writeFile(wrongVersion, `${JSON.stringify({
+      metadata: { snapshotVersion: "fartlek-osm-snapshot-v0", sourceUrl: "https://example.test/extract" }
+    })}\n`, "utf8");
     await expect(readFartlekOSMSnapshot(wrongVersion)).rejects.toThrow(/Unsupported Fartlek OSM snapshot version/);
 
-    const missingRecords = path.join(directory, "missing-records.json");
-    await writeFile(missingRecords, JSON.stringify({
-      metadata: { snapshotVersion: FARTLEK_OSM_SNAPSHOT_VERSION, sourceUrl: "https://example.test/extract" }
-    }), "utf8");
-    await expect(readFartlekOSMSnapshot(missingRecords)).rejects.toThrow(/metadata object and a records array/);
+    const missingMetadata = path.join(directory, "missing-metadata.ndjson");
+    await writeFile(missingMetadata, `${JSON.stringify({ osmType: "way", osmId: "1" })}\n`, "utf8");
+    await expect(readFartlekOSMSnapshot(missingMetadata)).rejects.toThrow(/first line must be a .*metadata.* object/);
 
-    const missingSourceUrl = path.join(directory, "missing-source-url.json");
-    await writeFile(missingSourceUrl, JSON.stringify({
-      metadata: { snapshotVersion: FARTLEK_OSM_SNAPSHOT_VERSION },
-      records: []
-    }), "utf8");
+    const missingSourceUrl = path.join(directory, "missing-source-url.ndjson");
+    await writeFile(missingSourceUrl, `${JSON.stringify({
+      metadata: { snapshotVersion: FARTLEK_OSM_SNAPSHOT_VERSION }
+    })}\n`, "utf8");
     await expect(readFartlekOSMSnapshot(missingSourceUrl)).rejects.toThrow(/requires a sourceUrl/);
   });
 });

@@ -13,7 +13,7 @@
     "seed:collectibles": "tsx src/persistence/seedCollectibles.ts",
     "import:quaeldich": "tsx src/persistence/importQuaeldichPasses.ts",
     "import:osm-wikidata": "tsx src/persistence/importOSMWikidata.ts",
-    "import:fartleks": "tsx src/persistence/importFartleks.ts",
+    "import:fartleks": "NODE_OPTIONS=\"--max-old-space-size=8192\" tsx src/persistence/importFartleks.ts",
     "extract:osm-germany": "bash scripts/extract-osm-germany.sh",
     "extract:osm-germany-fartleks": "bash scripts/extract-osm-germany-fartleks.sh",
     "test:persistence": "TEST_DATABASE_URL=${TEST_DATABASE_URL:?TEST_DATABASE_URL is required} vitest run --no-file-parallelism src/persistence/activityRepository.test.ts src/persistence/questRepository.test.ts src/auth.test.ts"

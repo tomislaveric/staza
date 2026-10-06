@@ -284,10 +284,10 @@ curl -O https://download.geofabrik.de/europe/germany-latest.osm.pbf
 
 # 2. Extract + build the committed way-geometry snapshot (requires osmium-tool).
 npm run extract:osm-germany-fartleks -- germany-latest.osm.pbf
-# writes fixtures/osm-germany-fartleks.json
+# writes fixtures/osm-germany-fartleks.ndjson
 
 # 3. Generate candidates, score them, and publish AUTO_PUBLISH results.
-npm run import:fartleks -- --snapshot fixtures/osm-germany-fartleks.json \
+npm run import:fartleks -- --snapshot fixtures/osm-germany-fartleks.ndjson \
   --write-review tmp/fartlek-review.jsonl
 ```
 

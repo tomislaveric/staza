@@ -66,20 +66,16 @@ const run = async (): Promise<void> => {
   const target = path.resolve(args.output);
   await mkdir(path.dirname(target), { recursive: true });
   const temporary = `${target}.${process.pid}.tmp`;
-  // Stream the write (rather than building one giant joined string) to avoid doubling peak
-  // memory on top of the already-large in-memory records array for a country-scale extract.
+  // NDJSON (one metadata line, then one record per line) rather than a single JSON document:
+  // a country-scale extract can be hundreds of MB to multiple GB, which blows past V8's max
+  // string length / available heap if parsed back with a single JSON.parse call. NDJSON lets
+  // both this writer and the reader (fartlekSnapshot.ts) stream line-by-line.
   const out = createWriteStream(temporary, { encoding: "utf8" });
   const write = async (chunk: string): Promise<void> => {
     if (!out.write(chunk)) await once(out, "drain");
   };
-  await write("{\n");
-  await write(`  "metadata": ${JSON.stringify(metadata, null, 2).split("\n").join("\n  ")},\n`);
-  await write('  "records": [\n');
-  for (let index = 0; index < parsed.records.length; index += 1) {
-    const suffix = index === parsed.records.length - 1 ? "\n" : ",\n";
-    await write(`    ${JSON.stringify(parsed.records[index])}${suffix}`);
-  }
-  await write("  ]\n}\n");
+  await write(`${JSON.stringify({ metadata })}\n`);
+  for (const record of parsed.records) await write(`${JSON.stringify(record)}\n`);
   out.end();
   await once(out, "finish");
   await rename(temporary, target);

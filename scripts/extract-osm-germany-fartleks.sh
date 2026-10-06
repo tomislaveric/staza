@@ -12,7 +12,7 @@
 set -euo pipefail
 
 PBF="${1:-germany-latest.osm.pbf}"
-OUTPUT="${OUTPUT:-fixtures/osm-germany-fartleks.json}"
+OUTPUT="${OUTPUT:-fixtures/osm-germany-fartleks.ndjson}"
 WORK_DIR="${WORK_DIR:-tmp/osm-extract-fartleks}"
 
 if ! command -v osmium >/dev/null 2>&1; then
