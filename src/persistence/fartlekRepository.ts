@@ -1,8 +1,7 @@
 import type { Pool } from "pg";
 import type { Fartlek, FartlekGeometry, FartlekStatus } from "../domain.js";
 import type { GeoBounds } from "../worldQuery.js";
-import { fartlekGeometryBounds, fartlekIntersectsBounds } from "../fartlek.js";
-import { isWithinBounds } from "../worldQuery.js";
+import { fartlekGeometryBounds } from "../fartlek.js";
 
 interface FartlekRow {
   id: string;
@@ -82,16 +81,22 @@ export class FartlekRepository {
   }
 
   /**
-   * Fartleks are far fewer than point collectibles, so bbox filtering happens in memory on the
-   * published catalog rather than with a dedicated spatial SQL index.
+   * Fartleks are filtered to the viewport in SQL using a precomputed geometry bounding box and a
+   * GiST index, so a world load only deserializes the handful of geometries that overlap the bbox
+   * rather than the entire published catalog.
    */
   async listWithinBounds(bounds: GeoBounds): Promise<Fartlek[]> {
-    const published = await this.listPublished();
-    return published.filter((fartlek) =>
-      fartlekIntersectsBounds(fartlek.geometry, bounds) ||
-      isWithinBounds({ latitude: fartlek.startLatitude, longitude: fartlek.startLongitude }, bounds) ||
-      isWithinBounds({ latitude: fartlek.endLatitude, longitude: fartlek.endLongitude }, bounds) ||
-      boundsOverlap(fartlekGeometryBounds(fartlek.geometry), bounds));
+    const result = await this.pool.query<FartlekRow>(
+      `SELECT ${SELECT_COLUMNS} FROM fartleks
+       WHERE status = 'published'
+         AND box(
+               point(bbox_min_longitude, bbox_min_latitude),
+               point(bbox_max_longitude, bbox_max_latitude)
+             ) && box(point($1, $3), point($2, $4))
+       ORDER BY id`,
+      [bounds.minLongitude, bounds.maxLongitude, bounds.minLatitude, bounds.maxLatitude]
+    );
+    return result.rows.map(mapFartlek);
   }
 
   async upsertMany(fartleks: Fartlek[]): Promise<number> {
@@ -100,12 +105,14 @@ export class FartlekRepository {
     try {
       await client.query("BEGIN");
       for (const fartlek of fartleks) {
+        const geometryBounds = fartlekGeometryBounds(fartlek.geometry);
         await client.query(
           `INSERT INTO fartleks (
             id, name, geometry, start_latitude, start_longitude, end_latitude, end_longitude, length_meters,
             status, direction_restricted, source_type, source_external_id, source_attribution, source_metadata,
-            suitability_score, suitability_reasons, mapping_confidence, geometry_version
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            suitability_score, suitability_reasons, mapping_confidence, geometry_version,
+            bbox_min_latitude, bbox_max_latitude, bbox_min_longitude, bbox_max_longitude
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             geometry = EXCLUDED.geometry,
@@ -123,6 +130,10 @@ export class FartlekRepository {
             suitability_score = EXCLUDED.suitability_score,
             suitability_reasons = EXCLUDED.suitability_reasons,
             mapping_confidence = EXCLUDED.mapping_confidence,
+            bbox_min_latitude = EXCLUDED.bbox_min_latitude,
+            bbox_max_latitude = EXCLUDED.bbox_max_latitude,
+            bbox_min_longitude = EXCLUDED.bbox_min_longitude,
+            bbox_max_longitude = EXCLUDED.bbox_max_longitude,
             geometry_version = fartleks.geometry_version + 1,
             updated_at = now()`,
           [
@@ -143,7 +154,11 @@ export class FartlekRepository {
             fartlek.suitabilityScore,
             fartlek.suitabilityReasons,
             fartlek.mappingConfidence,
-            fartlek.geometryVersion
+            fartlek.geometryVersion,
+            geometryBounds.minLatitude,
+            geometryBounds.maxLatitude,
+            geometryBounds.minLongitude,
+            geometryBounds.maxLongitude
           ]
         );
       }
@@ -157,7 +172,3 @@ export class FartlekRepository {
     }
   }
 }
-
-const boundsOverlap = (left: GeoBounds, right: GeoBounds): boolean =>
-  left.minLatitude <= right.maxLatitude && left.maxLatitude >= right.minLatitude &&
-  left.minLongitude <= right.maxLongitude && left.maxLongitude >= right.minLongitude;

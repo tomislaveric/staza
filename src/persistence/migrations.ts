@@ -392,4 +392,46 @@ export const migrations: Migration[] = [{
         ON fartlek_completions (fartlek_id);
     `);
   }
+}, {
+  id: "020_fartlek_geometry_bounds",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE fartleks
+        ADD COLUMN bbox_min_latitude DOUBLE PRECISION,
+        ADD COLUMN bbox_max_latitude DOUBLE PRECISION,
+        ADD COLUMN bbox_min_longitude DOUBLE PRECISION,
+        ADD COLUMN bbox_max_longitude DOUBLE PRECISION;
+
+      UPDATE fartleks AS f SET
+        bbox_min_longitude = sub.min_lon,
+        bbox_max_longitude = sub.max_lon,
+        bbox_min_latitude = sub.min_lat,
+        bbox_max_latitude = sub.max_lat
+      FROM (
+        SELECT g.id AS id,
+          min((coord->>0)::double precision) AS min_lon,
+          max((coord->>0)::double precision) AS max_lon,
+          min((coord->>1)::double precision) AS min_lat,
+          max((coord->>1)::double precision) AS max_lat
+        FROM fartleks AS g,
+             jsonb_array_elements(g.geometry->'coordinates') AS coord
+        GROUP BY g.id
+      ) AS sub
+      WHERE f.id = sub.id;
+
+      ALTER TABLE fartleks
+        ALTER COLUMN bbox_min_latitude SET NOT NULL,
+        ALTER COLUMN bbox_max_latitude SET NOT NULL,
+        ALTER COLUMN bbox_min_longitude SET NOT NULL,
+        ALTER COLUMN bbox_max_longitude SET NOT NULL;
+
+      CREATE INDEX fartleks_geometry_bbox_gist
+        ON fartleks USING gist (
+          box(
+            point(bbox_min_longitude, bbox_min_latitude),
+            point(bbox_max_longitude, bbox_max_latitude)
+          )
+        );
+    `);
+  }
 }];
