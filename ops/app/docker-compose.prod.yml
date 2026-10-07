@@ -23,6 +23,7 @@ services:
       MAIL_FROM: ${MAIL_FROM}
     volumes:
       - app-data:/data
+      - /opt/staza/data:/import-source:ro
     depends_on:
       postgres:
         condition: service_healthy

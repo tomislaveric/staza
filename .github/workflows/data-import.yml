@@ -1,4 +1,4 @@
-name: Import Data to staza
+name: Import Staza Data
 
 on:
   workflow_dispatch:
@@ -26,43 +26,18 @@ jobs:
   import:
     name: Import ${{ inputs.import_job }} to ${{ inputs.environment }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+
+    # OSM extraction/import may take a while.
+    timeout-minutes: 360
 
     environment:
       name: app-${{ inputs.environment }}
 
     steps:
-      - name: Validate input
-        shell: bash
-        env:
-          TARGET_ENV: ${{ inputs.environment }}
-          IMPORT_JOB: ${{ inputs.import_job }}
-        run: |
-          set -Eeuo pipefail
-
-          case "$TARGET_ENV" in
-            dev|prod)
-              ;;
-            *)
-              echo "Unsupported environment: $TARGET_ENV" >&2
-              exit 1
-              ;;
-          esac
-
-          case "$IMPORT_JOB" in
-            osm-germany-fartleks)
-              ;;
-            *)
-              echo "Unsupported import job: $IMPORT_JOB" >&2
-              exit 1
-              ;;
-          esac
-
       - name: Prepare SSH
         shell: bash
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_PORT: ${{ vars.SSH_PORT || '22' }}
         run: |
@@ -82,7 +57,8 @@ jobs:
 
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Run import
+      - name: Run Fartlek extract and import
+        if: ${{ inputs.import_job == 'osm-germany-fartleks' }}
         shell: bash
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -90,24 +66,8 @@ jobs:
           SSH_PORT: ${{ vars.SSH_PORT || '22' }}
           REMOTE_PATH: ${{ vars.REMOTE_PATH }}
           TARGET_ENV: ${{ inputs.environment }}
-          IMPORT_JOB: ${{ inputs.import_job }}
         run: |
           set -Eeuo pipefail
-
-          case "$IMPORT_JOB" in
-            osm-germany-fartleks)
-              npm_script="extract:osm-germany-fartleks"
-              source_file="/data/germany-latest.osm.pbf"
-              ;;
-            *)
-              echo "Unsupported import job: $IMPORT_JOB" >&2
-              exit 1
-              ;;
-          esac
-
-          echo "Target environment: $TARGET_ENV"
-          echo "Import job: $IMPORT_JOB"
-          echo "Remote path: $REMOTE_PATH"
 
           ssh \
             -i ~/.ssh/staza_deploy \
@@ -119,16 +79,14 @@ jobs:
             "$SSH_USER@$SSH_HOST" \
             bash -s -- \
             "$REMOTE_PATH" \
-            "$TARGET_ENV" \
-            "$npm_script" \
-            "$source_file" <<'REMOTE'
+            "$TARGET_ENV" <<'REMOTE'
 
           set -Eeuo pipefail
 
           remote_path="$1"
           target_env="$2"
-          npm_script="$3"
-          source_file="$4"
+
+          source_file="/import-source/germany-latest.osm.pbf"
 
           cd "$remote_path"
 
@@ -144,7 +102,6 @@ jobs:
           echo "========================================"
           echo "Environment: $target_env"
           echo "Remote path: $remote_path"
-          echo "Import script: $npm_script"
           echo "Source file: $source_file"
           echo
 
@@ -162,7 +119,7 @@ jobs:
           image_tag="$(sed -n 's/^STAZA_IMAGE_TAG=//p' .env | head -n 1)"
 
           if [[ -z "$image_name" || -z "$image_tag" ]]; then
-            echo "Could not determine currently deployed image." >&2
+            echo "Could not determine deployed image." >&2
             exit 1
           fi
 
@@ -172,6 +129,7 @@ jobs:
           echo "Validating Compose configuration."
           compose config --quiet
 
+          echo
           echo "Ensuring PostgreSQL is running."
           compose up -d postgres
 
@@ -212,7 +170,8 @@ jobs:
           fi
 
           echo
-          echo "Checking source file inside the app-data volume."
+          echo "Starting one-off import container."
+          echo
 
           compose run \
             --rm \
@@ -223,35 +182,47 @@ jobs:
 
               source_file="$1"
 
+              echo "========================================"
+              echo "Checking source file"
+              echo "========================================"
+
               if [ ! -f "$source_file" ]; then
                 echo "Source file does not exist: $source_file" >&2
                 exit 1
               fi
 
-              echo "Source file:"
               ls -lh "$source_file"
+
+              echo
+              echo "========================================"
+              echo "Step 1/2: Extract OSM Fartleks"
+              echo "========================================"
+              echo "npm run extract:osm-germany-fartleks -- $source_file"
+              echo
+
+              npm run extract:osm-germany-fartleks -- "$source_file"
+
+              echo
+              echo "========================================"
+              echo "Step 2/2: Import Fartleks"
+              echo "========================================"
+              echo "npm run import:fartleks"
+              echo
+
+              npm run import:fartleks
+
+              echo
+              echo "========================================"
+              echo "Import completed successfully"
+              echo "========================================"
             ' \
             sh \
             "$source_file"
 
           echo
-          echo "Starting import."
-          echo "Command:"
-          echo "npm run $npm_script -- $source_file"
-          echo
-
-          compose run \
-            --rm \
-            --no-deps \
-            app \
-            npm run "$npm_script" -- "$source_file"
-
-          echo
-          echo "========================================"
-          echo "Import completed successfully."
           echo "Environment: $target_env"
           echo "Image: ${image_name}:${image_tag}"
-          echo "Job: $npm_script"
-          echo "========================================"
+          echo "Import: osm-germany-fartleks"
+          echo "Result: SUCCESS"
 
           REMOTE
