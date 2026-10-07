@@ -332,11 +332,10 @@ echo "Updated STAZA_IMAGE_TAG to $image_tag."
 echo "Pulling deployment images."
 compose pull
 
-echo "Ensuring PostgreSQL is running."
-compose up -d postgres
+echo "Bringing supporting services to desired state."
+compose up -d
 
 echo "Waiting for PostgreSQL health."
-
 postgres_container="$(compose ps -q postgres)"
 
 if [[ -z "$postgres_container" ]]; then
@@ -372,48 +371,12 @@ if [[ "$postgres_health" != "healthy" ]]; then
   exit 1
 fi
 
-echo "Running database migration using new app image."
-
-compose run \
-  --rm \
-  --no-deps \
-  app \
-  node dist/persistence/migrate.js
-
+echo "Running database migration."
+compose run --rm --no-deps app node dist/persistence/migrate.js
 echo "Migration: completed."
 
-echo "Recreating app service with new image."
-
-compose up \
-  -d \
-  --force-recreate \
-  --no-deps \
-  app
-
-echo "Waiting for app container health."
-
-health_status="unknown"
-
-for ((attempt = 1; attempt <= 30; attempt++)); do
-  health_status="$(
-    docker inspect \
-      --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
-      "$app_container" \
-      2>/dev/null || printf 'missing'
-  )"
-
-  echo "App health attempt $attempt/30: $health_status"
-
-  if [[ "$health_status" == "healthy" ]]; then
-    break
-  fi
-
-  if [[ "$health_status" == "unhealthy" || "$health_status" == "missing" ]]; then
-    break
-  fi
-
-  sleep 10
-done
+echo "Recreating app with deployed image."
+compose up -d --force-recreate --no-deps app
 
 if [[ "$health_status" != "healthy" ]]; then
   echo "App container did not become healthy." >&2
