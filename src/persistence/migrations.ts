@@ -397,27 +397,30 @@ export const migrations: Migration[] = [{
   async up(client) {
     await client.query(`
       ALTER TABLE fartleks
-        ADD COLUMN bbox_min_latitude DOUBLE PRECISION,
-        ADD COLUMN bbox_max_latitude DOUBLE PRECISION,
-        ADD COLUMN bbox_min_longitude DOUBLE PRECISION,
-        ADD COLUMN bbox_max_longitude DOUBLE PRECISION;
+        ADD COLUMN IF NOT EXISTS bbox_min_latitude DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS bbox_max_latitude DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS bbox_min_longitude DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS bbox_max_longitude DOUBLE PRECISION;
 
       UPDATE fartleks AS f SET
-        bbox_min_longitude = sub.min_lon,
-        bbox_max_longitude = sub.max_lon,
-        bbox_min_latitude = sub.min_lat,
-        bbox_max_latitude = sub.max_lat
-      FROM (
-        SELECT g.id AS id,
+        bbox_min_longitude = COALESCE(sub.min_lon, LEAST(f.start_longitude, f.end_longitude)),
+        bbox_max_longitude = COALESCE(sub.max_lon, GREATEST(f.start_longitude, f.end_longitude)),
+        bbox_min_latitude = COALESCE(sub.min_lat, LEAST(f.start_latitude, f.end_latitude)),
+        bbox_max_latitude = COALESCE(sub.max_lat, GREATEST(f.start_latitude, f.end_latitude))
+      FROM fartleks AS base
+      LEFT JOIN LATERAL (
+        SELECT
           min((coord->>0)::double precision) AS min_lon,
           max((coord->>0)::double precision) AS max_lon,
           min((coord->>1)::double precision) AS min_lat,
           max((coord->>1)::double precision) AS max_lat
-        FROM fartleks AS g,
-             jsonb_array_elements(g.geometry->'coordinates') AS coord
-        GROUP BY g.id
-      ) AS sub
-      WHERE f.id = sub.id;
+        FROM jsonb_array_elements(base.geometry->'coordinates') AS coord
+      ) AS sub ON true
+      WHERE f.id = base.id
+        AND (
+          f.bbox_min_latitude IS NULL OR f.bbox_max_latitude IS NULL OR
+          f.bbox_min_longitude IS NULL OR f.bbox_max_longitude IS NULL
+        );
 
       ALTER TABLE fartleks
         ALTER COLUMN bbox_min_latitude SET NOT NULL,
@@ -425,7 +428,7 @@ export const migrations: Migration[] = [{
         ALTER COLUMN bbox_min_longitude SET NOT NULL,
         ALTER COLUMN bbox_max_longitude SET NOT NULL;
 
-      CREATE INDEX fartleks_geometry_bbox_gist
+      CREATE INDEX IF NOT EXISTS fartleks_geometry_bbox_gist
         ON fartleks USING gist (
           box(
             point(bbox_min_longitude, bbox_min_latitude),
