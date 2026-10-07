@@ -130,6 +130,7 @@ echo "Remote path: $REMOTE_PATH"
 previous_tag="$(
   ssh "${ssh_options[@]}" "$remote" bash -s -- "$REMOTE_PATH" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
+
 remote_path="$1"
 env_file="$remote_path/.env"
 
@@ -137,34 +138,18 @@ if [[ ! -d "$remote_path" ]]; then
   echo "Configured remote directory does not exist." >&2
   exit 1
 fi
+
 if [[ ! -f "$env_file" ]]; then
   echo "Server-side .env file does not exist." >&2
   exit 1
 fi
 
-required=(STAZA_IMAGE STAZA_IMAGE_TAG POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD DATABASE_URL WEBAUTHN_RP_ID WEBAUTHN_RP_NAME WEBAUTHN_ORIGIN)
-for name in "${required[@]}"; do
-  count="$(grep -c "^${name}=" "$env_file" || true)"
-  if [[ "$count" != "1" ]]; then
-    echo "Server .env must contain exactly one $name assignment." >&2
-    exit 1
-  fi
-  value="$(sed -n "s/^${name}=//p" "$env_file")"
-  if [[ -z "${value//[[:space:]]/}" ]]; then
-    echo "Server .env contains an empty $name value." >&2
-    exit 1
-  fi
-done
+old_tag="$(sed -n 's/^STAZA_IMAGE_TAG=//p' "$env_file" | head -n 1)"
 
-if ! grep -Fxq 'STAZA_IMAGE=ghcr.io/tomislaveric/staza' "$env_file"; then
-  echo "Server .env must use STAZA_IMAGE=ghcr.io/tomislaveric/staza." >&2
-  exit 1
+if [[ -z "$old_tag" ]]; then
+  old_tag="unknown"
 fi
-old_tag="$(sed -n 's/^STAZA_IMAGE_TAG=//p' "$env_file")"
-if [[ ! "$old_tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-  echo "Existing STAZA_IMAGE_TAG is not a valid simple image tag." >&2
-  exit 1
-fi
+
 printf '%s' "$old_tag"
 REMOTE_PREFLIGHT
 )"
