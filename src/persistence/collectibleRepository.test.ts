@@ -58,6 +58,25 @@ describe("CollectibleRepository OSM metadata", () => {
     expect(result).toEqual([collectible]);
   });
 
+  it("aggregates world stats via SQL counts without loading collectible rows", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ total: 20000, discovered: 12, rare: 3, epic: 1 }]
+    });
+    const pool = { query } as unknown as Pool;
+    const stats = await new CollectibleRepository(pool).worldStats(["a", "a", "b"]);
+    expect(stats).toEqual({
+      totalCollectibles: 20000,
+      discoveredCount: 12,
+      rareFinds: 3,
+      epicFinds: 1,
+      remainingCount: 19988
+    });
+    const [statement, params] = query.mock.calls[0];
+    expect(statement).toContain("FROM collectibles");
+    expect(statement).not.toContain("SELECT id, name");
+    expect(params).toEqual([["a", "b"]]);
+  });
+
   it("upserts metadata on the canonical collectible row without touching history", async () => {
     const query = vi.fn().mockResolvedValue({});
     const release = vi.fn();

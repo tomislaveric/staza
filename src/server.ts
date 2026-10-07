@@ -818,12 +818,8 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const bounds = parseBoundsParameter(request.query.bbox);
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
-      const [collectibles, allFartleks] = await Promise.all([
-        collectibleRepository.listAll(),
-        fartlekRepository.listAll()
-      ]);
-      const fartleks = await worldFartleksForPlayer(playerId, allFartleks);
-      response.json({ ...createWorldSnapshot(collectibles, discoveredSourceIds), quests: [], truncated: false, fartleks });
+      const stats = await collectibleRepository.worldStats(discoveredSourceIds);
+      response.json({ collectibles: [], stats, quests: [], truncated: false, fartleks: [] });
       return;
     }
     const [viewport, quests, fartlekCandidates] = await Promise.all([

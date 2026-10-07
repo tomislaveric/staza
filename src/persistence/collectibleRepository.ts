@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { Collectible, CollectibleCategory, CollectibleRarity, CollectibleStatus, CollectibleType } from "../domain.js";
+import type { Collectible, CollectibleCategory, CollectibleRarity, CollectibleStatus, CollectibleType, WorldStats } from "../domain.js";
 import type { GeoBounds } from "../worldQuery.js";
 import { boundsCenter, splitBoundsAtAntimeridian } from "../worldQuery.js";
 
@@ -68,6 +68,32 @@ export class CollectibleRepository {
       `SELECT ${SELECT_COLUMNS} FROM collectibles ORDER BY id`
     );
     return result.rows.map(mapCollectible);
+  }
+
+  /**
+   * Aggregates world discovery statistics with SQL counts so the global (no-bbox) snapshot never
+   * has to load every collectible row. Discovery stats mirror createWorldSnapshot: only source IDs
+   * present in the catalog count as discovered.
+   */
+  async worldStats(discoveredSourceIds: Iterable<string>): Promise<WorldStats> {
+    const ids = [...new Set(discoveredSourceIds)];
+    const result = await this.pool.query<{ total: number; discovered: number; rare: number; epic: number }>(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE id = ANY($1::text[]))::int AS discovered,
+         COUNT(*) FILTER (WHERE id = ANY($1::text[]) AND rarity = 'rare')::int AS rare,
+         COUNT(*) FILTER (WHERE id = ANY($1::text[]) AND rarity = 'epic')::int AS epic
+       FROM collectibles`,
+      [ids]
+    );
+    const { total, discovered, rare, epic } = result.rows[0];
+    return {
+      totalCollectibles: total,
+      discoveredCount: discovered,
+      rareFinds: rare,
+      epicFinds: epic,
+      remainingCount: total - discovered
+    };
   }
 
   async listWithinBounds(bounds: GeoBounds, limit: number): Promise<{ collectibles: Collectible[]; truncated: boolean }> {
