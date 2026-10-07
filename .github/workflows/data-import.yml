@@ -1,0 +1,257 @@
+name: Import Data to staza
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+      import_job:
+        description: Import job
+        required: true
+        type: choice
+        options:
+          - osm-germany-fartleks
+
+concurrency:
+  group: staza-${{ inputs.environment }}-data-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    name: Import ${{ inputs.import_job }} to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    environment:
+      name: app-${{ inputs.environment }}
+
+    steps:
+      - name: Validate input
+        shell: bash
+        env:
+          TARGET_ENV: ${{ inputs.environment }}
+          IMPORT_JOB: ${{ inputs.import_job }}
+        run: |
+          set -Eeuo pipefail
+
+          case "$TARGET_ENV" in
+            dev|prod)
+              ;;
+            *)
+              echo "Unsupported environment: $TARGET_ENV" >&2
+              exit 1
+              ;;
+          esac
+
+          case "$IMPORT_JOB" in
+            osm-germany-fartleks)
+              ;;
+            *)
+              echo "Unsupported import job: $IMPORT_JOB" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/staza_deploy
+          chmod 600 ~/.ssh/staza_deploy
+
+          ssh-keyscan \
+            -T 10 \
+            -p "$SSH_PORT" \
+            -H "$SSH_HOST" \
+            > ~/.ssh/known_hosts
+
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Run import
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          REMOTE_PATH: ${{ vars.REMOTE_PATH }}
+          TARGET_ENV: ${{ inputs.environment }}
+          IMPORT_JOB: ${{ inputs.import_job }}
+        run: |
+          set -Eeuo pipefail
+
+          case "$IMPORT_JOB" in
+            osm-germany-fartleks)
+              npm_script="extract:osm-germany-fartleks"
+              source_file="/data/germany-latest.osm.pbf"
+              ;;
+            *)
+              echo "Unsupported import job: $IMPORT_JOB" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "Target environment: $TARGET_ENV"
+          echo "Import job: $IMPORT_JOB"
+          echo "Remote path: $REMOTE_PATH"
+
+          ssh \
+            -i ~/.ssh/staza_deploy \
+            -p "$SSH_PORT" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$SSH_USER@$SSH_HOST" \
+            bash -s -- \
+            "$REMOTE_PATH" \
+            "$TARGET_ENV" \
+            "$npm_script" \
+            "$source_file" <<'REMOTE'
+
+          set -Eeuo pipefail
+
+          remote_path="$1"
+          target_env="$2"
+          npm_script="$3"
+          source_file="$4"
+
+          cd "$remote_path"
+
+          compose() {
+            docker compose \
+              --env-file .env \
+              -f docker-compose.yml \
+              "$@"
+          }
+
+          echo "========================================"
+          echo "Staza data import"
+          echo "========================================"
+          echo "Environment: $target_env"
+          echo "Remote path: $remote_path"
+          echo "Import script: $npm_script"
+          echo "Source file: $source_file"
+          echo
+
+          if [[ ! -f .env ]]; then
+            echo "Missing .env in $remote_path" >&2
+            exit 1
+          fi
+
+          if [[ ! -f docker-compose.yml ]]; then
+            echo "Missing docker-compose.yml in $remote_path" >&2
+            exit 1
+          fi
+
+          image_name="$(sed -n 's/^STAZA_IMAGE=//p' .env | head -n 1)"
+          image_tag="$(sed -n 's/^STAZA_IMAGE_TAG=//p' .env | head -n 1)"
+
+          if [[ -z "$image_name" || -z "$image_tag" ]]; then
+            echo "Could not determine currently deployed image." >&2
+            exit 1
+          fi
+
+          echo "Current image: ${image_name}:${image_tag}"
+          echo
+
+          echo "Validating Compose configuration."
+          compose config --quiet
+
+          echo "Ensuring PostgreSQL is running."
+          compose up -d postgres
+
+          postgres_container="$(compose ps -q postgres)"
+
+          if [[ -z "$postgres_container" ]]; then
+            echo "PostgreSQL container could not be found." >&2
+            exit 1
+          fi
+
+          postgres_health="unknown"
+
+          for attempt in $(seq 1 30); do
+            postgres_health="$(
+              docker inspect \
+                --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+                "$postgres_container" \
+                2>/dev/null || printf 'missing'
+            )"
+
+            echo "PostgreSQL health attempt $attempt/30: $postgres_health"
+
+            if [[ "$postgres_health" == "healthy" ]]; then
+              break
+            fi
+
+            if [[ "$postgres_health" == "unhealthy" || "$postgres_health" == "missing" ]]; then
+              break
+            fi
+
+            sleep 5
+          done
+
+          if [[ "$postgres_health" != "healthy" ]]; then
+            echo "PostgreSQL did not become healthy." >&2
+            compose logs --no-color --tail=100 postgres >&2 || true
+            exit 1
+          fi
+
+          echo
+          echo "Checking source file inside the app-data volume."
+
+          compose run \
+            --rm \
+            --no-deps \
+            app \
+            sh -c '
+              set -eu
+
+              source_file="$1"
+
+              if [ ! -f "$source_file" ]; then
+                echo "Source file does not exist: $source_file" >&2
+                exit 1
+              fi
+
+              echo "Source file:"
+              ls -lh "$source_file"
+            ' \
+            sh \
+            "$source_file"
+
+          echo
+          echo "Starting import."
+          echo "Command:"
+          echo "npm run $npm_script -- $source_file"
+          echo
+
+          compose run \
+            --rm \
+            --no-deps \
+            app \
+            npm run "$npm_script" -- "$source_file"
+
+          echo
+          echo "========================================"
+          echo "Import completed successfully."
+          echo "Environment: $target_env"
+          echo "Image: ${image_name}:${image_tag}"
+          echo "Job: $npm_script"
+          echo "========================================"
+
+          REMOTE
