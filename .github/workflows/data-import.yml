@@ -26,8 +26,6 @@ jobs:
   import:
     name: Import ${{ inputs.import_job }} to ${{ inputs.environment }}
     runs-on: ubuntu-latest
-
-    # OSM extraction/import may take a while.
     timeout-minutes: 360
 
     environment:
@@ -86,8 +84,6 @@ jobs:
           remote_path="$1"
           target_env="$2"
 
-          source_file="/import-source/germany-latest.osm.pbf"
-
           cd "$remote_path"
 
           compose() {
@@ -102,7 +98,7 @@ jobs:
           echo "========================================"
           echo "Environment: $target_env"
           echo "Remote path: $remote_path"
-          echo "Source file: $source_file"
+          echo "Source file: /import-source/germany-latest.osm.pbf"
           echo
 
           if [[ ! -f .env ]]; then
@@ -176,48 +172,65 @@ jobs:
           compose run \
             --rm \
             --no-deps \
+            -e OUTPUT=/data/osm-germany-fartleks.ndjson \
+            -e WORK_DIR=/data/tmp/osm-extract-fartleks \
             app \
             sh -c '
               set -eu
 
-              source_file="$1"
+              source_file="/import-source/germany-latest.osm.pbf"
+              snapshot_file="/data/osm-germany-fartleks.ndjson"
 
               echo "========================================"
-              echo "Checking source file"
+              echo "Checking prerequisites"
               echo "========================================"
 
               if [ ! -f "$source_file" ]; then
-                echo "Source file does not exist: $source_file" >&2
+                echo "Source file not found: $source_file" >&2
                 exit 1
               fi
 
+              if ! command -v osmium >/dev/null 2>&1; then
+                echo "osmium is not installed in the app image." >&2
+                exit 1
+              fi
+
+              echo "Source:"
               ls -lh "$source_file"
 
               echo
-              echo "========================================"
-              echo "Step 1/2: Extract OSM Fartleks"
-              echo "========================================"
-              echo "npm run extract:osm-germany-fartleks -- $source_file"
+              echo "osmium:"
+              osmium --version | head -n 1
+
               echo
+              echo "========================================"
+              echo "Step 1/2: Extracting OSM Fartleks"
+              echo "========================================"
 
               npm run extract:osm-germany-fartleks -- "$source_file"
 
-              echo
-              echo "========================================"
-              echo "Step 2/2: Import Fartleks"
-              echo "========================================"
-              echo "npm run import:fartleks"
-              echo
+              if [ ! -f "$snapshot_file" ]; then
+                echo "Expected snapshot was not created: $snapshot_file" >&2
+                exit 1
+              fi
 
-              npm run import:fartleks
+              echo
+              echo "Generated snapshot:"
+              ls -lh "$snapshot_file"
+
+              echo
+              echo "========================================"
+              echo "Step 2/2: Importing Fartleks"
+              echo "========================================"
+
+              npm run import:fartleks -- \
+                --snapshot "$snapshot_file"
 
               echo
               echo "========================================"
               echo "Import completed successfully"
               echo "========================================"
-            ' \
-            sh \
-            "$source_file"
+            '
 
           echo
           echo "Environment: $target_env"
