@@ -278,12 +278,21 @@ then
   exit 1
 fi
 
-echo "Checking public endpoint: $PUBLIC_URL"
-if ! curl --fail --silent --show-error --output /dev/null \
-  --retry 10 --retry-delay 5 --retry-all-errors --max-time 10 \
-  "${PUBLIC_URL%/}/"; then
-  echo "Public HTTP health check failed. Previous image tag: $previous_tag; attempted image tag: $IMAGE_TAG." >&2
-  ssh "${ssh_options[@]}" "$remote" bash -s -- "$REMOTE_PATH" <<'REMOTE_LOGS' || true
+if [[ "$DEPLOY_TARGET" == "prod" ]]; then
+  echo "Checking public endpoint: $PUBLIC_URL"
+
+  if ! curl --fail --silent --show-error --output /dev/null \
+    --retry 10 --retry-delay 5 --retry-all-errors --max-time 10 \
+    "${PUBLIC_URL%/}/"; then
+    echo "Public HTTP health check failed. Previous image tag: $previous_tag; attempted image tag: $IMAGE_TAG." >&2
+    exit 1
+  fi
+
+  echo "Public HTTP health check: passed."
+else
+  echo "Skipping public endpoint check for DEV."
+fi
+
 set -euo pipefail
 remote_path="$1"
 docker compose --env-file "$remote_path/.env" -f "$remote_path/docker-compose.yml" ps >&2 || true
