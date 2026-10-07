@@ -6,6 +6,15 @@ import {
   FARTLEK_MIN_LENGTH_METERS
 } from "./fartlekModel.js";
 
+/**
+ * Loosened from the initial spec (score >= 80 / confidence >= 85) because those thresholds
+ * auto-published only a small fraction of real nationwide OSM candidates. Still requires a
+ * solidly-above-average score and a majority-mapped candidate; REVIEW/IGNORE/REJECT still
+ * exist as a safety net for anything weaker.
+ */
+const FARTLEK_AUTO_PUBLISH_MIN_SCORE = 65;
+const FARTLEK_AUTO_PUBLISH_MIN_MAPPING_CONFIDENCE = 60;
+
 const UNSUITABLE_HIGHWAY_CLASSES = new Set(["motorway", "motorway_link", "trunk", "trunk_link"]);
 const SUITABLE_HIGHWAY_CLASSES = new Set([
   "secondary", "secondary_link", "tertiary", "tertiary_link", "unclassified", "residential", "cycleway"
@@ -121,13 +130,15 @@ export const scoreFartlekCandidate = (candidate: FartlekCandidate): ScoredFartle
 
   score = Math.max(0, Math.min(100, score));
 
-  const decision: FartlekDecision = score >= 80 && mappingConfidence >= 85
+  const decision: FartlekDecision = score >= FARTLEK_AUTO_PUBLISH_MIN_SCORE &&
+    mappingConfidence >= FARTLEK_AUTO_PUBLISH_MIN_MAPPING_CONFIDENCE
     ? "AUTO_PUBLISH"
-    : score >= 55 || (mappingConfidence >= 50 && mappingConfidence <= 85)
+    : score >= 40 || (mappingConfidence >= 30 && mappingConfidence <= FARTLEK_AUTO_PUBLISH_MIN_MAPPING_CONFIDENCE)
       ? "REVIEW"
       : "IGNORE";
 
-  if (decision === "REVIEW" && score >= 80 && mappingConfidence < 85) {
+  if (decision === "REVIEW" && score >= FARTLEK_AUTO_PUBLISH_MIN_SCORE &&
+    mappingConfidence < FARTLEK_AUTO_PUBLISH_MIN_MAPPING_CONFIDENCE) {
     reasons.push("High score but incomplete safety/access metadata: review only, never auto-published.");
   }
 
@@ -135,4 +146,8 @@ export const scoreFartlekCandidate = (candidate: FartlekCandidate): ScoredFartle
 };
 
 export const classifyFartlekScore = (score: number, mappingConfidence: number): FartlekDecision =>
-  score >= 80 && mappingConfidence >= 85 ? "AUTO_PUBLISH" : score >= 55 ? "REVIEW" : "IGNORE";
+  score >= FARTLEK_AUTO_PUBLISH_MIN_SCORE && mappingConfidence >= FARTLEK_AUTO_PUBLISH_MIN_MAPPING_CONFIDENCE
+    ? "AUTO_PUBLISH"
+    : score >= 40
+      ? "REVIEW"
+      : "IGNORE";

@@ -16,6 +16,9 @@ export const WorldLegend = () => `
     <span>${CollectibleSwatch({ category: "castle" })}<small>Castle</small></span>
     <span>${CollectibleSwatch({ category: "waterfall" })}<small>Waterfall</small></span>
     <span>${CollectibleSwatch({ category: "place" })}<small>Place</small></span>
+    <i aria-hidden="true"></i>
+    <span><b class="fartlek-swatch" aria-hidden="true"></b><small>Fartlek</small></span>
+    <span><b class="fartlek-swatch is-completed" aria-hidden="true"></b><small>Completed</small></span>
   </aside>
 `;
 

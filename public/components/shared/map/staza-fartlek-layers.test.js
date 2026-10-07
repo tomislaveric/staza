@@ -39,7 +39,7 @@ describe("fartlekLayers", () => {
 
   it("colors completed and uncompleted segments distinctly via a data-driven expression", () => {
     const lineLayer = fartlekLayers().find((layer) => layer.id === "staza-fartleks-line");
-    expect(lineLayer.paint["line-color"]).toEqual(["case", ["==", ["get", "completed"], true], "#e8b80a", "#7c828c"]);
+    expect(lineLayer.paint["line-color"]).toEqual(["case", ["==", ["get", "completed"], true], "#e8b80a", "#2ea8e0"]);
   });
 });
 

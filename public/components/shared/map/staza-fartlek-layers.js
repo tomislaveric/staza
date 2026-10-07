@@ -16,7 +16,8 @@ export const FARTLEK_SELECTED_LAYER = "staza-fartleks-selected";
 export const FARTLEK_HIT_LAYER = "staza-fartleks-hit";
 
 const CASING_COLOR = "#0b0c0f";
-const UNCOMPLETED_LINE = "#7c828c";
+/** Vivid teal so an uncompleted Fartlek reads as a deliberate Staza layer, not basemap road noise. */
+const UNCOMPLETED_LINE = "#2ea8e0";
 const COMPLETED_LINE = "#e8b80a";
 const SELECTED_ACCENT = "#e8b80a";
 

@@ -96,10 +96,12 @@ activity id, and `completed_at`.
    length/speed, summed into the existing `totalPoints`/`xpEarned` pipeline.
 4. **Length bounds**: minimum 1 km, ideal range 2–8 km, maximum ~15 km (penalize
    outside the ideal range, hard-reject below the minimum).
-5. **AUTO_PUBLISH thresholds**: `suitabilityScore ≥ 80` AND `mappingConfidence ≥ 85%`
-   AND no hard-reject flags. `REVIEW`: `suitabilityScore ≥ 55` OR `mappingConfidence`
-   50–85%, plausible geometry. `IGNORE`: below the REVIEW floor, no hard violations.
-   `REJECT`: explicit access/safety incompatibility or malformed geometry.
+5. **AUTO_PUBLISH thresholds**: `suitabilityScore ≥ 65` AND `mappingConfidence ≥ 60%`
+   AND no hard-reject flags (loosened from an initial 80/85% spec, which auto-published
+   only a small fraction of real nationwide OSM candidates). `REVIEW`: `suitabilityScore
+   ≥ 40` OR `mappingConfidence` 30–60%, plausible geometry. `IGNORE`: below the REVIEW
+   floor, no hard violations. `REJECT`: explicit access/safety incompatibility or
+   malformed geometry.
 6. **Quest readiness**: completion data must carry everything a future
    `fartlek_count` Quest rule needs (`fartlek_id`, `length_m_snapshot`, `activity_id`),
    with zero Quest-specific logic baked into Fartlek completion.
@@ -247,10 +249,11 @@ and `decision`.
 | Several stop signs and signals, inconsistent surface | 1.8 km | 35 | 80% | IGNORE |
 | Continuous, complete tags, 1 minor junction | 6.2 km | 90 | 97% | AUTO_PUBLISH |
 
-Thresholds:
-- **AUTO_PUBLISH**: `suitabilityScore ≥ 80` AND `mappingConfidence ≥ 85%` AND no
+Thresholds (loosened from an initial 80/85% spec — that combination auto-published
+only a small fraction of real nationwide OSM candidates):
+- **AUTO_PUBLISH**: `suitabilityScore ≥ 65` AND `mappingConfidence ≥ 60%` AND no
   hard-reject flags.
-- **REVIEW**: `suitabilityScore ≥ 55` OR `mappingConfidence` 50–85%, plausible
+- **REVIEW**: `suitabilityScore ≥ 40` OR `mappingConfidence` 30–60%, plausible
   geometry.
 - **IGNORE**: below the REVIEW floor, no hard violations.
 - **REJECT**: explicit access/safety incompatibility or malformed geometry.

@@ -58,7 +58,7 @@ describe("scoreFartlekCandidate", () => {
     expect(scored.decision).toBe("REJECT");
   });
 
-  it("IGNOREs poor-quality roads with stop signs and inconsistent surface", () => {
+  it("never AUTO_PUBLISHes poor-quality roads with stop signs and inconsistent surface", () => {
     const candidate = baseCandidate({
       lengthMeters: 1_800,
       junctionCount: 6,
@@ -71,7 +71,7 @@ describe("scoreFartlekCandidate", () => {
       ]
     });
     const scored = scoreFartlekCandidate(candidate);
-    expect(["IGNORE", "REJECT"]).toContain(scored.decision);
+    expect(["IGNORE", "REVIEW", "REJECT"]).toContain(scored.decision);
   });
 
   it("never lets a high score override missing critical metadata into AUTO_PUBLISH", () => {

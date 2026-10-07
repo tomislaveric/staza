@@ -175,6 +175,17 @@
 .collectible-swatch.is-epic { border-color: var(--accent-epic); border-width: 2px; }
 .collectible-swatch.is-selected { box-shadow: 0 0 0 2px rgb(232 184 10 / 45%); }
 
+/* Mirrors the Fartlek map line layer: a short bar rather than a dot, same uncompleted/completed colors. */
+.fartlek-swatch {
+  background: #2ea8e0;
+  border-radius: 2px;
+  display: block;
+  flex: none;
+  height: 4px;
+  width: 16px;
+}
+.fartlek-swatch.is-completed { background: var(--accent-yellow); }
+
 .world-detail-host {
   backdrop-filter: blur(12px);
   background: rgb(11 12 15 / 94%);
