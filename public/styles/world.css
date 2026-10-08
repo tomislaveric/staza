@@ -413,9 +413,21 @@
 .world-load-error { color: #ff9a9a; }
 
 @media (max-width: 760px) {
-  .world-page { padding-inline: 24px; }
-  .world-map-shell { height: 430px; }
+  .world-page { padding: 20px 16px 28px; }
+  .world-header { flex-wrap: wrap; gap: 16px; }
+  .world-header h1 { font-size: 38px; }
+  .world-discovered { justify-items: start; }
+  .world-filter-tabs { height: auto; margin-inline: -16px; overflow-x: auto; padding: 20px 16px 4px; scrollbar-width: none; }
+  .world-filter-tabs::-webkit-scrollbar { display: none; }
+  .world-filter-tabs button { flex: none; min-height: 38px; }
+  .world-map-shell { height: max(420px, 62dvh); margin-top: 12px; }
+  .world-map-status { left: 70px; max-width: calc(100% - 150px); overflow-wrap: anywhere; transform: none; }
   .world-legend { flex-wrap: wrap; gap: 6px 10px; left: 10px; padding-inline: 8px; right: 10px; }
   .world-legend small { font-size: 8px; }
-  .world-detail-host { left: 14px; max-height: calc(100% - 120px); right: 14px; width: auto; }
+  .world-detail-host { left: 10px; max-height: calc(100% - 110px); right: 10px; width: auto; }
+  .world-stats { margin-inline: 6px; }
+  .quest-list ol { grid-template-columns: 1fr; }
+  .quest-editor { padding: 16px; }
+  .quest-editor footer { flex-direction: column-reverse; }
+  .quest-editor footer button { min-height: 42px; width: 100%; }
 }

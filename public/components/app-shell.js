@@ -1,5 +1,5 @@
 import { mainContent } from "./main-content.js";
-import { setSidebarScreen, sidebar } from "./sidebar.js";
+import { MobileNavigation, setSidebarScreen, sidebar } from "./sidebar.js";
 
 export const navigableScreens = new Set(["home", "activities", "world", "progress", "profile", "add-activity"]);
 
@@ -7,6 +7,7 @@ export const AppShell = (locale = "en") => `
   <div class="app-shell">
     ${sidebar(locale)}
     ${mainContent()}
+    ${MobileNavigation()}
   </div>
 `;
 

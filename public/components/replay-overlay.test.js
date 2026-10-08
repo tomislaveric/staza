@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closestApproachTimestamp, replayPanelRows, rowStateAt } from "./replay-tab.js";
+import { closestApproachTimestamp, panelFitPadding, replayPanelRows, rowStateAt } from "./replay-tab.js";
 
 const route = [
   { latitude: 0, longitude: 0, timestampMs: 1_000 },
@@ -47,5 +47,29 @@ describe("rowStateAt", () => {
 
   it("stays unvisited when a reach time is unknown", () => {
     expect(rowStateAt({ kind: "near-miss", reachMs: undefined }, 9_999)).toBe("unvisited");
+  });
+});
+
+describe("panelFitPadding", () => {
+  const container = {
+    getBoundingClientRect: () => ({ top: 0, right: 400, bottom: 420, left: 0, width: 400 })
+  };
+
+  it("does not reserve map space when the mobile panel is below the map", () => {
+    const panel = {
+      hidden: false,
+      getBoundingClientRect: () => ({ top: 432, right: 388, bottom: 700, left: 12, width: 376 })
+    };
+
+    expect(panelFitPadding(container, panel)).toBe(48);
+  });
+
+  it("still reserves space for the desktop overlay", () => {
+    const panel = {
+      hidden: false,
+      getBoundingClientRect: () => ({ top: 14, right: 386, bottom: 406, left: 200, width: 186 })
+    };
+
+    expect(panelFitPadding(container, panel)).toMatchObject({ left: 48, right: 212 });
   });
 });

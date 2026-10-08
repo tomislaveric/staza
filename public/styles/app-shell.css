@@ -141,6 +141,10 @@ input {
     padding: 0;
 }
 
+.mobile-navigation {
+    display: none;
+}
+
 .home-page {
     margin: 0 auto;
     max-width: 1139px;
@@ -1879,6 +1883,320 @@ input {
     }
 }
 
+@media (max-width: 720px) {
+    :root {
+        --mobile-nav-height: 66px;
+        --mobile-action-space: 58px;
+    }
+
+    .app-shell {
+        display: block;
+        height: 100dvh;
+        min-height: 100dvh;
+        overflow: hidden;
+    }
+
+    .sidebar {
+        display: none;
+    }
+
+    .main-content {
+        height: 100dvh;
+        overflow-x: hidden;
+        padding-bottom: calc(var(--mobile-nav-height) + var(--mobile-action-space) + env(safe-area-inset-bottom));
+        scroll-padding-bottom: calc(var(--mobile-nav-height) + var(--mobile-action-space) + env(safe-area-inset-bottom));
+    }
+
+    .mobile-navigation {
+        bottom: 0;
+        display: block;
+        left: 0;
+        pointer-events: none;
+        position: fixed;
+        right: 0;
+        z-index: 20;
+    }
+
+    .mobile-add-activity {
+        align-items: center;
+        background: var(--accent-yellow);
+        border: 0;
+        border-radius: 999px;
+        box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+        color: #17130a;
+        cursor: pointer;
+        display: flex;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        gap: 8px;
+        height: 42px;
+        letter-spacing: .07em;
+        margin: 0 14px 8px auto;
+        padding: 0 16px;
+        pointer-events: auto;
+    }
+
+    .mobile-add-activity.is-current {
+        box-shadow: 0 0 0 2px #0b0c0f, 0 0 0 4px var(--accent-yellow);
+    }
+
+    .mobile-nav-menu {
+        backdrop-filter: blur(18px);
+        background: rgb(17 19 24 / 96%);
+        border-top: 1px solid var(--border-subtle);
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        min-height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+        padding: 5px 4px env(safe-area-inset-bottom);
+        pointer-events: auto;
+    }
+
+    .mobile-nav-item {
+        align-items: center;
+        background: transparent;
+        border: 0;
+        border-radius: 8px;
+        color: var(--text-subtle);
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        font-family: var(--font-display);
+        font-size: 9px;
+        gap: 4px;
+        justify-content: center;
+        min-height: 54px;
+        min-width: 0;
+        padding: 5px 2px;
+    }
+
+    .mobile-nav-item img {
+        opacity: .65;
+    }
+
+    .mobile-nav-item span {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .mobile-nav-item.is-active {
+        background: rgb(232 184 10 / 10%);
+        color: var(--accent-yellow);
+    }
+
+    .mobile-nav-item.is-active img {
+        opacity: 1;
+    }
+
+    .home-page,
+    .activities-page,
+    .activity-detail-page,
+    .progress-page {
+        padding: 20px 16px 28px;
+    }
+
+    .home-hero {
+        min-height: 0;
+        padding: 24px 16px 0;
+    }
+
+    .home-progress {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .home-level {
+        font-size: 72px;
+    }
+
+    .home-progress-details {
+        max-width: none;
+        padding-bottom: 0;
+        width: 100%;
+    }
+
+    .home-activity-header {
+        gap: 16px;
+        padding: 16px;
+    }
+
+    .home-distance {
+        font-size: 38px;
+    }
+
+    .home-earned strong {
+        font-size: 26px;
+    }
+
+    .home-activity-details,
+    .home-found {
+        padding: 14px 16px;
+    }
+
+    .progress-header h1,
+    .activities-header h1,
+    .activity-detail-placeholder h1 {
+        font-size: 38px;
+    }
+
+    .progress-level-step,
+    .progress-current-level {
+        gap: 14px;
+        grid-template-columns: 38px minmax(0, 1fr);
+    }
+
+    .progress-current-card {
+        padding: 16px;
+    }
+
+    .progress-current-title {
+        height: auto;
+        min-height: 84px;
+    }
+
+    .progress-current-title > strong {
+        font-size: 56px;
+    }
+
+    .recent-activity {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .recent-activity-xp {
+        margin-left: 54px;
+        width: calc(100% - 54px);
+    }
+
+    .recent-activity-xp > span {
+        flex: 1;
+        width: auto;
+    }
+
+    .activity-card-main {
+        flex-direction: column;
+    }
+
+    .activity-card-replay {
+        border-bottom: 1px solid var(--border-faint);
+        border-right: 0;
+        flex-basis: auto;
+        height: 136px;
+        width: 100%;
+    }
+
+    .activity-card-content {
+        min-height: 0;
+        width: 100%;
+    }
+
+    .activity-measurements {
+        flex-wrap: wrap;
+    }
+
+    .activity-detail-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .activity-detail-summary {
+        padding-top: 20px;
+    }
+
+    .activity-detail-summary h1 {
+        font-size: 38px;
+        overflow-wrap: anywhere;
+    }
+
+    .activity-progress-card {
+        margin-top: 24px;
+        padding: 18px 16px;
+    }
+
+    .activity-progress-top {
+        gap: 20px;
+        min-height: 0;
+    }
+
+    .activity-progress-earned {
+        font-size: 52px;
+    }
+
+    .activity-progress-found strong {
+        font-size: 38px;
+    }
+
+    .activity-tabs {
+        scrollbar-width: none;
+    }
+
+    .activity-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .near-miss-card,
+    .collectible-card {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        height: auto;
+    }
+
+    .near-miss-card-status {
+        align-items: start;
+        margin-left: 56px;
+        width: calc(100% - 56px);
+    }
+
+    .collectible-rarity {
+        margin-left: 52px;
+    }
+
+    .collectible-value {
+        margin-left: auto;
+    }
+
+    .activity-replay-map {
+        --mobile-replay-map-height: 420px;
+        height: auto;
+    }
+
+    .activity-replay-map-canvas {
+        height: var(--mobile-replay-map-height);
+    }
+
+    .activity-replay-map .activity-replay-play {
+        bottom: auto;
+        top: calc(var(--mobile-replay-map-height) - 56px);
+    }
+
+    .activity-replay-panel {
+        backdrop-filter: none;
+        bottom: auto;
+        left: auto;
+        margin: 12px;
+        max-height: none;
+        position: static;
+        right: auto;
+        top: auto;
+        width: calc(100% - 24px);
+    }
+
+    .video-no-highlights,
+    .video-selection-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .video-analysis-steps {
+        max-width: 100%;
+        width: 100%;
+    }
+
+}
+
 .eyebrow {
     color: var(--accent-yellow);
     font-family: var(--font-mono);
@@ -2362,4 +2680,32 @@ h3 {
 .rarity-epic {
     border-left: 2px solid #cf8cff;
     padding-left: 7px;
+}
+
+@media (max-width: 720px) {
+    .add-activity-page {
+        align-items: flex-start;
+        min-height: 0;
+        padding: 20px 16px 28px;
+    }
+
+    .add-activity-header,
+    .add-activity-form {
+        padding: 20px 16px;
+    }
+
+    .upload-file-row {
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .processing-state {
+        gap: 24px;
+        min-height: 0;
+        padding: 48px 20px;
+    }
+
+    .upload-status {
+        padding: 48px 20px;
+    }
 }

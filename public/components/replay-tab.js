@@ -170,11 +170,12 @@ const MIN_VISIBLE_ROUTE = 140;
  * the whole route inside the unobstructed area beside the panel instead of beneath it. Measured
  * from the live DOM rather than shifting any route coordinates.
  */
-const panelFitPadding = (container, panelHost) => {
+export const panelFitPadding = (container, panelHost) => {
   if (!panelHost || panelHost.hidden) return BASE_FIT_PADDING;
   const mapRect = container.getBoundingClientRect();
   const panelRect = panelHost.getBoundingClientRect();
   if (!mapRect.width || !panelRect.width) return BASE_FIT_PADDING;
+  if (panelRect.top >= mapRect.bottom || panelRect.bottom <= mapRect.top) return BASE_FIT_PADDING;
   const occluded = mapRect.right - panelRect.left + PANEL_GAP;
   const maxRight = Math.max(BASE_FIT_PADDING, mapRect.width - BASE_FIT_PADDING - MIN_VISIBLE_ROUTE);
   return {

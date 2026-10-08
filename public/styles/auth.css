@@ -112,10 +112,15 @@
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-yellow-bright); outline-offset: 3px; }
 @keyframes auth-spin { to { transform: rotate(360deg); } }
 @media (max-width: 640px) {
-  .auth-screen { padding: 32px 16px; }
+  .auth-screen { overflow-x: hidden; overflow-y: auto; padding: 32px 16px; place-items: start center; }
   .auth-top-band { height: 120px; }
   .auth-heading h1, .auth-success h1 { font-size: 34px; line-height: 40px; }
   .auth-code-input { gap: 5px; grid-template-columns: repeat(6, minmax(0, 48px)); width: 100%; }
   .auth-form .auth-code-input input { min-width: 0; }
+  .auth-account-link { flex-wrap: wrap; }
+  .auth-account-link button, .auth-text-action, .auth-back { min-height: 36px; }
+  .auth-primary, .auth-secondary { width: 100%; }
+  .auth-benefits { margin-top: 32px; padding: 16px; }
+  .auth-success > span { margin-bottom: 32px; }
 }
 @media (prefers-reduced-motion: reduce) { .auth-loader { animation: none; } }

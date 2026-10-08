@@ -80,6 +80,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   — introduce a linear, traversal-based World challenge type backed by a
   conservative OSM candidate pipeline, native MapLibre line rendering, and
   speed-independent completion and XP.
+- [Mobile responsiveness](features/mobile-responsiveness/README.md) — make the
+  authenticated app and auth screens usable on mobile with a compact bottom
+  navigation and focused responsive layouts.
 - [Multi Clip creation](features/multi-clip-creation/README.md) — select detected
   Coin passages and combine them into one chronological highlight video.
 - [Persistent activities player state v1](features/persistent-activities-player-state-v1/README.md)

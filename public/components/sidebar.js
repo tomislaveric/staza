@@ -1,6 +1,6 @@
 import { appPath } from "../app-locales.js";
 
-const navItems = [
+export const navItems = [
   ["home", "Home", "nav-home.svg"],
   ["activities", "Activities", "nav-activities.svg"],
   ["world", "World", "nav-world.svg"],
@@ -42,17 +42,34 @@ export const Sidebar = (locale = "en") => `
   </aside>
 `;
 
+export const MobileNavigation = () => `
+  <div class="mobile-navigation">
+    <button class="mobile-add-activity" type="button" data-screen="add-activity">
+      <img src="/assets/add-activity-upload.svg" width="16" height="16" alt="">
+      <span>ADD ACTIVITY</span>
+    </button>
+    <nav class="mobile-nav-menu" aria-label="Primary navigation">
+      ${navItems.map(([screen, label, icon]) => `
+        <button class="mobile-nav-item${screen === "home" ? " is-active" : ""}" type="button" data-screen="${screen}"${screen === "home" ? ' aria-current="page"' : ""}>
+          <img src="/assets/${icon}" width="20" height="20" alt="">
+          <span>${label}</span>
+        </button>
+      `).join("")}
+    </nav>
+  </div>
+`;
+
 export const sidebar = Sidebar;
 
 export const setSidebarScreen = (mountPoint, screen) => {
-  for (const item of mountPoint.querySelectorAll(".sidebar-nav-item")) {
+  for (const item of mountPoint.querySelectorAll(".sidebar-nav-item, .mobile-nav-item")) {
     const isActive =
       item.dataset.screen ===
       (screen === "activity-detail" ? "activities" : screen);
     item.classList.toggle("is-active", isActive);
     item.toggleAttribute("aria-current", isActive);
   }
-  mountPoint
-    .querySelector(".add-activity-cta")
-    .classList.toggle("is-current", screen === "add-activity");
+  for (const item of mountPoint.querySelectorAll(".add-activity-cta, .mobile-add-activity")) {
+    item.classList.toggle("is-current", screen === "add-activity");
+  }
 };
