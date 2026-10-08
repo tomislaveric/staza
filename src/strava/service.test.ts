@@ -37,6 +37,7 @@ const setup = () => {
     getActivityByImportKey: vi.fn(async (): Promise<PersistedActivity | undefined> => undefined),
     listActivityIdsByImportKeys: vi.fn(async () => new Map([["1001", "staza-1"]])),
     getJourneyStartedAt: vi.fn(async (): Promise<Date | undefined> => new Date("2026-04-15T00:00:00Z")),
+    getActivityCount: vi.fn(async () => 3),
     persistCompletedActivity: vi.fn(async (_player: string, activity: { id: string }) => ({
       activity: { id: activity.id } as PersistedActivity,
       inserted: true
@@ -96,6 +97,17 @@ describe("StravaService activities", () => {
     const list = await service.listRecent("player");
     expect(list.activities.map((activity) => activity.id)).toEqual(["2002", "2004", "2005"]);
     expect(client.listRecentActivities).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps pre-journey Strava activities selectable during the first three imports", async () => {
+    const { service, activities } = setup();
+    activities.getActivityCount.mockResolvedValueOnce(2).mockResolvedValueOnce(3);
+    activities.getJourneyStartedAt.mockResolvedValueOnce(new Date("2026-05-15T00:00:00Z"));
+    activities.getJourneyStartedAt.mockResolvedValueOnce(new Date("2026-05-15T00:00:00Z"));
+    const onboardingList = await service.listRecent("player");
+    const establishedList = await service.listRecent("player");
+    expect(onboardingList.activities[0].beforeJourneyStart).toBe(false);
+    expect(establishedList.activities[0].beforeJourneyStart).toBe(true);
   });
 
   it("returns an existing import without calling Strava", async () => {

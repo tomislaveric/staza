@@ -62,18 +62,21 @@ if (pool) {
 }
 
 describePersistence("Strava import persistence", () => {
-  it("sets the immutable journey start from the first accepted activity and rejects earlier ones without mutation", async () => {
+  it("allows earlier Strava activities among the first three imports, then preserves the journey boundary", async () => {
     await persist(activity("2026-05-10T08:00:00Z"));
     expect((await playerState()).journey_started_at?.toISOString()).toBe("2026-05-10T08:00:00.000Z");
 
-    await expect(persist(activity("2026-05-09T08:00:00Z", "strava"), "2001"))
-      .rejects.toMatchObject({ code: "before_journey_start", details: { journeyStartedAt: "2026-05-10T08:00:00.000Z" } });
-    expect(await playerState()).toMatchObject({ total_xp: 10, count: "1" });
+    await persist(activity("2026-05-09T08:00:00Z", "strava"), "2001");
+    expect((await playerState()).journey_started_at?.toISOString()).toBe("2026-05-09T08:00:00.000Z");
 
-    await persist(activity("2026-05-10T08:00:00Z", "strava", 0.05), "2002");
-    await persist(activity("2026-05-11T08:00:00Z", "strava"), "2003");
+    await persist(activity("2026-05-08T08:00:00Z", "strava", 0.05), "2002");
+    await expect(persist(activity("2026-05-07T08:00:00Z", "strava"), "2003"))
+      .rejects.toMatchObject({ code: "before_journey_start", details: { journeyStartedAt: "2026-05-08T08:00:00.000Z" } });
     expect(await playerState()).toMatchObject({ total_xp: 30, count: "3" });
-    expect((await playerState()).journey_started_at?.toISOString()).toBe("2026-05-10T08:00:00.000Z");
+    expect((await playerState()).journey_started_at?.toISOString()).toBe("2026-05-08T08:00:00.000Z");
+
+    await persist(activity("2026-05-10T08:00:00Z", "strava"), "2004");
+    expect(await playerState()).toMatchObject({ total_xp: 40, count: "4" });
   });
 
   it("backfills fingerprints for existing activities so they participate in duplicate checks", async () => {

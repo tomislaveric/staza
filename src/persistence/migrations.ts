@@ -488,6 +488,20 @@ export const migrations: Migration[] = [{
     `);
     await backfillActivityFingerprints(client);
   }
+}, {
+  id: "022_cascade_player_data_deletion",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE activities
+        DROP CONSTRAINT activities_player_id_fkey,
+        ADD CONSTRAINT activities_player_id_fkey
+          FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+      ALTER TABLE quests
+        DROP CONSTRAINT quests_created_by_player_id_fkey,
+        ADD CONSTRAINT quests_created_by_player_id_fkey
+          FOREIGN KEY (created_by_player_id) REFERENCES players(id) ON DELETE CASCADE;
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

@@ -361,6 +361,7 @@ export class AuthService {
         );
       }
       await client.query("UPDATE deletion_intents SET completed_at = now() WHERE id = $1", [intent.rows[0].id]);
+      await client.query("DELETE FROM email_codes WHERE email = $1", [user.email]);
       await client.query("DELETE FROM players WHERE user_id = $1", [user.id]);
       await client.query("DELETE FROM users WHERE id = $1", [user.id]);
       await client.query("COMMIT");

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ActivityImportResult, ActivityType, PersistedActivity } from "../domain.js";
+import { STRAVA_ONBOARDING_IMPORT_LIMIT, type ActivityImportResult, type ActivityType, type PersistedActivity } from "../domain.js";
 import type { CanonicalActivityProcessor } from "../activityProcessing.js";
 import type { ActivityRepository } from "../persistence/activityRepository.js";
 import type {
@@ -102,10 +102,12 @@ export class StravaService {
   async listRecent(playerId: string): Promise<StravaRecentActivities> {
     const summaries = await this.withAccessToken(playerId, (token) => this.recentWithRoute(token));
     const ids = summaries.map((summary) => String(summary.id));
-    const [imported, journeyStartedAt] = await Promise.all([
+    const [imported, journeyStartedAt, activityCount] = await Promise.all([
       this.activities.listActivityIdsByImportKeys(playerId, "strava", ids),
-      this.activities.getJourneyStartedAt(playerId)
+      this.activities.getJourneyStartedAt(playerId),
+      this.activities.getActivityCount(playerId)
     ]);
+    const isStravaOnboarding = activityCount < STRAVA_ONBOARDING_IMPORT_LIMIT;
     return {
       limit: this.recentLimit,
       ...(journeyStartedAt ? { journeyStartedAt: journeyStartedAt.toISOString() } : {}),
@@ -124,7 +126,12 @@ export class StravaService {
           ...(distanceMeters === undefined ? {} : { distanceMeters }),
           ...(movingTimeSeconds === undefined ? {} : { movingTimeSeconds }),
           hasRoute: hasRoute(summary),
-          beforeJourneyStart: Boolean(journeyStartedAt && Number.isFinite(startMs) && startMs < journeyStartedAt.getTime()),
+          beforeJourneyStart: Boolean(
+            !isStravaOnboarding
+            && journeyStartedAt
+            && Number.isFinite(startMs)
+            && startMs < journeyStartedAt.getTime()
+          ),
           ...(importedActivityId ? { importedActivityId } : {})
         };
       })

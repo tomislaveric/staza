@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import { STRAVA_ONBOARDING_IMPORT_LIMIT } from "../domain.js";
 import type {
   Activity,
   ActivitySource,
@@ -137,6 +138,10 @@ export class ActivityRepository {
         [playerId]
       );
       if (player.rowCount !== 1) throw new Error("Default player does not exist.");
+      const activityCount = await client.query<{ activity_count: number }>(
+        "SELECT count(*)::int AS activity_count FROM activities WHERE player_id = $1",
+        [playerId]
+      );
 
       const existingId = importKey
         ? await this.findActivityIdByImportKeyWithClient(client, playerId, activity.source, importKey)
@@ -161,7 +166,13 @@ export class ActivityRepository {
       }
 
       const journeyStartedAt = player.rows[0].journey_started_at;
-      if (journeyStartedAt && activity.startedAt < journeyStartedAt.getTime()) {
+      const isStravaOnboardingImport = activity.source === "strava"
+        && activityCount.rows[0].activity_count < STRAVA_ONBOARDING_IMPORT_LIMIT;
+      if (
+        journeyStartedAt
+        && activity.startedAt < journeyStartedAt.getTime()
+        && !isStravaOnboardingImport
+      ) {
         throw new ActivityImportRejectedError(
           "before_journey_start",
           "This activity happened before your Staza journey started.",
@@ -222,9 +233,14 @@ export class ActivityRepository {
         );
       }
       const updatedPlayer = await client.query<{ total_xp: number }>(
-        `UPDATE players SET total_xp = total_xp + $1, journey_started_at = COALESCE(journey_started_at, $3)
+        `UPDATE players
+         SET total_xp = total_xp + $1,
+             journey_started_at = CASE WHEN $4
+               THEN LEAST(COALESCE(journey_started_at, $3), $3)
+               ELSE COALESCE(journey_started_at, $3)
+             END
          WHERE id = $2 RETURNING total_xp`,
-        [result.totalPoints, playerId, new Date(activity.startedAt)]
+        [result.totalPoints, playerId, new Date(activity.startedAt), isStravaOnboardingImport]
       );
       if (updatedPlayer.rowCount !== 1) throw new Error("Default player does not exist.");
       const persisted = await this.getActivityWithClient(client, playerId, activity.id);
@@ -274,6 +290,14 @@ export class ActivityRepository {
     );
     if (result.rowCount !== 1) throw new Error("Player does not exist.");
     return result.rows[0].journey_started_at ?? undefined;
+  }
+
+  async getActivityCount(playerId: string): Promise<number> {
+    const result = await this.pool.query<{ activity_count: number }>(
+      "SELECT count(*)::int AS activity_count FROM activities WHERE player_id = $1",
+      [playerId]
+    );
+    return result.rows[0].activity_count;
   }
 
   async listActivities(playerId: string): Promise<ActivityHistoryItem[]> {
