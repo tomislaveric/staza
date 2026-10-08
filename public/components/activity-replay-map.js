@@ -1,5 +1,6 @@
 import { createStazaMap } from "./shared/map/staza-map.js";
 import { stazaRouteLayers, stazaSubduedRouteLayers } from "./shared/map/staza-route-layers.js";
+import { ensureFartlekLayers, fartleksToFeatureCollection, setFartlekData } from "./shared/map/staza-fartlek-layers.js";
 import {
   ensureCollectibleLayers,
   setCollectibleData
@@ -48,6 +49,18 @@ export const activityCollectibleSources = (sources, events, timestampMs) =>
     return { ...source, found: false, activityCollected: collected, activityPending: !collected };
   });
 
+/** Completed flowlines are revealed at their collection timestamp, in the shared gold state. */
+export const activityFlowlineSources = (completions = [], timestampMs) =>
+  completions
+    .filter((completion) =>
+      completion.fartlekGeometry && completion.completedAtTimestampMs <= timestampMs)
+    .map((completion) => ({
+      id: completion.fartlekId,
+      name: completion.fartlekName,
+      geometry: completion.fartlekGeometry,
+      completed: true
+    }));
+
 /**
  * Absolute activity timestamp past the end of playback, so every historical collection event
  * has resolved. Used to render the settled "result of the replay" for a static thumbnail.
@@ -82,12 +95,20 @@ export const mountReplayStill = async ({ container, activity, activityResult, ba
     map.addLayer(layer);
   }
 
+  ensureFartlekLayers(map);
   ensureCollectibleLayers(map);
   setCollectibleData(
     map,
     collectiblesToFeatureCollection(
       activityCollectibleSources(sources, activityResult.events, settledTimestamp(activity))
     )
+  );
+  setFartlekData(
+    map,
+    fartleksToFeatureCollection(activityFlowlineSources(
+      activityResult.fartlekCompletions,
+      settledTimestamp(activity)
+    ))
   );
 
   const bounds = pointsToBounds([...route, ...sources]);
@@ -161,6 +182,7 @@ export const mountReplayMap = async ({
     map.addLayer(layer);
   }
 
+  ensureFartlekLayers(map);
   ensureCollectibleLayers(map);
 
   map.addSource(POSITION_SOURCE, { type: "geojson", data: pointFeature() });
@@ -182,6 +204,13 @@ export const mountReplayMap = async ({
     setCollectibleData(
       map,
       collectiblesToFeatureCollection(activityCollectibleSources(sources, activityResult.events, timestamp))
+    );
+    setFartlekData(
+      map,
+      fartleksToFeatureCollection(activityFlowlineSources(
+        activityResult.fartlekCompletions,
+        timestamp
+      ))
     );
     onProgress(timestamp);
   };

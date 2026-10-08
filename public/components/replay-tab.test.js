@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { closestApproachTimestamp, FartlekCompletionsSection, replayPanelRows, rowStateAt } from "./replay-tab.js";
+import {
+  closestApproachTimestamp,
+  FartlekCompletionsSection,
+  flowlineStateAt,
+  replayPanelRows,
+  rowStateAt
+} from "./replay-tab.js";
 
 describe("FartlekCompletionsSection", () => {
   it("renders nothing when no Fartlek was completed", () => {
@@ -11,6 +17,7 @@ describe("FartlekCompletionsSection", () => {
     const markup = FartlekCompletionsSection([{
       fartlekId: "fartlek-1",
       fartlekName: "Harbour Straight",
+      completedAtTimestampMs: 2_000,
       fartlekLengthMSnapshot: 3_000,
       elapsedTimeS: 600,
       averageSpeedMps: 5,
@@ -23,7 +30,20 @@ describe("FartlekCompletionsSection", () => {
     expect(markup).toContain("18.0 km/h");
     expect(markup).toContain("Flowlines completed");
     expect(markup).toContain('aria-label="Completed Flowlines"');
+    expect(markup).toContain('data-flowline-row="fartlek-1"');
+    expect(markup).toContain('class="fartlek-swatch is-unvisited"');
     expect(markup).not.toContain("max ");
+  });
+
+  it("keeps each flowline swatch grey until the collection timestamp, then marks it completed", () => {
+    const completion = { completedAtTimestampMs: 2_000 };
+    expect(flowlineStateAt(completion, 1_999)).toBe("unvisited");
+    expect(flowlineStateAt(completion, 2_000)).toBe("completed");
+    expect(flowlineStateAt(completion, 3_000)).toBe("completed");
+  });
+
+  it("treats completions without a timestamp as already completed", () => {
+    expect(flowlineStateAt({}, 0)).toBe("completed");
   });
 
   it("includes an optional max speed when present", () => {

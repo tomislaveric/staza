@@ -143,12 +143,13 @@ describe("deriveFartlekCompletionDrafts", () => {
   const published: Fartlek = { ...fartlek, status: "published" } as Fartlek;
   const archived: Fartlek = { ...fartlek, id: "fartlek-archived", status: "archived" } as Fartlek;
 
-  it("produces one draft per completed published fartlek, carrying length/geometry snapshots", () => {
+  it("produces one draft per completed published fartlek, carrying geometry and completion snapshots", () => {
     const route = straightRoute(-50, SEGMENT_LENGTH_METERS + 50);
     const drafts = deriveFartlekCompletionDrafts(route, [published, archived]);
     expect(drafts).toHaveLength(1);
     expect(drafts[0]).toMatchObject({
       fartlekId: "fartlek-1",
+      fartlekGeometry: published.geometry,
       fartlekLengthMSnapshot: SEGMENT_LENGTH_METERS,
       fartlekGeometryVersionSnapshot: 1,
       traversalDirection: "a_to_b"

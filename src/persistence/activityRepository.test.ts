@@ -287,6 +287,7 @@ describePersistence("ActivityRepository", () => {
       fartlekCompletions: [{
         fartlekId: "fartlek-1",
         fartlekName: "Harbour Straight",
+        fartlekGeometry: { type: "LineString", coordinates: [[12.5683, 55.6761], [12.5693, 55.6771]] },
         completedAtTimestampMs: Date.parse("2026-01-02T03:14:05.000Z"),
         elapsedTimeS: 600,
         averageSpeedMps: 5,
@@ -297,6 +298,12 @@ describePersistence("ActivityRepository", () => {
     };
 
     await repository!.persistCompletedActivity(playerId, activity(id), fartlekResult);
+    const replaySnapshot = await pool!.query<{ replay_snapshot: { activityResult: ActivityResult } }>(
+      "SELECT replay_snapshot FROM activities WHERE id = $1",
+      [id]
+    );
+    expect(replaySnapshot.rows[0].replay_snapshot.activityResult.fartlekCompletions[0].fartlekGeometry)
+      .toEqual(fartlekResult.fartlekCompletions[0].fartlekGeometry);
     expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 50 });
     const completions = await pool!.query("SELECT fartlek_id, elapsed_time_s FROM fartlek_completions WHERE player_id = $1", [playerId]);
     expect(completions.rows).toEqual([{ fartlek_id: "fartlek-1", elapsed_time_s: 600 }]);

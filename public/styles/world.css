@@ -254,6 +254,9 @@
 .activity-replay-fartleks h3 { color: var(--text-muted); font-family: var(--font-display); font-size: 10px; letter-spacing: .2em; margin: 0 0 6px; text-transform: uppercase; }
 .activity-replay-fartleks ul { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
 .activity-replay-fartlek { color: var(--text-primary); display: grid; gap: 2px; }
+.activity-replay-fartlek-main { align-items: center; display: flex; gap: 8px; }
+.activity-replay-fartlek-main .fartlek-swatch { width: 12px; }
+.activity-replay-fartlek-main .fartlek-swatch.is-unvisited { background: #4a4f59; }
 .activity-replay-fartlek-name { font-family: var(--font-display); font-size: 13px; }
 .activity-replay-fartlek-stats { color: var(--text-muted); display: flex; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; gap: 8px; }
 .quest-detail-owner-actions { display: flex; gap: 8px; }

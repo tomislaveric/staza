@@ -17,6 +17,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Extend OSM/Wikidata Collectibles](features/extend-osm-wikidata-collectibles/README.md)
   — import named places, improve source retry/cache behavior, and trigger
   private-network DEV/PROD imports manually.
+- [Flowline collection on activity replay](features/flowline-collection-on-activity-replay/README.md)
+  — show completed flowlines in gold on the replay map from their completion
+  timestamps, preserving the geometry recorded with new activity snapshots.
 - [GameEvent instead of Coin](features/gameevent-instead-of-coin/README.md) —
   generalize downstream Coin-passage records into typed game events.
 - [Highlight planner](features/highlight-planner/README.md) — formalize selected

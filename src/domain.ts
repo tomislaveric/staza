@@ -184,6 +184,7 @@ export interface FartlekCompletion {
 export interface FartlekCompletionDraft {
   fartlekId: string;
   fartlekName: string;
+  fartlekGeometry: FartlekGeometry;
   completedAtTimestampMs: number;
   elapsedTimeS: number;
   averageSpeedMps: number;

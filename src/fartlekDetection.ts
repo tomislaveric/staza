@@ -257,6 +257,7 @@ export const deriveFartlekCompletionDrafts = (
     drafts.push({
       fartlekId: fartlek.id,
       fartlekName: fartlek.name,
+      fartlekGeometry: fartlek.geometry,
       completedAtTimestampMs: result.completedAtTimestampMs,
       elapsedTimeS: result.elapsedTimeS,
       averageSpeedMps: result.averageSpeedMps,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { activityCollectibleSources, replayTimestamp, traveledCoordinates } from "./activity-replay-map.js";
+import {
+  activityCollectibleSources,
+  activityFlowlineSources,
+  replayTimestamp,
+  traveledCoordinates
+} from "./activity-replay-map.js";
 
 const route = [
   { longitude: 0, latitude: 0, timestampMs: 1_000 },
@@ -49,5 +54,29 @@ describe("activityCollectibleSources", () => {
     const [decorated] = activityCollectibleSources([{ id: "c1", found: true }], events, 3_000);
 
     expect(decorated.found).toBe(false);
+  });
+});
+
+describe("activityFlowlineSources", () => {
+  const completion = {
+    fartlekId: "flowline-1",
+    fartlekName: "Harbour Straight",
+    fartlekGeometry: { type: "LineString", coordinates: [[8, 49], [8.1, 49.1]] },
+    completedAtTimestampMs: 2_000
+  };
+
+  it("reveals a completed flowline at its completion timestamp and keeps it in the completed state", () => {
+    expect(activityFlowlineSources([completion], 1_999)).toEqual([]);
+    expect(activityFlowlineSources([completion], 2_000)).toEqual([{
+      id: "flowline-1",
+      name: "Harbour Straight",
+      geometry: completion.fartlekGeometry,
+      completed: true
+    }]);
+    expect(activityFlowlineSources([completion], 3_000)).toHaveLength(1);
+  });
+
+  it("skips older replay completions without saved geometry", () => {
+    expect(activityFlowlineSources([{ ...completion, fartlekGeometry: undefined }], 3_000)).toEqual([]);
   });
 });

@@ -89,6 +89,11 @@ export const rowStateAt = (row, timestampMs) => {
   return row.kind === "collectible" ? "completed" : "nearby-miss";
 };
 
+export const flowlineStateAt = (completion, timestampMs) =>
+  completion.completedAtTimestampMs === undefined || timestampMs >= completion.completedAtTimestampMs
+    ? "completed"
+    : "unvisited";
+
 const replayPanelTitle = (activity) => activity?.title || getActivityLabel(activity?.type);
 
 /**
@@ -103,8 +108,11 @@ export const FartlekCompletionsSection = (fartlekCompletions = []) => {
       <h3>Flowlines completed</h3>
       <ul>
         ${fartlekCompletions.map((completion) => `
-          <li class="activity-replay-fartlek is-completed" data-user-content>
-            <span class="activity-replay-fartlek-name">${escapeHtml(completion.fartlekName)}</span>
+          <li class="activity-replay-fartlek" data-flowline-row="${escapeHtml(completion.fartlekId)}" data-user-content>
+            <span class="activity-replay-fartlek-main">
+              <b class="fartlek-swatch is-unvisited" aria-hidden="true"></b>
+              <span class="activity-replay-fartlek-name">${escapeHtml(completion.fartlekName)}</span>
+            </span>
             <span class="activity-replay-fartlek-stats">
               <small>${escapeHtml(formatDistance(completion.fartlekLengthMSnapshot))}</small>
               <small>${escapeHtml(formatElapsed(completion.elapsedTimeS))}</small>
@@ -134,6 +142,9 @@ const mountReplayPanel = (host, replay) => {
   });
 
   const rowElements = [...host.querySelectorAll("[data-collection-row]")];
+  const flowlineCompletions = replay.activityResult.fartlekCompletions ?? [];
+  const flowlineCompletionsById = new Map(flowlineCompletions.map((completion) => [completion.fartlekId, completion]));
+  const flowlineRows = [...host.querySelectorAll("[data-flowline-row]")];
   const labelElement = host.querySelector("[data-collection-progress-label]");
   const percentElement = host.querySelector("[data-collection-progress-percent]");
   const barElement = host.querySelector("[data-collection-progress-bar]");
@@ -152,6 +163,16 @@ const mountReplayPanel = (host, replay) => {
       }
       const stateElement = element.querySelector(".quest-collectible-state");
       if (stateElement) stateElement.textContent = collectionStateLabel(state);
+    });
+    flowlineRows.forEach((element) => {
+      const completion = flowlineCompletionsById.get(element.dataset.flowlineRow);
+      if (!completion) return;
+      const state = flowlineStateAt(completion, timestampMs);
+      const swatch = element.querySelector(".fartlek-swatch");
+      if (swatch) {
+        swatch.classList.toggle("is-completed", state === "completed");
+        swatch.classList.toggle("is-unvisited", state !== "completed");
+      }
     });
     const progress = { collected, total };
     const percent = collectionProgressPercent(progress);
