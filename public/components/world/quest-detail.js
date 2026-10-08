@@ -29,6 +29,7 @@ export const QuestDetail = (quest) => {
       <button type="button" data-quest-status="${escapeHtml(quest.id)}">
         ${quest.status === "published" ? "UNPUBLISH" : "PUBLISH"}
       </button>
+      <button type="button" class="quest-delete-button" data-quest-delete="${escapeHtml(quest.id)}">DELETE</button>
     </div>
   ` : "";
   return CollectionPanel({

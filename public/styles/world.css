@@ -16,23 +16,26 @@
 .world-discovered strong { color: var(--text-primary); font-family: var(--font-display); font-size: 24px; line-height: 32px; }
 .world-discovered strong i { color: var(--text-muted); font-size: 16px; font-style: normal; font-weight: 400; }
 
-.world-filter-tabs { display: flex; gap: 8px; height: 54px; padding: 20px 0 4px; }
-.world-filter-tabs button {
+.world-filter-controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 20px 0 4px; }
+.world-filter-controls button {
+  align-items: center;
   background: transparent;
   border: 1px solid var(--border-faint);
   border-radius: 999px;
   color: #6e7279;
   cursor: pointer;
+  display: inline-flex;
   font-family: var(--font-display);
   font-size: 12px;
   font-weight: 600;
+  gap: 6px;
   height: 30px;
   letter-spacing: .05em;
   padding: 0 12px;
   text-transform: uppercase;
 }
-.world-filter-tabs button.is-active { background: var(--accent-yellow); border-color: var(--accent-yellow); color: var(--world-map-background); }
-.world-filter-tabs button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.world-filter-controls button.is-active { background: var(--surface-raised-background); border-color: var(--accent-yellow); color: var(--text-primary); }
+.world-filter-controls button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 
 .world-map-shell {
   background: var(--world-map-background);
@@ -133,25 +136,6 @@
   white-space: normal;
   width: auto;
 }
-
-.world-legend {
-  align-items: center;
-  backdrop-filter: blur(10px);
-  background: rgb(11 12 15 / 90%);
-  border: 1px solid var(--border-faint);
-  border-radius: 8px;
-  bottom: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  left: 14px;
-  padding: 7px 12px;
-  position: absolute;
-  z-index: 3;
-}
-.world-legend > span { align-items: center; display: flex; gap: 6px; }
-.world-legend small { color: var(--text-muted); font-family: var(--font-display); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
-.world-legend > i { background: var(--border-faint); height: 12px; width: 1px; }
 
 /* Shared marker vocabulary: fill encodes discovery/category, ring encodes rarity. */
 .collectible-swatch {
@@ -287,6 +271,10 @@
   padding: 8px;
 }
 .quest-detail-owner-actions button:hover { color: var(--text-primary); }
+.quest-detail-owner-actions .quest-delete-button { color: #ff9a9a; }
+.quest-detail-owner-actions .quest-delete-button:hover { border-color: #ff9a9a; color: #ff9a9a; }
+.quest-detail-owner-actions button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.quest-detail-owner-actions button:disabled { cursor: wait; opacity: .5; }
 
 /* Viewport-scoped stats sit directly under the map so they read as map context. */
 .world-stats {
@@ -417,13 +405,9 @@
   .world-header { flex-wrap: wrap; gap: 16px; }
   .world-header h1 { font-size: 38px; }
   .world-discovered { justify-items: start; }
-  .world-filter-tabs { height: auto; margin-inline: -16px; overflow-x: auto; padding: 20px 16px 4px; scrollbar-width: none; }
-  .world-filter-tabs::-webkit-scrollbar { display: none; }
-  .world-filter-tabs button { flex: none; min-height: 38px; }
+  .world-filter-controls button { min-height: 38px; }
   .world-map-shell { height: max(420px, 62dvh); margin-top: 12px; }
   .world-map-status { left: 70px; max-width: calc(100% - 150px); overflow-wrap: anywhere; transform: none; }
-  .world-legend { flex-wrap: wrap; gap: 6px 10px; left: 10px; padding-inline: 8px; right: 10px; }
-  .world-legend small { font-size: 8px; }
   .world-detail-host { left: 10px; max-height: calc(100% - 110px); right: 10px; width: auto; }
   .world-stats { margin-inline: 6px; }
   .quest-list ol { grid-template-columns: 1fr; }

@@ -263,6 +263,9 @@ collected by that player.
   when a valid external route exists, and subtle creator attribution.
 - Selecting a quest draws its route geometry on the map in a restrained style,
   together with its collectibles and their visited state. Basemap context stays visible.
+- Owners can delete draft or published quests from the detail panel after confirming
+  permanent deletion. The existing owner-only delete API removes the quest for all
+  users; World clears its detail, route, and quest-only markers and refreshes nearby quests.
 - Published user-created quests appear exactly like curated Staza quests. There is no
   separate "official versus user" mode, no ratings, and no popularity ranking.
 

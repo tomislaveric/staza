@@ -95,22 +95,23 @@ describe("collectible source data respects World filters", () => {
     { id: "epic-found", name: "Epic", found: true, rarity: "epic", latitude: 51, longitude: 10 }
   ];
 
-  const featureIds = (activeFilter, questCollectibles) =>
-    collectiblesToFeatureCollection(mappedWorldCollectibles(collectibles, activeFilter, questCollectibles))
+  const featureIds = (selectedFilters, questCollectibles) =>
+    collectiblesToFeatureCollection(mappedWorldCollectibles(collectibles, selectedFilters, questCollectibles))
       .features.map((feature) => feature.properties.id);
 
   it("renders exactly the filtered collectibles", () => {
-    expect(featureIds("all")).toEqual(["common-found", "rare-unfound", "epic-found"]);
-    expect(featureIds("found")).toEqual(["common-found", "epic-found"]);
-    expect(featureIds("unfound")).toEqual(["rare-unfound"]);
-    expect(featureIds("rare")).toEqual(["rare-unfound"]);
-    expect(featureIds("epic")).toEqual(["epic-found"]);
+    expect(featureIds([])).toEqual(["common-found", "rare-unfound", "epic-found"]);
+    expect(featureIds(["found"])).toEqual(["common-found", "epic-found"]);
+    expect(featureIds(["unfound"])).toEqual(["rare-unfound"]);
+    expect(featureIds(["rare"])).toEqual(["rare-unfound"]);
+    expect(featureIds(["epic"])).toEqual(["epic-found"]);
+    expect(featureIds(["unfound", "epic", "fartleks"])).toEqual(["rare-unfound", "epic-found"]);
   });
 
   it("keeps the selected quest collectibles on the map without duplicating them", () => {
     const questCollectible = { id: "quest-only", name: "Quest", found: false, rarity: "common", latitude: 52, longitude: 11 };
 
-    expect(featureIds("found", [questCollectible, collectibles[0]]))
+    expect(featureIds(["found"], [questCollectible, collectibles[0]]))
       .toEqual(["common-found", "epic-found", "quest-only"]);
   });
 
@@ -133,6 +134,6 @@ describe("collectible source data respects World filters", () => {
   });
 
   it("does not duplicate business filtering outside filteredWorldCollectibles", () => {
-    expect(mappedWorldCollectibles(collectibles, "rare")).toEqual(filteredWorldCollectibles(collectibles, "rare"));
+    expect(mappedWorldCollectibles(collectibles, ["rare"])).toEqual(filteredWorldCollectibles(collectibles, ["rare"]));
   });
 });

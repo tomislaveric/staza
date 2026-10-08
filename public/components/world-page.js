@@ -1,7 +1,8 @@
-import { getAppLocale } from "../app-locales.js";
+import { getAppLocale, translateAppText } from "../app-locales.js";
 import { escapeHtml } from "./collected-list.js";
-import { markerLabel, WorldLegend } from "./world/world-markers.js";
-import { collectiblesToFeatureCollection } from "./world/collectible-features.js";
+import { markerLabel } from "./world/world-markers.js";
+import { collectibleCategory, collectiblesToFeatureCollection } from "./world/collectible-features.js";
+import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import { fartleksToFeatureCollection } from "./world/fartlek-features.js";
 import { boundsToParameter, createWorldMap } from "./world/world-map.js";
 import { QuestList } from "./world/quest-list.js";
@@ -10,7 +11,7 @@ import { CollectibleDetail } from "./world/collectible-detail.js";
 import { FartlekDetail } from "./world/fartlek-detail.js";
 import { mountQuestEditor } from "./world/quest-editor.js";
 
-export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks"];
+export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place"];
 
 const filterLabels = {
   all: "All",
@@ -18,50 +19,64 @@ const filterLabels = {
   unfound: "Unfound",
   rare: "Rare",
   epic: "Epic",
-  fartleks: "Fartleks"
+  fartleks: "Fartleks",
+  viewpoint: "Viewpoint",
+  peak: "Peak",
+  castle: "Castle",
+  waterfall: "Waterfall",
+  place: "Place"
 };
-
-/** Found/Unfound/Rare/Epic and category filters apply to point collectibles only. */
-const COLLECTIBLE_ONLY_FILTERS = new Set(["found", "unfound", "rare", "epic"]);
 
 const formatNumber = (value) => new Intl.NumberFormat(getAppLocale()).format(value);
 
 export const visibleWorldCollectibles = (collectibles) =>
   collectibles.filter((collectible) => collectible.visibility !== "hidden");
 
-export const filteredWorldCollectibles = (collectibles, activeFilter) => visibleWorldCollectibles(collectibles).filter((collectible) => {
-  if (activeFilter === "fartleks") return false;
-  if (activeFilter === "found") return collectible.found;
-  if (activeFilter === "unfound") return !collectible.found;
-  if (activeFilter === "rare" || activeFilter === "epic") return collectible.rarity === activeFilter;
-  return true;
-});
+export const filteredWorldCollectibles = (collectibles, selectedFilters) =>
+  visibleWorldCollectibles(collectibles).filter((collectible) =>
+    selectedFilters.length === 0 || selectedFilters.some((filter) => {
+      if (filter === "fartleks") return false;
+      if (filter === "found") return collectible.found;
+      if (filter === "unfound") return !collectible.found;
+      if (filter === "rare" || filter === "epic") return collectible.rarity === filter;
+      return collectibleCategory(collectible) === filter;
+    }));
 
-/**
- * Fartleks are a distinct challenge type with their own completed/uncompleted state; the
- * collectible-only filters (Found/Unfound/Rare/Epic) leave them unaffected by hiding them
- * while one of those collectible-focused filters is active.
- */
-export const filteredWorldFartleks = (fartleks, activeFilter) =>
-  COLLECTIBLE_ONLY_FILTERS.has(activeFilter) ? [] : fartleks;
+/** Fartlek completion is independent of collectible discovery and rarity filters. */
+export const filteredWorldFartleks = (fartleks, selectedFilters) =>
+  selectedFilters.length === 0 || selectedFilters.includes("fartleks") ? fartleks : [];
 
 /** Collectibles drawn on the map: the filtered viewport set plus the selected quest's own. */
-export const mappedWorldCollectibles = (collectibles, activeFilter, questCollectibles = []) => {
-  const mapped = [...filteredWorldCollectibles(collectibles, activeFilter)];
+export const mappedWorldCollectibles = (collectibles, selectedFilters, questCollectibles = []) => {
+  const mapped = [...filteredWorldCollectibles(collectibles, selectedFilters)];
   for (const collectible of questCollectibles) {
     if (!mapped.some((item) => item.id === collectible.id)) mapped.push(collectible);
   }
   return mapped;
 };
 
-export const WorldFilterTabs = (activeFilter) => `
-  <div class="world-filter-tabs" role="tablist" aria-label="World collectibles">
-    ${worldFilters.map((filter) => `
-      <button class="${filter === activeFilter ? "is-active" : ""}" type="button" role="tab"
-        aria-selected="${filter === activeFilter}" data-world-filter="${filter}">
-        ${filterLabels[filter]}
-      </button>
-    `).join("")}
+const filterSwatch = (filter) => {
+  if (filter === "all") return "";
+  if (filter === "fartleks") return '<b class="fartlek-swatch" aria-hidden="true"></b>';
+  if (filter === "found" || filter === "unfound") return CollectibleSwatch({ visited: filter === "found" });
+  if (filter === "rare" || filter === "epic") return CollectibleSwatch({ rarity: filter });
+  return CollectibleSwatch({ category: filter });
+};
+
+const isFilterSelected = (filter, selectedFilters) =>
+  filter === "all" ? selectedFilters.length === 0 : selectedFilters.includes(filter);
+
+export const WorldFilterControls = (selectedFilters) => `
+  <div class="world-filter-controls" role="group" aria-label="World collectibles">
+    ${worldFilters.map((filter) => {
+      const selected = isFilterSelected(filter, selectedFilters);
+      return `
+        <button class="${selected ? "is-active" : ""}" type="button"
+          aria-pressed="${selected}" data-world-filter="${filter}">
+          ${filterSwatch(filter)}<span>${filterLabels[filter]}</span>
+        </button>
+      `;
+    }).join("")}
   </div>
 `;
 
@@ -78,7 +93,7 @@ export const WorldStats = (stats, truncated) => `
   </p>
 `;
 
-export const WorldPage = ({ lifetime, activeFilter }) => `
+export const WorldPage = ({ lifetime, selectedFilters }) => `
   <section class="world-page" aria-labelledby="world-title">
     <header class="world-header">
       <div>
@@ -90,10 +105,9 @@ export const WorldPage = ({ lifetime, activeFilter }) => `
         <strong>${formatNumber(lifetime.discoveredCount)} <i>/ ${formatNumber(lifetime.totalCollectibles)}</i></strong>
       </div>
     </header>
-    ${WorldFilterTabs(activeFilter)}
+    ${WorldFilterControls(selectedFilters)}
     <div class="world-map-shell">
       <div class="world-map staza-map" data-world-map></div>
-      ${WorldLegend()}
       <ul class="world-collectible-list" aria-label="Collectibles on the map" data-world-collectible-list></ul>
       <a class="world-osm-attribution" href="https://www.openstreetmap.org/copyright"
         target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
@@ -133,7 +147,7 @@ export const mountWorldPage = async (mountPoint) => {
     return;
   }
 
-  let activeFilter = "all";
+  let selectedFilters = [];
   let collectibles = [];
   let quests = [];
   let stats = emptyStats;
@@ -141,10 +155,11 @@ export const mountWorldPage = async (mountPoint) => {
   let fartleks = [];
   let selection;
   let selectedQuest;
+  let deletingQuest = false;
   let requestToken = 0;
   let worldMap;
 
-  mountPoint.innerHTML = WorldPage({ lifetime, activeFilter });
+  mountPoint.innerHTML = WorldPage({ lifetime, selectedFilters });
   const mapContainer = mountPoint.querySelector("[data-world-map]");
   const statusHost = mountPoint.querySelector("[data-world-status]");
   const statsHost = mountPoint.querySelector("[data-world-stats]");
@@ -165,12 +180,12 @@ export const mountWorldPage = async (mountPoint) => {
   const renderCollectibles = () => {
     const selectedCollectibleId = selection?.kind === "collectible" ? selection.id : undefined;
     const questCollectibles = selectedQuest?.collectibles ?? [];
-    const mapped = mappedWorldCollectibles(collectibles, activeFilter, questCollectibles);
+    const mapped = mappedWorldCollectibles(collectibles, selectedFilters, questCollectibles);
     const questCollectibleIds = selectedQuest ? questCollectibles.map((item) => item.id) : undefined;
     worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { selectedId: selectedCollectibleId, questCollectibleIds }));
 
     const selectedFartlekId = selection?.kind === "fartlek" ? selection.id : undefined;
-    const mappedFartleks = filteredWorldFartleks(fartleks, activeFilter);
+    const mappedFartleks = filteredWorldFartleks(fartleks, selectedFilters);
     worldMap?.setFartleks(fartleksToFeatureCollection(mappedFartleks, { selectedId: selectedFartlekId }));
 
     renderCollectibleList(mapped, selectedCollectibleId, mappedFartleks, selectedFartlekId);
@@ -243,6 +258,10 @@ export const mountWorldPage = async (mountPoint) => {
     });
     detailHost.querySelector("[data-quest-edit]")?.addEventListener("click", openEditor);
     detailHost.querySelector("[data-quest-status]")?.addEventListener("click", () => void toggleStatus());
+    detailHost.querySelector("[data-quest-delete]")?.addEventListener("click", () => void deleteQuest());
+    detailHost.querySelectorAll(".quest-detail-owner-actions button").forEach((button) => {
+      button.disabled = deletingQuest;
+    });
   };
 
   const renderSidePanels = () => {
@@ -254,9 +273,10 @@ export const mountWorldPage = async (mountPoint) => {
   };
 
   const renderFilters = () => {
-    mountPoint.querySelectorAll("[data-world-filter]").forEach((tab) => {
-      tab.classList.toggle("is-active", tab.dataset.worldFilter === activeFilter);
-      tab.setAttribute("aria-selected", String(tab.dataset.worldFilter === activeFilter));
+    mountPoint.querySelectorAll("[data-world-filter]").forEach((button) => {
+      const selected = isFilterSelected(button.dataset.worldFilter, selectedFilters);
+      button.classList.toggle("is-active", selected);
+      button.setAttribute("aria-pressed", String(selected));
     });
   };
 
@@ -310,7 +330,7 @@ export const mountWorldPage = async (mountPoint) => {
   }
 
   async function toggleStatus() {
-    if (!selectedQuest?.isOwner) return;
+    if (!selectedQuest?.isOwner || deletingQuest) return;
     const action = selectedQuest.status === "published" ? "unpublish" : "publish";
     try {
       selectedQuest = await fetch(`/api/quests/${encodeURIComponent(selectedQuest.id)}/${action}`, { method: "POST" })
@@ -322,8 +342,37 @@ export const mountWorldPage = async (mountPoint) => {
     }
   }
 
+  async function deleteQuest() {
+    if (!selectedQuest?.isOwner || deletingQuest) return;
+    const questId = selectedQuest.id;
+    const message = translateAppText(
+      "Delete this quest permanently? This removes it for all users and cannot be undone.",
+      getAppLocale()
+    );
+    if (!window.confirm(message)) return;
+    deletingQuest = true;
+    renderDetail();
+    try {
+      await fetch(`/api/quests/${encodeURIComponent(questId)}`, { method: "DELETE" }).then(responseJson);
+      quests = quests.filter((quest) => quest.id !== questId);
+      if (selectedQuest?.id === questId) {
+        editorHost.hidden = true;
+        editorHost.innerHTML = "";
+        clearSelection();
+      } else {
+        renderSidePanels();
+      }
+      await loadViewport(worldMap.getBounds());
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      deletingQuest = false;
+      renderDetail();
+    }
+  }
+
   function openEditor() {
-    if (!selectedQuest) return;
+    if (!selectedQuest || deletingQuest) return;
     editorHost.hidden = false;
     mountQuestEditor(editorHost, {
       quest: selectedQuest,
@@ -370,15 +419,18 @@ export const mountWorldPage = async (mountPoint) => {
     debounce = setTimeout(() => void loadViewport(bounds), 250);
   };
 
-  mountPoint.querySelectorAll("[data-world-filter]").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      activeFilter = tab.dataset.worldFilter;
+  mountPoint.querySelectorAll("[data-world-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const filter = button.dataset.worldFilter;
+      selectedFilters = filter === "all" ? [] : selectedFilters.includes(filter)
+        ? selectedFilters.filter((selected) => selected !== filter)
+        : [...selectedFilters, filter];
       if (selection?.kind === "collectible"
-        && !filteredWorldCollectibles(collectibles, activeFilter).some((item) => item.id === selection.id)) {
+        && !filteredWorldCollectibles(collectibles, selectedFilters).some((item) => item.id === selection.id)) {
         selection = undefined;
       }
       if (selection?.kind === "fartlek"
-        && !filteredWorldFartleks(fartleks, activeFilter).some((item) => item.id === selection.id)) {
+        && !filteredWorldFartleks(fartleks, selectedFilters).some((item) => item.id === selection.id)) {
         selection = undefined;
       }
       renderFilters();

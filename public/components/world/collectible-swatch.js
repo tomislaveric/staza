@@ -1,7 +1,7 @@
 import { canonicalRarity } from "../collected-list.js";
 
 /**
- * One marker vocabulary shared by the map legend and the quest collectible rows:
+ * One marker vocabulary shared by the World filters and the quest collectible rows:
  * fill encodes discovery/category, ring encodes rarity — exactly like the MapLibre layers.
  */
 export const CollectibleSwatch = ({ visited = false, rarity, category, selected = false } = {}) => {

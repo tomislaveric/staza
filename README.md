@@ -121,6 +121,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [World Collectible Domain Model V1](features/world-collectible-domain-model-v1/README.md)
   — normalize legacy Coin configuration into reusable world Collectibles with
   canonical event relationships and shared replay/HUD presentation metadata.
+- [World Filter](features/world-filter/README.md)
+  — combine multi-select, marker-keyed World map filters and remove the
+  redundant map-overlay legend.
 
 ## World architecture
 

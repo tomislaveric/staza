@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatProgressPercent, questProgressLabel, QuestCard, QuestList, QuestStatusBadge } from "./quest-list.js";
 import { CreateRouteCta, QuestDetail } from "./quest-detail.js";
 import { buildQuestPayload, initialEditorState } from "./quest-editor.js";
-import { markerLabel, WorldLegend } from "./world-markers.js";
+import { markerLabel } from "./world-markers.js";
 import { QuestCollectibleRow } from "./quest-detail.js";
 import { CollectibleSwatch } from "./collectible-swatch.js";
 
@@ -104,13 +104,16 @@ describe("quest detail", () => {
 
   it("offers owner actions only to the creator", () => {
     expect(QuestDetail(detailQuest)).not.toContain("data-quest-edit");
+    expect(QuestDetail(detailQuest)).not.toContain("data-quest-delete");
     const owned = QuestDetail(quest({ isOwner: true, status: "draft", collectibles: [] }));
     expect(owned).toContain("data-quest-edit");
+    expect(owned).toContain('data-quest-delete="quest-1"');
     expect(owned).toContain("PUBLISH");
   });
 
   it("offers unpublishing for a published quest owned by the player", () => {
     expect(QuestDetail(quest({ isOwner: true, status: "published" }))).toContain("UNPUBLISH");
+    expect(QuestDetail(quest({ isOwner: true, status: "published" }))).toContain('data-quest-delete="quest-1"');
   });
 });
 
@@ -163,21 +166,6 @@ describe("shared marker vocabulary", () => {
     expect(CollectibleSwatch({ rarity: "rare" })).toContain("is-rare");
     expect(CollectibleSwatch({ category: "castle" })).toContain("is-castle");
     expect(CollectibleSwatch()).toContain("is-common");
-  });
-
-  it("shows only the states the map actually renders in the legend", () => {
-    const legend = WorldLegend();
-
-    expect(legend).toContain("Visited");
-    expect(legend).toContain("Unvisited");
-    expect(legend).toContain("Viewpoint");
-    expect(legend).toContain("Peak");
-    expect(legend).toContain("Castle");
-    expect(legend).toContain("Waterfall");
-    expect(legend).toContain("Rare");
-    expect(legend).toContain("Epic");
-    expect(legend).not.toContain("collectible-type-icon");
-    expect(legend).not.toContain("Landmark");
   });
 
   it("uses the same swatch in quest collectible rows as on the map", () => {

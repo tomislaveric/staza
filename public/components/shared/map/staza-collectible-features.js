@@ -5,6 +5,9 @@ export const DEFAULT_COLLECTIBLE_RARITY = "common";
 
 export const EMPTY_FEATURE_COLLECTION = { type: "FeatureCollection", features: [] };
 
+export const collectibleCategory = (collectible) =>
+  collectible.primaryCategory ?? collectible.type ?? DEFAULT_COLLECTIBLE_CATEGORY;
+
 /**
  * Converts a Staza collectible into a canonical GeoJSON point feature. Coordinates stay
  * geographic so MapLibre owns every projection; Staza state travels as properties only.
@@ -23,7 +26,7 @@ export const collectibleFeature = (collectible, selectedId, questCollectibleIds)
   properties: {
     id: collectible.id,
     name: collectible.name ?? collectible.id,
-    category: collectible.primaryCategory ?? collectible.type ?? DEFAULT_COLLECTIBLE_CATEGORY,
+    category: collectibleCategory(collectible),
     tags: collectible.tags ?? [],
     sourceType: collectible.source?.sourceType ?? null,
     sourceExternalId: collectible.source?.sourceExternalId ?? null,
