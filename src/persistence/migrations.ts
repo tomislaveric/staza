@@ -1,4 +1,6 @@
 import type { PoolClient } from "pg";
+import { createActivityFingerprint } from "../activityFingerprint.js";
+import type { ReplaySnapshot } from "../domain.js";
 
 export interface Migration {
   id: string;
@@ -437,4 +439,78 @@ export const migrations: Migration[] = [{
         );
     `);
   }
+}, {
+  id: "021_strava_import_and_journey_start",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE players ADD COLUMN journey_started_at TIMESTAMPTZ;
+      UPDATE players SET journey_started_at = first_activity.started_at
+      FROM (
+        SELECT DISTINCT ON (player_id) player_id, started_at
+        FROM activities
+        ORDER BY player_id, created_at, id
+      ) AS first_activity
+      WHERE first_activity.player_id = players.id;
+
+      ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_source_type_check;
+      ALTER TABLE activities ADD CONSTRAINT activities_source_type_check
+        CHECK (source_type IN ('fit', 'strava'));
+      ALTER TABLE activities
+        ADD COLUMN fingerprint_version INTEGER,
+        ADD COLUMN fingerprint_started_at TIMESTAMPTZ,
+        ADD COLUMN fingerprint JSONB;
+      CREATE INDEX activities_player_fingerprint_start_index
+        ON activities (player_id, fingerprint_started_at)
+        WHERE fingerprint IS NOT NULL;
+
+      CREATE TABLE strava_connections (
+        player_id UUID PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+        athlete_id BIGINT NOT NULL,
+        scope TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'reconnect_required')),
+        access_token_ciphertext TEXT NOT NULL,
+        refresh_token_ciphertext TEXT NOT NULL,
+        access_token_expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE strava_oauth_states (
+        id UUID PRIMARY KEY,
+        state_hash TEXT NOT NULL UNIQUE,
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        return_locale TEXT NOT NULL DEFAULT 'en' CHECK (return_locale IN ('en', 'de')),
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX strava_oauth_states_player_index ON strava_oauth_states (player_id);
+    `);
+    await backfillActivityFingerprints(client);
+  }
 }];
+
+/** Derives fingerprints for already accepted activities from their persisted replay snapshots. */
+export const backfillActivityFingerprints = async (client: PoolClient): Promise<void> => {
+  let lastId = "";
+  for (;;) {
+    const batch = await client.query<{ id: string; replay_snapshot: ReplaySnapshot }>(
+      `SELECT id, replay_snapshot FROM activities
+       WHERE fingerprint IS NULL AND replay_snapshot IS NOT NULL AND id > $1
+       ORDER BY id LIMIT 200`,
+      [lastId]
+    );
+    if (batch.rowCount === 0) return;
+    for (const row of batch.rows) {
+      lastId = row.id;
+      const snapshot = row.replay_snapshot.activity;
+      if (!Array.isArray(snapshot?.route)) continue;
+      const fingerprint = createActivityFingerprint({ type: snapshot.type ?? "unknown", route: snapshot.route });
+      if (!fingerprint) continue;
+      await client.query(
+        `UPDATE activities SET fingerprint_version = $2, fingerprint_started_at = $3, fingerprint = $4 WHERE id = $1`,
+        [row.id, fingerprint.version, new Date(fingerprint.startedAtMs), JSON.stringify(fingerprint)]
+      );
+    }
+  }
+};

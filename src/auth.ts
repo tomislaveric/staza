@@ -23,6 +23,7 @@ export interface SessionUser {
   email: string;
   emailVerified: boolean;
   playerId: string;
+  sessionId: string;
   csrfToken: string;
   stepUpAt?: Date;
 }
@@ -301,7 +302,7 @@ export class AuthService {
 
   async exportAccount(user: SessionUser): Promise<unknown> {
     const [player, activities, events] = await Promise.all([
-      this.pool.query("SELECT id, display_name, total_xp, created_at FROM players WHERE id = $1", [user.playerId]),
+      this.pool.query("SELECT id, display_name, total_xp, journey_started_at, created_at FROM players WHERE id = $1", [user.playerId]),
       this.pool.query(
         `SELECT id, source_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video, created_at
          FROM activities WHERE player_id = $1 ORDER BY created_at`, [user.playerId]
@@ -445,8 +446,9 @@ export class AuthService {
   }
 
   private async sessionUserWithClient(client: import("pg").PoolClient, tokenHash: string): Promise<SessionUser | undefined> {
-    const result = await client.query<{ id: string; email: string; email_verified_at: Date | null; player_id: string; csrf_token: string; step_up_at: Date | null }>(
-      `SELECT users.id, users.email, users.email_verified_at, players.id AS player_id, sessions.csrf_token, sessions.step_up_at
+    const result = await client.query<{ id: string; email: string; email_verified_at: Date | null; player_id: string; session_id: string; csrf_token: string; step_up_at: Date | null }>(
+      `SELECT users.id, users.email, users.email_verified_at, players.id AS player_id, sessions.id AS session_id,
+              sessions.csrf_token, sessions.step_up_at
        FROM sessions INNER JOIN users ON users.id = sessions.user_id
        INNER JOIN players ON players.user_id = users.id
        WHERE sessions.token_hash = $1 AND sessions.revoked_at IS NULL AND users.deleted_at IS NULL
@@ -459,6 +461,7 @@ export class AuthService {
       email: row.email,
       emailVerified: row.email_verified_at !== null,
       playerId: row.player_id,
+      sessionId: row.session_id,
       csrfToken: row.csrf_token,
       ...(row.step_up_at ? { stepUpAt: row.step_up_at } : {})
     } : undefined;

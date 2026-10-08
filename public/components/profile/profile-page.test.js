@@ -33,4 +33,19 @@ describe("Profile views", () => {
     expect(view).not.toContain("credential_id");
     expect(view).not.toContain("public_key");
   });
+
+  it("shows Strava connection controls only when the integration is enabled", () => {
+    const profile = {
+      displayName: "Rider",
+      distanceMeters: 0,
+      activityCount: 0,
+      progress: { level: 1, totalXp: 0, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0 },
+      collectibles: { discoveredCount: 0, totalCollectibles: 0, rareFinds: 0, epicFinds: 0 }
+    };
+    expect(profileOverviewView(profile, session, "disabled")).not.toContain("CONNECTIONS");
+    expect(profileOverviewView(profile, session, "disconnected")).toContain('data-profile-action="strava-connect"');
+    const connected = profileOverviewView(profile, session, "connected");
+    expect(connected).toContain("CONNECTIONS");
+    expect(connected).toContain('data-profile-action="strava-disconnect"');
+  });
 });

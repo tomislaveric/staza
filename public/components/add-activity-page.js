@@ -3,6 +3,15 @@ import { ProcessingState } from "./processing-state.js";
 import { UploadError } from "./upload-error.js";
 import { UploadStatus } from "./upload-status.js";
 import { mountUploadDropzone } from "./upload-dropzone.js";
+import {
+  StravaImportSection,
+  consumeStravaCallbackNotice,
+  disconnectStrava,
+  loadRecentStravaActivities,
+  loadStravaStatus,
+  requestStravaAuthorization,
+  startStravaImport
+} from "./strava-import.js";
 
 const importKey = () => crypto.randomUUID();
 export const PROCESSING_STEP_DURATION_MS = 1_000;
@@ -38,6 +47,7 @@ const content = (state) => {
       ${state.error ? UploadError({ message: state.error }) : ""}
       <button class="upload-primary-button" type="submit">PROCESS ACTIVITY</button>
     </form>
+    ${StravaImportSection(state.strava)}
   `;
 };
 
@@ -48,14 +58,93 @@ export const AddActivityPage = (state = {}) => `
 `;
 
 export const mountAddActivityPage = (mountPoint, onActivityReady) => {
-  const state = { fit: undefined, importKey: importKey(), processing: undefined, error: undefined, complete: undefined };
+  const callback = consumeStravaCallbackNotice();
+  const state = {
+    fit: undefined,
+    importKey: importKey(),
+    processing: undefined,
+    error: undefined,
+    complete: undefined,
+    strava: { status: "loading", notice: callback?.notice }
+  };
+  const process = async (request) => {
+    try {
+      for (let step = 0; step < 4; step += 1) {
+        state.processing = step;
+        render();
+        await delay(PROCESSING_STEP_DURATION_MS);
+      }
+      return await request;
+    } finally {
+      state.processing = undefined;
+    }
+  };
+  const updateStrava = (changes) => {
+    state.strava = { ...state.strava, notice: undefined, error: undefined, ...changes };
+    // The page may have been replaced by another screen while a Strava request was pending.
+    if (!mountPoint.querySelector(".add-activity-page")) return;
+    render();
+  };
+  const stravaFailure = (error) => {
+    if (error?.code === "reconnect_required" || error?.code === "not_connected") {
+      updateStrava({ status: error.code === "not_connected" ? "disconnected" : "reconnect_required", list: undefined, listLoading: false });
+    }
+    updateStrava({ listLoading: false, error: {
+      message: error instanceof Error ? error.message : "Strava could not be reached. Try again.",
+      existingActivityId: error?.existingActivityId,
+      journeyStartedAt: error?.journeyStartedAt
+    } });
+  };
+  const listStrava = async () => {
+    updateStrava({ listLoading: true, list: undefined, selectedId: undefined });
+    try {
+      updateStrava({ listLoading: false, list: await loadRecentStravaActivities() });
+    } catch (error) { stravaFailure(error); }
+  };
+  const stravaActions = {
+    connect: async () => {
+      try { await requestStravaAuthorization(); } catch (error) { stravaFailure(error); }
+    },
+    disconnect: async () => {
+      try { updateStrava({ status: "disconnected", list: undefined, notice: await disconnectStrava() }); } catch (error) { stravaFailure(error); }
+    },
+    list: listStrava
+  };
+  const bindStrava = () => {
+    mountPoint.querySelectorAll("[data-strava-action]").forEach((button) => {
+      button.addEventListener("click", () => stravaActions[button.dataset.stravaAction]?.());
+    });
+    mountPoint.querySelector("[data-strava-existing]")?.addEventListener("click", (event) => {
+      onActivityReady(event.currentTarget.dataset.stravaExisting);
+    });
+    mountPoint.querySelectorAll('input[name="strava-activity"]').forEach((input) => {
+      input.addEventListener("change", () => { state.strava.selectedId = input.value; });
+    });
+    mountPoint.querySelector(".strava-import-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const activityId = state.strava.selectedId;
+      if (!activityId) {
+        updateStrava({ error: { message: "Choose one Strava activity to import." } });
+        return;
+      }
+      state.error = undefined;
+      try {
+        const body = await process(startStravaImport(activityId));
+        state.complete = body.activity;
+        render();
+      } catch (error) {
+        stravaFailure(error);
+      }
+    });
+  };
   const render = () => {
     mountPoint.innerHTML = AddActivityPage(state);
     if (state.complete) {
       mountPoint.querySelector("[data-upload-complete]")?.addEventListener("click", () => onActivityReady(state.complete.id));
       return;
     }
-    if (state.processing) return;
+    if (state.processing !== undefined) return;
+    bindStrava();
     mountPoint.querySelectorAll("[data-upload-dropzone]").forEach((dropzone) => {
       const input = dropzone.querySelector("input");
       mountUploadDropzone(dropzone, (file) => {
@@ -86,12 +175,7 @@ export const mountAddActivityPage = (mountPoint, onActivityReady) => {
         body: data
       });
       try {
-        for (let step = 0; step < 4; step += 1) {
-          state.processing = step;
-          render();
-          await delay(PROCESSING_STEP_DURATION_MS);
-        }
-        const response = await request;
+        const response = await process(request);
         const body = await response.json();
         if (!response.ok) throw new Error(body.error ?? "Unable to import activity.");
         state.complete = body.activity;
@@ -99,10 +183,12 @@ export const mountAddActivityPage = (mountPoint, onActivityReady) => {
       } catch (error) {
         state.error = error instanceof Error ? error.message : "Unable to import activity.";
       } finally {
-        state.processing = undefined;
         render();
       }
     });
   };
   render();
+  loadStravaStatus()
+    .then((status) => updateStrava({ status, notice: state.strava.notice }))
+    .catch(() => updateStrava({ status: "disabled" }));
 };

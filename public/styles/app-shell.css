@@ -2407,6 +2407,117 @@ h3 {
     margin: 0;
     padding: 12px;
 }
+.strava-import {
+    border-top: 1px solid var(--border-faint);
+    display: grid;
+    gap: 16px;
+    padding: 24px;
+}
+.strava-import header p,
+.strava-activity-list legend {
+    color: var(--text-subtle);
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    margin: 0 0 8px;
+}
+.strava-import header span,
+.strava-help,
+.strava-notice {
+    color: var(--text-muted);
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 16px;
+    margin: 0;
+}
+.strava-notice {
+    color: var(--text-primary);
+}
+.strava-import-form {
+    display: grid;
+    gap: 16px;
+}
+.strava-activity-list {
+    border: 0;
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+}
+.strava-activity {
+    align-items: center;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-card);
+    cursor: pointer;
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+}
+.strava-activity:has(input:checked) {
+    background: rgb(232 184 10 / 7%);
+    border-color: var(--accent-yellow);
+}
+.strava-activity.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+.strava-activity input {
+    accent-color: var(--accent-yellow);
+}
+.strava-activity > span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+.strava-activity strong {
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.strava-activity small,
+.strava-activity em {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-style: normal;
+}
+.strava-secondary-button,
+.strava-link-button {
+    background: transparent;
+    border: 1px solid var(--border-faint);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 14px;
+    letter-spacing: 0.12em;
+    min-height: 44px;
+    padding: 12px 20px;
+    width: 100%;
+}
+.strava-link-button {
+    border: 0;
+    color: var(--text-muted);
+    letter-spacing: 0;
+    min-height: 0;
+    padding: 4px;
+    width: auto;
+    justify-self: start;
+}
+.strava-secondary-button:hover,
+.strava-link-button:hover {
+    color: var(--accent-yellow);
+}
+.strava-secondary-button:focus-visible,
+.strava-link-button:focus-visible,
+.strava-activity:focus-within {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 3px;
+}
 .processing-state {
     align-items: center;
     display: flex;

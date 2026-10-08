@@ -1,4 +1,5 @@
 import { getAppLocale } from "../../app-locales.js";
+import { disconnectStrava, loadStravaStatus, requestStravaAuthorization } from "../strava-import.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -23,7 +24,17 @@ const row = (label, detail, action, danger = false) => `<button type="button" cl
     : `<span data-user-content>${escapeHtml(detail.email)}</span>${detail.verified ? ` · ${escapeHtml(detail.verified)}` : ""}`}</small>` : ""}</span>
 </button>`;
 
-export const profileOverviewView = (profile, session) => {
+const stravaConnection = (status) => {
+  if (status === "connected") {
+    return `${row("Strava", "Connected")}${row("Disconnect Strava", "Removes Staza's access to your Strava account", "strava-disconnect", true)}`;
+  }
+  if (status === "reconnect_required") {
+    return `${row("Reconnect Strava", "Your Strava connection expired", "strava-connect")}${row("Disconnect Strava", "Removes Staza's access to your Strava account", "strava-disconnect", true)}`;
+  }
+  return row("Connect Strava", "Import recent activities from Strava", "strava-connect");
+};
+
+export const profileOverviewView = (profile, session, stravaStatus) => {
   const { progress, collectibles } = profile;
   const initial = profile.displayName.trim().slice(0, 1).toUpperCase() || "?";
   return shell("overview", `
@@ -48,7 +59,10 @@ export const profileOverviewView = (profile, session) => {
       ${row("Account email", { email: session.user.email, verified: session.user.emailVerified ? "Verified" : "" }, "account")}
       ${row("Passkeys", "Manage registered passkeys", "passkeys")}
       ${row("Sessions", "Sign out or manage active devices", "account")}
-    </div></section>`);
+    </div></section>
+    ${["connected", "disconnected", "reconnect_required"].includes(stravaStatus)
+      ? `<section class="profile-section"><h2>CONNECTIONS</h2><div class="profile-card">${stravaConnection(stravaStatus)}</div></section>`
+      : ""}`);
 };
 
 export const profileAccountView = (session, passkeyCount) => shell("account", `
@@ -89,8 +103,12 @@ export const mountProfilePage = (root, { fetch: request, session, startRegistrat
     try {
       if (screen === "overview") {
         root.innerHTML = '<section class="profile-page"><p class="profile-loading" role="status">Loading Profile...</p></section>';
-        profile = await json(await request("/api/player/profile"));
-        render(profileOverviewView(profile, session));
+        const [loadedProfile, stravaStatus] = await Promise.all([
+          request("/api/player/profile").then(json),
+          loadStravaStatus(request).catch(() => "disabled")
+        ]);
+        profile = loadedProfile;
+        render(profileOverviewView(profile, session, stravaStatus));
       } else if (screen === "account") { await loadPasskeys(); render(profileAccountView(session, passkeys.length)); }
       else if (screen === "passkeys") { await loadPasskeys(); render(profilePasskeysView(passkeys)); }
       else render(profileDeleteView(false));
@@ -116,6 +134,8 @@ export const mountProfilePage = (root, { fetch: request, session, startRegistrat
         if (!response.ok) await json(response);
         screen = "passkeys"; await show(); return;
       }
+      if (action === "strava-connect") { await requestStravaAuthorization(request); return; }
+      if (action === "strava-disconnect") { await disconnectStrava(request); await show(); return; }
       if (action === "export") { window.location.assign("/api/account/export"); return; }
       if (action === "delete") { screen = "delete"; await show(); return; }
       if (action === "confirm-delete") {

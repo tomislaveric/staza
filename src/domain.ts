@@ -92,9 +92,11 @@ export interface MappedGameEvent extends GameEvent {
 
 export type ActivityType = "cycling" | "running" | "hiking" | "walking" | "unknown";
 
+export type ActivitySource = "fit" | "strava";
+
 export interface Activity {
   id: string;
-  source: "fit";
+  source: ActivitySource;
   type: ActivityType;
   title?: string;
   description?: string;

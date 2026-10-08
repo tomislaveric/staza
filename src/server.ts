@@ -6,10 +6,11 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simp
 import { access, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import multer from "multer";
-import { deriveActivity, deriveActivityResult } from "./activity.js";
+import { deriveActivity } from "./activity.js";
+import { createCanonicalActivityProcessor } from "./activityProcessing.js";
 import { config } from "./config.js";
 import type { ActivityImportResult, ActivityVideo, Fartlek, HudTimeline, Job, MappedGameEvent, PersistedActivity, WorldFartlek } from "./domain.js";
-import { UserInputError } from "./errors.js";
+import { ActivityImportRejectedError, UserInputError } from "./errors.js";
 import { parseFitTrack, parseFitMetadata } from "./fit.js";
 import { extractGps5Times, mapToVideoSecond } from "./gpmf.js";
 import {
@@ -26,7 +27,12 @@ import { QuestNotFoundError, QuestRepository } from "./persistence/questReposito
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
-import { getRelevantCollectibles, getRelevantFartleks, parseBoundsParameter } from "./worldQuery.js";
+import { parseBoundsParameter } from "./worldQuery.js";
+import { StravaConnectionRepository, type StravaReturnLocale } from "./persistence/stravaConnectionRepository.js";
+import { StravaClient } from "./strava/client.js";
+import { StravaError } from "./strava/errors.js";
+import { StravaService } from "./strava/service.js";
+import { TokenCipher } from "./strava/tokenCipher.js";
 import { toWorldFartlek } from "./fartlek.js";
 import { createWorldSnapshot } from "./world.js";
 import { getBasemapConfig, getBasemapOrigins } from "./basemap.js";
@@ -72,6 +78,16 @@ const authService = new AuthService(databasePool, {
   production: config.nodeEnv === "production"
 }, new EmailSender(config.nodeEnv === "production", smtpConfig));
 await activityRepository.markInterruptedActivityVideos();
+const processActivity = createCanonicalActivityProcessor(collectibleRepository, fartlekRepository, config.worldQueryPaddingMeters);
+const stravaService = config.strava
+  ? new StravaService(
+      new StravaClient(config.strava),
+      new StravaConnectionRepository(databasePool, new TokenCipher(config.strava.tokenEncryptionKey)),
+      activityRepository,
+      processActivity,
+      config.strava.recentActivityLimit
+    )
+  : undefined;
 
 const jobFile = (directory: string): string => path.join(directory, "job.json");
 
@@ -169,22 +185,13 @@ const processDetection = async (
   playerId: string
 ): Promise<void> => {
   try {
-    const [collectibles, fartleks] = await Promise.all([
-      collectibleRepository.listAll(),
-      fartlekRepository.listPublished()
-    ]);
     const fit = path.join(directory, "track.fit");
     const [track, metadata] = await Promise.all([parseFitTrack(fit), parseFitMetadata(fit)]);
     const activity = deriveActivity(job.token, track, "unknown", metadata);
-    const relevantCollectibles = getRelevantCollectibles(collectibles, track, config.worldQueryPaddingMeters);
-    const relevantFartleks = getRelevantFartleks(fartleks, track, config.worldQueryPaddingMeters);
-    const activityResult = deriveActivityResult(activity, relevantCollectibles, relevantFartleks);
+    const { result: activityResult, totalCollectibles, relevantCollectibles } = await processActivity(activity);
     job.activity = activity;
     job.activityResult = activityResult;
-    job.world = {
-      totalCollectibles: collectibles.length,
-      relevantCollectibles: relevantCollectibles.length
-    };
+    job.world = { totalCollectibles, relevantCollectibles };
     job.resultMode = hasVideo ? "video" : "activity";
     await repository.persistCompletedActivity(playerId, activity, activityResult);
 
@@ -426,16 +433,9 @@ const importActivity = async (
   }
 
   try {
-    const [collectibles, fartleks, track, metadata] = await Promise.all([
-      collectibleRepository.listAll(),
-      fartlekRepository.listPublished(),
-      parseFitTrack(fit.path),
-      parseFitMetadata(fit.path)
-    ]);
+    const [track, metadata] = await Promise.all([parseFitTrack(fit.path), parseFitMetadata(fit.path)]);
     const activity = deriveActivity(randomUUID(), track, "unknown", metadata);
-    const relevantCollectibles = getRelevantCollectibles(collectibles, track, config.worldQueryPaddingMeters);
-    const relevantFartleks = getRelevantFartleks(fartleks, track, config.worldQueryPaddingMeters);
-    const activityResult = deriveActivityResult(activity, relevantCollectibles, relevantFartleks);
+    const { result: activityResult } = await processActivity(activity);
     const persisted = await activityRepository.persistCompletedActivity(playerId, activity, activityResult, importKey);
     let importedActivity = persisted.activity;
     let videoError: string | undefined;
@@ -683,6 +683,60 @@ app.post("/api/account/delete", requireUser, requireCsrf, async (request: Upload
     await Promise.all(paths.map((mediaPath) => rm(path.dirname(mediaPath), { recursive: true, force: true })));
     clearSession(response);
     response.status(204).end();
+  } catch (error) { next(error); }
+});
+const stravaLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 30,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (request) => (request as UploadRequest).user?.playerId ?? "anonymous"
+});
+const requireStrava = (_request: Request, _response: Response, next: NextFunction): void => {
+  next(stravaService ? undefined : new StravaError("strava_disabled"));
+};
+const stravaReturnLocale = (value: unknown): StravaReturnLocale => (value === "de" ? "de" : "en");
+app.get("/api/integrations/strava", requireUser, async (request: UploadRequest, response, next) => {
+  try {
+    if (!stravaService) {
+      response.json({ enabled: false, status: "disconnected" });
+      return;
+    }
+    response.json({ enabled: true, recentLimit: stravaService.limit, ...(await stravaService.status(request.user!.playerId)) });
+  } catch (error) { next(error); }
+});
+app.post("/api/integrations/strava/authorize", requireUser, requireCsrf, requireStrava, stravaLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    const authorizationUrl = await stravaService!.startAuthorization(
+      request.user!.playerId,
+      request.user!.sessionId,
+      stravaReturnLocale(request.body?.locale)
+    );
+    response.json({ authorizationUrl });
+  } catch (error) { next(error); }
+});
+app.get("/api/integrations/strava/callback", requireStrava, async (request: UploadRequest, response, next) => {
+  try {
+    if (!request.user) {
+      response.redirect(303, "/sign-in");
+      return;
+    }
+    const { outcome, locale } = await stravaService!.completeAuthorization(request.user, request.query);
+    response.redirect(303, `${locale === "de" ? "/de/aktivitaet-hinzufuegen" : "/en/add-activity"}?strava=${outcome}`);
+  } catch (error) { next(error); }
+});
+app.delete("/api/integrations/strava", requireUser, requireCsrf, requireStrava, async (request: UploadRequest, response, next) => {
+  try { response.json(await stravaService!.disconnect(request.user!.playerId)); } catch (error) { next(error); }
+});
+app.get("/api/integrations/strava/activities", requireUser, requireStrava, stravaLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    response.set("Cache-Control", "no-store").json(await stravaService!.listRecent(request.user!.playerId));
+  } catch (error) { next(error); }
+});
+app.post("/api/integrations/strava/activities/:id/import", requireUser, requireCsrf, requireStrava, stravaLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    const result = await stravaService!.importActivity(request.user!.playerId, String(request.params.id), attachVideoUrls);
+    response.status(result.inserted ? 201 : 200).json(result);
   } catch (error) { next(error); }
 });
 app.get("/shared/progression.js", (_request, response) => {
@@ -1213,8 +1267,18 @@ app.get("/api/jobs/:token/download", requirePlayer, async (request: UploadReques
 });
 
 app.use((error: Error, request: UploadRequest, response: Response, _next: NextFunction) => {
-  console.error("Request failed:", error);
   if (request.jobDir) void cleanupReservation(request);
+  if (error instanceof StravaError) {
+    if (error.status >= 500) console.error("Strava request failed:", error.code);
+    if (error.retryAfterSeconds !== undefined) response.set("Retry-After", String(error.retryAfterSeconds));
+    response.status(error.status).json({ error: error.message, code: error.code });
+    return;
+  }
+  if (error instanceof ActivityImportRejectedError) {
+    response.status(409).json({ error: error.message, code: error.code, ...error.details });
+    return;
+  }
+  console.error("Request failed:", error);
   const isInputError = error instanceof multer.MulterError || error instanceof UserInputError;
   response.status(isInputError ? 400 : 500).json({
     error: error instanceof multer.MulterError ? `Upload rejected: ${error.message}` : error.message

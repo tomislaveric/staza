@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type {
   Activity,
+  ActivitySource,
   ActivityType,
   ActivityImportResult,
   ActivityHistoryItem,
@@ -15,6 +16,13 @@ import type {
   PlayerProfileOverview,
   ReplaySnapshot
 } from "../domain.js";
+import {
+  createActivityFingerprint,
+  FINGERPRINT_CANDIDATE_WINDOW_MS,
+  isHighConfidenceDuplicate,
+  type ActivityFingerprint
+} from "../activityFingerprint.js";
+import { ActivityImportRejectedError } from "../errors.js";
 import { getLevelProgress, getTotalXpRequiredForLevel } from "../progression.js";
 import { FartlekCompletionRepository } from "./fartlekCompletionRepository.js";
 
@@ -122,11 +130,50 @@ export class ActivityRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      // The player row lock serializes every acceptance decision for this player: exact identity,
+      // cross-source duplicates, and the journey boundary are evaluated against committed state.
+      const player = await client.query<{ journey_started_at: Date | null }>(
+        "SELECT journey_started_at FROM players WHERE id = $1 FOR UPDATE",
+        [playerId]
+      );
+      if (player.rowCount !== 1) throw new Error("Default player does not exist.");
+
+      const existingId = importKey
+        ? await this.findActivityIdByImportKeyWithClient(client, playerId, activity.source, importKey)
+        : await this.findOwnedActivityIdWithClient(client, playerId, activity.id);
+      if (existingId) {
+        const persisted = await this.getActivityWithClient(client, playerId, existingId);
+        const progress = await this.getProgressWithClient(client, playerId);
+        await client.query("COMMIT");
+        return { activity: persisted, progress, inserted: false };
+      }
+
+      const fingerprint = createActivityFingerprint(activity);
+      if (fingerprint) {
+        const duplicateId = await this.findCrossSourceDuplicateWithClient(client, playerId, activity.source, fingerprint);
+        if (duplicateId) {
+          throw new ActivityImportRejectedError(
+            "duplicate_activity",
+            "This activity is already in Staza from another import.",
+            { existingActivityId: duplicateId }
+          );
+        }
+      }
+
+      const journeyStartedAt = player.rows[0].journey_started_at;
+      if (journeyStartedAt && activity.startedAt < journeyStartedAt.getTime()) {
+        throw new ActivityImportRejectedError(
+          "before_journey_start",
+          "This activity happened before your Staza journey started.",
+          { journeyStartedAt: journeyStartedAt.toISOString() }
+        );
+      }
+
       const inserted = await client.query<ActivityRow>(
         `INSERT INTO activities (
           id, player_id, source_type, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count,
-          replay_snapshot, source_external_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          replay_snapshot, source_external_id, fingerprint_version, fingerprint_started_at, fingerprint
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT DO NOTHING
         RETURNING id, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video, replay_snapshot`,
         [
@@ -140,21 +187,13 @@ export class ActivityRepository {
           result.totalPoints,
           result.collectedCount,
           JSON.stringify(createReplaySnapshot(activity, result)),
-          importKey ?? null
+          importKey ?? null,
+          fingerprint?.version ?? null,
+          fingerprint ? new Date(fingerprint.startedAtMs) : null,
+          fingerprint ? JSON.stringify(fingerprint) : null
         ]
       );
-
-      if (inserted.rowCount === 0) {
-        const persisted = await this.getActivityWithClient(
-          client, playerId,
-          importKey
-            ? await this.getActivityIdByImportKeyWithClient(client, playerId, importKey)
-            : activity.id
-        );
-        const progress = await this.getProgressWithClient(client, playerId);
-        await client.query("COMMIT");
-        return { activity: persisted, progress, inserted: false };
-      }
+      if (inserted.rowCount === 0) throw new Error("Activity identity conflict.");
 
       for (const event of result.events) {
         await client.query(
@@ -182,14 +221,15 @@ export class ActivityRepository {
           client, playerId, activity.id, result.fartlekCompletions
         );
       }
-      const player = await client.query<{ total_xp: number }>(
-        "UPDATE players SET total_xp = total_xp + $1 WHERE id = $2 RETURNING total_xp",
-        [result.totalPoints, playerId]
+      const updatedPlayer = await client.query<{ total_xp: number }>(
+        `UPDATE players SET total_xp = total_xp + $1, journey_started_at = COALESCE(journey_started_at, $3)
+         WHERE id = $2 RETURNING total_xp`,
+        [result.totalPoints, playerId, new Date(activity.startedAt)]
       );
-      if (player.rowCount !== 1) throw new Error("Default player does not exist.");
+      if (updatedPlayer.rowCount !== 1) throw new Error("Default player does not exist.");
       const persisted = await this.getActivityWithClient(client, playerId, activity.id);
       await client.query("COMMIT");
-      return { activity: persisted, progress: getLevelProgress(player.rows[0].total_xp), inserted: true };
+      return { activity: persisted, progress: getLevelProgress(updatedPlayer.rows[0].total_xp), inserted: true };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -198,14 +238,42 @@ export class ActivityRepository {
     }
   }
 
-  async getActivityByImportKey(playerId: string, importKey: string): Promise<PersistedActivity | undefined> {
+  async getActivityByImportKey(
+    playerId: string,
+    importKey: string,
+    source: ActivitySource = "fit"
+  ): Promise<PersistedActivity | undefined> {
     const result = await this.pool.query<{ id: string }>(
       `SELECT id FROM activities
-       WHERE player_id = $1 AND source_type = 'fit' AND source_external_id = $2`,
-      [playerId, importKey]
+       WHERE player_id = $1 AND source_type = $2 AND source_external_id = $3`,
+      [playerId, source, importKey]
     );
     if (result.rowCount !== 1) return undefined;
     return this.getActivity(playerId, result.rows[0].id);
+  }
+
+  /** Maps already-imported provider identities to their Staza activity IDs for one player and source. */
+  async listActivityIdsByImportKeys(
+    playerId: string,
+    source: ActivitySource,
+    importKeys: string[]
+  ): Promise<Map<string, string>> {
+    if (importKeys.length === 0) return new Map();
+    const result = await this.pool.query<{ id: string; source_external_id: string }>(
+      `SELECT id, source_external_id FROM activities
+       WHERE player_id = $1 AND source_type = $2 AND source_external_id = ANY($3::text[])`,
+      [playerId, source, importKeys]
+    );
+    return new Map(result.rows.map((row) => [row.source_external_id, row.id]));
+  }
+
+  async getJourneyStartedAt(playerId: string): Promise<Date | undefined> {
+    const result = await this.pool.query<{ journey_started_at: Date | null }>(
+      "SELECT journey_started_at FROM players WHERE id = $1",
+      [playerId]
+    );
+    if (result.rowCount !== 1) throw new Error("Player does not exist.");
+    return result.rows[0].journey_started_at ?? undefined;
   }
 
   async listActivities(playerId: string): Promise<ActivityHistoryItem[]> {
@@ -412,14 +480,48 @@ export class ActivityRepository {
     return getLevelProgress(result.rows[0].total_xp);
   }
 
-  private async getActivityIdByImportKeyWithClient(client: PoolClient, playerId: string, importKey: string): Promise<string> {
+  private async findActivityIdByImportKeyWithClient(
+    client: PoolClient,
+    playerId: string,
+    source: ActivitySource,
+    importKey: string
+  ): Promise<string | undefined> {
     const result = await client.query<{ id: string }>(
       `SELECT id FROM activities
-       WHERE player_id = $1 AND source_type = 'fit' AND source_external_id = $2`,
-      [playerId, importKey]
+       WHERE player_id = $1 AND source_type = $2 AND source_external_id = $3`,
+      [playerId, source, importKey]
     );
-    if (result.rowCount !== 1) throw new Error("Persisted import not found.");
-    return result.rows[0].id;
+    return result.rows[0]?.id;
+  }
+
+  private async findOwnedActivityIdWithClient(client: PoolClient, playerId: string, id: string): Promise<string | undefined> {
+    const result = await client.query<{ id: string }>(
+      "SELECT id FROM activities WHERE id = $1 AND player_id = $2",
+      [id, playerId]
+    );
+    return result.rows[0]?.id;
+  }
+
+  private async findCrossSourceDuplicateWithClient(
+    client: PoolClient,
+    playerId: string,
+    source: ActivitySource,
+    fingerprint: ActivityFingerprint
+  ): Promise<string | undefined> {
+    const candidates = await client.query<{ id: string; fingerprint: ActivityFingerprint }>(
+      `SELECT id, fingerprint FROM activities
+       WHERE player_id = $1 AND source_type <> $2 AND fingerprint_version = $3
+         AND fingerprint_started_at BETWEEN $4 AND $5
+       ORDER BY created_at, id`,
+      [
+        playerId,
+        source,
+        fingerprint.version,
+        new Date(fingerprint.startedAtMs - FINGERPRINT_CANDIDATE_WINDOW_MS),
+        new Date(fingerprint.startedAtMs + FINGERPRINT_CANDIDATE_WINDOW_MS)
+      ]
+    );
+    return candidates.rows.find((candidate) => isHighConfidenceDuplicate(fingerprint, candidate.fingerprint))?.id;
   }
 
   private async getActivityWithClient(client: PoolClient, playerId: string, id: string): Promise<PersistedActivity> {

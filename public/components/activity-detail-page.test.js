@@ -15,6 +15,9 @@ describe("Activity detail data transformation", () => {
     expect(replayInputs({})).toBeUndefined();
     expect(replayInputs({ replay: { version: 2 } })).toBeUndefined();
     expect(replayInputs({ replay: { ...snapshot, activity: { source: "fit", route: [] } } })).toBeUndefined();
+    const strava = { ...snapshot, activity: { source: "strava", route: [{}, {}] } };
+    expect(replayInputs({ replay: strava })).toBe(strava);
+    expect(replayInputs({ replay: { ...snapshot, activity: { source: "gpx", route: [{}, {}] } } })).toBeUndefined();
     const invalidNearMiss = replay([{ collectibleId: "bad", name: "Bad", value: 1, rarity: "invalid", minimumDistanceMeters: 10 }]);
     expect(replayInputs({ replay: invalidNearMiss })).toBe(invalidNearMiss);
     expect(nearMissInputs({ replay: invalidNearMiss })).toBeUndefined();

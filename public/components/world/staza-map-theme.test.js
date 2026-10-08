@@ -11,6 +11,7 @@ const providerStyle = () => ({
     { id: "background", type: "background", paint: { "background-color": "#f8f4f0" } },
     { id: "water", type: "fill", source: "openmaptiles", "source-layer": "water", paint: { "fill-color": "rgb(158,189,255)" } },
     { id: "landcover_wood", type: "fill", source: "openmaptiles", "source-layer": "landcover", paint: { "fill-color": "hsla(98,61%,72%,0.7)" } },
+    { id: "park_outline", type: "line", source: "openmaptiles", "source-layer": "park", paint: { "line-color": "#6a8f58" } },
     { id: "building", type: "fill", source: "openmaptiles", "source-layer": "building", paint: { "fill-color": "hsl(35,8%,85%)" } },
     { id: "road_minor", type: "line", source: "openmaptiles", "source-layer": "transportation", paint: { "line-color": "#fff", "line-width": 2 } },
     { id: "road_motorway", type: "line", source: "openmaptiles", "source-layer": "transportation", paint: { "line-color": "#fc8" } },
@@ -32,6 +33,7 @@ describe("applyStazaMapTheme", () => {
     expect(layerById(themed, "background").paint["background-color"]).toBe(STAZA_DARK_PALETTE.background);
     expect(layerById(themed, "water").paint["fill-color"]).toBe(STAZA_DARK_PALETTE.water);
     expect(layerById(themed, "building").paint["fill-color"]).toBe(STAZA_DARK_PALETTE.building);
+    expect(layerById(themed, "park_outline").layout.visibility).toBe("none");
     expect(layerById(themed, "road_motorway").paint["line-color"]).toBe(STAZA_DARK_PALETTE.roadMajor);
     expect(layerById(themed, "road_minor").paint["line-color"]).toBe(STAZA_DARK_PALETTE.roadMinor);
     expect(layerById(themed, "road_minor_casing").paint["line-color"]).toBe(STAZA_DARK_PALETTE.roadCasing);

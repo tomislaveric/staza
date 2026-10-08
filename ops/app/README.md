@@ -60,6 +60,17 @@ environment. Required variables:
 | `SMTP_PASSWORD_BASE64` | Base64 of the password; preferred for passwords with special characters. Takes precedence over `SMTP_PASSWORD`. Generate with `printf '%s' 'the#pass' \| base64`. |
 | `MAIL_FROM` | Sender address for outgoing mail, e.g. `auth@staza.world`. |
 
+Optional Strava import variables. The integration stays disabled unless the
+first four are all set:
+
+| Variable | Purpose |
+| --- | --- |
+| `STRAVA_CLIENT_ID` | Numeric client ID of the environment's registered Strava API application. |
+| `STRAVA_CLIENT_SECRET` | Strava client secret. Never commit or log it. |
+| `STRAVA_REDIRECT_URI` | Exact HTTPS callback, e.g. `https://dev.play.staza.world/api/integrations/strava/callback`; its host must match the Strava app's Authorization Callback Domain. |
+| `STRAVA_TOKEN_ENCRYPTION_KEY` | Base64 32-byte key that encrypts Strava tokens at rest. Generate with `openssl rand -base64 32`; use a different key per environment and keep it stable, because changing it requires users to reconnect. |
+| `STRAVA_RECENT_ACTIVITY_LIMIT` | Optional number of recent GPS activities shown (default `3`, maximum `30`). |
+
 Compose sets `NODE_ENV=production`, `PORT=3000`, `DATA_DIR=/data/jobs`, and
 `MEDIA_DIR=/data/media`. The app container uses an environment-specific named
 volume for `/data`; PostgreSQL uses a different named volume for its data

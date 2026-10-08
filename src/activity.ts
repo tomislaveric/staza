@@ -1,4 +1,4 @@
-import type { Activity, ActivityResult, ActivityType, Collectible, Fartlek, GameEvent, NearMissCollectible, TrackPoint } from "./domain.js";
+import type { Activity, ActivityResult, ActivitySource, ActivityType, Collectible, Fartlek, GameEvent, NearMissCollectible, TrackPoint } from "./domain.js";
 import type { FitMetadata } from "./fit.js";
 import { distanceMeters, detectFirstCollectiblePassages, minimumRouteDistanceMeters } from "./geometry.js";
 import { deriveFartlekCompletionDrafts } from "./fartlekDetection.js";
@@ -22,7 +22,8 @@ export const deriveActivity = (
   id: string,
   route: TrackPoint[],
   type: ActivityType = "unknown",
-  metadata: FitMetadata = {}
+  metadata: FitMetadata = {},
+  source: ActivitySource = "fit"
 ): Activity => {
   const distance = route.slice(1).reduce(
     (total, point, index) =>
@@ -34,7 +35,7 @@ export const deriveActivity = (
   const title = metadata.title ?? activityTypeLabel(type);
   return {
     id,
-    source: "fit",
+    source,
     type,
     title,
     ...(metadata.description === undefined ? {} : { description: metadata.description }),

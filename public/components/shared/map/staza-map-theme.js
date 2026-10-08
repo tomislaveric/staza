@@ -12,7 +12,6 @@ export const STAZA_DARK_PALETTE = {
   waterLabel: "#6f8794",
   nature: "#16211b",
   natureAlt: "#19241c",
-  natureOutline: "rgb(120 160 120 / 14%)",
   landuse: "#121317",
   building: "#15171c",
   buildingOutline: "rgb(255 255 255 / 4%)",
@@ -32,7 +31,7 @@ const HIDDEN_LAYERS = new Set([
   "poi_r1", "poi_r7", "poi_r20", "poi_transit",
   "highway-name-minor",
   "road_one_way_arrow", "road_one_way_arrow_opposite",
-  "road_area_pattern"
+  "road_area_pattern", "park_outline"
 ]);
 
 const WATER_FILL = new Set(["water"]);
@@ -78,7 +77,6 @@ export const classifyLayer = (layer) => {
   if (WATER_FILL.has(id)) return "water";
   if (WATER_LINE.has(id)) return "waterway";
   if (WATER_LABEL.has(id)) return "water-label";
-  if (id === "park_outline") return "nature-outline";
   if (NATURE_FILL.has(id)) return "nature";
   if (LANDUSE_FILL.has(id)) return "landuse";
   if (BOUNDARY_LAYERS.has(id)) return "boundary";
@@ -117,8 +115,6 @@ const paintFor = (category, layer, palette) => {
       return { ...labelPaint(palette, layer.id), "text-color": palette.waterLabel };
     case "nature":
       return { "fill-color": layer.id === "park" ? palette.natureAlt : palette.nature, "fill-opacity": 0.85 };
-    case "nature-outline":
-      return { "line-color": palette.natureOutline, "line-opacity": 0.6 };
     case "landuse":
       return { "fill-color": palette.landuse, "fill-opacity": 0.8 };
     case "building":

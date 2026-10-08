@@ -83,6 +83,48 @@ const smtpPasswordEnv = (): string | undefined => {
   return process.env.SMTP_PASSWORD || undefined;
 };
 
+export interface StravaConfig {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  tokenEncryptionKey: Buffer;
+  recentActivityLimit: number;
+}
+
+const stravaEnv = (): StravaConfig | undefined => {
+  const clientId = process.env.STRAVA_CLIENT_ID?.trim() || undefined;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET?.trim() || undefined;
+  const redirectUri = process.env.STRAVA_REDIRECT_URI?.trim() || undefined;
+  const encodedKey = process.env.STRAVA_TOKEN_ENCRYPTION_KEY?.trim() || undefined;
+  const values = [clientId, clientSecret, redirectUri, encodedKey];
+  if (values.every((value) => value === undefined)) return undefined;
+  if (!clientId || !clientSecret || !redirectUri || !encodedKey) {
+    console.warn(
+      "Strava integration is disabled: STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_REDIRECT_URI, and STRAVA_TOKEN_ENCRYPTION_KEY are all required."
+    );
+    return undefined;
+  }
+  if (!/^\d+$/.test(clientId)) throw new Error("STRAVA_CLIENT_ID must be numeric.");
+  let redirect: URL;
+  try {
+    redirect = new URL(redirectUri);
+  } catch {
+    throw new Error("STRAVA_REDIRECT_URI must be a valid URL.");
+  }
+  const localHttp = redirect.protocol === "http:" && ["localhost", "127.0.0.1"].includes(redirect.hostname);
+  if (redirect.protocol !== "https:" && !localHttp) throw new Error("STRAVA_REDIRECT_URI must use https.");
+  if (redirect.pathname !== "/api/integrations/strava/callback" || redirect.search || redirect.hash) {
+    throw new Error("STRAVA_REDIRECT_URI must point to /api/integrations/strava/callback without query or fragment.");
+  }
+  const tokenEncryptionKey = Buffer.from(encodedKey, "base64");
+  if (tokenEncryptionKey.length !== 32 || tokenEncryptionKey.toString("base64") !== encodedKey) {
+    throw new Error("STRAVA_TOKEN_ENCRYPTION_KEY must be 32 random bytes encoded as base64.");
+  }
+  const recentActivityLimit = integerEnv("STRAVA_RECENT_ACTIVITY_LIMIT", 3);
+  if (recentActivityLimit > 30) throw new Error("STRAVA_RECENT_ACTIVITY_LIMIT must not exceed 30.");
+  return { clientId, clientSecret, redirectUri: redirect.toString(), tokenEncryptionKey, recentActivityLimit };
+};
+
 export const config = {
   port: integerEnv("PORT", 3000),
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data/jobs"),
@@ -143,7 +185,8 @@ export const config = {
   smtpSecure: booleanEnv("SMTP_SECURE", false),
   smtpUser: process.env.SMTP_USER?.trim() || undefined,
   smtpPassword: smtpPasswordEnv(),
-  mailFrom: process.env.MAIL_FROM?.trim() || undefined
+  mailFrom: process.env.MAIL_FROM?.trim() || undefined,
+  strava: stravaEnv()
 };
 
 if (config.nodeEnv === "production") {

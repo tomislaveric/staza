@@ -41,7 +41,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   — historical persisted detail and replay implementation.
 - [Milestone 11.5 — Activity detail / Collected (historical)](features/milestone-11-5-trailhunt-ride-detail-collected/README.md)
   — historical collected-items detail implementation.
-- [Milestone 11.6 — Activity detail / Near Misses (historical)](features/milestone-11-6-trailhunt-ride-detail-desktop-near-misses/README.md)
+- [Milestone 11.6 — Activity detail / Near Misses (historical)](features/milestone-11-6-ride-detail-desktop-near-misses/README.md)
   — historical near-miss detail implementation.
 - [Milestone 11.7 — Activity detail / Video (historical)](features/milestone-11-7-ride-detail-desktop-video/README.md)
   — historical activity-scoped video highlight implementation.
@@ -101,6 +101,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Shared Staza Map Foundation](features/shared-staza-map-foundation/README.md)
   — unify World and Activity Detail on one MapLibre Staza map foundation and
   rebuild the Ride Detail replay natively on shared basemap, theme, and layers.
+- [SMTP auth email delivery](features/smtp-auth-email-delivery/README.md)
+  — send authentication codes and security notifications by real email via
+  nodemailer SMTP against the existing mail server in production.
 - [Staza app DEV/PROD deployment structure](features/staza-app-dev-prod-deployment-structure/README.md)
   — version separate app deployment Compose files, isolated environment storage,
   and manual VPS deployment instructions.
@@ -113,9 +116,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Staza landing page localization](features/staza-landing-page-localization/README.md)
   — render the public landing page in English and German with localized URLs
   while preserving one shared page structure and the existing app routes.
-- [SMTP auth email delivery](features/smtp-auth-email-delivery/README.md)
-  — send authentication codes and security notifications by real email via
-  nodemailer SMTP against the existing mail server in production.
+- [Strava OAuth and manual activity import](features/strava-oauth-manual-activity-import/README.md)
+  — connect Strava for an explicit single-activity import through the canonical
+  activity pipeline, with an immutable journey-start boundary.
 - [Synchronization diagnostics](features/synchronization-diagnostics/README.md)
   — make FIT/GPS5 synchronization failures explicit and operationally visible.
 - [World Collectible Domain Model V1](features/world-collectible-domain-model-v1/README.md)
@@ -392,6 +395,22 @@ failure does not remove its history or XP.
 - `POST /api/activities/import` multipart fields: required `fit`, optional
   `video`, and required `Idempotency-Key`. Returns the persisted activity and
   starts optional video processing separately.
+- `GET /api/integrations/strava` returns whether Strava import is enabled and
+  the safe connection status (`disconnected`, `connected`, or
+  `reconnect_required`); no tokens are ever returned.
+- `POST /api/integrations/strava/authorize` (CSRF) starts OAuth with a
+  one-time, session-bound state and returns the Strava authorization URL;
+  `GET /api/integrations/strava/callback` completes it server-side and
+  redirects back to Add Activity with a `?strava=` outcome.
+- `GET /api/integrations/strava/activities` fetches one first page of recent
+  activities on demand and returns only the newest ones with GPS data
+  (`STRAVA_RECENT_ACTIVITY_LIMIT`, default 3).
+- `POST /api/integrations/strava/activities/:id/import` (CSRF) imports exactly
+  one listed activity through the canonical FIT pipeline and transaction
+  (`201` new, `200` existing). Duplicates and pre-journey activities return
+  `409` with `code` `duplicate_activity` or `before_journey_start`.
+- `DELETE /api/integrations/strava` (CSRF) deletes local credentials and
+  attempts remote deauthorization; imported activities and XP remain.
 - `GET /api/activities` returns the default player's completed activities,
   newest first, with compact summary fields.
 - `GET /api/activities/:id` returns one persisted activity and its ordered
