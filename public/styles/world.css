@@ -161,7 +161,7 @@
 
 /* Mirrors the Fartlek map line layer: a short bar rather than a dot, same uncompleted/completed colors. */
 .fartlek-swatch {
-  background: #2ea8e0;
+  background: #6b9eac;
   border-radius: 2px;
   display: block;
   flex: none;
@@ -256,7 +256,6 @@
 .activity-replay-fartlek { color: var(--text-primary); display: grid; gap: 2px; }
 .activity-replay-fartlek-main { align-items: center; display: flex; gap: 8px; }
 .activity-replay-fartlek-main .fartlek-swatch { width: 12px; }
-.activity-replay-fartlek-main .fartlek-swatch.is-unvisited { background: #4a4f59; }
 .activity-replay-fartlek-name { font-family: var(--font-display); font-size: 13px; }
 .activity-replay-fartlek-stats { color: var(--text-muted); display: flex; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; gap: 8px; }
 .quest-detail-owner-actions { display: flex; gap: 8px; }

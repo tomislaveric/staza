@@ -16,11 +16,11 @@ export const FARTLEK_SELECTED_LAYER = "staza-fartleks-selected";
 export const FARTLEK_HIT_LAYER = "staza-fartleks-hit";
 
 const CASING_COLOR = "#0b0c0f";
-/** Match the subdued historical route treatment until the Fartlek has been ridden. */
-const UNCOMPLETED_LINE = "#4a4f59";
+/** A muted blue-teal keeps unridden segments distinct from roads without competing with gold. */
+const UNCOMPLETED_LINE = "#6b9eac";
 const COMPLETED_LINE = "#e8b80a";
 const SELECTED_ACCENT = "#e8b80a";
-const UNCOMPLETED_OPACITY = 0.72;
+const UNCOMPLETED_OPACITY = 0.82;
 const COMPLETED_OPACITY = 0.95;
 
 const SELECTED = ["==", ["get", "selected"], true];

@@ -41,8 +41,8 @@ describe("fartlekLayers", () => {
     const lineLayer = fartlekLayers().find((layer) => layer.id === "staza-fartleks-line");
     const completed = ["==", ["get", "completed"], true];
 
-    expect(lineLayer.paint["line-color"]).toEqual(["case", completed, "#e8b80a", "#4a4f59"]);
-    expect(lineLayer.paint["line-opacity"]).toEqual(["case", completed, 0.95, 0.72]);
+    expect(lineLayer.paint["line-color"]).toEqual(["case", completed, "#e8b80a", "#6b9eac"]);
+    expect(lineLayer.paint["line-opacity"]).toEqual(["case", completed, 0.95, 0.82]);
   });
 });
 
