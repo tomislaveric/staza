@@ -223,10 +223,18 @@ export const buildFartlekCandidates = (
     }
   }
 
-  const boundaryIndex = createGridIndex<true>(GRID_CELL_METERS);
-  for (const node of options.boundaryNodes) boundaryIndex.insert(node.coordinates[0], true);
+  const boundaryIndex = createGridIndex<OSMWayRecord>(GRID_CELL_METERS);
+  for (const node of options.boundaryNodes) boundaryIndex.insert(node.coordinates[0], node);
   const controlIndex = createGridIndex<true>(GRID_CELL_METERS);
   for (const node of options.controlNodes) controlIndex.insert(node.coordinates[0], true);
+  const boundaryNameAt = (coordinate: [number, number]): string | undefined => {
+    const names = new Set(
+      boundaryIndex.near(coordinate, BOUNDARY_MATCH_TOLERANCE_METERS)
+        .map((node) => node.tags.name?.trim())
+        .filter((name): name is string => Boolean(name))
+    );
+    return names.size === 1 ? [...names][0] : undefined;
+  };
 
   const candidates: FartlekCandidate[] = [];
   for (const chain of chains) {
@@ -276,7 +284,16 @@ export const buildFartlekCandidates = (
         0
       );
       const hasClearBoundaries = boundaryHitIndices.has(startIndex) && boundaryHitIndices.has(endIndex);
-      const name = consistentTagValue(slice, "name") ?? consistentTagValue(slice, "ref");
+      const startName = boundaryNameAt(slice[0].coordinate);
+      const endName = boundaryNameAt(slice[slice.length - 1].coordinate);
+      const roadName = consistentTagValue(slice, "name") ?? consistentTagValue(slice, "ref");
+      const name = startName && endName
+        ? `${startName} -> ${endName}`
+        : startName
+          ? `${startName} -> ${roadName ?? "?"}`
+          : endName
+            ? `${roadName ?? "?"} -> ${endName}`
+            : roadName;
 
       candidates.push({
         id: `fartlek-osm:${sourceWayIds[0]}:${sourceWayIds[sourceWayIds.length - 1]}:${startIndex}:${endIndex}`,

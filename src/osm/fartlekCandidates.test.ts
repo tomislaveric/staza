@@ -27,11 +27,11 @@ const closeToMeters = (actual: number, expected: number): void => {
   expect(Math.abs(actual - expected)).toBeLessThan(10);
 };
 
-const boundaryNode = (osmId: string, meters: number): OSMWayRecord => ({
+const boundaryNode = (osmId: string, meters: number, name?: string): OSMWayRecord => ({
   osmType: "node",
   osmId,
   coordinates: [point(meters)],
-  tags: { traffic_sign: "city_limit" }
+  tags: { traffic_sign: "city_limit", ...(name ? { name } : {}) }
 });
 
 const controlNode = (osmId: string, meters: number, tags: Record<string, string> = {}): OSMWayRecord => ({
@@ -57,6 +57,36 @@ describe("buildFartlekCandidates", () => {
       trafficControlCount: 0
     });
     closeToMeters(candidates[0].lengthMeters, 3_000);
+  });
+
+  it("names candidates from both named city-limit boundaries", () => {
+    const ways = [way("w1", 0, 3_000, { name: "B 1" })];
+    const candidates = buildFartlekCandidates(ways, {
+      boundaryNodes: [boundaryNode("b1", 0, "Northville"), boundaryNode("b2", 3_000, "Southtown")],
+      controlNodes: []
+    });
+
+    expect(candidates[0].name).toBe("Northville -> Southtown");
+  });
+
+  it("uses one named city-limit boundary and keeps the road name as context", () => {
+    const ways = [way("w1", 0, 3_000, { name: "B 1" })];
+    const candidates = buildFartlekCandidates(ways, {
+      boundaryNodes: [boundaryNode("b1", 0, "Northville"), boundaryNode("b2", 3_000)],
+      controlNodes: []
+    });
+
+    expect(candidates[0].name).toBe("Northville -> B 1");
+  });
+
+  it("places a single named city-limit boundary at the correct end of the title", () => {
+    const ways = [way("w1", 0, 3_000, { ref: "B 1" })];
+    const candidates = buildFartlekCandidates(ways, {
+      boundaryNodes: [boundaryNode("b1", 0), boundaryNode("b2", 3_000, "Southtown")],
+      controlNodes: []
+    });
+
+    expect(candidates[0].name).toBe("B 1 -> Southtown");
   });
 
   it("merges two connected same-ref ways sharing an endpoint into one chain", () => {

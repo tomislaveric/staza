@@ -1,5 +1,5 @@
 export const FARTLEK_SOURCE_TYPE = "osm";
-export const FARTLEK_CANDIDATE_GENERATION_VERSION = "fartlek-candidates-v1";
+export const FARTLEK_CANDIDATE_GENERATION_VERSION = "fartlek-candidates-v2";
 export const FARTLEK_SCORING_VERSION = "fartlek-score-v1";
 
 export const FARTLEK_MIN_LENGTH_METERS = 1_000;

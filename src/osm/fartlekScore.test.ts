@@ -8,7 +8,7 @@ const baseCandidate = (overrides: Partial<FartlekCandidate> = {}): FartlekCandid
   coordinates: Array.from({ length: 10 }, (_, index) => [8 + index * 0.01, 48] as [number, number]),
   lengthMeters: 3_800,
   sourceWayIds: ["way:1", "way:2"],
-  candidateGenerationVersion: "fartlek-candidates-v1",
+  candidateGenerationVersion: "fartlek-candidates-v2",
   junctionCount: 1,
   trafficControlCount: 0,
   tagsBySegment: [],
