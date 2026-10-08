@@ -33,6 +33,8 @@ describe("formatSpeed", () => {
 describe("FartlekDetail", () => {
   it("never implies a speed target when uncompleted", () => {
     const markup = FartlekDetail(fartlek());
+    expect(markup).toContain('aria-label="Flowline detail"');
+    expect(markup).toContain('aria-label="Close Flowline detail"');
     expect(markup).toContain("Complete the full segment in one activity.");
     expect(markup).not.toMatch(/as fast as possible/i);
     expect(markup).toContain("Not yet completed");

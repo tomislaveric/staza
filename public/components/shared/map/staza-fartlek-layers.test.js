@@ -37,9 +37,12 @@ describe("fartlekLayers", () => {
     expect(hitLayer.paint["line-width"]).toBe(16);
   });
 
-  it("colors completed and uncompleted segments distinctly via a data-driven expression", () => {
+  it("shows completed segments in Staza gold and keeps uncompleted segments subdued", () => {
     const lineLayer = fartlekLayers().find((layer) => layer.id === "staza-fartleks-line");
-    expect(lineLayer.paint["line-color"]).toEqual(["case", ["==", ["get", "completed"], true], "#e8b80a", "#2ea8e0"]);
+    const completed = ["==", ["get", "completed"], true];
+
+    expect(lineLayer.paint["line-color"]).toEqual(["case", completed, "#e8b80a", "#4a4f59"]);
+    expect(lineLayer.paint["line-opacity"]).toEqual(["case", completed, 0.95, 0.72]);
   });
 });
 

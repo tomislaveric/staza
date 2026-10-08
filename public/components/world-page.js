@@ -19,7 +19,7 @@ const filterLabels = {
   unfound: "Unfound",
   rare: "Rare",
   epic: "Epic",
-  fartleks: "Fartleks",
+  fartleks: "Flowlines",
   viewpoint: "Viewpoint",
   peak: "Peak",
   castle: "Castle",
@@ -67,7 +67,7 @@ const isFilterSelected = (filter, selectedFilters) =>
   filter === "all" ? selectedFilters.length === 0 : selectedFilters.includes(filter);
 
 export const WorldFilterControls = (selectedFilters) => `
-  <div class="world-filter-controls" role="group" aria-label="World collectibles">
+  <div class="world-filter-controls" role="group" aria-label="World collectibles and Flowlines">
     ${worldFilters.map((filter) => {
       const selected = isFilterSelected(filter, selectedFilters);
       return `

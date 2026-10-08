@@ -21,6 +21,8 @@ describe("FartlekCompletionsSection", () => {
     expect(markup).toContain("3.0 km");
     expect(markup).toContain("10:00");
     expect(markup).toContain("18.0 km/h");
+    expect(markup).toContain("Flowlines completed");
+    expect(markup).toContain('aria-label="Completed Flowlines"');
     expect(markup).not.toContain("max ");
   });
 

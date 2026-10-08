@@ -67,8 +67,12 @@ describe("World page data transformations", () => {
 });
 
 describe("Fartlek filtering", () => {
-  it("exposes a Fartleks control alongside the collectible filters", () => {
+  it("labels the Fartleks control Flowlines alongside the collectible filters", () => {
+    const controls = WorldFilterControls([]);
+    const flowlineButton = controls.match(/<button[^>]*data-world-filter="fartleks"[^>]*>[\s\S]*?<\/button>/)[0];
+
     expect(worldFilters).toContain("fartleks");
+    expect(flowlineButton).toContain("Flowlines");
   });
 
   it("hides collectibles entirely under the Fartleks filter", () => {
@@ -114,7 +118,7 @@ describe("World filter controls", () => {
   it("renders labelled toggle buttons rather than single-select tabs", () => {
     const markup = WorldFilterControls(["rare", "castle"]);
     expect(worldFilters).toEqual(["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place"]);
-    expect(markup).toContain('role="group" aria-label="World collectibles"');
+    expect(markup).toContain('role="group" aria-label="World collectibles and Flowlines"');
     expect(markup).not.toContain('role="tab');
     expect(markup).not.toContain("aria-selected");
     for (const filter of worldFilters) {

@@ -99,8 +99,8 @@ const replayPanelTitle = (activity) => activity?.title || getActivityLabel(activ
 export const FartlekCompletionsSection = (fartlekCompletions = []) => {
   if (fartlekCompletions.length === 0) return "";
   return `
-    <div class="activity-replay-fartleks" aria-label="Completed Fartleks">
-      <h3>Fartleks completed</h3>
+    <div class="activity-replay-fartleks" aria-label="Completed Flowlines">
+      <h3>Flowlines completed</h3>
       <ul>
         ${fartlekCompletions.map((completion) => `
           <li class="activity-replay-fartlek is-completed" data-user-content>

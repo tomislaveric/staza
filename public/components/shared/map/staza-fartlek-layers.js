@@ -16,10 +16,12 @@ export const FARTLEK_SELECTED_LAYER = "staza-fartleks-selected";
 export const FARTLEK_HIT_LAYER = "staza-fartleks-hit";
 
 const CASING_COLOR = "#0b0c0f";
-/** Vivid teal so an uncompleted Fartlek reads as a deliberate Staza layer, not basemap road noise. */
-const UNCOMPLETED_LINE = "#2ea8e0";
+/** Match the subdued historical route treatment until the Fartlek has been ridden. */
+const UNCOMPLETED_LINE = "#4a4f59";
 const COMPLETED_LINE = "#e8b80a";
 const SELECTED_ACCENT = "#e8b80a";
+const UNCOMPLETED_OPACITY = 0.72;
+const COMPLETED_OPACITY = 0.95;
 
 const SELECTED = ["==", ["get", "selected"], true];
 const COMPLETED = ["==", ["get", "completed"], true];
@@ -42,7 +44,7 @@ const fartlekCasingLayer = () => ({
   }
 });
 
-/** The segment itself: neutral while uncompleted, the same Staza gold used for visited state once completed. */
+/** Ridden segments use the collectible gold; unridden segments stay subdued. */
 const fartlekLineLayer = () => ({
   id: FARTLEK_LINE_LAYER,
   type: "line",
@@ -50,7 +52,7 @@ const fartlekLineLayer = () => ({
   layout: { "line-cap": "round", "line-join": "round" },
   paint: {
     "line-color": ["case", COMPLETED, COMPLETED_LINE, UNCOMPLETED_LINE],
-    "line-opacity": 0.95,
+    "line-opacity": ["case", COMPLETED, COMPLETED_OPACITY, UNCOMPLETED_OPACITY],
     "line-width": lineWidth(LINE_WIDTH_STOPS)
   }
 });

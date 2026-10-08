@@ -114,7 +114,8 @@ const paintFor = (category, layer, palette) => {
     case "water-label":
       return { ...labelPaint(palette, layer.id), "text-color": palette.waterLabel };
     case "nature":
-      return { "fill-color": layer.id === "park" ? palette.natureAlt : palette.nature, "fill-opacity": 0.85 };
+      const natureColor = layer.id === "park" ? palette.natureAlt : palette.nature;
+      return { "fill-color": natureColor, "fill-outline-color": natureColor, "fill-opacity": 0.85 };
     case "landuse":
       return { "fill-color": palette.landuse, "fill-opacity": 0.8 };
     case "building":

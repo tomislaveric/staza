@@ -30,7 +30,7 @@ const startFinish = (geometry) => {
 export const FartlekDetail = (fartlek) => {
   const { latestCompletion } = fartlek;
   return `
-    <section class="world-detail fartlek-detail" aria-label="Fartlek detail">
+    <section class="world-detail fartlek-detail" aria-label="Flowline detail">
       <header>
         <div>
           <h2><span data-user-content>${escapeHtml(fartlek.name)}</span></h2>
@@ -39,7 +39,7 @@ export const FartlekDetail = (fartlek) => {
             <small>${escapeHtml(formatDistance(fartlek.lengthMeters))}</small>
           </p>
         </div>
-        <button class="world-detail-close" type="button" data-world-close aria-label="Close Fartlek detail">\u00d7</button>
+        <button class="world-detail-close" type="button" data-world-close aria-label="Close Flowline detail">\u00d7</button>
       </header>
       <p class="fartlek-detail-state ${fartlek.completed ? "is-completed" : "is-uncompleted"}">
         ${fartlek.completed ? "Completed" : "Not yet completed"}
