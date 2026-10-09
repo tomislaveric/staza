@@ -7,35 +7,47 @@ import { createDatabasePool } from "./database.js";
 import { migrate } from "./migrate.js";
 import { CollectibleRepository } from "./collectibleRepository.js";
 import { QuestRepository } from "./questRepository.js";
+import { QuestInstanceRepository, readQuestTemplateRows } from "./questInstanceRepository.js";
 import type { Collectible } from "../domain.js";
-
-interface SeedQuest {
-  title: string;
-  description?: string;
-  collectibleIds: string[];
-}
+import path from "node:path";
 
 interface SeedDocument {
   collectibles: Collectible[];
   curatorDisplayName: string;
-  quests: SeedQuest[];
+  removeQuests: string[];
 }
+
+const readQuestTitles = (value: unknown, field: string): string[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || !value.every((title): title is string =>
+    typeof title === "string" && title.trim() !== "")) {
+    throw new Error(`${field} must be a list of nonblank quest titles.`);
+  }
+  return [...new Set(value.map((title) => title.trim()))];
+};
 
 const readSeedDocument = async (file: string): Promise<SeedDocument> => {
   const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
   if (Array.isArray(parsed)) {
-    return { collectibles: normalizeCollectibles(parsed), curatorDisplayName: "Staza Curator", quests: [] };
+    return {
+      collectibles: normalizeCollectibles(parsed),
+      curatorDisplayName: "Staza Curator",
+      removeQuests: []
+    };
   }
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error(`${file} must contain a collectible array or a seed document.`);
   }
   const document = parsed as Record<string, unknown>;
-  const quests = Array.isArray(document.quests) ? (document.quests as SeedQuest[]) : [];
+  if (document.quests !== undefined
+    && (!Array.isArray(document.quests) || document.quests.length > 0)) {
+    throw new Error("Quest rows are no longer seeded; curate quest templates in fixtures/quest-templates.json.");
+  }
   const curator = document.curator as { displayName?: unknown } | undefined;
   return {
     collectibles: normalizeCollectibles(document.collectibles),
     curatorDisplayName: typeof curator?.displayName === "string" ? curator.displayName : "Staza Curator",
-    quests
+    removeQuests: readQuestTitles(document.removeQuests, "removeQuests")
   };
 };
 
@@ -50,33 +62,8 @@ const ensureCurator = async (pool: Pool, displayName: string): Promise<string> =
   return id;
 };
 
-const seedQuests = async (pool: Pool, curatorId: string, quests: SeedQuest[]): Promise<number> => {
-  if (quests.length === 0) return 0;
-  const repository = new QuestRepository(pool);
-  const existing = await pool.query<{ id: string; title: string }>(
-    "SELECT id, title FROM quests WHERE created_by_player_id = $1",
-    [curatorId]
-  );
-  const byTitle = new Map(existing.rows.map((row) => [row.title, row.id]));
-  for (const quest of quests) {
-    const questId = byTitle.get(quest.title);
-    if (questId === undefined) {
-      const created = await repository.create(curatorId, {
-        title: quest.title,
-        description: quest.description,
-        collectibleIds: quest.collectibleIds
-      });
-      await repository.setStatus(curatorId, created, "published");
-      continue;
-    }
-    await repository.update(curatorId, questId, {
-      title: quest.title,
-      description: quest.description ?? "",
-      collectibleIds: quest.collectibleIds
-    });
-    await repository.setStatus(curatorId, questId, "published");
-  }
-  return quests.length;
+const removeSeedQuests = async (pool: Pool, curatorId: string, titles: string[]): Promise<number> => {
+  return new QuestRepository(pool).removeOwnedByTitles(curatorId, titles);
 };
 
 const file = process.argv[2] ?? config.collectibleSeedFile;
@@ -87,10 +74,15 @@ const pool = createDatabasePool(config.databaseUrl);
 try {
   await migrate(pool);
   const document = await readSeedDocument(file);
+  const templates = await readQuestTemplateRows(path.resolve("fixtures/quest-templates.json"));
+  await new QuestInstanceRepository(pool).replaceTemplates(templates);
   const count = await new CollectibleRepository(pool).upsertMany(document.collectibles);
-  const curatorId = await ensureCurator(pool, document.curatorDisplayName);
-  const questCount = await seedQuests(pool, curatorId, document.quests);
-  console.log(`Seeded ${count} collectibles and ${questCount} quests from ${file}.`);
+  const hasRetiredQuests = document.removeQuests.length > 0;
+  const curatorId = hasRetiredQuests ? await ensureCurator(pool, document.curatorDisplayName) : undefined;
+  const removedQuestCount = curatorId === undefined
+    ? 0
+    : await removeSeedQuests(pool, curatorId, document.removeQuests);
+  console.log(`Seeded ${count} collectibles and ${templates.length} quest templates; removed ${removedQuestCount} retired quests from ${file}.`);
 } finally {
   await pool.end();
 }

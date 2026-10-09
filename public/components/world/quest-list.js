@@ -1,58 +1,91 @@
 import { escapeHtml } from "../collected-list.js";
 
-export const formatProgressPercent = (progress) => {
-  if (!progress || progress.total === 0) return "0%";
-  return `${Math.round(progress.ratio * 100)}%`;
+const objectiveLabel = (objective) => {
+  if (objective.type === "flowline_rule") {
+    const qualifiers = [
+      objective.minimumLengthMeters ? `at least ${Math.round(objective.minimumLengthMeters / 1000 * 10) / 10} km each` : "",
+      objective.minimumAverageSpeedMps ? `at least ${Math.round(objective.minimumAverageSpeedMps * 3.6)} km/h average` : "",
+      objective.sameActivity ? "in one Activity" : ""
+    ].filter(Boolean);
+    return `Complete ${objective.requiredCount} Flowlines${qualifiers.length ? `, ${qualifiers.join(", ")}` : ""}`;
+  }
+  const categoryName = ({
+    peak: "peaks",
+    place: "places",
+    mountain_pass: "mountain passes",
+    viewpoint: "viewpoints",
+    castle: "castles",
+    waterfall: "waterfalls"
+  })[objective.category] ?? "collectibles";
+  if (objective.type === "collectible_targets") {
+    return `Visit ${objective.targets.map((target) => target.name).join(", ")}`;
+  }
+  return `Discover ${objective.requiredCount} ${categoryName}`;
 };
 
-export const questProgressLabel = (progress) => {
-  if (!progress || progress.total === 0) return "No collectibles yet";
-  return `${progress.collected} / ${progress.total} completed`;
-};
-
-export const QuestStatusBadge = (quest) => {
-  if (quest.status === "draft") return '<span class="quest-badge is-draft">Draft</span>';
-  if (quest.progress?.complete) return '<span class="quest-badge is-complete">Complete</span>';
-  return "";
-};
-
-export const QuestCard = (quest, selectedQuestId) => `
-  <li>
-    <button class="quest-card${quest.id === selectedQuestId ? " is-selected" : ""}" type="button"
-      data-quest-card="${escapeHtml(quest.id)}" aria-pressed="${quest.id === selectedQuestId}">
+const SuggestionCard = (suggestion, started) => `
+  <li class="quest-suggestion-card">
+    <article>
       <span class="quest-card-head">
-        <strong data-user-content>${escapeHtml(quest.title)}</strong>
-        ${QuestStatusBadge(quest)}
+        <strong data-user-content>${escapeHtml(suggestion.title)}</strong>
+        <small>Level ${escapeHtml(suggestion.recommendedLevel)}</small>
       </span>
-      ${quest.description ? `<span class="quest-card-description" data-user-content>${escapeHtml(quest.description)}</span>` : ""}
-      <span class="quest-card-progress">
-        <span class="quest-progress-track" aria-hidden="true">
-          <i style="width: ${escapeHtml(formatProgressPercent(quest.progress))};"></i>
-        </span>
-        <small>${escapeHtml(questProgressLabel(quest.progress))} \u00b7 ${escapeHtml(formatProgressPercent(quest.progress))}</small>
-      </span>
-      <span class="quest-card-meta">
-        <small>${escapeHtml(quest.collectibleCount)} collectibles</small>
-        ${quest.hasRoute ? "<small>Route</small>" : ""}
-      </span>
-    </button>
+      <span class="quest-card-description" data-user-content>${escapeHtml(suggestion.description)}</span>
+      <ul>${suggestion.objectives.map((objective) =>
+        `<li>${escapeHtml(objectiveLabel(objective))}</li>`
+      ).join("")}</ul>
+      <button type="button" data-quest-start="${escapeHtml(suggestion.id)}"${started ? " disabled" : ""}>
+        ${started ? "Started" : "Start quest"}
+      </button>
+    </article>
   </li>
 `;
 
-export const QuestList = (quests, selectedQuestId) => {
-  if (!quests.length) {
-    return `
-      <section class="quest-list quest-list-empty" aria-label="Quests nearby">
-        <h2>Quests nearby</h2>
-        <p>Nothing curated here yet.</p>
-        <span>Pan or zoom the map to look somewhere else.</span>
-      </section>
-    `;
-  }
+const InstanceCard = (instance) => {
+  const objectiveStates = instance.objectives;
+  const completed = objectiveStates.filter((item) => item.progress.complete).length;
+  const ratio = objectiveStates.length ? completed / objectiveStates.length : 0;
+  const status = instance.status === "completed" ? "Complete" : "Active";
   return `
-    <section class="quest-list" aria-label="Quests nearby">
-      <h2>Quests nearby</h2>
-      <ol>${quests.map((quest) => QuestCard(quest, selectedQuestId)).join("")}</ol>
+    <li class="quest-instance-card is-${instance.status}">
+      <article>
+        <span class="quest-card-head">
+          <strong data-user-content>${escapeHtml(instance.title)}</strong>
+          <small>${status}</small>
+        </span>
+        <span class="quest-card-description" data-user-content>${escapeHtml(instance.description)}</span>
+        <ul>${objectiveStates.map(({ objective, progress }) => `
+          <li class="${progress.complete ? "is-complete" : ""}">
+            <span>${escapeHtml(objectiveLabel(objective))}</span>
+            <small>${escapeHtml(progress.completed)} / ${escapeHtml(progress.required)}</small>
+          </li>
+        `).join("")}</ul>
+        <span class="quest-card-progress">
+          <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
+          <small>${completed} / ${objectiveStates.length} objectives</small>
+        </span>
+      </article>
+    </li>
+  `;
+};
+
+export const QuestList = (suggestions, instances, startingSuggestionId) => {
+  const startedIds = new Set(instances.map((instance) => instance.suggestionId));
+  return `
+    <section class="default-quest-list" aria-label="Suggested quests">
+      <h2>Local recommendations</h2>
+      ${suggestions.length
+        ? `<ol>${suggestions.map((suggestion) => SuggestionCard(
+          suggestion,
+          startedIds.has(suggestion.id) || startingSuggestionId === suggestion.id
+        )).join("")}</ol>`
+        : '<p class="default-quest-empty">No curated quests match this map area yet.</p>'}
+    </section>
+    <section class="quest-list" aria-label="Your quests">
+      <h2>Your quests</h2>
+      ${instances.length
+        ? `<ol>${instances.map(InstanceCard).join("")}</ol>`
+        : '<p class="default-quest-empty">Start a local recommendation to begin tracking a quest.</p>'}
     </section>
   `;
 };

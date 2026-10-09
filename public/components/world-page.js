@@ -1,4 +1,4 @@
-import { getAppLocale, translateAppText } from "../app-locales.js";
+import { getAppLocale } from "../app-locales.js";
 import { escapeHtml } from "./collected-list.js";
 import { markerLabel } from "./world/world-markers.js";
 import { collectibleCategory, collectiblesToFeatureCollection } from "./world/collectible-features.js";
@@ -6,10 +6,8 @@ import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import { fartleksToFeatureCollection } from "./world/fartlek-features.js";
 import { boundsToParameter, createWorldMap } from "./world/world-map.js";
 import { QuestList } from "./world/quest-list.js";
-import { QuestDetail } from "./world/quest-detail.js";
 import { CollectibleDetail } from "./world/collectible-detail.js";
 import { FartlekDetail } from "./world/fartlek-detail.js";
-import { mountQuestEditor } from "./world/quest-editor.js";
 
 export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"];
 
@@ -66,7 +64,7 @@ export const filteredWorldCollectibles = (collectibles, selectedFilters) =>
 export const filteredWorldFartleks = (fartleks, selectedFilters) =>
   selectedFilters.length === 0 || selectedFilters.includes("fartleks") ? fartleks : [];
 
-/** Collectibles drawn on the map: the filtered viewport set plus the selected quest's own. */
+/** Collectibles drawn on the map, respecting the active discovery filters. */
 export const mappedWorldCollectibles = (collectibles, selectedFilters, questCollectibles = []) => {
   const mapped = [...filteredWorldCollectibles(collectibles, selectedFilters)];
   for (const collectible of questCollectibles) {
@@ -140,7 +138,6 @@ export const WorldPage = ({ lifetime, selectedFilters }) => `
     </div>
     <div data-world-stats></div>
     <div data-world-quests></div>
-    <div class="world-editor-host" data-world-editor hidden></div>
   </section>
 `;
 
@@ -158,13 +155,16 @@ export const mountWorldPage = async (mountPoint) => {
 
   let basemap;
   let lifetime = emptyStats;
+  let questInstances = [];
   try {
-    const [loadedBasemap, globalSnapshot] = await Promise.all([
+    const [loadedBasemap, globalSnapshot, activeQuests] = await Promise.all([
       fetch("/api/world/basemap").then(responseJson),
-      fetch("/api/world").then(responseJson)
+      fetch("/api/world").then(responseJson),
+      fetch("/api/quest-instances").then(responseJson)
     ]);
     basemap = loadedBasemap;
     lifetime = globalSnapshot.stats;
+    questInstances = activeQuests.instances;
   } catch (error) {
     mountPoint.innerHTML = `<section class="world-page"><p class="world-load-error" role="alert">Unable to load World: ${escapeHtml(error.message)}</p></section>`;
     return;
@@ -172,14 +172,13 @@ export const mountWorldPage = async (mountPoint) => {
 
   let selectedFilters = [];
   let collectibles = [];
-  let quests = [];
+  let questSuggestions = [];
+  let startingQuestId;
   let stats = emptyStats;
   let truncated = false;
   let fartleks = [];
   let availableFilters = availableWorldFilters(collectibles, fartleks);
   let selection;
-  let selectedQuest;
-  let deletingQuest = false;
   let requestToken = 0;
   let worldMap;
 
@@ -190,23 +189,18 @@ export const mountWorldPage = async (mountPoint) => {
   const questHost = mountPoint.querySelector("[data-world-quests]");
   const detailHost = mountPoint.querySelector("[data-world-detail]");
   const collectibleListHost = mountPoint.querySelector("[data-world-collectible-list]");
-  const editorHost = mountPoint.querySelector("[data-world-editor]");
-
   const setStatus = (message) => {
     statusHost.hidden = !message;
     statusHost.textContent = message ?? "";
   };
 
-  const collectibleById = (id) => collectibles.find((collectible) => collectible.id === id)
-    ?? selectedQuest?.collectibles?.find((collectible) => collectible.id === id);
+  const collectibleById = (id) => collectibles.find((collectible) => collectible.id === id);
   const fartlekById = (id) => fartleks.find((fartlek) => fartlek.id === id);
 
   const renderCollectibles = () => {
     const selectedCollectibleId = selection?.kind === "collectible" ? selection.id : undefined;
-    const questCollectibles = selectedQuest?.collectibles ?? [];
-    const mapped = mappedWorldCollectibles(collectibles, selectedFilters, questCollectibles);
-    const questCollectibleIds = selectedQuest ? questCollectibles.map((item) => item.id) : undefined;
-    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { selectedId: selectedCollectibleId, questCollectibleIds }));
+    const mapped = mappedWorldCollectibles(collectibles, selectedFilters);
+    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { selectedId: selectedCollectibleId }));
 
     const selectedFartlekId = selection?.kind === "fartlek" ? selection.id : undefined;
     const mappedFartleks = filteredWorldFartleks(fartleks, selectedFilters);
@@ -246,13 +240,7 @@ export const mountWorldPage = async (mountPoint) => {
     }
     detailHost.hidden = false;
     worldMap?.setDetailPanelOpen(true);
-    if (selection.kind === "quest") {
-      if (!selectedQuest) {
-        detailHost.innerHTML = '<section class="world-detail"><p role="status">Loading quest...</p></section>';
-        return;
-      }
-      detailHost.innerHTML = QuestDetail(selectedQuest);
-    } else if (selection.kind === "fartlek") {
+    if (selection.kind === "fartlek") {
       const fartlek = fartlekById(selection.id);
       if (!fartlek) {
         detailHost.hidden = true;
@@ -269,30 +257,19 @@ export const mountWorldPage = async (mountPoint) => {
         worldMap?.setDetailPanelOpen(false);
         return;
       }
-      const related = selectedQuest && (selectedQuest.collectibles ?? [])
-        .some((item) => item.id === collectible.id) ? [selectedQuest] : [];
-      detailHost.innerHTML = CollectibleDetail(collectible, related);
+      detailHost.innerHTML = CollectibleDetail(collectible, []);
     }
     detailHost.querySelector("[data-world-close]")?.addEventListener("click", clearSelection);
     detailHost.querySelectorAll("[data-world-marker]").forEach((button) => {
       button.addEventListener("click", () => selectCollectible(button.dataset.worldMarker));
     });
-    detailHost.querySelectorAll("[data-quest-card]").forEach((button) => {
-      button.addEventListener("click", () => void selectQuest(button.dataset.questCard));
-    });
-    detailHost.querySelector("[data-quest-edit]")?.addEventListener("click", openEditor);
-    detailHost.querySelector("[data-quest-status]")?.addEventListener("click", () => void toggleStatus());
-    detailHost.querySelector("[data-quest-delete]")?.addEventListener("click", () => void deleteQuest());
-    detailHost.querySelectorAll(".quest-detail-owner-actions button").forEach((button) => {
-      button.disabled = deletingQuest;
-    });
   };
 
   const renderSidePanels = () => {
     statsHost.innerHTML = WorldStats(stats, truncated);
-    questHost.innerHTML = QuestList(quests, selectedQuest?.id);
-    questHost.querySelectorAll("[data-quest-card]").forEach((button) => {
-      button.addEventListener("click", () => void selectQuest(button.dataset.questCard));
+    questHost.innerHTML = QuestList(questSuggestions, questInstances, startingQuestId);
+    questHost.querySelectorAll("[data-quest-start]").forEach((button) => {
+      button.addEventListener("click", () => void startQuest(button.dataset.questStart));
     });
   };
 
@@ -307,8 +284,6 @@ export const mountWorldPage = async (mountPoint) => {
 
   function clearSelection() {
     selection = undefined;
-    selectedQuest = undefined;
-    worldMap?.setRoute(undefined);
     renderCollectibles();
     renderSidePanels();
     renderDetail();
@@ -330,90 +305,24 @@ export const mountWorldPage = async (mountPoint) => {
     renderDetail();
   }
 
-  async function selectQuest(questId) {
-    if (selectedQuest?.id === questId) {
-      clearSelection();
-      return;
-    }
-    selection = { kind: "quest", id: questId };
-    selectedQuest = undefined;
-    renderDetail();
+  async function startQuest(suggestionId) {
+    if (startingQuestId) return;
+    startingQuestId = suggestionId;
+    renderSidePanels();
     try {
-      selectedQuest = await fetch(`/api/quests/${encodeURIComponent(questId)}`).then(responseJson);
-      worldMap?.setRoute(selectedQuest.route);
-      const points = selectedQuest.collectibles.length
-        ? selectedQuest.collectibles
-        : (selectedQuest.route?.geometry.coordinates ?? []).map(([longitude, latitude]) => ({ longitude, latitude }));
-      worldMap?.fitTo(points);
-      renderCollectibles();
-      renderSidePanels();
-      renderDetail();
-    } catch (error) {
-      setStatus(error.message);
-      clearSelection();
-    }
-  }
-
-  async function toggleStatus() {
-    if (!selectedQuest?.isOwner || deletingQuest) return;
-    const action = selectedQuest.status === "published" ? "unpublish" : "publish";
-    try {
-      selectedQuest = await fetch(`/api/quests/${encodeURIComponent(selectedQuest.id)}/${action}`, { method: "POST" })
-        .then(responseJson);
-      renderDetail();
-      await loadViewport(worldMap.getBounds());
-    } catch (error) {
-      setStatus(error.message);
-    }
-  }
-
-  async function deleteQuest() {
-    if (!selectedQuest?.isOwner || deletingQuest) return;
-    const questId = selectedQuest.id;
-    const message = translateAppText(
-      "Delete this quest permanently? This removes it for all users and cannot be undone.",
-      getAppLocale()
-    );
-    if (!window.confirm(message)) return;
-    deletingQuest = true;
-    renderDetail();
-    try {
-      await fetch(`/api/quests/${encodeURIComponent(questId)}`, { method: "DELETE" }).then(responseJson);
-      quests = quests.filter((quest) => quest.id !== questId);
-      if (selectedQuest?.id === questId) {
-        editorHost.hidden = true;
-        editorHost.innerHTML = "";
-        clearSelection();
-      } else {
-        renderSidePanels();
-      }
+      await fetch("/api/quest-instances/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suggestionId, bbox: boundsToParameter(worldMap.getBounds()) })
+      }).then(responseJson);
+      questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
       await loadViewport(worldMap.getBounds());
     } catch (error) {
       setStatus(error.message);
     } finally {
-      deletingQuest = false;
-      renderDetail();
+      startingQuestId = undefined;
+      renderSidePanels();
     }
-  }
-
-  function openEditor() {
-    if (!selectedQuest || deletingQuest) return;
-    editorHost.hidden = false;
-    mountQuestEditor(editorHost, {
-      quest: selectedQuest,
-      onCancel: () => {
-        editorHost.hidden = true;
-        editorHost.innerHTML = "";
-      },
-      onSaved: async (saved) => {
-        editorHost.hidden = true;
-        editorHost.innerHTML = "";
-        selectedQuest = saved;
-        worldMap?.setRoute(saved.route);
-        await loadViewport(worldMap.getBounds());
-        renderDetail();
-      }
-    });
   }
 
   async function loadViewport(bounds) {
@@ -422,13 +331,15 @@ export const mountWorldPage = async (mountPoint) => {
       const snapshot = await fetch(`/api/world?bbox=${boundsToParameter(bounds)}`).then(responseJson);
       if (token !== requestToken) return;
       collectibles = snapshot.collectibles;
-      quests = snapshot.quests;
+      questSuggestions = snapshot.questSuggestions ?? [];
       stats = snapshot.stats;
       truncated = snapshot.truncated;
       fartleks = snapshot.fartleks ?? [];
       availableFilters = availableWorldFilters(collectibles, fartleks);
       selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
-      setStatus(collectibles.length === 0 && quests.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);
+      setStatus(collectibles.length === 0 && questSuggestions.length === 0 && fartleks.length === 0
+        ? "Nothing curated here yet."
+        : undefined);
       if (selection?.kind === "collectible" && !collectibleById(selection.id)) selection = undefined;
       if (selection?.kind === "fartlek" && !fartlekById(selection.id)) selection = undefined;
       renderFilters();

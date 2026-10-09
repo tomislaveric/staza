@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { Activity, ActivityResult } from "../domain.js";
 import { createDatabasePool } from "./database.js";
 import { ActivityRepository } from "./activityRepository.js";
+import { CollectibleRepository } from "./collectibleRepository.js";
 import { migrate } from "./migrate.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -9,6 +10,7 @@ const describePersistence = databaseUrl ? describe : describe.skip;
 const playerId = "00000000-0000-4000-8000-000000000099";
 const pool = databaseUrl ? createDatabasePool(databaseUrl) : undefined;
 const repository = pool ? new ActivityRepository(pool) : undefined;
+const collectibles = pool ? new CollectibleRepository(pool) : undefined;
 
 const activity = (id: string): Activity => ({
   id,
@@ -61,6 +63,16 @@ describePersistence("ActivityRepository", () => {
     await migrate(pool!);
     await pool!.query("TRUNCATE activity_events, activities, players CASCADE");
     await pool!.query("INSERT INTO players (id, display_name) VALUES ($1, $2)", [playerId, "Persistence test player"]);
+    await collectibles!.upsertMany([{
+      id: "historic-coin",
+      name: "Historic Coin",
+      type: "coin",
+      latitude: 55.6761,
+      longitude: 12.5683,
+      radiusMeters: 15,
+      value: 25,
+      primaryCategory: "peak"
+    }]);
   });
 
   afterAll(async () => {
@@ -88,6 +100,7 @@ describePersistence("ActivityRepository", () => {
       events: [expect.objectContaining({
         sourceId: "historic-coin",
         collectible: { name: "Historic Coin", type: "coin", rarity: "rare" },
+        collectibleCategory: "peak",
         value: 25,
         activityTimestamp: 1_790_090_187_586.4768
       })],

@@ -6,6 +6,11 @@
 > [`features/coming-soon`](../coming-soon/README.md). Sections mentioning external
 > routes, the `quest_external_routes` table, or Komoot are retained for historical
 > context only and no longer reflect the codebase.
+>
+> **Quest workflow update:** The user-authored collectible-only quest workflow
+> documented below has been replaced by curated `QuestTemplate`s, bbox-local
+> recommendations, and explicitly started persistent instances. See
+> [`features/default-quests`](../default-quests/README.md) for the current model.
 
 ## Goal
 
@@ -127,13 +132,16 @@ CREATE INDEX collectibles_bbox_index ON collectibles (latitude, longitude);
   `listWithinBounds(bounds, limit)`, `listByIds(ids)`, and `upsertMany(collectibles)`.
 - `src/coin.ts` keeps its validation logic and becomes the parser used by a new
   idempotent seed command `npm run seed:collectibles` (`src/persistence/seedCollectibles.ts`),
-  which reads `COLLECTIBLE_SEED_FILE` and upserts by `id`. Seeding never deletes rows.
+  which reads `COLLECTIBLE_SEED_FILE` and upserts collectibles by `id`; collectible
+  rows are never deleted by seeding.
   The command accepts an explicit file argument
   (`npm run seed:collectibles -- fixtures/world-v1-seed.json`) and reads either a
   plain collectible array or a seed document of the form
-  `{ "curator": { "displayName": … }, "collectibles": [ … ], "quests": [ … ] }`.
+  `{ "curator": { "displayName": … }, "collectibles": [ … ], "quests": [ … ], "removeQuests": [ … ] }`.
   Seed quests are owned by a curator player resolved by display name and are
   reconciled by title, so reseeding updates them in place instead of duplicating them.
+  The explicit `removeQuests` list deletes only quests with those titles owned by
+  that curator.
 - `activity_events.source_id` intentionally keeps no foreign key to `collectibles`:
   historical gameplay must survive catalog edits.
 - Request paths (`/api/world`, activity processing in `src/server.ts`) read the

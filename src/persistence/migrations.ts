@@ -502,6 +502,61 @@ export const migrations: Migration[] = [{
           FOREIGN KEY (created_by_player_id) REFERENCES players(id) ON DELETE CASCADE;
     `);
   }
+}, {
+  id: "023_quest_templates_and_instances",
+  async up(client) {
+    await client.query(`
+      CREATE TABLE quest_templates (
+        id TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version > 0),
+        title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        description TEXT NOT NULL CHECK (length(trim(description)) > 0),
+        recommended_level INTEGER NOT NULL CHECK (recommended_level > 0),
+        objectives JSONB NOT NULL CHECK (jsonb_typeof(objectives) = 'array'),
+        onboarding BOOLEAN NOT NULL DEFAULT false,
+        active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (id, version)
+      );
+      CREATE INDEX quest_templates_active_index ON quest_templates (active, id, version DESC);
+
+      CREATE TABLE quest_instances (
+        id UUID PRIMARY KEY,
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        template_id TEXT NOT NULL,
+        template_version INTEGER NOT NULL,
+        scope_hash TEXT NOT NULL,
+        title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        description TEXT NOT NULL,
+        recommended_level INTEGER NOT NULL CHECK (recommended_level > 0),
+        objectives JSONB NOT NULL CHECK (jsonb_typeof(objectives) = 'array'),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+        started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        completed_at TIMESTAMPTZ,
+        FOREIGN KEY (template_id, template_version)
+          REFERENCES quest_templates(id, version) ON DELETE RESTRICT,
+        UNIQUE (player_id, template_id, template_version, scope_hash),
+        CHECK ((status = 'active' AND completed_at IS NULL)
+          OR (status = 'completed' AND completed_at IS NOT NULL))
+      );
+      CREATE INDEX quest_instances_player_status_index
+        ON quest_instances (player_id, status, started_at DESC);
+
+      ALTER TABLE activity_events
+        ADD COLUMN collectible_category TEXT
+          CHECK (collectible_category IS NULL OR collectible_category IN
+            ('viewpoint', 'peak', 'castle', 'waterfall', 'place', 'mountain_pass'));
+      UPDATE activity_events AS events
+      SET collectible_category = collectibles.primary_category
+      FROM collectibles
+      WHERE events.source_id = collectibles.id
+        AND events.collectible_category IS NULL
+        AND collectibles.primary_category IS NOT NULL;
+      CREATE INDEX activity_events_category_history_index
+        ON activity_events (collectible_category, source_id);
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

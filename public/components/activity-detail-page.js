@@ -4,7 +4,6 @@ import { ReplayTab, mountReplayTab } from "./replay-tab.js";
 import { ActivitySummary } from "./activity-summary.js";
 import { ActivityTabs } from "./activity-tabs.js";
 import { VideoTab, mountVideoTab } from "./video-tab.js";
-import { mountQuestEditor } from "./world/quest-editor.js";
 
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -44,13 +43,6 @@ export const nearMissInputs = (activity) => {
 
 const ReplayUnavailable = () => '<p class="activity-detail-state" role="status">Replay data is unavailable for this legacy activity.</p>';
 
-/** A quest can only be created from an activity that carries a usable replay route. */
-export const canCreateQuestFromActivity = (activity) => replayInputs(activity) !== undefined;
-
-export const CreateQuestAction = (activity) => canCreateQuestFromActivity(activity)
-  ? '<button class="activity-detail-create-quest" type="button" data-create-quest>CREATE QUEST</button>'
-  : "";
-
 export const ActivityDetailPage = (activity, progress, selectedTab = "replay") => {
   const replay = replayInputs(activity);
   const tabContent = selectedTab === "video"
@@ -60,13 +52,11 @@ export const ActivityDetailPage = (activity, progress, selectedTab = "replay") =
     <section class="activity-detail-page" aria-labelledby="activity-detail-title">
       <div class="activity-detail-toolbar">
         <button class="activity-detail-back" type="button"><img src="/assets/activity-detail-back.svg" width="16" height="16" alt="">BACK</button>
-        ${CreateQuestAction(activity)}
       </div>
       ${ActivitySummary(activity)}
       ${ActivityProgress(activity, progress)}
       ${ActivityTabs(activity, selectedTab)}
       <div class="activity-detail-tab-content">${tabContent}</div>
-      <div class="activity-detail-quest-editor" data-quest-editor hidden></div>
     </section>
   `;
 };
@@ -94,7 +84,6 @@ export const mountActivityDetailPage = async (mountPoint, activityId, onBack) =>
       disposeReplay = undefined;
       mountPoint.innerHTML = ActivityDetailPage(activity, progress, selectedTab);
       mountPoint.querySelector(".activity-detail-back").addEventListener("click", onBack);
-      mountPoint.querySelector("[data-create-quest]")?.addEventListener("click", () => void openQuestEditor());
       mountPoint.querySelectorAll("[data-activity-tab]").forEach((tab) => {
         tab.addEventListener("click", () => render(tab.dataset.activityTab));
       });
@@ -112,29 +101,8 @@ export const mountActivityDetailPage = async (mountPoint, activityId, onBack) =>
         });
       }
     };
-    const openQuestEditor = async () => {
-      const host = mountPoint.querySelector("[data-quest-editor]");
-      if (!host) return;
-      host.hidden = false;
-      host.innerHTML = '<p class="activity-detail-state" role="status">Preparing quest draft...</p>';
+    const pollVideo = async () => {
       try {
-        const draft = await fetch(`/api/activities/${encodeURIComponent(activityId)}/quest-draft`).then(responseJson);
-        mountQuestEditor(host, {
-          draft,
-          onCancel: () => {
-            host.hidden = true;
-            host.innerHTML = "";
-          },
-          onSaved: (quest) => {
-            host.innerHTML = `<p class="activity-detail-state" role="status">Quest "<span data-user-content>${escapeHtml(quest.title)}</span>" ${quest.status === "published" ? "published" : "saved as a draft"}. Open World to see it.</p>`;
-          }
-        });
-      } catch (error) {
-        host.innerHTML = `<p class="activity-detail-state activity-detail-error" role="alert">${escapeHtml(error.message)}</p>`;
-      }
-    };
-
-    const pollVideo = async () => {      try {
         const response = await fetch(`/api/activities/${encodeURIComponent(activityId)}`);
         const updated = await responseJson(response);
         activity = updated;

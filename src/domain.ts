@@ -302,6 +302,7 @@ export interface PersistedActivityEvent {
   sourceId: string;
   type: GameEvent["type"];
   collectible: GameEvent["collectible"];
+  collectibleCategory?: CollectibleCategory;
   value: number;
   latitude: number;
   longitude: number;
@@ -368,6 +369,104 @@ export interface QuestDetail extends QuestSummary {
   route?: QuestRoute;
 }
 
+export type QuestObjectiveTemplate =
+  | {
+      type: "flowline_rule";
+      requiredCount: number;
+      minimumLengthMeters?: number;
+      minimumAverageSpeedMps?: number;
+      sameActivity?: boolean;
+    }
+  | {
+      type: "collectible_count";
+      requiredCount: number;
+      category: CollectibleCategory;
+    }
+  | {
+      type: "collectible_targets";
+      requiredCount: number;
+      category?: CollectibleCategory;
+    };
+
+export interface QuestTemplate {
+  id: string;
+  version: number;
+  title: string;
+  description: string;
+  recommendedLevel: number;
+  objectives: QuestObjectiveTemplate[];
+  onboarding?: boolean;
+}
+
+export interface QuestObjectiveTarget {
+  id: string;
+  name: string;
+}
+
+export type QuestObjective =
+  | {
+      id: string;
+      type: "flowline_rule";
+      requiredCount: number;
+      targets: QuestObjectiveTarget[];
+      minimumLengthMeters?: number;
+      minimumAverageSpeedMps?: number;
+      sameActivity?: boolean;
+    }
+  | {
+      id: string;
+      type: "collectible_count";
+      requiredCount: number;
+      category: CollectibleCategory;
+      targets: QuestObjectiveTarget[];
+    }
+  | {
+      id: string;
+      type: "collectible_targets";
+      requiredCount: number;
+      category?: CollectibleCategory;
+      targets: QuestObjectiveTarget[];
+    };
+
+export interface QuestObjectiveProgress {
+  completed: number;
+  required: number;
+  complete: boolean;
+}
+
+export interface QuestObjectiveState {
+  objective: QuestObjective;
+  progress: QuestObjectiveProgress;
+}
+
+export interface QuestSuggestion {
+  id: string;
+  templateId: string;
+  templateVersion: number;
+  title: string;
+  description: string;
+  recommendedLevel: number;
+  objectives: QuestObjective[];
+}
+
+export interface QuestInstance {
+  id: string;
+  suggestionId: string;
+  templateId: string;
+  templateVersion: number;
+  title: string;
+  description: string;
+  recommendedLevel: number;
+  status: "active" | "completed";
+  startedAt: string;
+  completedAt?: string;
+  objectives: QuestObjectiveState[];
+}
+
+export interface QuestInstancesResponse {
+  instances: QuestInstance[];
+}
+
 export interface QuestDraftSuggestion {
   sourceActivityId: string;
   title: string;
@@ -386,9 +485,9 @@ export interface QuestInput {
 }
 
 export interface WorldViewportResponse extends WorldSnapshot {
-  quests: QuestSummary[];
   truncated: boolean;
   fartleks: WorldFartlek[];
+  questSuggestions?: QuestSuggestion[];
 }
 
 export type JobState = "processing" | "awaiting_selection" | "rendering" | "succeeded" | "failed";

@@ -11,6 +11,7 @@ import { createCanonicalActivityProcessor } from "./activityProcessing.js";
 import { config } from "./config.js";
 import type { ActivityImportResult, ActivityVideo, Fartlek, HudTimeline, Job, MappedGameEvent, PersistedActivity, WorldFartlek } from "./domain.js";
 import { ActivityImportRejectedError, UserInputError } from "./errors.js";
+import { generateQuestSuggestions } from "./questTemplates.js";
 import { parseFitTrack, parseFitMetadata } from "./fit.js";
 import { extractGps5Times, mapToVideoSecond } from "./gpmf.js";
 import {
@@ -23,7 +24,11 @@ import { ActivityRepository } from "./persistence/activityRepository.js";
 import { CollectibleRepository } from "./persistence/collectibleRepository.js";
 import { FartlekRepository } from "./persistence/fartlekRepository.js";
 import { FartlekCompletionRepository } from "./persistence/fartlekCompletionRepository.js";
-import { QuestNotFoundError, QuestRepository } from "./persistence/questRepository.js";
+import {
+  QuestInstanceRepository,
+  QuestTemplateUnavailableError,
+  readQuestTemplateRows
+} from "./persistence/questInstanceRepository.js";
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
@@ -36,11 +41,6 @@ import { TokenCipher } from "./strava/tokenCipher.js";
 import { toWorldFartlek } from "./fartlek.js";
 import { createWorldSnapshot } from "./world.js";
 import { getBasemapConfig, getBasemapOrigins } from "./basemap.js";
-import {
-  createQuestRouteSnapshot,
-  parseQuestInput,
-  suggestQuestTitle
-} from "./quest.js";
 import { AuthService, EmailSender, type SessionUser } from "./auth.js";
 import { translateLandingTemplate } from "./landing/locales.js";
 
@@ -60,7 +60,10 @@ const activityRepository = new ActivityRepository(databasePool);
 const collectibleRepository = new CollectibleRepository(databasePool);
 const fartlekRepository = new FartlekRepository(databasePool);
 const fartlekCompletionRepository = new FartlekCompletionRepository(databasePool);
-const questRepository = new QuestRepository(databasePool);
+const questInstanceRepository = new QuestInstanceRepository(databasePool);
+await questInstanceRepository.replaceTemplates(
+  await readQuestTemplateRows(path.resolve("fixtures/quest-templates.json"))
+);
 const smtpConfig = config.smtpHost && config.smtpUser && config.smtpPassword && config.mailFrom
   ? {
       host: config.smtpHost,
@@ -873,18 +876,22 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
       const stats = await collectibleRepository.worldStats(discoveredSourceIds);
-      response.json({ collectibles: [], stats, quests: [], truncated: false, fartleks: [] });
+      response.json({ collectibles: [], stats, questSuggestions: [], truncated: false, fartleks: [] });
       return;
     }
-    const [viewport, quests, fartlekCandidates] = await Promise.all([
+    const [viewport, fartlekCandidates] = await Promise.all([
       collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      questRepository.listWithinBounds(playerId, bounds, discoveredSourceIds, config.worldViewportLimit),
       fartlekRepository.listWithinBounds(bounds)
     ]);
     const fartleks = await worldFartleksForPlayer(playerId, fartlekCandidates);
+    const world = createWorldSnapshot(viewport.collectibles, discoveredSourceIds);
     response.json({
-      ...createWorldSnapshot(viewport.collectibles, discoveredSourceIds),
-      quests,
+      ...world,
+      questSuggestions: generateQuestSuggestions({
+        templates: await questInstanceRepository.listActiveTemplates(),
+        collectibles: world.collectibles,
+        flowlines: fartleks
+      }),
       truncated: viewport.truncated,
       fartleks
     });
@@ -893,172 +900,51 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
   }
 });
 
-const loadCollectedIds = (playerId: string): Promise<string[]> =>
-  activityRepository.listDiscoveredCollectibleSourceIds(playerId);
-
-const assertKnownCollectibles = async (ids: string[]): Promise<void> => {
-  if (ids.length === 0) return;
-  const known = await collectibleRepository.listByIds(ids);
-  if (known.length !== ids.length) {
-    throw new UserInputError("A quest can only contain collectibles from the Staza catalog.");
-  }
-};
-
-const questRouteFromActivity = (activity: PersistedActivity): ReturnType<typeof createQuestRouteSnapshot> => {
-  const replay = activity.replay;
-  if (replay?.version !== 1 || !Array.isArray(replay.activity?.route)) return undefined;
-  return createQuestRouteSnapshot(replay.activity, config.questRouteMaxPoints);
-};
-
-const handleQuestError = (error: unknown, response: Response, next: NextFunction): void => {
-  if (error instanceof QuestNotFoundError) {
-    response.status(404).json({ error: "Quest not found." });
-    return;
-  }
-  next(error);
-};
-
-app.get("/api/activities/:id/quest-draft", requirePlayer, async (request: UploadRequest, response, next) => {
+app.get("/api/quest-instances", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
-    const playerId = request.user!.playerId;
-    const activity = await activityRepository.getActivity(playerId, String(request.params.id));
-    if (!activity) {
-      response.status(404).json({ error: "Activity not found." });
-      return;
+    response.json({ instances: await questInstanceRepository.listForPlayer(request.user!.playerId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/quest-instances/start", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  try {
+    const suggestionId = request.body?.suggestionId;
+    if (typeof suggestionId !== "string" || !/^[a-f0-9]{32}$/.test(suggestionId)) {
+      throw new UserInputError("A valid quest suggestion is required.");
     }
-    const route = questRouteFromActivity(activity);
-    if (!route) {
-      response.status(409).json({ error: "This activity has no route that can become a quest." });
-      return;
-    }
-    const [collected, encountered] = await Promise.all([
-      loadCollectedIds(playerId),
-      collectibleRepository.listByIds([...new Set(activity.events.map((event) => event.sourceId))])
+    const bounds = parseBoundsParameter(request.body?.bbox);
+    if (!bounds) throw new UserInputError("A map bounding box is required to start a local quest.");
+
+    const [viewport, flowlineCandidates] = await Promise.all([
+      collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
+      fartlekRepository.listWithinBounds(bounds)
     ]);
-    const collectedIds = new Set(collected);
-    response.json({
-      sourceActivityId: activity.id,
-      title: suggestQuestTitle(activity.type, activity.startedAt),
-      description: "",
-      activityType: activity.type,
-      ...(activity.distanceMeters === undefined ? {} : { distanceMeters: activity.distanceMeters }),
-      route,
-      collectibles: encountered.map((collectible) => ({
-        ...collectible,
-        found: collectedIds.has(collectible.id),
-        visibility: "visible" as const
-      }))
+    const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(request.user!.playerId);
+    const world = createWorldSnapshot(viewport.collectibles, discoveredSourceIds);
+    const flowlines = await worldFartleksForPlayer(request.user!.playerId, flowlineCandidates);
+    const candidates = generateQuestSuggestions({
+      templates: await questInstanceRepository.listActiveTemplates(),
+      collectibles: world.collectibles,
+      flowlines
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/quests", requirePlayer, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const collected = await loadCollectedIds(playerId);
-    response.json(await questRepository.listByCreator(playerId, collected));
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/quests", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const input = parseQuestInput(request.body, { requireTitle: true });
-    await assertKnownCollectibles(input.collectibleIds);
-    let route;
-    if (input.sourceActivityId) {
-      const activity = await activityRepository.getActivity(playerId, input.sourceActivityId);
-      if (!activity) {
-        response.status(404).json({ error: "Activity not found." });
-        return;
-      }
-      route = questRouteFromActivity(activity);
-      if (!route) {
-        response.status(409).json({ error: "This activity has no route that can become a quest." });
-        return;
-      }
+    const suggestion = candidates.find((candidate) => candidate.id === suggestionId);
+    if (!suggestion) {
+      response.status(409).json({ error: "This suggestion is no longer available in the selected map area." });
+      return;
     }
-    const id = await questRepository.create(playerId, {
-      title: input.title,
-      ...(input.description === undefined ? {} : { description: input.description }),
-      ...(input.sourceActivityId === undefined ? {} : { sourceActivityId: input.sourceActivityId }),
-      collectibleIds: input.collectibleIds,
-      ...(route === undefined ? {} : { route })
-    });
-    const collected = await loadCollectedIds(playerId);
-    response.status(201).json(await questRepository.get(playerId, id, collected));
+    const instanceId = await questInstanceRepository.start(request.user!.playerId, suggestion);
+    const instance = (await questInstanceRepository.listForPlayer(request.user!.playerId))
+      .find((item) => item.id === instanceId);
+    if (!instance) throw new Error("Started quest instance could not be loaded.");
+    response.json(instance);
   } catch (error) {
-    handleQuestError(error, response, next);
-  }
-});
-
-app.get("/api/quests/:id", requirePlayer, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const collected = await loadCollectedIds(playerId);
-    response.json(await questRepository.get(playerId, String(request.params.id), collected));
-  } catch (error) {
-    handleQuestError(error, response, next);
-  }
-});
-
-app.patch("/api/quests/:id", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const input = parseQuestInput(request.body, { requireTitle: false });
-    const collectibleIdsProvided = Array.isArray((request.body as Record<string, unknown>)?.collectibleIds);
-    if (collectibleIdsProvided) await assertKnownCollectibles(input.collectibleIds);
-    await questRepository.update(playerId, String(request.params.id), {
-      ...(input.title === undefined ? {} : { title: input.title }),
-      ...(input.description === undefined ? {} : { description: input.description }),
-      ...(collectibleIdsProvided ? { collectibleIds: input.collectibleIds } : {})
-    });
-    const collected = await loadCollectedIds(playerId);
-    response.json(await questRepository.get(playerId, String(request.params.id), collected));
-  } catch (error) {
-    handleQuestError(error, response, next);
-  }
-});
-
-app.post("/api/quests/:id/publish", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const questId = String(request.params.id);
-    const collected = await loadCollectedIds(playerId);
-    const quest = await questRepository.get(playerId, questId, collected);
-    if (!quest.isOwner) throw new QuestNotFoundError();
-    if (quest.collectibleCount === 0 && !quest.hasRoute) {
-      throw new UserInputError("A quest needs at least one collectible or a route before publishing.");
+    if (error instanceof QuestTemplateUnavailableError) {
+      response.status(409).json({ error: error.message });
+      return;
     }
-    await questRepository.setStatus(playerId, questId, "published");
-    response.json(await questRepository.get(playerId, questId, collected));
-  } catch (error) {
-    handleQuestError(error, response, next);
-  }
-});
-
-app.post("/api/quests/:id/unpublish", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const questId = String(request.params.id);
-    await questRepository.setStatus(playerId, questId, "draft");
-    const collected = await loadCollectedIds(playerId);
-    response.json(await questRepository.get(playerId, questId, collected));
-  } catch (error) {
-    handleQuestError(error, response, next);
-  }
-});
-
-app.delete("/api/quests/:id", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    await questRepository.remove(request.user!.playerId, String(request.params.id));
-    response.status(204).end();
-  } catch (error) {
-    handleQuestError(error, response, next);
+    next(error);
   }
 });
 

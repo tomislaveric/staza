@@ -1,0 +1,75 @@
+[
+  {
+    "id": "flowline-team-ride",
+    "version": 1,
+    "title": "Ride Together",
+    "description": "Complete four nearby Flowlines in one Activity.",
+    "recommendedLevel": 3,
+    "objectives": [
+      { "type": "flowline_rule", "requiredCount": 4, "sameActivity": true }
+    ]
+  },
+  {
+    "id": "long-flowlines",
+    "version": 1,
+    "title": "Long Lines",
+    "description": "Complete five Flowlines that are each at least 2 km long.",
+    "recommendedLevel": 4,
+    "objectives": [
+      { "type": "flowline_rule", "requiredCount": 5, "minimumLengthMeters": 2000 }
+    ]
+  },
+  {
+    "id": "fast-flowlines",
+    "version": 1,
+    "title": "Speed Seeker",
+    "description": "Complete three Flowlines with an average segment speed of at least 30 km/h.",
+    "recommendedLevel": 5,
+    "objectives": [
+      { "type": "flowline_rule", "requiredCount": 3, "minimumAverageSpeedMps": 8.3333333333 }
+    ]
+  },
+  {
+    "id": "peak-discoveries",
+    "version": 1,
+    "title": "Peak Seeker",
+    "description": "Discover three mountain peaks in this area.",
+    "recommendedLevel": 2,
+    "objectives": [
+      { "type": "collectible_count", "requiredCount": 3, "category": "peak" }
+    ]
+  },
+  {
+    "id": "landmarks-and-flowlines",
+    "version": 1,
+    "title": "Landmarks and Lines",
+    "description": "Discover two local landmarks and complete two Flowlines.",
+    "recommendedLevel": 3,
+    "objectives": [
+      { "type": "collectible_count", "requiredCount": 2, "category": "place" },
+      { "type": "flowline_rule", "requiredCount": 2 }
+    ]
+  },
+  {
+    "id": "local-place-collection",
+    "version": 1,
+    "title": "Local Explorer",
+    "description": "Visit a generated collection of four local places.",
+    "recommendedLevel": 2,
+    "objectives": [
+      { "type": "collectible_targets", "requiredCount": 4, "category": "place" }
+    ]
+  },
+  {
+    "id": "first-steps",
+    "version": 1,
+    "title": "First Steps",
+    "description": "Discover one nearby place and complete a Flowline to get started.",
+    "recommendedLevel": 1,
+    "onboarding": true,
+    "objectives": [
+      { "type": "collectible_targets", "requiredCount": 1, "category": "place" },
+      { "type": "flowline_rule", "requiredCount": 1 }
+    ]
+  }
+]

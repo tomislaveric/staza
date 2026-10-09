@@ -525,53 +525,10 @@
       "description": "Exhibition grounds south-west."
     }
   ],
-  "quests": [
-    {
-      "title": "Karlsruhe City Classics",
-      "description": "The fan-shaped city centre in one short loop: palace, pyramid, town hall and theatre.",
-      "collectibleIds": [
-        "schloss-karlsruhe",
-        "schlossgarten-fountain",
-        "marktplatz-pyramide",
-        "rathaus-karlsruhe",
-        "stadtkirche",
-        "staatstheater"
-      ]
-    },
-    {
-      "title": "Durlach and the Turmberg",
-      "description": "East out of the city to Durlach, then up to the Turmberg for the view over the Rhine plain.",
-      "collectibleIds": [
-        "pfinz-bridge",
-        "grotzingen-kirche",
-        "durlach-altstadt",
-        "karlsburg-durlach",
-        "turmbergbahn",
-        "turmberg"
-      ]
-    },
-    {
-      "title": "Rhine and Harbour",
-      "description": "Flat and fast along the Alb to the Rhine, the working harbour and the Maxau bridge.",
-      "collectibleIds": [
-        "guenther-klotz-anlage",
-        "alb-bridge-daxlanden",
-        "rappenwoert",
-        "rheinhafen",
-        "knielingen-rheinufer",
-        "rheinbruecke-maxau"
-      ]
-    },
-    {
-      "title": "Alb Valley Climb",
-      "description": "South along the Alb to Ettlingen and up the Wattkopf, the first proper climb of the Black Forest.",
-      "collectibleIds": [
-        "albtalbahnhof",
-        "oberwald-lodge",
-        "ettlingen-altstadt",
-        "ettlingen-schloss",
-        "wattkopf"
-      ]
-    }
+  "removeQuests": [
+    "Karlsruhe City Classics",
+    "Durlach and the Turmberg",
+    "Rhine and Harbour",
+    "Alb Valley Climb"
   ]
 }

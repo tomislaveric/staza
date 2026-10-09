@@ -225,10 +225,6 @@
 .fartlek-detail-stats dt { color: var(--text-muted); font-family: var(--font-display); font-size: 9px; letter-spacing: .12em; margin: 0; text-transform: uppercase; }
 .fartlek-detail-stats dd { color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; margin: 0; }
 
-.quest-badge { border-radius: 999px; font-family: var(--font-display); font-size: 9px; letter-spacing: .12em; padding: 3px 7px; text-transform: uppercase; }
-.quest-badge.is-draft { background: rgb(255 255 255 / 8%); color: var(--text-muted); }
-.quest-badge.is-complete { background: var(--accent-yellow); color: var(--world-map-background); }
-
 .quest-progress-track { background: rgb(255 255 255 / 10%); border-radius: 999px; display: block; height: 4px; overflow: hidden; width: 100%; }
 .quest-progress-track i { background: var(--accent-yellow); display: block; height: 100%; }
 
@@ -236,23 +232,6 @@
 .quest-detail-progress { display: grid; gap: 6px; margin: 0; }
 .quest-detail-progress strong { color: var(--text-primary); font-family: var(--font-display); font-size: 13px; }
 .quest-detail-progress small { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
-.quest-route-cta {
-  align-items: center;
-  background: var(--accent-yellow);
-  border-radius: 8px;
-  color: var(--world-map-background);
-  display: flex;
-  flex-direction: column;
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 700;
-  gap: 2px;
-  letter-spacing: .12em;
-  padding: 10px 12px;
-  text-align: center;
-  text-decoration: none;
-}
-.quest-route-cta small { font-size: 10px; font-weight: 500; letter-spacing: .02em; opacity: .75; text-transform: none; }
 .quest-collectibles { display: grid; gap: 2px; list-style: none; margin: 0; padding: 0; }
 .quest-collectible button { align-items: center; background: transparent; border: 0; color: var(--text-muted); cursor: pointer; display: flex; gap: 8px; padding: 6px 4px; text-align: left; width: 100%; }
 .quest-collectible.is-found button { color: var(--text-primary); }
@@ -268,26 +247,6 @@
 .activity-replay-fartlek-main .fartlek-swatch { width: 12px; }
 .activity-replay-fartlek-name { font-family: var(--font-display); font-size: 13px; }
 .activity-replay-fartlek-stats { color: var(--text-muted); display: flex; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; gap: 8px; }
-.quest-detail-owner-actions { display: flex; gap: 8px; }
-.quest-detail-owner-actions button {
-  background: transparent;
-  border: 1px solid var(--border-faint);
-  border-radius: 8px;
-  color: var(--text-muted);
-  cursor: pointer;
-  flex: 1;
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .12em;
-  padding: 8px;
-}
-.quest-detail-owner-actions button:hover { color: var(--text-primary); }
-.quest-detail-owner-actions .quest-delete-button { color: #ff9a9a; }
-.quest-detail-owner-actions .quest-delete-button:hover { border-color: #ff9a9a; color: #ff9a9a; }
-.quest-detail-owner-actions button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
-.quest-detail-owner-actions button:disabled { cursor: wait; opacity: .5; }
-
 /* Viewport-scoped stats sit directly under the map so they read as map context. */
 .world-stats {
   align-items: center;
@@ -315,91 +274,49 @@
 .quest-list { padding-top: 16px; }
 .quest-list h2 { color: var(--text-primary); font-family: var(--font-display); font-size: 18px; margin: 0 0 12px; }
 .quest-list ol { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); list-style: none; margin: 0; padding: 0; }
-.quest-card {
+.default-quest-list { padding-top: 16px; }
+.default-quest-list h2 { color: var(--text-primary); font-family: var(--font-display); font-size: 18px; margin: 0 0 12px; }
+.default-quest-list > ol { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); list-style: none; margin: 0; padding: 0; }
+.quest-suggestion-card article, .quest-instance-card article {
   background: var(--surface-background);
   border: 1px solid var(--border-faint);
   border-radius: var(--radius-card);
-  cursor: pointer;
   display: grid;
   gap: 8px;
   padding: 14px;
-  text-align: left;
-  width: 100%;
 }
-.quest-card.is-selected { border-color: var(--accent-yellow); }
+.quest-suggestion-card small, .quest-instance-card small {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.quest-suggestion-card ul, .quest-instance-card ul { display: grid; gap: 5px; list-style: none; margin: 0; padding: 0; }
+.quest-suggestion-card li li, .quest-instance-card li li { align-items: center; color: var(--text-primary); display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
+.quest-instance-card li li.is-complete > span { text-decoration: line-through; }
+.quest-suggestion-card button {
+  background: var(--accent-yellow);
+  border: 0;
+  border-radius: 6px;
+  color: var(--world-map-background);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 7px 12px;
+  text-transform: uppercase;
+}
+.quest-suggestion-card button:disabled { cursor: default; opacity: .55; }
+.quest-instance-card.is-completed article { border-color: var(--accent-yellow); }
+.quest-card-progress { border-top: 1px solid var(--border-faint); padding-top: 7px; }
+.default-quest-empty { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin: 0; }
 .quest-card-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
 .quest-card-head strong { color: var(--text-primary); font-family: var(--font-display); font-size: 14px; }
 .quest-card-description { color: var(--text-muted); font-size: 12px; line-height: 1.45; overflow: hidden; }
 .quest-card-progress { display: grid; gap: 5px; }
-.quest-card-progress small, .quest-card-meta small { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
-.quest-card-meta { display: flex; flex-wrap: wrap; gap: 8px; }
-.quest-list-empty { color: var(--text-muted); font-family: var(--font-mono); }
-.quest-list-empty p { color: var(--text-primary); font-family: var(--font-display); margin: 0 0 4px; }
-.quest-list-empty span { font-size: 12px; }
-
-.world-editor-host, .activity-detail-quest-editor { padding-top: 20px; }
-.quest-editor {
-  background: var(--surface-background);
-  border: 1px solid var(--border-faint);
-  border-radius: var(--radius-card);
-  display: grid;
-  gap: 14px;
-  padding: 20px;
-}
-.quest-editor header { align-items: center; display: flex; justify-content: space-between; }
-.quest-editor h2 { color: var(--text-primary); font-family: var(--font-display); font-size: 18px; margin: 0; }
-.quest-editor-close { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; font-size: 20px; line-height: 1; padding: 0 2px; }
-.quest-editor-field { display: grid; gap: 6px; }
-.quest-editor-field > span { color: var(--text-muted); font-family: var(--font-display); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
-.quest-editor input, .quest-editor textarea {
-  background: var(--world-map-background);
-  border: 1px solid var(--border-faint);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  font-size: 14px;
-  padding: 10px 12px;
-  width: 100%;
-}
-.quest-editor-collectibles { border: 1px solid var(--border-faint); border-radius: 8px; margin: 0; padding: 12px; }
-.quest-editor-collectibles legend { color: var(--text-muted); font-family: var(--font-display); font-size: 10px; letter-spacing: .16em; padding: 0 6px; text-transform: uppercase; }
-.quest-editor-collectibles legend small { letter-spacing: .02em; opacity: .7; text-transform: none; }
-.quest-editor-collectibles ul { display: grid; gap: 4px; list-style: none; margin: 0; max-height: 240px; overflow-y: auto; padding: 0; }
-.quest-editor-collectibles label { align-items: center; color: var(--text-primary); cursor: pointer; display: flex; font-family: var(--font-display); font-size: 13px; gap: 8px; }
-.quest-editor-collectibles label > span { flex: 1; }
-.quest-editor-collectibles label small { color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; }
-.quest-editor-collectibles input { width: auto; }
-.quest-editor-collectibles p { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin: 0; }
-.quest-editor-message { color: #ff9a9a; font-family: var(--font-mono); font-size: 12px; margin: 0; }
-.quest-editor footer { display: flex; gap: 8px; justify-content: flex-end; }
-.quest-editor footer button {
-  background: transparent;
-  border: 1px solid var(--border-faint);
-  border-radius: 8px;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .12em;
-  padding: 10px 14px;
-}
-.quest-editor footer [data-quest-publish] { background: var(--accent-yellow); border-color: var(--accent-yellow); color: var(--world-map-background); }
+.quest-card-progress small { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
 
 .activity-detail-toolbar { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
-.activity-detail-create-quest {
-  background: transparent;
-  border: 1px solid var(--border-faint);
-  border-radius: 999px;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .12em;
-  padding: 8px 14px;
-}
-.activity-detail-create-quest:hover { border-color: var(--accent-yellow); color: var(--accent-yellow); }
 
 .world-map-empty, .world-loading, .world-load-error {
   align-content: center;
@@ -423,7 +340,5 @@
   .world-detail-host { left: 10px; max-height: calc(100% - 110px); right: 10px; width: auto; }
   .world-stats { margin-inline: 6px; }
   .quest-list ol { grid-template-columns: 1fr; }
-  .quest-editor { padding: 16px; }
-  .quest-editor footer { flex-direction: column-reverse; }
-  .quest-editor footer button { min-height: 42px; width: 100%; }
+  .default-quest-list > ol { grid-template-columns: 1fr; }
 }

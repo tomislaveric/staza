@@ -1,164 +1,111 @@
 import { describe, expect, it } from "vitest";
-import { formatProgressPercent, questProgressLabel, QuestCard, QuestList, QuestStatusBadge } from "./quest-list.js";
-import { CreateRouteCta, QuestDetail } from "./quest-detail.js";
-import { buildQuestPayload, initialEditorState } from "./quest-editor.js";
+import { QuestList } from "./quest-list.js";
 import { markerLabel } from "./world-markers.js";
-import { QuestCollectibleRow } from "./quest-detail.js";
 import { CollectibleSwatch } from "./collectible-swatch.js";
 
-const progress = (collected, total) => ({
-  collected,
-  total,
-  ratio: total === 0 ? 0 : collected / total,
-  complete: total > 0 && collected === total
-});
-
-const quest = (overrides = {}) => ({
-  id: "quest-1",
-  title: "Best Viewpoints around Karlsruhe",
-  description: "Ridge loop",
-  status: "published",
-  createdBy: "Ada",
-  isOwner: false,
-  centerLatitude: 49,
-  centerLongitude: 8.4,
-  collectibleCount: 8,
-  hasRoute: true,
-  progress: progress(4, 8),
-  collectibles: [],
+const suggestion = (overrides = {}) => ({
+  id: "suggestion-1",
+  templateId: "local-explorer",
+  templateVersion: 1,
+  title: "Local Explorer",
+  description: "Visit local places and ride Flowlines.",
+  recommendedLevel: 2,
+  objectives: [
+    {
+      id: "places",
+      type: "collectible_targets",
+      requiredCount: 3,
+      category: "place",
+      targets: [
+        { id: "a", name: "Castle" },
+        { id: "b", name: "Bridge" },
+        { id: "c", name: "Tower" }
+      ]
+    },
+    {
+      id: "flowlines",
+      type: "flowline_rule",
+      requiredCount: 3,
+      minimumLengthMeters: 2000,
+      minimumAverageSpeedMps: 8.3333,
+      targets: [{ id: "f1", name: "One" }, { id: "f2", name: "Two" }, { id: "f3", name: "Three" }]
+    }
+  ],
   ...overrides
 });
 
-describe("quest progress presentation", () => {
-  it("renders progress as a visited count and a percentage", () => {
-    expect(questProgressLabel(progress(4, 8))).toBe("4 / 8 completed");
-    expect(formatProgressPercent(progress(4, 8))).toBe("50%");
+const instance = (overrides = {}) => ({
+  id: "instance-1",
+  suggestionId: "suggestion-1",
+  templateId: "local-explorer",
+  templateVersion: 1,
+  title: "Local Explorer",
+  description: "Visit local places and ride Flowlines.",
+  recommendedLevel: 2,
+  status: "active",
+  startedAt: "2026-04-01T10:00:00.000Z",
+  objectives: [
+    {
+      objective: suggestion().objectives[0],
+      progress: { completed: 1, required: 3, complete: false }
+    },
+    {
+      objective: suggestion().objectives[1],
+      progress: { completed: 2, required: 3, complete: false }
+    }
+  ],
+  ...overrides
+});
+
+describe("Quest suggestions and instances", () => {
+  it("renders bbox suggestions without tracked progress and offers explicit Start", () => {
+    const markup = QuestList([suggestion()], [], undefined);
+    expect(markup).toContain("Local recommendations");
+    expect(markup).toContain("data-quest-start=\"suggestion-1\"");
+    expect(markup).toContain("Start quest");
+    expect(markup).toContain("Visit Castle, Bridge, Tower");
+    expect(markup).toContain("Complete 3 Flowlines");
+    expect(markup).toContain("Level 2");
+    expect(markup).not.toContain("0 / 2 objectives");
   });
 
-  it("never divides by zero for a quest without collectibles", () => {
-    expect(questProgressLabel(progress(0, 0))).toBe("No collectibles yet");
-    expect(formatProgressPercent(progress(0, 0))).toBe("0%");
+  it("separates persistent active progress from ephemeral recommendations", () => {
+    const markup = QuestList([suggestion()], [instance()], undefined);
+    expect(markup).toContain("Your quests");
+    expect(markup).toContain("Active");
+    expect(markup).toContain("1 / 3");
+    expect(markup).toContain("2 / 3");
+    expect(markup).toContain("Started");
+    expect(markup).toContain("disabled");
   });
 
-  it("shows a draft badge for drafts and a complete badge only when finished", () => {
-    expect(QuestStatusBadge(quest({ status: "draft" }))).toContain("Draft");
-    expect(QuestStatusBadge(quest({ progress: progress(8, 8) }))).toContain("Complete");
-    expect(QuestStatusBadge(quest())).toBe("");
+  it("shows completed instance status and escapes quest-controlled content", () => {
+    const markup = QuestList([], [instance({
+      title: "<script>",
+      status: "completed",
+      objectives: instance().objectives.map((item) => ({
+        ...item,
+        progress: { ...item.progress, complete: true, completed: item.progress.required }
+      }))
+    })], undefined);
+    expect(markup).toContain("Complete");
+    expect(markup).not.toContain("<script>");
+    expect(markup).toContain("&lt;script&gt;");
   });
 
-  it("escapes creator-controlled quest text", () => {
-    const card = QuestCard(quest({ title: '<img src=x onerror="alert(1)">' }), undefined);
-    expect(card).not.toContain("<img src=x");
-    expect(card).toContain("&lt;img");
+  it("renders useful empty states without fabricating quests", () => {
+    const markup = QuestList([], [], undefined);
+    expect(markup).toContain("No curated quests match this map area yet.");
+    expect(markup).toContain("Start a local recommendation to begin tracking a quest.");
   });
 });
 
-describe("quests nearby list", () => {
-  it("shows an empty state instead of fabricating quests", () => {
-    const markup = QuestList([], undefined);
-    expect(markup).toContain("Nothing curated here yet.");
-    expect(markup).not.toContain("quest-card");
-  });
-
-  it("marks the selected quest", () => {
-    expect(QuestList([quest()], "quest-1")).toContain("is-selected");
-    expect(QuestList([quest()], "other")).not.toContain("is-selected");
-  });
-});
-
-describe("create route CTA", () => {
-  it("renders a Coming Soon placeholder button", () => {
-    const cta = CreateRouteCta();
-    expect(cta).toContain("CREATE ROUTE");
-    expect(cta).toContain("data-coming-soon");
-    expect(cta).toContain("Coming soon");
-  });
-
-  it("does not navigate to any external location", () => {
-    const cta = CreateRouteCta();
-    expect(cta).not.toContain("href");
-    expect(cta).toContain("<button");
-  });
-});
-
-describe("quest detail", () => {
-  const detailQuest = quest({
-    collectibles: [
-      { id: "a", name: "Turmberg", type: "landmark", rarity: "epic", value: 50, found: true },
-      { id: "b", name: "Rheinbrücke", type: "coin", value: 10, found: false }
-    ]
-  });
-
-  it("renders the Create route Coming Soon button", () => {
-    expect(QuestDetail(detailQuest)).toContain("CREATE ROUTE");
-    expect(QuestDetail(detailQuest)).toContain("data-coming-soon");
-  });
-
-  it("shows per-collectible completed state and subtle creator attribution", () => {
-    const markup = QuestDetail(detailQuest);
-    expect(markup).toContain("Completed");
-    expect(markup).toContain("Unvisited");
-    expect(markup).toContain("by Ada");
-    expect(markup).toContain("4 / 8 completed");
-  });
-
-  it("offers owner actions only to the creator", () => {
-    expect(QuestDetail(detailQuest)).not.toContain("data-quest-edit");
-    expect(QuestDetail(detailQuest)).not.toContain("data-quest-delete");
-    const owned = QuestDetail(quest({ isOwner: true, status: "draft", collectibles: [] }));
-    expect(owned).toContain("data-quest-edit");
-    expect(owned).toContain('data-quest-delete="quest-1"');
-    expect(owned).toContain("PUBLISH");
-  });
-
-  it("offers unpublishing for a published quest owned by the player", () => {
-    expect(QuestDetail(quest({ isOwner: true, status: "published" }))).toContain("UNPUBLISH");
-    expect(QuestDetail(quest({ isOwner: true, status: "published" }))).toContain('data-quest-delete="quest-1"');
-  });
-});
-
-describe("quest editor state", () => {
-  const collectibles = [
-    { id: "a", name: "A", type: "coin", value: 10, found: true },
-    { id: "b", name: "B", type: "coin", value: 10, found: false }
-  ];
-
-  it("preselects the suggested collectibles of an activity draft", () => {
-    const state = initialEditorState({ draft: { title: "Ride", collectibles, sourceActivityId: "activity-1" } });
-    expect(state.mode).toBe("create");
-    expect(state.selectedIds).toEqual(["a", "b"]);
-    expect(state.sourceActivityId).toBe("activity-1");
-  });
-
-  it("keeps the source activity reference and selected subset in the payload", () => {
-    const state = initialEditorState({ draft: { title: "Ride", collectibles, sourceActivityId: "activity-1" } });
-    state.selectedIds = ["b"];
-    expect(buildQuestPayload(state)).toEqual({
-      title: "Ride",
-      description: "",
-      collectibleIds: ["b"],
-      sourceActivityId: "activity-1"
-    });
-  });
-
-  it("loads an existing quest for editing without a source activity", () => {
-    const state = initialEditorState({
-      quest: quest({ isOwner: true, status: "draft", collectibles })
-    });
-    expect(state.mode).toBe("edit");
-    expect(state.questId).toBe("quest-1");
-    expect(buildQuestPayload(state).sourceActivityId).toBeUndefined();
-  });
-});
-
-describe("world markers", () => {
+describe("world marker vocabulary", () => {
   it("labels collectibles with visited state for assistive technology", () => {
     expect(markerLabel({ name: "Turmberg", found: true, rarity: "epic" })).toBe("Turmberg, visited, epic");
     expect(markerLabel({ name: "Turmberg", found: false })).toBe("Turmberg, unvisited");
   });
-});
 
-describe("shared marker vocabulary", () => {
   it("encodes discovery and rarity in one swatch", () => {
     expect(CollectibleSwatch({ visited: true })).toContain("is-visited");
     expect(CollectibleSwatch({ visited: false })).toContain("is-unvisited");
@@ -166,12 +113,5 @@ describe("shared marker vocabulary", () => {
     expect(CollectibleSwatch({ rarity: "rare" })).toContain("is-rare");
     expect(CollectibleSwatch({ category: "castle" })).toContain("is-castle");
     expect(CollectibleSwatch()).toContain("is-common");
-  });
-
-  it("uses the same swatch in quest collectible rows as on the map", () => {
-    const row = QuestCollectibleRow({ id: "castle-7", name: "Castle", found: true, rarity: "rare", type: "landmark" });
-
-    expect(row).toContain(CollectibleSwatch({ visited: true, rarity: "rare" }));
-    expect(row).not.toContain("collectible-type-icon");
   });
 });

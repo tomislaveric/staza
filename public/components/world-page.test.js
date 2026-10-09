@@ -215,7 +215,7 @@ describe("mounted World page interactions", () => {
     vi.unstubAllGlobals();
   });
 
-  const mount = async ({ isOwner = false } = {}) => {
+  const mount = async () => {
     const element = () => ({
       innerHTML: "",
       hidden: false,
@@ -232,16 +232,10 @@ describe("mounted World page interactions", () => {
       filter, { ...element(), dataset: { worldFilter: filter } }
     ]));
     const hosts = Object.fromEntries([
-      "map", "status", "stats", "quests", "detail", "collectible-list", "editor", "locate"
+      "map", "status", "stats", "quests", "detail", "collectible-list", "locate"
     ].map((name) => [`[data-world-${name}]`, element()]));
-    const questButton = { ...element(), dataset: { questCard: "quest-1" } };
-    const deleteButton = element();
-    const ownerButtons = [element(), element(), deleteButton];
+    const questButton = { ...element(), dataset: { questStart: "suggestion-1" }, disabled: false };
     const detail = hosts["[data-world-detail]"];
-    detail.querySelector = (selector) =>
-      selector === "[data-quest-delete]" && detail.innerHTML.includes("data-quest-delete") ? deleteButton : undefined;
-    detail.querySelectorAll = (selector) =>
-      selector === ".quest-detail-owner-actions button" && detail.innerHTML.includes("data-quest-delete") ? ownerButtons : [];
     hosts["[data-world-quests]"].querySelectorAll = () => [questButton];
     const mountPoint = {
       innerHTML: "",
@@ -249,25 +243,45 @@ describe("mounted World page interactions", () => {
       querySelectorAll: () => Object.values(buttons)
     };
     const stats = { totalCollectibles: 3, discoveredCount: 2, rareFinds: 0, epicFinds: 1, remainingCount: 1 };
-    let viewportSnapshot = { collectibles, fartleks, stats, truncated: false };
-    const questCollectible = { ...collectibles[0], id: "quest-only", name: "Quest viewpoint" };
-    const quest = {
-      id: "quest-1", title: "Viewpoint quest", status: "published", createdBy: "Ada", isOwner,
-      collectibleCount: 2, hasRoute: false,
-      progress: { collected: 2, total: 2, ratio: 1, complete: true },
-      collectibles: [questCollectible, collectibles[0]]
+    const questSuggestions = [{
+      id: "suggestion-1",
+      templateId: "first-steps",
+      templateVersion: 1,
+      title: "First Steps",
+      description: "Complete a Flowline and discover a collectible.",
+      recommendedLevel: 1,
+      objectives: [
+        { id: "flowline", type: "flowline_rule", requiredCount: 1, targets: [{ id: "fartlek-1", name: "Harbour Straight" }] },
+        { id: "collectible", type: "collectible_targets", requiredCount: 1, targets: [{ id: "common-found", name: "Common" }] }
+      ]
+    }];
+    let viewportSnapshot = { collectibles, fartleks, questSuggestions, stats, truncated: false };
+    let activeInstances = [];
+    const activeInstance = {
+      id: "instance-1",
+      suggestionId: "suggestion-1",
+      templateId: "first-steps",
+      templateVersion: 1,
+      title: "First Steps",
+      description: "Complete a Flowline and discover a collectible.",
+      recommendedLevel: 1,
+      status: "active",
+      startedAt: "2026-04-01T10:00:00.000Z",
+      objectives: [
+        { objective: questSuggestions[0].objectives[0], progress: { completed: 0, required: 1, complete: false } },
+        { objective: questSuggestions[0].objectives[1], progress: { completed: 0, required: 1, complete: false } }
+      ]
     };
-    let deleted = false;
     const fetchMock = vi.fn(async (url, options) => {
       let body;
       if (url === "/api/world/basemap") body = { styleUrl: "/style.json" };
       else if (url === "/api/world") body = { stats };
-      else if (url.startsWith("/api/world?bbox=")) body = { ...viewportSnapshot, quests: deleted ? [] : [quest] };
-      else if (url === "/api/quests/quest-1" && options?.method === "DELETE") {
-        deleted = true;
-        return { ok: true, status: 204 };
+      else if (url === "/api/quest-instances") body = { instances: activeInstances };
+      else if (url === "/api/quest-instances/start" && options?.method === "POST") {
+        activeInstances = [activeInstance];
+        body = activeInstance;
       }
-      else if (url === "/api/quests/quest-1") body = quest;
+      else if (url.startsWith("/api/world?bbox=")) body = viewportSnapshot;
       else throw new Error(`Unexpected fetch: ${url}`);
       return { ok: true, json: async () => body };
     });
@@ -281,7 +295,7 @@ describe("mounted World page interactions", () => {
     await mountWorldPage(mountPoint);
     return {
       click: (filter) => buttons[filter].handlers.click(),
-      buttons, map, fetchMock, questButton, deleteButton, ownerButtons,
+      buttons, map, fetchMock, questButton,
       callbacks: createMap.mock.calls[0][1],
       detail,
       status: hosts["[data-world-status]"],
@@ -297,6 +311,10 @@ describe("mounted World page interactions", () => {
 
   it("toggles a union, removes individual filters, and resets without refetching", async () => {
     const page = await mount();
+    expect(page.quests.innerHTML).toContain("Suggested quests");
+    expect(page.quests.innerHTML).toContain("First Steps");
+    expect(page.quests.innerHTML).toContain("Start quest");
+    expect(page.quests.innerHTML).not.toContain("0 / 2 objectives");
     expect(page.buttons.all.hidden).toBe(false);
     expect(page.buttons.waterfall.hidden).toBe(true);
     expect(page.buttons.place.hidden).toBe(true);
@@ -323,7 +341,7 @@ describe("mounted World page interactions", () => {
     expect(page.buttons.all.attributes["aria-pressed"]).toBe("true");
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
     expect(page.fartlekIds()).toEqual(fartleks.map((item) => item.id));
-    expect(page.fetchMock).toHaveBeenCalledTimes(3);
+    expect(page.fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("updates available filters and clears selections when the viewport changes", async () => {
@@ -367,71 +385,18 @@ describe("mounted World page interactions", () => {
     expect(page.detail.hidden).toBe(true);
   });
 
-  it("keeps active quest collectibles mapped and deduplicated across filter changes", async () => {
+  it("starts a bbox suggestion explicitly and shows its persistent instance", async () => {
     const page = await mount();
     page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Viewpoint quest"));
-    page.click("fartleks");
-    expect(page.collectibleIds()).toEqual(["quest-only", "common-found"]);
-    expect(page.detail.hidden).toBe(false);
-    page.click("found");
-    expect(page.collectibleIds()).toEqual(["common-found", "epic-found", "quest-only"]);
-    expect(page.map.setCollectibles.mock.lastCall[0].features.map((feature) => feature.properties.questRelated))
-      .toEqual([true, false, true]);
-    expect(page.map.fitTo).toHaveBeenCalledOnce();
-  });
-
-  it("confirms owner deletion, clears the route and detail, and refreshes nearby quests", async () => {
-    vi.stubGlobal("window", { confirm: vi.fn(() => true) });
-    const page = await mount({ isOwner: true });
-    page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("data-quest-delete"));
-    expect(page.collectibleIds()).toContain("quest-only");
-    page.deleteButton.handlers.click();
-    expect(page.ownerButtons.every((button) => button.disabled)).toBe(true);
-    page.deleteButton.handlers.click();
-    await vi.waitFor(() => expect(page.quests.innerHTML).not.toContain("Viewpoint quest"));
-    expect(window.confirm).toHaveBeenCalledOnce();
-    expect(page.fetchMock.mock.calls.filter(([, options]) => options?.method === "DELETE"))
-      .toEqual([["/api/quests/quest-1", { method: "DELETE" }]]);
-    expect(page.detail.hidden).toBe(true);
-    expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
-    expect(page.collectibleIds()).not.toContain("quest-only");
-    expect(page.fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/world?bbox="))).toHaveLength(2);
-  });
-
-  it("leaves the quest intact when deletion is cancelled", async () => {
-    vi.stubGlobal("window", { confirm: vi.fn(() => false) });
-    const page = await mount({ isOwner: true });
-    page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("data-quest-delete"));
-    page.deleteButton.handlers.click();
-    expect(page.fetchMock.mock.calls.some(([, options]) => options?.method === "DELETE")).toBe(false);
-    expect(page.detail.hidden).toBe(false);
-    expect(page.quests.innerHTML).toContain("Viewpoint quest");
-    expect(page.ownerButtons.every((button) => !button.disabled)).toBe(true);
-  });
-
-  it("shows delete failures without removing the quest and re-enables owner actions", async () => {
-    vi.stubGlobal("window", { confirm: vi.fn(() => true) });
-    const page = await mount({ isOwner: true });
-    page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("data-quest-delete"));
-    page.fetchMock.mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({ error: "Unable to delete this quest." }) });
-    page.deleteButton.handlers.click();
-    await vi.waitFor(() => expect(page.status.textContent).toBe("Unable to delete this quest."));
-    expect(page.status.hidden).toBe(false);
-    expect(page.detail.hidden).toBe(false);
-    expect(page.quests.innerHTML).toContain("Viewpoint quest");
-    expect(page.collectibleIds()).toContain("quest-only");
-    expect(page.ownerButtons.every((button) => !button.disabled)).toBe(true);
-  });
-
-  it("does not expose deletion for another user's published quest", async () => {
-    const page = await mount();
-    page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Viewpoint quest"));
-    expect(page.detail.innerHTML).not.toContain("data-quest-delete");
-    expect(page.deleteButton.handlers.click).toBeUndefined();
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Active"));
+    const startCall = page.fetchMock.mock.calls.find(([url]) => url === "/api/quest-instances/start");
+    expect(startCall[1].method).toBe("POST");
+    expect(JSON.parse(startCall[1].body)).toEqual({
+      suggestionId: "suggestion-1",
+      bbox: "8.00000,49.00000,11.00000,52.00000"
+    });
+    expect(page.quests.innerHTML).toContain("Active");
+    expect(page.quests.innerHTML).toContain("Started");
+    expect(page.fetchMock.mock.calls.filter(([url]) => url === "/api/quest-instances")).toHaveLength(2);
   });
 });

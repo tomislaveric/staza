@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ActivityDetailPage, canCreateQuestFromActivity, CreateQuestAction, nearMissInputs, replayInputs } from "./activity-detail-page.js";
+import { ActivityDetailPage, nearMissInputs, replayInputs } from "./activity-detail-page.js";
 import { activityDistanceLabel, activityDurationLabel } from "./activity-summary.js";
 
 const replay = (nearMisses = []) => ({
@@ -114,23 +114,12 @@ describe("Activity detail data transformation", () => {
     expect(page).not.toContain("The FIT activity and video do not overlap in time.");
   });
 
-  it("offers a quest only for an activity with a replayable route", () => {
-    const withRoute = { replay: replay() };
-    expect(canCreateQuestFromActivity(withRoute)).toBe(true);
-    expect(CreateQuestAction(withRoute)).toContain("CREATE QUEST");
-    expect(CreateQuestAction(withRoute)).toContain("data-create-quest");
-
-    const legacy = { distanceMeters: 1_000 };
-    expect(canCreateQuestFromActivity(legacy)).toBe(false);
-    expect(CreateQuestAction(legacy)).toBe("");
-  });
-
-  it("puts the quest action on the detail page without replacing existing actions", () => {
+  it("does not offer the retired activity-to-quest authoring workflow", () => {
     const page = ActivityDetailPage({
       id: "activity-1", distanceMeters: 1_000, durationSeconds: 600, xpEarned: 25, collectedCount: 1,
       replay: replay()
     }, { level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0 }, "replay");
-    expect(page).toContain("data-create-quest");
-    expect(page).toContain("data-quest-editor");
+    expect(page).not.toContain("data-create-quest");
+    expect(page).not.toContain("data-quest-editor");
   });
 });

@@ -16,6 +16,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   with a 2.5D Collect effect, reward, and generated audio Chime.
 - [Coming soon](features/coming-soon/README.md) — add a reusable multi-language
   "Coming Soon" annotation and remove the unsupported Komoot external-route feature.
+- [Default quests](features/default-quests/README.md) — generate bbox-local
+  recommendations from curated objective templates, then track explicitly
+  started quests independently of the map.
 - [Extend OSM/Wikidata Collectibles](features/extend-osm-wikidata-collectibles/README.md)
   — import named places, improve source retry/cache behavior, and trigger
   private-network DEV/PROD imports manually.
@@ -76,8 +79,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   — conservative Germany OSM extract ingestion, Wikidata enrichment, and scored manual
   World catalog import.
 - [Milestone 15 — Staza World v1](features/milestone-15-staza-world-v1/README.md)
-  — replace the mock World map with a real MapLibre basemap, viewport-driven
-  curated collectibles and quests, and quests created from completed activities.
+  — historical World foundation with a MapLibre map and curated collectible
+  catalog; quest behavior is now defined by [Default quests](features/default-quests/README.md).
 - [Milestone 16.0 — Staza Landing Page](features/milestone-16-0-staza-landing-page/README.md)
   — add an isolated public landing page at `/` while preserving the existing
   authenticated app under `/app` and `/sign-in`.
@@ -244,11 +247,14 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
 - **Telemetry:** This POC supports **GPS5** only. The correct GoPro chapter must cover the FIT coin-passage time.
 - **Collectibles:** The curated catalog lives in the PostgreSQL `collectibles`
   table. `fixtures/world-v1-seed.json` is the default seed document: run
-  `npm run seed:collectibles` to upsert its collectibles by `id` and publish its
-  curated quests (seeding never deletes rows). Pass a file explicitly, for
-  example `npm run seed:collectibles -- fixtures/other-world.json`, or set
-  `COLLECTIBLE_SEED_FILE` to change the default. A seed document holds a
-  `collectibles` list, an optional `curator`, and optional `quests`; a plain
+  `npm run seed:collectibles` to upsert its collectibles by `id` and synchronize
+  curated quest templates from `fixtures/quest-templates.json`. Templates are
+  also synchronized at server startup. Legacy quest rows are not seeded or
+  deleted except when explicitly named in the document's `removeQuests` list;
+  collectible rows are never deleted by seeding.
+  Pass a file explicitly, for example `npm run seed:collectibles -- fixtures/other-world.json`,
+  or set `COLLECTIBLE_SEED_FILE` to change the default. A seed document holds a
+  `collectibles` list, an optional `curator`, and optional `removeQuests`; a plain
   nonempty list of Collectibles is also accepted. Legacy entries with `id`,
   `latitude`, `longitude`, `radius_m`, and `value` normalize to a `coin` named
   after its ID. Rich entries may additionally set a nonblank `name`, `type`

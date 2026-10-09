@@ -237,6 +237,15 @@ export class QuestRepository {
     if (result.rowCount !== 1) throw new QuestNotFoundError();
   }
 
+  async removeOwnedByTitles(playerId: string, titles: string[]): Promise<number> {
+    if (titles.length === 0) return 0;
+    const result = await this.pool.query(
+      "DELETE FROM quests WHERE created_by_player_id = $1 AND title = ANY($2::text[])",
+      [playerId, titles]
+    );
+    return result.rowCount ?? 0;
+  }
+
   /** Published quests plus the requesting player's own drafts, centred inside the viewport. */
   async listWithinBounds(
     playerId: string,

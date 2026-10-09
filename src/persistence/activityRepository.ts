@@ -5,6 +5,7 @@ import type {
   Activity,
   ActivitySource,
   ActivityType,
+  CollectibleCategory,
   ActivityImportResult,
   ActivityHistoryItem,
   ActivityResult,
@@ -50,6 +51,7 @@ interface EventRow {
   collectible_name: string;
   collectible_rarity: PersistedActivityEvent["collectible"]["rarity"] | null;
   collectible_type: PersistedActivityEvent["collectible"]["type"];
+  collectible_category: CollectibleCategory | null;
 }
 
 interface VideoRow {
@@ -97,6 +99,7 @@ const mapEvent = (row: EventRow): PersistedActivityEvent => ({
     type: row.collectible_type,
     ...(row.collectible_rarity === null ? {} : { rarity: row.collectible_rarity })
   },
+  ...(row.collectible_category === null ? {} : { collectibleCategory: row.collectible_category }),
   value: row.value,
   latitude: row.latitude,
   longitude: row.longitude,
@@ -206,12 +209,21 @@ export class ActivityRepository {
       );
       if (inserted.rowCount === 0) throw new Error("Activity identity conflict.");
 
+      const eventSourceIds = [...new Set(result.events.map((event) => event.sourceId))];
+      const eventCategories = await client.query<{
+        id: string;
+        primary_category: CollectibleCategory | null;
+      }>(
+        "SELECT id, primary_category FROM collectibles WHERE id = ANY($1::text[])",
+        [eventSourceIds]
+      );
+      const categoriesBySourceId = new Map(eventCategories.rows.map((row) => [row.id, row.primary_category]));
       for (const event of result.events) {
         await client.query(
           `INSERT INTO activity_events (
             id, activity_id, source_id, event_type, activity_timestamp, value, latitude, longitude,
-            collectible_name, collectible_rarity, collectible_type
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            collectible_name, collectible_rarity, collectible_type, collectible_category
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [
             randomUUID(),
             activity.id,
@@ -223,7 +235,8 @@ export class ActivityRepository {
             event.longitude,
             event.collectible.name,
             event.collectible.rarity ?? null,
-            event.collectible.type
+            event.collectible.type,
+            categoriesBySourceId.get(event.sourceId) ?? null
           ]
         );
       }
@@ -557,7 +570,7 @@ export class ActivityRepository {
     if (activityResult.rowCount !== 1) throw new Error("Activity not found.");
     const events = await client.query<EventRow>(
       `SELECT id, source_id, event_type, activity_timestamp, value, latitude, longitude,
-              collectible_name, collectible_rarity, collectible_type
+              collectible_name, collectible_rarity, collectible_type, collectible_category
        FROM activity_events WHERE activity_id = $1 ORDER BY activity_timestamp, id`,
       [id]
     );
