@@ -240,7 +240,7 @@ input {
     margin: 3px 0 0;
 }
 .home-recent-activity {
-    padding-top: 24px;
+    padding-bottom: 24px;
 }
 .home-section-heading {
     align-items: center;
@@ -2926,3 +2926,7 @@ h3 {
         padding: 48px 20px;
     }
 }
+
+.home-active-quests { display: grid; gap: 12px; }
+.home-quest-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); list-style: none; margin: 0; padding: 0; }
+.home-find-quests { background: transparent; border: 0; color: var(--accent-yellow); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }

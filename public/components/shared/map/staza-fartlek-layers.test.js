@@ -42,7 +42,20 @@ describe("fartlekLayers", () => {
     const completed = ["==", ["get", "completed"], true];
 
     expect(lineLayer.paint["line-color"]).toEqual(["case", completed, "#e8b80a", "#6b9eac"]);
-    expect(lineLayer.paint["line-opacity"]).toEqual(["case", completed, 0.95, 0.82]);
+    expect(lineLayer.paint["line-opacity"]).toEqual([
+      "case",
+      ["==", ["get", "questRelated"], false],
+      0.35,
+      ["case", completed, 0.95, 0.82]
+    ]);
+  });
+
+  it("emphasizes all selected quest Flowlines in addition to a single selected Flowline", () => {
+    const selectedLayer = fartlekLayers().find((layer) => layer.id === "staza-fartleks-selected");
+    expect(selectedLayer.filter).toEqual(["any",
+      ["==", ["get", "selected"], true],
+      ["==", ["get", "questTarget"], true]
+    ]);
   });
 });
 
@@ -63,6 +76,16 @@ describe("fartlekFeature / fartleksToFeatureCollection", () => {
     const collection = fartleksToFeatureCollection([fartlek(), fartlek({ id: "fartlek-2" })]);
     expect(collection.type).toBe("FeatureCollection");
     expect(collection.features).toHaveLength(2);
+  });
+
+  it("marks every selected quest Flowline as related and targetable", () => {
+    const collection = fartleksToFeatureCollection(
+      [fartlek(), fartlek({ id: "fartlek-2" })],
+      { questTargetIds: ["fartlek-2"] }
+    );
+
+    expect(collection.features.map((feature) => feature.properties.questTarget)).toEqual([false, true]);
+    expect(collection.features.map((feature) => feature.properties.questRelated)).toEqual([false, true]);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HomeRecentActivity, homeViewModel } from "./home-page.js";
+import { HomeActiveQuests, HomeActiveQuestCard, HomeRecentActivity, activeQuestInstances, homeViewModel } from "./home-page.js";
 
 describe("Home data transformation", () => {
   const progress = { totalXp: 700, level: 4, currentLevelXp: 100, nextLevelXp: 400, progressToNextLevel: .25 };
@@ -35,5 +35,31 @@ describe("Home data transformation", () => {
     expect(HomeRecentActivity(activity)).toContain("data-replay-still");
     expect(HomeRecentActivity(activity)).not.toContain("activity-replay-play");
     expect(HomeRecentActivity(activity)).toContain('data-activity-id="latest"');
+  });
+});
+
+describe("Home active quests", () => {
+  const quest = (over = {}) => ({
+    id: "q1", status: "active", title: "<b>Run</b>", description: "A & B",
+    objectives: [{ progress: { complete: true } }, { progress: { complete: false } }], ...over
+  });
+
+  it("keeps only active instances", () => {
+    expect(activeQuestInstances([quest(), quest({ id: "q2", status: "completed" })]).map((q) => q.id)).toEqual(["q1"]);
+  });
+
+  it("renders escaped read-only cards with progress", () => {
+    const html = HomeActiveQuestCard(quest());
+    expect(html).toContain("&lt;b&gt;Run&lt;/b&gt;");
+    expect(html).toContain("A &amp; B");
+    expect(html).toContain("1 / 2 objectives");
+    expect(html).toContain("width: 50%");
+    expect(html).not.toContain("data-quest-cancel");
+  });
+
+  it("renders the empty state with a World control", () => {
+    const html = HomeActiveQuests([]);
+    expect(html).toContain("You don't have any quests active, find some in");
+    expect(html).toContain("data-home-find-quests");
   });
 });

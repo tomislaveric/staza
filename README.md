@@ -29,6 +29,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   generalize downstream Coin-passage records into typed game events.
 - [Highlight planner](features/highlight-planner/README.md) — formalize selected
   game-event timing into a deterministic render manifest before media rendering.
+- [Home Active Quests](features/home-active-quests/README.md) — list the player's
+  active quests on Home with read-only cards, and link to Staza World when none
+  are active.
 - [HUD](features/hud/README.md) — replace physical-scene Coin visuals with a
   compact, camera-independent route and event overlay.
 - [Job lifecycle operational robustness](features/job-lifecycle-operational-robustness/README.md)
@@ -98,6 +101,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   with transaction-safe exactly-once progression.
 - [Progression V1](features/progression-v1/README.md) — make each completed ride
   contribute XP toward a derived player level without adding persistence or rewards.
+- [Quest target clarity and shared World cards](features/quest-target-clarity-and-shared-world-cards/README.md) —
+  list concrete quest targets and requirements on shared World cards, and highlight
+  and frame all targets when a quest is selected.
 - [Quest UI optimization](features/quest-ui-optimization/README.md) — make quest
   cards easier to scan with World-style objective icons, consistent heights, and
   compact recommendation goal chips and completed Flowline speeds on active

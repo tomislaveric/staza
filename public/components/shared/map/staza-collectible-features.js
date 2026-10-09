@@ -37,6 +37,7 @@ export const collectibleFeature = (collectible, selectedId, questCollectibleIds)
     rarity: canonicalRarity(collectible.rarity) ?? DEFAULT_COLLECTIBLE_RARITY,
     visited: Boolean(collectible.found),
     selected: collectible.id === selectedId,
+    questTarget: Boolean(questCollectibleIds?.has(collectible.id)),
     questRelated: !questCollectibleIds || questCollectibleIds.has(collectible.id),
     activityPending: Boolean(collectible.activityPending),
     activityCollected: Boolean(collectible.activityCollected)
@@ -46,9 +47,9 @@ export const collectibleFeature = (collectible, selectedId, questCollectibleIds)
 /**
  * @param {object} [options]
  * @param {string} [options.selectedId]
- * @param {Iterable<string>} [options.questCollectibleIds] Ids of the active quest's
- *   collectibles. Presentational only: when omitted every feature counts as quest
- *   related, which keeps the default marker hierarchy unchanged.
+ * @param {Iterable<string>} [options.questCollectibleIds] Ids of the selected quest's
+ *   collectibles. Presentational only: selected targets are highlighted and unrelated
+ *   features are dimmed; when omitted the default marker hierarchy is unchanged.
  */
 export const collectiblesToFeatureCollection = (collectibles, { selectedId, questCollectibleIds } = {}) => {
   const questIds = questCollectibleIds ? new Set(questCollectibleIds) : undefined;

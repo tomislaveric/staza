@@ -887,15 +887,53 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     ]);
     const fartleks = await worldFartleksForPlayer(playerId, fartlekCandidates);
     const world = createWorldSnapshot(viewport.collectibles, discoveredSourceIds);
+    const questSuggestions = request.query.includeQuestSuggestions === "false"
+      ? []
+      : generateQuestSuggestions({
+          templates: await questInstanceRepository.listActiveTemplates(),
+          collectibles: world.collectibles,
+          flowlines: fartleks
+        });
     response.json({
       ...world,
-      questSuggestions: generateQuestSuggestions({
-        templates: await questInstanceRepository.listActiveTemplates(),
-        collectibles: world.collectibles,
-        flowlines: fartleks
-      }),
+      questSuggestions,
       truncated: viewport.truncated,
       fartleks
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/world/quest-targets", requirePlayer, async (request: UploadRequest, response, next) => {
+  try {
+    const readIds = (value: unknown, label: string): string[] => {
+      if (value === undefined) return [];
+      const values = typeof value === "string" ? [value] : value;
+      if (!Array.isArray(values) || values.some((id) => typeof id !== "string" || id.trim() === "")) {
+        throw new UserInputError(`${label} must be a list of nonblank ids.`);
+      }
+      return [...new Set(values)];
+    };
+    const collectibleIds = readIds(request.query.collectibleId, "Collectible ids");
+    const flowlineIds = readIds(request.query.flowlineId, "Flowline ids");
+    if (collectibleIds.length + flowlineIds.length === 0) {
+      throw new UserInputError("At least one quest target id is required.");
+    }
+    if (collectibleIds.length + flowlineIds.length > 100) {
+      throw new UserInputError("A maximum of 100 quest target ids can be loaded at once.");
+    }
+    const [collectibles, flowlines, discoveredSourceIds] = await Promise.all([
+      collectibleRepository.listByIds(collectibleIds),
+      fartlekRepository.listByIds(flowlineIds),
+      activityRepository.listDiscoveredCollectibleSourceIds(request.user!.playerId)
+    ]);
+    if (collectibles.length !== collectibleIds.length || flowlines.length !== flowlineIds.length) {
+      throw new UserInputError("One or more quest targets are no longer available.");
+    }
+    response.json({
+      collectibles: createWorldSnapshot(collectibles, discoveredSourceIds).collectibles,
+      flowlines: await worldFartleksForPlayer(request.user!.playerId, flowlines)
     });
   } catch (error) {
     next(error);

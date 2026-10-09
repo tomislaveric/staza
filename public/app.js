@@ -82,7 +82,7 @@ const mountPrivateApp = () => {
         mountSignIn();
       }
     });
-    else mountHomePage(shell.content, selectActivity);
+    else mountHomePage(shell.content, selectActivity, navigateScreen);
     shell.content.focus({ preventScroll: true });
   }
   function selectActivity(activityId) {

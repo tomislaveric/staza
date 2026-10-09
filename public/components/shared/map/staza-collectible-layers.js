@@ -23,6 +23,8 @@ const RARITY_RING = ["match", ["get", "rarity"],
   NEUTRAL_RING];
 
 const SELECTED = ["==", ["get", "selected"], true];
+const QUEST_TARGET = ["==", ["get", "questTarget"], true];
+const SELECTED_OR_QUEST_TARGET = ["any", SELECTED, QUEST_TARGET];
 const IS_RARE = ["!=", ["get", "rarity"], "common"];
 const ACTIVITY_COLLECTED = ["==", ["get", "activityCollected"], true];
 /** Visited state stays gold; unvisited circle markers retain semantic category colors. */
@@ -58,7 +60,7 @@ const collectibleLayer = () => ({
   source: COLLECTIBLE_SOURCE,
   filter: NO_CATEGORY_ICON,
   paint: {
-    "circle-radius": zoomSize(RADIUS_STOPS, SELECTED, 1.25),
+    "circle-radius": zoomSize(RADIUS_STOPS, SELECTED_OR_QUEST_TARGET, 1.25),
     "circle-color": ["case", FILLED, VISITED_FILL, CATEGORY_FILL],
     "circle-opacity": questOpacity(["case", FILLED, 1, 0.88]),
     "circle-stroke-width": zoomSize(STROKE_STOPS, IS_RARE, 1.4),
@@ -117,7 +119,7 @@ const selectedGlowLayer = () => ({
   id: COLLECTIBLE_SELECTED_GLOW_LAYER,
   type: "circle",
   source: COLLECTIBLE_SOURCE,
-  filter: SELECTED,
+  filter: SELECTED_OR_QUEST_TARGET,
   paint: {
     "circle-radius": zoomSize(SELECTED_GLOW_STOPS),
     "circle-color": SELECTED_ACCENT,
@@ -132,7 +134,7 @@ const selectedRingLayer = () => ({
   id: COLLECTIBLE_SELECTED_LAYER,
   type: "circle",
   source: COLLECTIBLE_SOURCE,
-  filter: SELECTED,
+  filter: SELECTED_OR_QUEST_TARGET,
   paint: {
     "circle-radius": zoomSize(SELECTED_RING_STOPS),
     "circle-color": SELECTED_ACCENT,

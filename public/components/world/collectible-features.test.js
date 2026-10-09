@@ -86,6 +86,16 @@ describe("collectible GeoJSON conversion", () => {
 
     expect(featureCollection.features.map((feature) => feature.properties.selected)).toEqual([false, true]);
   });
+
+  it("marks each selected quest collectible for map emphasis", () => {
+    const featureCollection = collectiblesToFeatureCollection(
+      [collectible({ id: "a" }), collectible({ id: "b" })],
+      { questCollectibleIds: ["b"] }
+    );
+
+    expect(featureCollection.features.map((feature) => feature.properties.questTarget)).toEqual([false, true]);
+    expect(featureCollection.features.map((feature) => feature.properties.questRelated)).toEqual([false, true]);
+  });
 });
 
 describe("collectible source data respects World filters", () => {

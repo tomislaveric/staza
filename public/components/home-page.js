@@ -118,10 +118,40 @@ export const HomeRecentActivity = (activity) => {
   `;
 };
 
+export const activeQuestInstances = (instances) => (instances ?? []).filter((instance) => instance.status === "active");
+
+export const HomeActiveQuestCard = (instance) => {
+  const objectives = instance.objectives ?? [];
+  const completed = objectives.filter((item) => item.progress.complete).length;
+  const ratio = objectives.length ? completed / objectives.length : 0;
+  return `
+    <li class="quest-instance-card is-${escapeHtml(instance.status)}">
+      <article>
+        <span class="quest-card-head"><strong data-user-content>${escapeHtml(instance.title)}</strong></span>
+        <span class="quest-card-description" data-user-content>${escapeHtml(instance.description)}</span>
+        <span class="quest-card-progress">
+          <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
+          <small>${completed} / ${objectives.length} objectives</small>
+        </span>
+      </article>
+    </li>
+  `;
+};
+
+export const HomeActiveQuests = (instances = []) => `
+  <section class="home-active-quests" aria-labelledby="active-quests-title">
+    <div class="home-section-heading"><h1 id="active-quests-title">ACTIVE QUESTS</h1></div>
+    ${instances.length
+      ? `<ol class="home-quest-list">${instances.map(HomeActiveQuestCard).join("")}</ol>`
+      : `<div class="home-empty-state"><p>You don't have any quests active, find some in <button type="button" class="home-find-quests" data-home-find-quests>Staza World</button></p></div>`}
+  </section>
+`;
+
 export const HomePage = (model) => `
   <section class="home-page">
     ${HomePlayerProgress(model)}
     ${HomeRecentActivity(model.latest)}
+    ${HomeActiveQuests(model.activeQuests)}
   </section>
 `;
 
@@ -131,24 +161,26 @@ const responseJson = async (response) => {
   return body;
 };
 
-export const mountHomePage = async (mountPoint, onSelectActivity) => {
+export const mountHomePage = async (mountPoint, onSelectActivity, onNavigate) => {
   mountPoint.innerHTML = '<section class="home-page"><p class="home-loading" role="status">Loading Home...</p></section>';
   try {
-    const [progress, history] = await Promise.all([
+    const [progress, history, questBody] = await Promise.all([
       fetch("/api/player/progress").then(responseJson),
-      fetch("/api/activities").then(responseJson)
+      fetch("/api/activities").then(responseJson),
+      fetch("/api/quest-instances").then(responseJson)
     ]);
     const activities = await Promise.all(history.map(async (activity) => ({
       ...activity,
       ...(await fetch(`/api/activities/${encodeURIComponent(activity.id)}`).then(responseJson))
     })));
-    const model = homeViewModel(progress, activities);
+    const model = { ...homeViewModel(progress, activities), activeQuests: activeQuestInstances(questBody.instances) };
     mountPoint.innerHTML = HomePage(model);
     const replay = replayForHome(model.latest);
     if (replay) {
       const basemap = await fetch("/api/world/basemap").then(responseJson).catch(() => undefined);
       mountReplayStillCard(mountPoint.querySelector(".home-activity-card"), replay, basemap);
     }
+    mountPoint.querySelector("[data-home-find-quests]")?.addEventListener("click", () => onNavigate?.("world"));
     mountPoint.querySelector("[data-activity-id]")?.addEventListener("click", () => {
       onSelectActivity?.(model.latest.id);
     });

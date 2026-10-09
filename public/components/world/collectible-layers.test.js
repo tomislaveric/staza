@@ -95,7 +95,10 @@ describe("collectible source and layers", () => {
     for (const id of [COLLECTIBLE_SELECTED_GLOW_LAYER, COLLECTIBLE_SELECTED_LAYER]) {
       const selected = map.getLayer(id);
       expect(selected.source).toBe(COLLECTIBLE_SOURCE);
-      expect(selected.filter).toEqual(["==", ["get", "selected"], true]);
+      expect(selected.filter).toEqual(["any",
+        ["==", ["get", "selected"], true],
+        ["==", ["get", "questTarget"], true]
+      ]);
     }
   });
 
@@ -138,6 +141,7 @@ describe("collectible source and layers", () => {
 
     const radius = JSON.stringify(map.getLayer(COLLECTIBLE_LAYER).paint["circle-radius"]);
     expect(radius).toContain("selected");
+    expect(radius).toContain("questTarget");
     expect(radius).toContain("case");
   });
 

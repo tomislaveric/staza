@@ -141,11 +141,17 @@ continues to identify its discovery globally.
   share a consistent-height layout, and use a quieter Start action. The
   recommendation grid initially shows up to three suggestions with an
   accessible show-more/show-less control; active and completed instances remain
-  visible. Unstarted recommendations show their title and description,
-  one inline icon-and-type chip per objective, and Start without repeating
-  objective prose. Active Flowline objectives show a completed/required count
-  and only completed Flowlines, each with its latest qualifying average speed.
-  Other objective groups and completed quests retain per-target status rows.
+  visible. Recommendations and instances use the same target-list card
+  structure. Each objective lists every eligible or frozen target beneath the
+  description and states the required count, such as completing five of seven
+  listed Flowlines. Length, average-speed, and same-Activity constraints remain
+  explicit. Started instances show progress for every listed target; completed
+  Flowlines include their qualifying average speed.
+- Selecting a recommendation or started/completed quest highlights all of its
+  collectible and Flowline targets on the World map and frames them together.
+  Target geometry is loaded by ID, independent of the current viewport and
+  filters; targets remain visible when normal World filters would hide them.
+  Start and Cancel remain separate from map selection.
 
 ## Acceptance criteria
 
@@ -165,6 +171,10 @@ continues to identify its discovery globally.
 - Rule-based, target-based, and mixed objectives work, including same-Activity,
   minimum Flowline length, segment-average-speed, category count, and named
   target-set requirements.
+- World recommendation and instance cards list all targets and clearly
+  distinguish required counts from available candidates.
+- Selecting a World quest highlights and frames all point and Flowline targets,
+  including those outside the current bbox and current filter set.
 - Cardinality rules prevent a single collectible or other World object from
   appearing as a normal Quest.
 - Existing Quest CRUD/publish behavior is replaced without silently deleting

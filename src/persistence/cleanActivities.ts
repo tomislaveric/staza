@@ -30,9 +30,9 @@ const cleanActivities = async (): Promise<void> => {
   const prompt = createInterface({ input: stdin, output: stdout });
   try {
     const answer = await prompt.question(
-      `This removes all activities for all players from ${databaseHost}, resets all XP and journey dates, and deletes their video files. Collectibles, Fartleks, and quests are preserved. Type "delete all activities" to continue: `
+      `This removes all activities and active quests for all players from ${databaseHost}, resets all XP and journey dates, and deletes their video files. Collectibles, Fartleks, and completed quests are preserved. Type "delete" to continue: `
     );
-    if (answer !== "delete all activities") {
+    if (answer !== "delete") {
       console.log("Activity cleanup cancelled.");
       return;
     }
@@ -45,6 +45,7 @@ const cleanActivities = async (): Promise<void> => {
     await migrate(pool);
     const client = await pool.connect();
     let activityCount = 0;
+    let activeQuestCount = 0;
     let mediaDirectories: string[] = [];
     try {
       await client.query("BEGIN");
@@ -57,6 +58,8 @@ const cleanActivities = async (): Promise<void> => {
 
       const deleted = await client.query("DELETE FROM activities");
       activityCount = deleted.rowCount ?? 0;
+      const deletedQuests = await client.query("DELETE FROM quest_instances WHERE status = 'active'");
+      activeQuestCount = deletedQuests.rowCount ?? 0;
       await client.query("UPDATE players SET total_xp = 0, journey_started_at = NULL");
       await client.query("COMMIT");
     } catch (error) {
@@ -67,7 +70,7 @@ const cleanActivities = async (): Promise<void> => {
     }
 
     await Promise.all(mediaDirectories.map((directory) => rm(directory, { recursive: true, force: true })));
-    console.log(`Deleted ${activityCount} activities and reset XP and journey dates for all players.`);
+    console.log(`Deleted ${activityCount} activities and ${activeQuestCount} active quests, and reset XP and journey dates for all players.`);
   } finally {
     await pool.end();
   }

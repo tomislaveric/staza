@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { availableWorldFilters, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
+import { availableWorldFilters, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mappedWorldFartleks, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
 import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import * as worldMarkers from "./world/world-markers.js";
 import * as worldMap from "./world/world-map.js";
@@ -108,6 +108,11 @@ describe("Fartlek filtering", () => {
     expect(filteredWorldCollectibles(collectibles, ["fartleks", "unfound", "castle"]).map((item) => item.id))
       .toEqual(["rare-unfound", "epic-found"]);
   });
+
+  it("keeps selected quest Flowlines on the map regardless of the active filters", () => {
+    expect(mappedWorldFartleks(fartleks, ["found"], [fartleks[0], fartleks[1]]))
+      .toEqual(fartleks);
+  });
 });
 
 describe("World map rendering is MapLibre native", () => {
@@ -212,12 +217,11 @@ describe("World filter controls", () => {
     const css = readFileSync(new URL("../styles/world.css", import.meta.url), "utf8");
     expect(css).toContain("grid-auto-rows: 1fr;");
     expect(css).toContain("height: 100%;");
-    expect(css).toMatch(/\.quest-suggestion-card button\s*\{[^}]*background:\s*transparent/s);
-    expect(css).toContain(".quest-suggestion-card button:focus-visible");
+    expect(css).toMatch(/\.quest-suggestion-card button\[data-quest-start\]\s*\{[^}]*background:\s*transparent/s);
+    expect(css).toContain(".quest-card-select:focus-visible");
     expect(css).toContain(".quest-suggestions-toggle:focus-visible");
-    expect(css).toMatch(/\.quest-suggestion-goals\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap/s);
-    expect(css).toMatch(/\.quest-suggestion-card article\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(24px,\s*1fr\) auto;[^}]*min-height:\s*0/s);
-    expect(css).toMatch(/\.quest-instance-card article\s*\{[^}]*gap:\s*6px;[^}]*grid-template-rows:\s*auto auto auto auto;[^}]*min-height:\s*0;[^}]*padding:\s*12px/s);
+    expect(css).toMatch(/\.quest-objective-groups\s*\{[^}]*display:\s*grid/s);
+    expect(css).toMatch(/\.quest-suggestion-card article, \.quest-instance-card article\s*\{[^}]*gap:\s*6px;[^}]*min-height:\s*0;[^}]*padding:\s*12px/s);
     expect(css).toMatch(/\.quest-card-head\s*\{[^}]*align-items:\s*center/s);
     expect(css).toMatch(/\.quest-instance-cancel\s*\{[^}]*height:\s*32px;[^}]*width:\s*32px/s);
   });
@@ -229,7 +233,7 @@ describe("mounted World page interactions", () => {
     vi.unstubAllGlobals();
   });
 
-  const mount = async (suggestionCount = 1) => {
+  const mount = async (suggestionCount = 1, withRemoteQuest = false) => {
     const element = () => ({
       innerHTML: "",
       hidden: false,
@@ -254,6 +258,14 @@ describe("mounted World page interactions", () => {
       dataset: { questCancel: "instance-1" },
       disabled: false
     };
+    const questSelectButton = {
+      ...element(),
+      dataset: { questSelect: "suggestion:suggestion-1" }
+    };
+    const remoteQuestSelectButton = {
+      ...element(),
+      dataset: { questSelect: "instance:instance-remote" }
+    };
     const questSuggestionsToggle = element();
     const detail = hosts["[data-world-detail]"];
     const questHost = hosts["[data-world-quests]"];
@@ -261,7 +273,8 @@ describe("mounted World page interactions", () => {
       && questHost.innerHTML.includes("data-quest-suggestions-toggle") ? questSuggestionsToggle : undefined;
     questHost.querySelectorAll = (selector) => selector === "[data-quest-start]"
       ? [questButton]
-      : selector === "[data-quest-cancel]" ? [questCancelButton] : [];
+      : selector === "[data-quest-cancel]" ? [questCancelButton]
+        : selector === "[data-quest-select]" ? [questSelectButton, remoteQuestSelectButton] : [];
     const mountPoint = {
       innerHTML: "",
       querySelector: (selector) => hosts[selector],
@@ -310,10 +323,51 @@ describe("mounted World page interactions", () => {
         }
       ]
     };
+    const remoteCollectible = {
+      ...collectibles[0],
+      id: "remote-place",
+      name: "Remote Place",
+      latitude: 55,
+      longitude: 12
+    };
+    const remoteFlowline = {
+      ...fartleks[0],
+      id: "remote-flowline",
+      name: "Remote Flowline",
+      geometry: { type: "LineString", coordinates: [[12, 55], [12.2, 55.2]] }
+    };
+    const remoteInstance = {
+      ...activeInstance,
+      id: "instance-remote",
+      objectives: [
+        {
+          objective: {
+            ...questSuggestions[0].objectives[0],
+            targets: [{ id: remoteFlowline.id, name: remoteFlowline.name }]
+          },
+          progress: { completed: 0, required: 1, complete: false },
+          targetProgress: [{ id: remoteFlowline.id, name: remoteFlowline.name, complete: false }]
+        },
+        {
+          objective: {
+            ...questSuggestions[0].objectives[1],
+            targets: [{ id: remoteCollectible.id, name: remoteCollectible.name }]
+          },
+          progress: { completed: 0, required: 1, complete: false },
+          targetProgress: [{ id: remoteCollectible.id, name: remoteCollectible.name, complete: false }]
+        }
+      ]
+    };
+    if (withRemoteQuest) activeInstances = [remoteInstance];
     const fetchMock = vi.fn(async (url, options) => {
       let body;
       if (url === "/api/world/basemap") body = { styleUrl: "/style.json" };
       else if (url === "/api/world") body = { stats };
+      else if (url.startsWith("/api/world/quest-targets?")) {
+        body = url.includes("remote-place")
+          ? { collectibles: [remoteCollectible], flowlines: [remoteFlowline] }
+          : { collectibles: [collectibles[0]], flowlines: [fartleks[0]] };
+      }
       else if (url === "/api/quest-instances") body = { instances: activeInstances };
       else if (url === "/api/quest-instances/start" && options?.method === "POST") {
         activeInstances = [activeInstance];
@@ -322,7 +376,9 @@ describe("mounted World page interactions", () => {
       else if (url === "/api/quest-instances/instance-1" && options?.method === "DELETE") {
         activeInstances = [];
       }
-      else if (url.startsWith("/api/world?bbox=")) body = viewportSnapshot;
+      else if (url.startsWith("/api/world?bbox=")) body = url.includes("includeQuestSuggestions=false")
+        ? { ...viewportSnapshot, questSuggestions: [] }
+        : viewportSnapshot;
       else throw new Error(`Unexpected fetch: ${url}`);
       return { ok: true, json: async () => body };
     });
@@ -337,6 +393,8 @@ describe("mounted World page interactions", () => {
     return {
       click: (filter) => buttons[filter].handlers.click(),
       buttons, map, fetchMock, questButton, questCancelButton, questSuggestionsToggle,
+      questSelectButton,
+      remoteQuestSelectButton,
       callbacks: createMap.mock.calls[0][1],
       detail,
       status: hosts["[data-world-status]"],
@@ -344,6 +402,7 @@ describe("mounted World page interactions", () => {
         viewportSnapshot = snapshot;
         createMap.mock.calls[0][1].onViewportChange(map.getBounds());
       },
+      get viewportSnapshot() { return viewportSnapshot; },
       quests: hosts["[data-world-quests]"],
       collectibleIds: () => map.setCollectibles.mock.lastCall[0].features.map((feature) => feature.id),
       fartlekIds: () => map.setFartleks.mock.lastCall[0].features.map((feature) => feature.id)
@@ -424,6 +483,83 @@ describe("mounted World page interactions", () => {
     expect(page.detail.hidden).toBe(false);
     page.click("castle");
     expect(page.detail.hidden).toBe(true);
+  });
+
+  it("highlights all selected quest targets, includes filtered targets, and frames them together", async () => {
+    const page = await mount();
+    page.click("rare");
+    page.questSelectButton.handlers.click();
+
+    await vi.waitFor(() => expect(page.map.fitTo).toHaveBeenCalled());
+    expect(page.fetchMock.mock.calls.some(([url]) => url
+      === "/api/world/quest-targets?collectibleId=common-found&flowlineId=fartlek-1")).toBe(true);
+    expect(page.map.setCollectibles.mock.lastCall[0].features
+      .find((feature) => feature.id === "common-found").properties).toMatchObject({
+      questTarget: true,
+      questRelated: true
+    });
+    expect(page.map.setCollectibles.mock.lastCall[0].features
+      .find((feature) => feature.id === "rare-unfound").properties.questRelated).toBe(false);
+    expect(page.map.setFartleks.mock.lastCall[0].features
+      .find((feature) => feature.id === "fartlek-1").properties).toMatchObject({
+      questTarget: true,
+      questRelated: true
+    });
+    expect(page.map.fitTo).toHaveBeenCalledWith([
+      { latitude: 49, longitude: 8 },
+      { latitude: 49, longitude: 8 },
+      { latitude: 49.01, longitude: 8.01 }
+    ]);
+    expect(page.quests.innerHTML).toContain('aria-pressed="true"');
+
+    page.questSelectButton.handlers.click();
+    expect(page.map.setCollectibles.mock.lastCall[0].features.map((feature) => feature.id)).toEqual(["rare-unfound"]);
+    expect(page.map.setFartleks.mock.lastCall[0].features).toEqual([]);
+    expect(page.quests.innerHTML).toContain('aria-pressed="false"');
+  });
+
+  it("loads and frames frozen quest targets outside the current viewport", async () => {
+    const page = await mount(1, true);
+    page.remoteQuestSelectButton.handlers.click();
+
+    await vi.waitFor(() => expect(page.map.fitTo).toHaveBeenCalled());
+    expect(page.fetchMock.mock.calls.some(([url]) => url.includes("collectibleId=remote-place")
+      && url.includes("flowlineId=remote-flowline"))).toBe(true);
+    expect(page.map.setCollectibles.mock.lastCall[0].features
+      .find((feature) => feature.id === "remote-place").properties.questTarget).toBe(true);
+    expect(page.map.setFartleks.mock.lastCall[0].features
+      .find((feature) => feature.id === "remote-flowline").properties.questTarget).toBe(true);
+    expect(page.map.fitTo).toHaveBeenCalledWith([
+      { latitude: 55, longitude: 12 },
+      { latitude: 55, longitude: 12 },
+      { latitude: 55.2, longitude: 12.2 }
+    ]);
+  });
+
+  it("does not regenerate quest recommendations while selected and refreshes after deselection", async () => {
+    const page = await mount();
+    page.questSelectButton.handlers.click();
+    await vi.waitFor(() => expect(page.map.fitTo).toHaveBeenCalled());
+
+    page.changeViewport({
+      ...page.viewportSnapshot,
+      questSuggestions: [{
+        ...page.viewportSnapshot.questSuggestions[0],
+        id: "new-area-suggestion",
+        title: "New viewport recommendation"
+      }]
+    });
+    await vi.waitFor(() => expect(page.fetchMock.mock.calls.some(([url]) =>
+      url.startsWith("/api/world?bbox=") && url.includes("includeQuestSuggestions=false")
+    )).toBe(true), { timeout: 2000 });
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("First Steps 1"));
+    expect(page.quests.innerHTML).not.toContain("New viewport recommendation");
+
+    page.questSelectButton.handlers.click();
+    await vi.waitFor(() => expect(page.fetchMock.mock.calls.some(([url]) =>
+      url.startsWith("/api/world?bbox=") && !url.includes("includeQuestSuggestions=false")
+    )).toBe(true));
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("New viewport recommendation"));
   });
 
   it("starts a bbox suggestion explicitly and shows its persistent instance", async () => {

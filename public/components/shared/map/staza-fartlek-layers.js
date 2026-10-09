@@ -24,6 +24,8 @@ const UNCOMPLETED_OPACITY = 0.82;
 const COMPLETED_OPACITY = 0.95;
 
 const SELECTED = ["==", ["get", "selected"], true];
+const QUEST_TARGET = ["==", ["get", "questTarget"], true];
+const SELECTED_OR_QUEST_TARGET = ["any", SELECTED, QUEST_TARGET];
 const COMPLETED = ["==", ["get", "completed"], true];
 
 const lineWidth = (stops) => ["interpolate", ["linear"], ["zoom"], ...stops.flatMap(([zoom, value]) => [zoom, value])];
@@ -52,7 +54,12 @@ const fartlekLineLayer = () => ({
   layout: { "line-cap": "round", "line-join": "round" },
   paint: {
     "line-color": ["case", COMPLETED, COMPLETED_LINE, UNCOMPLETED_LINE],
-    "line-opacity": ["case", COMPLETED, COMPLETED_OPACITY, UNCOMPLETED_OPACITY],
+    "line-opacity": [
+      "case",
+      ["==", ["get", "questRelated"], false],
+      0.35,
+      ["case", COMPLETED, COMPLETED_OPACITY, UNCOMPLETED_OPACITY]
+    ],
     "line-width": lineWidth(LINE_WIDTH_STOPS)
   }
 });
@@ -62,7 +69,7 @@ const fartlekSelectedLayer = () => ({
   id: FARTLEK_SELECTED_LAYER,
   type: "line",
   source: FARTLEK_SOURCE,
-  filter: SELECTED,
+  filter: SELECTED_OR_QUEST_TARGET,
   layout: { "line-cap": "round", "line-join": "round" },
   paint: {
     "line-color": SELECTED_ACCENT,
@@ -118,7 +125,7 @@ export const setFartlekData = (map, featureCollection) => {
 };
 
 /** Converts a World Fartlek into a canonical GeoJSON LineString feature. */
-export const fartlekFeature = (fartlek, selectedId) => ({
+export const fartlekFeature = (fartlek, selectedId, questTargetIds) => ({
   type: "Feature",
   id: fartlek.id,
   geometry: fartlek.geometry,
@@ -126,14 +133,19 @@ export const fartlekFeature = (fartlek, selectedId) => ({
     id: fartlek.id,
     name: fartlek.name,
     completed: Boolean(fartlek.completed),
-    selected: fartlek.id === selectedId
+    selected: fartlek.id === selectedId,
+    questTarget: Boolean(questTargetIds?.has(fartlek.id)),
+    questRelated: !questTargetIds || questTargetIds.has(fartlek.id)
   }
 });
 
-export const fartleksToFeatureCollection = (fartleks, { selectedId } = {}) => ({
-  type: "FeatureCollection",
-  features: fartleks.map((fartlek) => fartlekFeature(fartlek, selectedId))
-});
+export const fartleksToFeatureCollection = (fartleks, { selectedId, questTargetIds } = {}) => {
+  const questIds = questTargetIds ? new Set(questTargetIds) : undefined;
+  return {
+    type: "FeatureCollection",
+    features: fartleks.map((fartlek) => fartlekFeature(fartlek, selectedId, questIds))
+  };
+};
 
 const featureFartlekId = (event) => event?.features?.[0]?.properties?.id;
 

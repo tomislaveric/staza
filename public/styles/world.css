@@ -286,29 +286,26 @@
   border-radius: var(--radius-card);
   box-sizing: border-box;
   display: grid;
+  cursor: pointer;
   gap: 8px;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   height: 100%;
   min-height: 232px;
   padding: 14px;
 }
-.quest-suggestion-card article { gap: 6px; grid-template-rows: auto auto minmax(24px, 1fr) auto; min-height: 0; padding: 12px; }
-.quest-instance-card article { gap: 6px; grid-template-rows: auto auto auto auto; min-height: 0; padding: 12px; }
+.quest-suggestion-card article, .quest-instance-card article { gap: 6px; min-height: 0; padding: 12px; }
 .quest-suggestion-card small, .quest-instance-card small {
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 10px;
 }
-.quest-instance-card article > ul { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
-.quest-suggestion-goals { align-items: center; display: flex; flex-wrap: wrap; gap: 6px 12px; list-style: none; margin: 0; padding: 0; }
-.quest-suggestion-goal { align-items: center; color: var(--text-muted); display: inline-flex; font-family: var(--font-body); font-size: 11px; gap: 6px; }
-.quest-suggestion-goal .collectible-swatch { flex: none; }
-.quest-suggestion-goal .fartlek-swatch { flex: none; }
+.quest-objective-groups { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
 .quest-objective-group { display: grid; gap: 5px; min-width: 0; }
 .quest-objective-group-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
 .quest-objective-group-head strong { color: var(--text-primary); font-family: var(--font-body); font-size: 11px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .quest-objective-summary { align-items: center; display: flex; gap: 8px; min-width: 0; }
 .quest-objective-group-head small, .quest-objective-targets small { flex: none; }
+.quest-objective-requirement { color: var(--text-muted); font-family: var(--font-body); font-size: 10px; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
 .quest-objective-targets { display: grid; gap: 5px; list-style: none; margin: 0; padding: 0; }
 .quest-objective-targets > li {
   align-items: flex-start;
@@ -325,7 +322,7 @@
 .quest-objective-copy > span { min-width: 0; overflow-wrap: anywhere; }
 .quest-objective-copy .fartlek-swatch { margin-top: 6px; }
 .quest-objective-copy .collectible-swatch { flex: none; margin-top: 1px; }
-.quest-suggestion-card button {
+.quest-suggestion-card button[data-quest-start] {
   background: transparent;
   border: 1px solid rgb(232 184 10 / 45%);
   border-radius: 6px;
@@ -338,9 +335,25 @@
   min-height: 36px;
   padding: 6px 10px;
 }
-.quest-suggestion-card button:hover { background: rgb(232 184 10 / 8%); }
-.quest-suggestion-card button:disabled { cursor: default; opacity: .55; }
-.quest-suggestion-card button:focus-visible, .quest-suggestions-toggle:focus-visible {
+.quest-suggestion-card button[data-quest-start]:hover { background: rgb(232 184 10 / 8%); }
+.quest-suggestion-card button[data-quest-start]:disabled { cursor: default; opacity: .55; }
+.quest-card-select {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+.quest-card-select > span { color: var(--text-subtle); flex: none; font-size: 15px; }
+.quest-card-select:hover > span, .quest-card-select[aria-pressed="true"] > span { color: var(--accent-yellow); }
+.quest-card-select:focus-visible, .quest-suggestion-card button[data-quest-start]:focus-visible, .quest-suggestions-toggle:focus-visible {
   outline: 2px solid var(--accent-yellow);
   outline-offset: 2px;
 }
@@ -358,6 +371,7 @@
 }
 .quest-suggestions-toggle:hover { text-decoration: underline; }
 .quest-instance-card.is-completed article { border-color: var(--accent-yellow); }
+.quest-card.is-map-selected article { border-color: var(--accent-yellow); box-shadow: 0 0 0 1px rgb(232 184 10 / 35%); }
 .quest-instance-cancel {
   align-items: center;
   background: transparent;

@@ -73,6 +73,14 @@ export const mappedWorldCollectibles = (collectibles, selectedFilters, questColl
   return mapped;
 };
 
+export const mappedWorldFartleks = (fartleks, selectedFilters, questFartleks = []) => {
+  const mapped = [...filteredWorldFartleks(fartleks, selectedFilters)];
+  for (const fartlek of questFartleks) {
+    if (!mapped.some((item) => item.id === fartlek.id)) mapped.push(fartlek);
+  }
+  return mapped;
+};
+
 const filterSwatch = (filter) => {
   if (filter === "all") return "";
   if (filter === "fartleks") return '<b class="fartlek-swatch" aria-hidden="true"></b>';
@@ -180,6 +188,9 @@ export const mountWorldPage = async (mountPoint) => {
   let fartleks = [];
   let availableFilters = availableWorldFilters(collectibles, fartleks);
   let selection;
+  let selectedQuestKey;
+  let selectedQuestTargets = { collectibles: [], flowlines: [] };
+  let questSelectionToken = 0;
   let requestToken = 0;
   let worldMap;
 
@@ -200,12 +211,24 @@ export const mountWorldPage = async (mountPoint) => {
 
   const renderCollectibles = () => {
     const selectedCollectibleId = selection?.kind === "collectible" ? selection.id : undefined;
-    const mapped = mappedWorldCollectibles(collectibles, selectedFilters);
-    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { selectedId: selectedCollectibleId }));
+    const questCollectibleIds = selectedQuestKey
+      ? selectedQuestTargets.collectibles.map((collectible) => collectible.id)
+      : undefined;
+    const mapped = mappedWorldCollectibles(collectibles, selectedFilters, selectedQuestTargets.collectibles);
+    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, {
+      selectedId: selectedCollectibleId,
+      questCollectibleIds
+    }));
 
     const selectedFartlekId = selection?.kind === "fartlek" ? selection.id : undefined;
-    const mappedFartleks = filteredWorldFartleks(fartleks, selectedFilters);
-    worldMap?.setFartleks(fartleksToFeatureCollection(mappedFartleks, { selectedId: selectedFartlekId }));
+    const questFlowlineIds = selectedQuestKey
+      ? selectedQuestTargets.flowlines.map((flowline) => flowline.id)
+      : undefined;
+    const mappedFartleks = mappedWorldFartleks(fartleks, selectedFilters, selectedQuestTargets.flowlines);
+    worldMap?.setFartleks(fartleksToFeatureCollection(mappedFartleks, {
+      selectedId: selectedFartlekId,
+      questTargetIds: questFlowlineIds
+    }));
 
     renderCollectibleList(mapped, selectedCollectibleId, mappedFartleks, selectedFartlekId);
   };
@@ -268,7 +291,13 @@ export const mountWorldPage = async (mountPoint) => {
 
   const renderSidePanels = () => {
     statsHost.innerHTML = WorldStats(stats, truncated);
-    questHost.innerHTML = QuestList(questSuggestions, questInstances, pendingQuestId, showAllQuestSuggestions);
+    questHost.innerHTML = QuestList(
+      questSuggestions,
+      questInstances,
+      pendingQuestId,
+      showAllQuestSuggestions,
+      selectedQuestKey
+    );
     questHost.querySelector("[data-quest-suggestions-toggle]")?.addEventListener("click", () => {
       showAllQuestSuggestions = !showAllQuestSuggestions;
       renderSidePanels();
@@ -278,6 +307,15 @@ export const mountWorldPage = async (mountPoint) => {
     });
     questHost.querySelectorAll("[data-quest-cancel]").forEach((button) => {
       button.addEventListener("click", () => void cancelQuest(button.dataset.questCancel));
+    });
+    questHost.querySelectorAll("[data-quest-select]").forEach((button) => {
+      button.addEventListener("click", () => void selectQuest(button.dataset.questSelect));
+    });
+    questHost.querySelectorAll("[data-quest-card]").forEach((card) => {
+      card.addEventListener("click", (event) => {
+        if (event.target.closest("button")) return;
+        void selectQuest(card.dataset.questCard);
+      });
     });
   };
 
@@ -311,6 +349,70 @@ export const mountWorldPage = async (mountPoint) => {
       : { kind: "fartlek", id };
     renderCollectibles();
     renderDetail();
+  }
+
+  async function selectQuest(key) {
+    const token = ++questSelectionToken;
+    if (selectedQuestKey === key) {
+      selectedQuestKey = undefined;
+      selectedQuestTargets = { collectibles: [], flowlines: [] };
+      renderCollectibles();
+      renderSidePanels();
+      void loadViewport(worldMap.getBounds());
+      return;
+    }
+
+    const suggestion = key.startsWith("suggestion:")
+      ? questSuggestions.find((item) => item.id === key.slice("suggestion:".length))
+      : undefined;
+    const instance = key.startsWith("instance:")
+      ? questInstances.find((item) => item.id === key.slice("instance:".length))
+      : undefined;
+    const quest = suggestion ?? instance;
+    if (!quest) return;
+
+    const objectives = suggestion
+      ? quest.objectives
+      : quest.objectives.map((state) => state.objective);
+    const collectibleIds = [...new Set(objectives
+      .filter((objective) => objective.type !== "flowline_rule")
+      .flatMap((objective) => objective.targets.map((target) => target.id)))];
+    const flowlineIds = [...new Set(objectives
+      .filter((objective) => objective.type === "flowline_rule")
+      .flatMap((objective) => objective.targets.map((target) => target.id)))];
+    const query = new URLSearchParams();
+    collectibleIds.forEach((id) => query.append("collectibleId", id));
+    flowlineIds.forEach((id) => query.append("flowlineId", id));
+
+    selectedQuestKey = key;
+    selectedQuestTargets = { collectibles: [], flowlines: [] };
+    selection = undefined;
+    renderCollectibles();
+    renderSidePanels();
+    renderDetail();
+    try {
+      const targets = await fetch(`/api/world/quest-targets?${query.toString()}`).then(responseJson);
+      if (token !== questSelectionToken) return;
+      selectedQuestTargets = {
+        collectibles: targets.collectibles,
+        flowlines: targets.flowlines
+      };
+      renderCollectibles();
+      const points = [
+        ...targets.collectibles.map(({ latitude, longitude }) => ({ latitude, longitude })),
+        ...targets.flowlines.flatMap((flowline) => flowline.geometry.coordinates.map(
+          ([longitude, latitude]) => ({ latitude, longitude })
+        ))
+      ];
+      worldMap.fitTo(points);
+    } catch (error) {
+      if (token !== questSelectionToken) return;
+      selectedQuestKey = undefined;
+      selectedQuestTargets = { collectibles: [], flowlines: [] };
+      renderCollectibles();
+      renderSidePanels();
+      setStatus(error.message);
+    }
   }
 
   async function startQuest(suggestionId) {
@@ -356,11 +458,17 @@ export const mountWorldPage = async (mountPoint) => {
 
   async function loadViewport(bounds) {
     const token = ++requestToken;
+    const preserveQuestSuggestions = Boolean(selectedQuestKey);
+    const url = `/api/world?bbox=${boundsToParameter(bounds)}${
+      preserveQuestSuggestions ? "&includeQuestSuggestions=false" : ""
+    }`;
     try {
-      const snapshot = await fetch(`/api/world?bbox=${boundsToParameter(bounds)}`).then(responseJson);
+      const snapshot = await fetch(url).then(responseJson);
       if (token !== requestToken) return;
       collectibles = snapshot.collectibles;
-      questSuggestions = snapshot.questSuggestions ?? [];
+      if (!selectedQuestKey && !preserveQuestSuggestions) {
+        questSuggestions = snapshot.questSuggestions ?? [];
+      }
       stats = snapshot.stats;
       truncated = snapshot.truncated;
       fartleks = snapshot.fartleks ?? [];

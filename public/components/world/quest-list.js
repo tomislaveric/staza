@@ -3,43 +3,46 @@ import { CollectibleSwatch } from "./collectible-swatch.js";
 
 export const INITIAL_VISIBLE_QUEST_SUGGESTIONS = 3;
 
-const objectiveGroupLabel = (objective) => {
-  if (objective.type === "flowline_rule") {
-    const qualifiers = [
-      objective.minimumLengthMeters ? `at least ${Math.round(objective.minimumLengthMeters / 1000 * 10) / 10} km each` : "",
-      objective.minimumAverageSpeedMps ? `at least ${Math.round(objective.minimumAverageSpeedMps * 3.6)} km/h average` : "",
-      objective.sameActivity ? "in one Activity" : ""
-    ].filter(Boolean);
-    return `Flowlines${qualifiers.length ? ` · ${qualifiers.join(", ")}` : ""}`;
-  }
-  const categoryName = ({
-    peak: "peaks",
-    place: "places",
-    mountain_pass: "mountain passes",
-    viewpoint: "viewpoints",
-    castle: "castles",
-    waterfall: "waterfalls"
-  })[objective.category] ?? "targets";
-  return categoryName;
+const categoryNames = {
+  peak: "peaks",
+  place: "places",
+  mountain_pass: "mountain passes",
+  viewpoint: "viewpoints",
+  castle: "castles",
+  waterfall: "waterfalls"
 };
 
-const objectiveTypeLabel = (objective) => {
-  if (objective.type === "flowline_rule") return "Flowline";
-  return ({
-    peak: "Mountain peak",
-    place: "Place",
-    mountain_pass: "Mountain pass",
-    viewpoint: "Viewpoint",
-    castle: "Castle",
-    waterfall: "Waterfall"
-  })[objective.category] ?? "Collectible";
+const objectiveGroupLabel = (objective) => objective.type === "flowline_rule"
+  ? "Flowlines"
+  : categoryNames[objective.category] ?? "targets";
+
+const objectiveIcon = (objective, completed = false) => {
+  if (objective.type === "flowline_rule") {
+    return `<b class="fartlek-swatch${completed ? " is-completed" : ""}" aria-hidden="true"></b>`;
+  }
+  return objective.category
+    ? CollectibleSwatch({ category: objective.category, visited: completed })
+    : "";
 };
 
-const objectiveIcon = (objective) => {
-  if (objective.type === "flowline_rule") {
-    return '<b class="fartlek-swatch" aria-hidden="true"></b>';
-  }
-  return objective.category ? CollectibleSwatch({ category: objective.category }) : "";
+const objectiveRequirement = (objective) => {
+  const required = objective.requiredCount;
+  const targetCount = objective.targets.length;
+  const verb = objective.type === "flowline_rule" ? "Complete"
+    : objective.type === "collectible_targets" && objective.category === "place" ? "Visit"
+      : "Discover";
+  const targets = objectiveGroupLabel(objective);
+  const base = `${verb} ${required} of these ${targetCount} ${targets}`;
+  const qualifiers = objective.type === "flowline_rule" ? [
+    objective.minimumLengthMeters
+      ? `at least ${Math.round(objective.minimumLengthMeters / 1000 * 10) / 10} km each`
+      : "",
+    objective.minimumAverageSpeedMps
+      ? `at least ${Math.round(objective.minimumAverageSpeedMps * 3.6)} km/h average each`
+      : "",
+    objective.sameActivity ? "in one Activity" : ""
+  ].filter(Boolean) : [];
+  return qualifiers.length ? `${base} — ${qualifiers.join(", ")}` : base;
 };
 
 const flowlineAverageSpeedLabel = (target) => {
@@ -49,101 +52,119 @@ const flowlineAverageSpeedLabel = (target) => {
   return `${Math.round(target.averageSpeedMps * 3.6)} km/h`;
 };
 
-const activeFlowlineGroup = ({ progress, targetProgress }) => `
-  <li class="quest-objective-group">
-    <div class="quest-objective-group-head">
-      <span class="quest-objective-summary">
-        <b class="fartlek-swatch" aria-hidden="true"></b>
-        <strong>Flowlines completed</strong>
-      </span>
-      <small>${escapeHtml(progress.completed)}/${escapeHtml(progress.required)}</small>
-    </div>
-    <ul class="quest-objective-targets">
-      ${targetProgress.filter((target) => target.complete).map((target) => `
-        <li class="is-complete is-flowline-completion">
-          <span class="quest-objective-copy">
-            <b class="fartlek-swatch is-completed" aria-hidden="true"></b>
-            <span>${escapeHtml(target.name)} - ${escapeHtml(flowlineAverageSpeedLabel(target))}</span>
-          </span>
-        </li>
-      `).join("")}
-    </ul>
-  </li>
-`;
+const suggestionObjectiveStates = (suggestion) => suggestion.objectives.map((objective) => ({
+  objective,
+  progress: {
+    completed: 0,
+    required: objective.requiredCount,
+    complete: false
+  },
+  targetProgress: objective.targets.map((target) => ({ ...target, complete: false }))
+}));
 
-const objectiveGroup = ({ objective, progress, targetProgress }) => `
-  <li class="quest-objective-group">
-    <div class="quest-objective-group-head">
-      <strong>${escapeHtml(objectiveGroupLabel(objective))}</strong>
-      <small>${escapeHtml(progress.completed)} / ${escapeHtml(progress.required)} required</small>
-    </div>
-    <ul class="quest-objective-targets">
-      ${targetProgress.map((target) => `
-        <li class="${target.complete ? "is-complete" : ""}">
-          <span class="quest-objective-copy">
-            ${objectiveIcon(objective)}
-            <span>${escapeHtml(target.name)}</span>
-          </span>
-          <small>${target.complete ? "Complete" : "Not complete"}</small>
-        </li>
-      `).join("")}
-    </ul>
-  </li>
-`;
-
-const SuggestionCard = (suggestion, started) => `
-  <li class="quest-suggestion-card">
-    <article>
-      <span class="quest-card-head">
-        <strong data-user-content>${escapeHtml(suggestion.title)}</strong>
-      </span>
-      <span class="quest-card-description" data-user-content>${escapeHtml(suggestion.description)}</span>
-      <ul class="quest-suggestion-goals" aria-label="Quest goals">
-        ${suggestion.objectives.map((objective) => `
-          <li class="quest-suggestion-goal">
-            ${objectiveIcon(objective)}
-            <span>${escapeHtml(objectiveTypeLabel(objective))}</span>
+const objectiveGroup = (state, isSuggestion) => {
+  const { objective, progress, targetProgress } = state;
+  const completedLabel = isSuggestion
+    ? `${progress.required} required · ${targetProgress.length} targets`
+    : `${progress.completed}/${progress.required} complete`;
+  return `
+    <li class="quest-objective-group">
+      <div class="quest-objective-group-head">
+        <span class="quest-objective-summary">
+          ${objectiveIcon(objective)}
+          <strong>${escapeHtml(objectiveGroupLabel(objective))}</strong>
+        </span>
+        <small>${escapeHtml(completedLabel)}</small>
+      </div>
+      <p class="quest-objective-requirement">${escapeHtml(objectiveRequirement(objective))}</p>
+      <ul class="quest-objective-targets">
+        ${targetProgress.map((target) => `
+          <li class="${target.complete ? "is-complete" : ""}">
+            <span class="quest-objective-copy">
+              ${objectiveIcon(objective, target.complete)}
+              <span>${escapeHtml(target.name)}${objective.type === "flowline_rule" && target.complete
+                ? ` — ${escapeHtml(flowlineAverageSpeedLabel(target))}` : ""}</span>
+            </span>
+            <small>${isSuggestion ? "Target" : target.complete ? "Complete" : "Not complete"}</small>
           </li>
         `).join("")}
       </ul>
-      <button type="button" data-quest-start="${escapeHtml(suggestion.id)}"${started ? " disabled" : ""}>
-        ${started ? "Started" : "Start quest"}
-      </button>
-    </article>
-  </li>
-`;
+    </li>
+  `;
+};
 
-const InstanceCard = (instance, pendingQuestId) => {
-  const objectiveStates = instance.objectives;
+const questCard = ({
+  key,
+  title,
+  description,
+  objectiveStates,
+  status,
+  selectedQuestKey,
+  pendingQuestId,
+  suggestionId,
+  instanceId,
+  alreadyStarted
+}) => {
+  const isSuggestion = suggestionId !== undefined;
   const completed = objectiveStates.filter((item) => item.progress.complete).length;
   const ratio = objectiveStates.length ? completed / objectiveStates.length : 0;
-  const renderObjectiveGroup = (state) => instance.status === "active"
-    && state.objective.type === "flowline_rule"
-    ? activeFlowlineGroup(state)
-    : objectiveGroup(state);
   return `
-    <li class="quest-instance-card is-${instance.status}">
-      <article>
+    <li class="${isSuggestion ? "quest-suggestion-card" : "quest-instance-card"} quest-card is-${status}${selectedQuestKey === key ? " is-map-selected" : ""}">
+      <article data-quest-card="${escapeHtml(key)}">
         <span class="quest-card-head">
-          <strong data-user-content>${escapeHtml(instance.title)}</strong>
-          ${instance.status === "active" ? `
-            <button type="button" class="quest-instance-cancel" data-quest-cancel="${escapeHtml(instance.id)}"
-              aria-label="Cancel quest" title="Cancel quest"
-              ${pendingQuestId === instance.id ? "disabled" : ""}>\u2715</button>
-          ` : "<small>Complete</small>"}
+          <button type="button" class="quest-card-select" data-quest-select="${escapeHtml(key)}"
+            aria-pressed="${selectedQuestKey === key}" aria-label="Show targets for ${escapeHtml(title)} on map">
+            <strong data-user-content>${escapeHtml(title)}</strong>
+            <span aria-hidden="true">⌖</span>
+          </button>
+          ${isSuggestion
+            ? `<button type="button" data-quest-start="${escapeHtml(suggestionId)}"${alreadyStarted ? " disabled" : ""}>
+                ${alreadyStarted ? "Started" : "Start quest"}
+              </button>`
+            : status === "active" ? `
+              <button type="button" class="quest-instance-cancel" data-quest-cancel="${escapeHtml(instanceId)}"
+                aria-label="Cancel quest" title="Cancel quest"
+                ${pendingQuestId === instanceId ? "disabled" : ""}>\u2715</button>
+            ` : "<small>Complete</small>"}
         </span>
-        <span class="quest-card-description" data-user-content>${escapeHtml(instance.description)}</span>
-        <ul class="quest-objective-groups">${objectiveStates.map((state) => renderObjectiveGroup(state)).join("")}</ul>
-        <span class="quest-card-progress">
-          <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
-          <small>${completed} / ${objectiveStates.length} objectives</small>
-        </span>
+        <span class="quest-card-description" data-user-content>${escapeHtml(description)}</span>
+        <ul class="quest-objective-groups">
+          ${objectiveStates.map((state) => objectiveGroup(state, isSuggestion)).join("")}
+        </ul>
+        ${isSuggestion ? "" : `
+          <span class="quest-card-progress">
+            <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
+            <small>${completed} / ${objectiveStates.length} objectives</small>
+          </span>
+        `}
       </article>
     </li>
   `;
 };
 
-export const QuestList = (suggestions, instances, pendingQuestId, showAllSuggestions = false) => {
+const SuggestionCard = (suggestion, started, selectedQuestKey) => questCard({
+  key: `suggestion:${suggestion.id}`,
+  title: suggestion.title,
+  description: suggestion.description,
+  objectiveStates: suggestionObjectiveStates(suggestion),
+  status: "suggested",
+  selectedQuestKey,
+  suggestionId: suggestion.id,
+  alreadyStarted: started
+});
+
+const InstanceCard = (instance, pendingQuestId, selectedQuestKey) => questCard({
+  key: `instance:${instance.id}`,
+  title: instance.title,
+  description: instance.description,
+  objectiveStates: instance.objectives,
+  status: instance.status,
+  selectedQuestKey,
+  pendingQuestId,
+  instanceId: instance.id
+});
+
+export const QuestList = (suggestions, instances, pendingQuestId, showAllSuggestions = false, selectedQuestKey) => {
   const startedIds = new Set(instances.map((instance) => instance.suggestionId));
   const visibleSuggestions = showAllSuggestions
     ? suggestions
@@ -153,12 +174,13 @@ export const QuestList = (suggestions, instances, pendingQuestId, showAllSuggest
     <section class="default-quest-list" aria-label="Suggested quests">
       <h2>Local recommendations</h2>
       <p class="quest-section-description">
-        Optional challenges for exploring places and completing Flowlines. Start one to track your progress.
+        Optional challenges for exploring places and completing Flowlines. Select a quest to see its targets on the map.
       </p>
       ${suggestions.length
         ? `<ol id="quest-recommendations">${visibleSuggestions.map((suggestion) => SuggestionCard(
           suggestion,
-          startedIds.has(suggestion.id) || pendingQuestId === suggestion.id
+          startedIds.has(suggestion.id) || pendingQuestId === suggestion.id,
+          selectedQuestKey
         )).join("")}</ol>
           ${hasHiddenSuggestions ? `
             <button type="button" class="quest-suggestions-toggle" data-quest-suggestions-toggle
@@ -171,7 +193,7 @@ export const QuestList = (suggestions, instances, pendingQuestId, showAllSuggest
     <section class="quest-list" aria-label="Your running quests">
       <h2>Your running Quests</h2>
       ${instances.length
-        ? `<ol>${instances.map((instance) => InstanceCard(instance, pendingQuestId)).join("")}</ol>`
+        ? `<ol>${instances.map((instance) => InstanceCard(instance, pendingQuestId, selectedQuestKey)).join("")}</ol>`
         : '<p class="default-quest-empty">Start a local recommendation to begin tracking a quest.</p>'}
     </section>
   `;
