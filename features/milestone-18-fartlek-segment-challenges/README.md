@@ -282,14 +282,16 @@ to the existing point-collectible pipeline (`snapshot.ts`/`normalize.ts`/`model.
 but preserving full way `LineString` geometry instead of collapsing to a centroid.
 
 ```bash
-# 1. Download a Geofabrik extract (once; large file, not committed).
+# 1. Download a Geofabrik extract locally (large file; do not put it on the VPS).
 curl -O https://download.geofabrik.de/europe/germany-latest.osm.pbf
 
-# 2. Extract + build the committed way-geometry snapshot (requires osmium-tool).
+# 2. Extract + build the way-geometry snapshot locally (requires osmium-tool).
 npm run extract:osm-germany-fartleks -- germany-latest.osm.pbf
 # writes fixtures/osm-germany-fartleks.ndjson
 
-# 3. Generate candidates, score them, and publish AUTO_PUBLISH results.
+# 3. Upload the snapshot to /opt/staza/data/osm-germany-fartleks.ndjson on the VPS.
+# 4. Optionally preview locally; otherwise dispatch the Import Fartleks workflow,
+#    which scores and publishes AUTO_PUBLISH candidates from the uploaded snapshot.
 npm run import:fartleks -- --snapshot fixtures/osm-germany-fartleks.ndjson \
   --write-review tmp/fartlek-review.jsonl
 ```

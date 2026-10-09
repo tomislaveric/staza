@@ -277,20 +277,25 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
   imported; do not replace this GeoJSON import with website scraping without a
   separate licensing review. See
   [Milestone 15.4](features/milestone-15-4-quaeldich-pass-import/README.md).
+  On the VPS, the manual quäldich workflow runs the compiled package command
+  `npm run import:quaeldich:dist` in a one-off container; see the
+  [deployment guide](ops/app/README.md#manual-quäldich-import).
 
-- **OSM extract snapshot:** The importer reads a committed OpenStreetMap extract
+- **OSM extract snapshot:** The importer reads an uploaded OpenStreetMap extract
   instead of querying a live API. Download the Geofabrik Germany PBF
-  (`https://download.geofabrik.de/europe/germany-latest.osm.pbf`, ODbL 1.0),
-  install `osmium-tool`, then run `npm run extract:osm-germany [path/to.pbf]`.
+  locally (`https://download.geofabrik.de/europe/germany-latest.osm.pbf`, ODbL
+  1.0), install `osmium-tool`, then run
+  `npm run extract:osm-germany [path/to.pbf]`.
   It filters the seven imported object classes, exports geometries (non-point
   objects collapse to their bounding-box center), keeps only the retained tag
   keys, and writes `fixtures/osm-germany.json` with `metadata` (source URL,
   extract version, attribution, license, selectors, counts) plus `records`.
-  Commit that file and redeploy so the image carries it; refreshing the catalog
-  means regenerating and committing a new snapshot. Downloaded `*.osm.pbf`
-  files stay ignored.
+  Upload that snapshot to `/opt/staza/data/osm-germany.json` on the VPS before
+  running its workflow. The PBF and generated snapshots are not needed in the
+  VPS repository or app image.
 - **OSM/Wikidata collectible catalog:** `npm run import:osm-wikidata` imports the
-  committed snapshot (override with `-- --snapshot <file>` or `OSM_SNAPSHOT_FILE`)
+  uploaded snapshot in its VPS workflow (locally, override with
+  `-- --snapshot <file>` or `OSM_SNAPSHOT_FILE`)
   of German OpenStreetMap landmarks (`© OpenStreetMap contributors`), enriches it
   with Wikidata, and writes `landmark` records into the `collectibles` table.
   Besides viewpoints, peaks, castles, and waterfalls it imports named

@@ -11,11 +11,6 @@ on:
         options:
           - dev
           - prod
-      dry_run:
-        description: Report only; never write to the database
-        type: boolean
-        required: true
-        default: true
 
 concurrency:
   group: import-osm-wikidata-${{ inputs.target }}
@@ -36,7 +31,6 @@ jobs:
       - name: Run the importer on the selected server
         env:
           IMPORT_TARGET: ${{ inputs.target }}
-          DRY_RUN: ${{ inputs.dry_run }}
           REMOTE_PATH: ${{ vars.REMOTE_PATH }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}

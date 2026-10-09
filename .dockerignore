@@ -3,3 +3,7 @@ dist
 data
 .git
 npm-debug.log
+fixtures
+*.osm.pbf
+*.osm.pbf.md5
+*.ndjson

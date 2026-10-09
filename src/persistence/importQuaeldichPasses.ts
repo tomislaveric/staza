@@ -12,7 +12,7 @@ if (!config.databaseUrl) throw new Error("DATABASE_URL is required.");
 
 const pool = createDatabasePool(config.databaseUrl);
 try {
-  await migrate(pool);
+  if (!dryRun) await migrate(pool);
   const repository = new CollectibleRepository(pool);
 
   const payload = await fetchQuaeldichGeoJson(config.quaeldichGeoJsonUrl);

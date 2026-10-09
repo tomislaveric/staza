@@ -7,7 +7,6 @@ RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
-COPY scripts ./scripts
 
 RUN npm run build
 
@@ -15,9 +14,7 @@ RUN npm run build
 FROM node:22-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install --no-install-recommends -y \
-    ffmpeg \
-    osmium-tool \
+  && apt-get install --no-install-recommends -y ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -37,10 +34,8 @@ COPY package*.json ./
 RUN npm ci
 
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/scripts ./scripts
 
 COPY public ./public
-COPY fixtures ./fixtures
 
 VOLUME ["/data"]
 

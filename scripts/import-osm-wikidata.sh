@@ -3,7 +3,6 @@ set -Eeuo pipefail
 
 required_variables=(
   IMPORT_TARGET
-  DRY_RUN
   REMOTE_PATH
   SSH_HOST
   SSH_USER
@@ -26,10 +25,6 @@ else
   exit 1
 fi
 
-[[ "$DRY_RUN" == "true" || "$DRY_RUN" == "false" ]] || {
-  echo "DRY_RUN must be true or false." >&2
-  exit 1
-}
 [[ "$REMOTE_PATH" =~ ^/[A-Za-z0-9._/-]+$ && "$REMOTE_PATH" != "/" && "$REMOTE_PATH" != */ ]] || {
   echo "REMOTE_PATH must be a safe absolute directory path." >&2
   exit 1
@@ -89,16 +84,14 @@ ssh_options=(
 remote="$SSH_USER@$SSH_HOST"
 
 echo "Target environment: ${IMPORT_TARGET^^}"
-echo "Dry run: $DRY_RUN"
 echo "Remote path: $REMOTE_PATH"
 
 ssh "${ssh_options[@]}" "$remote" bash -s -- \
-  "$REMOTE_PATH" "$DRY_RUN" "$app_container" <<'REMOTE_IMPORT'
+  "$REMOTE_PATH" "$app_container" <<'REMOTE_IMPORT'
 set -Eeuo pipefail
 
 remote_path="$1"
-dry_run="$2"
-app_container="$3"
+app_container="$2"
 env_file="$remote_path/.env"
 compose_file="$remote_path/docker-compose.yml"
 
@@ -123,27 +116,24 @@ if ! docker inspect "$app_container" >/dev/null 2>&1; then
   exit 1
 fi
 
-import_arguments=()
-if [[ "$dry_run" == "true" ]]; then
-  import_arguments+=(--dry-run)
-fi
-
-echo "Committed OSM extract snapshot shipped with the deployed image:"
-if ! compose run --rm --no-TTY --entrypoint sh app -c \
-  'test -f /app/fixtures/osm-germany.json && head -c 400 /app/fixtures/osm-germany.json'; then
-  echo "The deployed image has no fixtures/osm-germany.json; commit the extract and redeploy." >&2
+snapshot_file=/import-source/osm-germany.json
+echo "Uploaded OSM extract snapshot:"
+if ! compose run --rm --no-TTY --no-deps --entrypoint sh app -c \
+  'test -s /import-source/osm-germany.json && ls -lh /import-source/osm-germany.json'; then
+  echo "Snapshot not found or empty: /opt/staza/data/osm-germany.json" >&2
   exit 1
 fi
 
 echo "Running the compiled importer as a one-off container on the private Compose network."
 compose run --rm --no-TTY \
   -e OSM_WIKIDATA_CACHE_DIR=/data/osm-cache/wikidata \
-  app node dist/persistence/importOSMWikidata.js "${import_arguments[@]}"
+  app node dist/persistence/importOSMWikidata.js \
+  --snapshot "$snapshot_file"
 
 echo "Persistent Wikidata cache on the app-data volume:"
 compose run --rm --no-TTY --entrypoint sh app -c \
   'du -sh /data/osm-cache/wikidata 2>/dev/null || true'
 REMOTE_IMPORT
 
-echo "Import run finished for target=$IMPORT_TARGET dry_run=$DRY_RUN."
+echo "Import run finished for target=$IMPORT_TARGET."
 echo "No deployment or service restart was performed."

@@ -1,0 +1,127 @@
+name: Import quäldich passes
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Target environment
+        type: choice
+        required: true
+        default: dev
+        options:
+          - dev
+          - prod
+
+concurrency:
+  group: import-quaeldich-${{ inputs.target }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    environment:
+      name: app-${{ inputs.target }}
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/quaeldich_import
+          chmod 600 ~/.ssh/quaeldich_import
+
+          ssh-keyscan \
+            -T 10 \
+            -p "$SSH_PORT" \
+            -H "$SSH_HOST" \
+            > ~/.ssh/known_hosts
+
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Run quäldich importer on the selected server
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+          REMOTE_PATH: ${{ vars.REMOTE_PATH }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+        run: |
+          set -Eeuo pipefail
+
+          ssh \
+            -i ~/.ssh/quaeldich_import \
+            -p "$SSH_PORT" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$SSH_USER@$SSH_HOST" \
+            bash -s -- \
+            "$REMOTE_PATH" \
+            "$TARGET" <<'REMOTE'
+
+          set -Eeuo pipefail
+
+          remote_path="$1"
+          target="$2"
+          cd "$remote_path"
+
+          if [[ ! -f .env || ! -f docker-compose.yml ]]; then
+            echo "Missing .env or docker-compose.yml in $remote_path; deploy the environment first." >&2
+            exit 1
+          fi
+
+          compose() {
+            docker compose --env-file .env -f docker-compose.yml "$@"
+          }
+
+          echo "Validating Compose configuration."
+          compose config --quiet
+
+          echo "Ensuring PostgreSQL is running."
+          compose up -d postgres
+
+          postgres_container="$(compose ps -q postgres)"
+          if [[ -z "$postgres_container" ]]; then
+            echo "PostgreSQL container could not be found." >&2
+            exit 1
+          fi
+
+          postgres_health=unknown
+          for attempt in $(seq 1 30); do
+            postgres_health="$(
+              docker inspect \
+                --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+                "$postgres_container" \
+                2>/dev/null || printf 'missing'
+            )"
+            echo "PostgreSQL health attempt $attempt/30: $postgres_health"
+            if [[ "$postgres_health" == healthy || "$postgres_health" == unhealthy || "$postgres_health" == missing ]]; then
+              break
+            fi
+            sleep 5
+          done
+
+          if [[ "$postgres_health" != healthy ]]; then
+            echo "PostgreSQL did not become healthy." >&2
+            compose logs --no-color --tail=100 postgres >&2 || true
+            exit 1
+          fi
+
+          echo "Importing quäldich data into $target."
+          compose run --rm --no-deps app \
+            npm run import:quaeldich:dist
+
+          echo "quäldich import completed successfully."
+          REMOTE

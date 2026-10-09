@@ -125,7 +125,9 @@ workflow that runs the collectible importer on one server. Inputs:
 | Input | Meaning |
 | --- | --- |
 | `target` | `dev` or `prod`; selects the `app-dev` or `app-prod` GitHub environment. |
-| `dry_run` | Defaults to `true`. Reports a plan and writes nothing to PostgreSQL. |
+
+Running the workflow always imports and writes to the selected database; there
+is no dry-run input. Review the target before dispatching, especially for PROD.
 
 The job reuses the environment secrets `SSH_HOST`, `SSH_USER`,
 `SSH_PRIVATE_KEY` and variables `REMOTE_PATH` and `SSH_PORT` that the
@@ -138,16 +140,15 @@ PostgreSQL. The script fails if `DATABASE_URL` is present in the runner
 environment.
 
 The one-off container uses the image tag currently recorded in the server
-`.env`, so the updated app image must be deployed to that environment before
-its import run can use new importer behavior. The import never pulls, deploys,
-recreates, or restarts the app service. PROD environment protection and
-approval rules continue to apply.
+`.env`. The import never pulls, deploys, recreates, or restarts the app
+service. PROD environment protection and approval rules continue to apply.
 
-OSM objects come from the committed `fixtures/osm-germany.json` extract that
-ships inside the deployed image, so the run contacts only Wikidata. The job
-fails early if the image carries no snapshot. Refreshing the catalog means
-regenerating the snapshot locally (`npm run extract:osm-germany`), committing
-it, and redeploying the image before running the import.
+OSM objects come from the uploaded
+`/opt/staza/data/osm-germany.json` snapshot, mounted read-only in the app
+container at `/import-source/osm-germany.json`. The importer contacts Wikidata
+for enrichment but does not download an OSM PBF. Regenerate the snapshot
+locally with `npm run extract:osm-germany`, upload the resulting JSON to the
+VPS, then run this workflow; no snapshot commit or image redeploy is needed.
 
 The Wikidata cache persists under the mounted app-data volume at
 `/data/osm-cache/wikidata` (`OSM_WIKIDATA_CACHE_DIR`), so repeated one-off
@@ -157,8 +158,42 @@ containers reuse validated entities. Uncached batches are paced
 The workflow log streams timestamped UTC progress lines for each batch, pacing
 wait, and retry, so a long-running job can be followed live.
 
-Run a dry run first, read its report, then rerun with `dry_run: false` on DEV
-before selecting PROD.
+The workflow reads the uploaded snapshot and writes eligible OSM/Wikidata
+collectibles to the selected database.
+
+## Manual Fartlek import
+
+`.github/workflows/data-import.yml` imports the prepared snapshot. Upload
+`osm-germany-fartleks.ndjson` to
+`/opt/staza/data/osm-germany-fartleks.ndjson` on the VPS before dispatching
+the workflow. For example:
+
+```sh
+scp fixtures/osm-germany-fartleks.ndjson \
+  user@your-vps:/opt/staza/data/osm-germany-fartleks.ndjson
+```
+
+The selected Compose file mounts `/opt/staza/data` read-only at
+`/import-source` in the app container. The workflow runs
+`npm run import:fartleks -- --snapshot /import-source/osm-germany-fartleks.ndjson`
+in a one-off container using the deployed image; it does not need a PBF or an
+application repository checkout on the VPS. This import writes to the selected
+environment's database, so verify the target before dispatching. The uploaded
+snapshot can be shared by DEV and PROD; the workflow imports it only into the
+selected target.
+
+## Manual quäldich import
+
+`.github/workflows/import-quaeldich.yml` runs the quäldich importer using the
+configured source URL. No GeoJSON upload or application repository checkout
+is needed on the VPS; `quaeldich-sample.geojson` is only a test fixture. The
+workflow invokes `npm run import:quaeldich:dist`, the compiled-image variant
+of the local `npm run import:quaeldich` package command.
+
+Every workflow run applies pending migrations and writes planned creates and
+updates to the selected database. There is no dry-run option. Deploy an app
+image containing the compiled quäldich importer before dispatching the
+workflow.
 
 ## Manual commands
 

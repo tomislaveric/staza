@@ -1,4 +1,4 @@
-name: Import Staza Data
+name: Import Fartleks
 
 on:
   workflow_dispatch:
@@ -11,20 +11,13 @@ on:
           - dev
           - prod
 
-      import_job:
-        description: Import job
-        required: true
-        type: choice
-        options:
-          - osm-germany-fartleks
-
 concurrency:
-  group: staza-${{ inputs.environment }}-data-import
+  group: staza-${{ inputs.environment }}-fartlek-import
   cancel-in-progress: false
 
 jobs:
   import:
-    name: Import ${{ inputs.import_job }} to ${{ inputs.environment }}
+    name: Import Fartleks to ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
@@ -55,8 +48,7 @@ jobs:
 
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Run Fartlek extract and import
-        if: ${{ inputs.import_job == 'osm-germany-fartleks' }}
+      - name: Run Fartlek snapshot import
         shell: bash
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -94,11 +86,11 @@ jobs:
           }
 
           echo "========================================"
-          echo "Staza data import"
+          echo "Fartlek snapshot import"
           echo "========================================"
           echo "Environment: $target_env"
           echo "Remote path: $remote_path"
-          echo "Source file: /import-source/germany-latest.osm.pbf"
+          echo "Snapshot: /import-source/osm-germany-fartleks.ndjson"
           echo
 
           if [[ ! -f .env ]]; then
@@ -169,73 +161,33 @@ jobs:
           echo "Starting one-off import container."
           echo
 
+          snapshot_file="/import-source/osm-germany-fartleks.ndjson"
           compose run \
             --rm \
             --no-deps \
-            -e OUTPUT=/data/osm-germany-fartleks.ndjson \
-            -e WORK_DIR=/data/tmp/osm-extract-fartleks \
             app \
             sh -c '
               set -eu
 
-              source_file="/import-source/germany-latest.osm.pbf"
-              snapshot_file="/data/osm-germany-fartleks.ndjson"
-
-              echo "========================================"
-              echo "Checking prerequisites"
-              echo "========================================"
-
-              if [ ! -f "$source_file" ]; then
-                echo "Source file not found: $source_file" >&2
+              snapshot_file="/import-source/osm-germany-fartleks.ndjson"
+              if [ ! -s "$snapshot_file" ]; then
+                echo "Uploaded snapshot not found or empty: $snapshot_file" >&2
+                echo "Upload it to /opt/staza/data/osm-germany-fartleks.ndjson on the VPS." >&2
                 exit 1
               fi
-
-              if ! command -v osmium >/dev/null 2>&1; then
-                echo "osmium is not installed in the app image." >&2
-                exit 1
-              fi
-
-              echo "Source:"
-              ls -lh "$source_file"
-
-              echo
-              echo "osmium:"
-              osmium --version | head -n 1
-
-              echo
-              echo "========================================"
-              echo "Step 1/2: Extracting OSM Fartleks"
-              echo "========================================"
-
-              npm run extract:osm-germany-fartleks -- "$source_file"
-
-              if [ ! -f "$snapshot_file" ]; then
-                echo "Expected snapshot was not created: $snapshot_file" >&2
-                exit 1
-              fi
-
-              echo
-              echo "Generated snapshot:"
+              echo "Using uploaded Fartlek snapshot:"
               ls -lh "$snapshot_file"
 
-              echo
-              echo "========================================"
-              echo "Step 2/2: Importing Fartleks"
-              echo "========================================"
+              echo "Importing Fartleks."
+              npm run import:fartleks -- --snapshot "$snapshot_file"
 
-              npm run import:fartleks -- \
-                --snapshot "$snapshot_file"
-
-              echo
-              echo "========================================"
               echo "Import completed successfully"
-              echo "========================================"
             '
 
           echo
           echo "Environment: $target_env"
           echo "Image: ${image_name}:${image_tag}"
-          echo "Import: osm-germany-fartleks"
+          echo "Snapshot: $snapshot_file"
           echo "Result: SUCCESS"
 
           REMOTE

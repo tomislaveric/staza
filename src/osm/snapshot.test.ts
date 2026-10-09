@@ -73,10 +73,13 @@ describe("OSM export conversion", () => {
   });
 });
 
-describe("committed snapshot distribution", () => {
-  it("ships fixtures in the runtime image so the importer can read the snapshot", async () => {
+describe("runtime image inputs", () => {
+  it("does not copy local OSM snapshots into the image", async () => {
+    const dockerignore = await (await import("node:fs/promises")).readFile(".dockerignore", "utf8");
     const dockerfile = await (await import("node:fs/promises")).readFile("Dockerfile", "utf8");
-    expect(dockerfile).toContain("COPY fixtures ./fixtures");
+    expect(dockerignore).toContain("fixtures");
+    expect(dockerignore).toContain("*.ndjson");
+    expect(dockerfile).not.toContain("COPY fixtures ./fixtures");
   });
 });
 
