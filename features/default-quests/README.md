@@ -15,6 +15,9 @@ standalone Quests.
 - Keep suggestions ephemeral and untracked until the player explicitly starts
   one.
 - Persist started instances with frozen, server-validated objective scope.
+- Allow active instances to be cancelled; delete the instance and its progress.
+- Start a cancelled scope with fresh progress while preserving canonical
+  activity and collectible history.
 - Keep active instances visible and progressing independently of the current
   bbox.
 - Derive progress from the player's all-time collectible and Flowline history,
@@ -30,8 +33,9 @@ standalone Quests.
 |---|---|
 | Model | Curated `QuestTemplate` → bbox-generated `QuestInstance` → typed objectives. |
 | Start behavior | Suggestions create no database state; explicit Start creates the persistent player instance. |
+| Cancellation | Cancelling deletes the active instance and objective scope. Activity and collectible history remain untouched; starting the same scope again begins fresh. |
 | Objective scope | Resolve and freeze target collectible / Flowline IDs and criteria at Start. |
-| History | All canonical player history counts; an instance may be complete as soon as it is started. |
+| History | First-time starts use all canonical player history and may complete immediately. After cancelling and restarting the same scope, only history from the new start counts. |
 | Flowline counting | Count distinct Flowlines by default; same-Activity rules group completions by `activity_id`. |
 | Performance | Apply speed thresholds to each Flowline segment's average speed (m/s; UI may display km/h). |
 | Objective logic | All objectives are required (AND) in v1; mixed objectives are first-class. |
@@ -46,8 +50,10 @@ Support:
   minimum length, requiring all N in the same Activity, or meeting a segment
   average-speed threshold.
 - Discover N distinct collectibles of a category such as peak or place.
+- Discover mountain passes as a category-based objective.
 - Visit a frozen set of specific collectible IDs.
-- Combine multiple objective groups, including collectible and Flowline rules.
+- Combine multiple objective groups, including Mountain Pass and Flowline
+  objectives.
 
 Templates must support examples including:
 
@@ -55,6 +61,8 @@ Templates must support examples including:
 - Complete 5 Flowlines, each at least 2 km.
 - Complete 3 Flowlines satisfying a performance condition.
 - Discover 3 Peaks.
+- Discover 3 Mountain Passes.
+- Discover 2 Mountain Passes and complete 2 Flowlines.
 - Discover 2 landmarks and complete 2 Flowlines.
 - Visit a generated set of 4 local places.
 - An explicit starter combining a simple collectible target with a Flowline
@@ -108,16 +116,29 @@ continues to identify its discovery globally.
 - `fixtures/quest-templates.json` is the curated template source. Startup and
   `npm run seed:collectibles` validate and synchronize versioned templates.
 - Migration `023_quest_templates_and_instances` adds template/instance storage
-  and a collectible-category event snapshot, with a best-effort backfill from
-  catalog records that still exist.
+  and a collectible-category event snapshot. Migration
+  `024_mountain_pass_quest_categories` backfills Mountain Pass categories on
+  existing collectibles and activity events.
+- Migration `025_quest_instance_pause` is retired by
+  `026_cancel_quest_instances`, which restores any paused instances to active,
+  removes pause history, adds restart tracking, and enables fresh progress
+  after cancellation.
 - `GET /api/world?bbox=...` returns feasible `questSuggestions` without
   progress or persistence. `POST /api/quest-instances/start` re-resolves the
   suggestion against the submitted bbox and stores its frozen objective scope.
 - `GET /api/quest-instances` evaluates all-time collectible and Flowline
   history, persists first completion, and lists instances without bbox filtering.
+- `DELETE /api/quest-instances/:instanceId` cancels an active instance for its
+  owner and deletes its objective scope.
+- Cancelling an active quest deletes its instance and frozen objective scope.
+  A minimal scope marker ensures a later start begins with fresh progress;
+  canonical activity and collectible history is preserved. Completed quests
+  remain listed with a Complete status.
 - The World UI separates untracked recommendations from active/completed
   instances. The legacy authoring, publish, and activity-to-quest APIs/actions
   are no longer exposed; legacy quest rows are retained.
+- Quest card headings and objective labels use the default body font at a
+  reduced size, keeping objective copy visually secondary.
 
 ## Acceptance criteria
 
@@ -128,6 +149,10 @@ continues to identify its discovery globally.
   server-validated objective scope.
 - Started instances remain active after bbox changes and use all-time history,
   including history predating Start.
+- Cancelling deletes the instance and its progress while preserving canonical
+  activity history.
+- Restarting a cancelled scope counts only qualifying history from the new
+  start time; first-time starts continue to use all-time history.
 - An instance whose objectives are already satisfied completes immediately on
   Start.
 - Rule-based, target-based, and mixed objectives work, including same-Activity,
@@ -147,6 +172,8 @@ continues to identify its discovery globally.
   length/performance thresholds, historical collection, and category snapshots.
 - Test Start idempotency, scope freezing, immediate all-history completion,
   persistence, and reads outside the source bbox.
+- Test cancellation deletion, fresh progress boundaries after restart, and the
+  confirmation UI.
 - Test the UI distinction between recommendations and started instances,
   including Start, progress, and completed presentation.
 - Run the TypeScript build, focused quest/persistence/UI tests, and full test

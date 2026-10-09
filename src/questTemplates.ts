@@ -30,7 +30,7 @@ const MINIMUM_RULE_COLLECTIBLES = 3;
 const MINIMUM_TARGET_COLLECTIBLES = 3;
 const MINIMUM_FLOWLINES = 2;
 const MIXED_MINIMUM_WORK = 4;
-const MAX_LOCAL_QUEST_SUGGESTIONS = 8;
+const MAX_LOCAL_QUEST_SUGGESTIONS = 10;
 const COLLECTIBLE_CATEGORIES: CollectibleCategory[] = [
   "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"
 ];
@@ -113,6 +113,9 @@ const sortedUniqueById = <T extends { id: string }>(values: T[]): T[] =>
 
 const targetSnapshot = (id: string, name: string) => ({ id, name });
 
+const categoryOf = (collectible: WorldCollectible): CollectibleCategory | undefined =>
+  collectible.primaryCategory ?? (collectible.type === "mountain_pass" ? "mountain_pass" : undefined);
+
 const resolveObjective = (
   templateId: string,
   index: number,
@@ -139,7 +142,7 @@ const resolveObjective = (
 
   const candidates = sortedUniqueById(collectibles.filter((collectible) =>
     collectible.visibility !== "hidden"
-      && (definition.category === undefined || collectible.primaryCategory === definition.category)
+      && (definition.category === undefined || categoryOf(collectible) === definition.category)
   ));
   if (candidates.length < definition.requiredCount) return undefined;
   if (definition.type === "collectible_targets") {

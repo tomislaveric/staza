@@ -10,7 +10,12 @@ import type {
   QuestSuggestion,
   QuestTemplate
 } from "../domain.js";
-import { evaluateQuestObjectives, isCollectibleCategory, validateQuestTemplate } from "../questTemplates.js";
+import {
+  evaluateQuestObjectives,
+  isCollectibleCategory,
+  validateQuestTemplate,
+  type QuestHistory
+} from "../questTemplates.js";
 
 interface TemplateRow {
   id: string;
@@ -34,7 +39,44 @@ interface InstanceRow {
   status: "active" | "completed";
   started_at: Date;
   completed_at: Date | null;
+  fresh_progress: boolean;
 }
+
+interface TimedCollectibleHistory {
+  sourceId: string;
+  category?: CollectibleCategory;
+  timestampMs: number;
+}
+
+interface TimedFlowlineHistory {
+  flowlineId: string;
+  activityId: string;
+  lengthMeters: number;
+  averageSpeedMps: number;
+  timestampMs: number;
+}
+
+export const historyFromQuestStart = (
+  history: { collectibles: TimedCollectibleHistory[]; flowlines: TimedFlowlineHistory[] },
+  startedAtMs: number
+): QuestHistory => {
+  return {
+    collectibles: history.collectibles
+      .filter((event) => event.timestampMs >= startedAtMs)
+      .map(({ sourceId, category }) => ({
+        sourceId,
+        ...(category === undefined ? {} : { category })
+      })),
+    flowlines: history.flowlines
+      .filter((completion) => completion.timestampMs >= startedAtMs)
+      .map(({ flowlineId, activityId, lengthMeters, averageSpeedMps }) => ({
+        flowlineId,
+        activityId,
+        lengthMeters,
+        averageSpeedMps
+      }))
+  };
+};
 
 const mapTemplate = (row: TemplateRow): QuestTemplate => ({
   id: row.id,
@@ -49,6 +91,18 @@ const mapTemplate = (row: TemplateRow): QuestTemplate => ({
 export class QuestTemplateUnavailableError extends Error {
   constructor() {
     super("This quest template is no longer available.");
+  }
+}
+
+export class QuestInstanceNotFoundError extends Error {
+  constructor() {
+    super("Quest instance not found.");
+  }
+}
+
+export class QuestInstanceStateError extends Error {
+  constructor(message: string) {
+    super(message);
   }
 }
 
@@ -113,12 +167,17 @@ export class QuestInstanceRepository {
         [suggestion.templateId, suggestion.templateVersion]
       );
       if (template.rowCount !== 1) throw new QuestTemplateUnavailableError();
+      const cancellation = await client.query(
+        `SELECT 1 FROM quest_instance_cancellations
+         WHERE player_id = $1 AND template_id = $2 AND template_version = $3 AND scope_hash = $4`,
+        [playerId, suggestion.templateId, suggestion.templateVersion, suggestion.id]
+      );
       const id = randomUUID();
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO quest_instances (
           id, player_id, template_id, template_version, scope_hash,
-          title, description, recommended_level, objectives
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          title, description, recommended_level, objectives, fresh_progress
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (player_id, template_id, template_version, scope_hash) DO NOTHING
         RETURNING id`,
         [
@@ -130,7 +189,8 @@ export class QuestInstanceRepository {
           suggestion.title,
           suggestion.description,
           suggestion.recommendedLevel,
-          JSON.stringify(suggestion.objectives)
+          JSON.stringify(suggestion.objectives),
+          cancellation.rows.length > 0
         ]
       );
       if (inserted.rowCount === 1) {
@@ -153,13 +213,54 @@ export class QuestInstanceRepository {
     }
   }
 
+  async cancel(playerId: string, instanceId: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const deleted = await client.query<{
+        template_id: string;
+        template_version: number;
+        scope_hash: string;
+      }>(
+        `DELETE FROM quest_instances
+         WHERE id = $1 AND player_id = $2 AND status = 'active'
+         RETURNING template_id, template_version, scope_hash`,
+        [instanceId, playerId]
+      );
+      if (deleted.rowCount !== 1) {
+        const current = await client.query<{ status: "active" | "completed" }>(
+          "SELECT status FROM quest_instances WHERE id = $1 AND player_id = $2",
+          [instanceId, playerId]
+        );
+        if (current.rowCount !== 1) throw new QuestInstanceNotFoundError();
+        throw new QuestInstanceStateError("Only active quests can be cancelled.");
+      }
+
+      const cancelled = deleted.rows[0];
+      await client.query(
+        `INSERT INTO quest_instance_cancellations (
+          player_id, template_id, template_version, scope_hash, cancelled_at
+        ) VALUES ($1, $2, $3, $4, now())
+        ON CONFLICT (player_id, template_id, template_version, scope_hash)
+        DO UPDATE SET cancelled_at = EXCLUDED.cancelled_at`,
+        [playerId, cancelled.template_id, cancelled.template_version, cancelled.scope_hash]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async listForPlayer(playerId: string): Promise<QuestInstance[]> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const instances = await client.query<InstanceRow>(
         `SELECT id, template_id, template_version, scope_hash, title, description, recommended_level,
-                objectives, status, started_at, completed_at
+                objectives, status, started_at, completed_at, fresh_progress
          FROM quest_instances WHERE player_id = $1
          ORDER BY started_at DESC, id`,
         [playerId]
@@ -182,9 +283,17 @@ export class QuestInstanceRepository {
       }
       const [collectibleHistory, flowlineHistory] = await Promise.all([
         collectibleTargetIds.size === 0
-          ? Promise.resolve({ rows: [] as Array<{ source_id: string; collectible_category: CollectibleCategory | null }> })
-          : client.query<{ source_id: string; collectible_category: CollectibleCategory | null }>(
-          `SELECT DISTINCT events.source_id, events.collectible_category
+          ? Promise.resolve({ rows: [] as Array<{
+            source_id: string;
+            collectible_category: CollectibleCategory | null;
+            activity_timestamp: number | string;
+          }> })
+          : client.query<{
+            source_id: string;
+            collectible_category: CollectibleCategory | null;
+            activity_timestamp: number | string;
+          }>(
+          `SELECT DISTINCT events.source_id, events.collectible_category, events.activity_timestamp
            FROM activity_events AS events
            INNER JOIN activities ON activities.id = events.activity_id
            WHERE activities.player_id = $1 AND events.source_id = ANY($2::text[])`,
@@ -196,32 +305,50 @@ export class QuestInstanceRepository {
             activity_id: string;
             fartlek_length_m_snapshot: number;
             average_speed_mps: number;
+            completed_at: Date;
           }> })
           : client.query<{
           fartlek_id: string;
           activity_id: string;
           fartlek_length_m_snapshot: number;
           average_speed_mps: number;
+          completed_at: Date;
         }>(
-          `SELECT fartlek_id, activity_id, fartlek_length_m_snapshot, average_speed_mps
+          `SELECT fartlek_id, activity_id, fartlek_length_m_snapshot, average_speed_mps, completed_at
            FROM fartlek_completions WHERE player_id = $1 AND fartlek_id = ANY($2::text[])`,
           [playerId, [...flowlineTargetIds]]
         )
       ]);
-      const history = {
+      const timedHistory = {
         collectibles: collectibleHistory.rows.map((row) => ({
           sourceId: row.source_id,
-          ...(row.collectible_category === null ? {} : { category: row.collectible_category })
+          ...(row.collectible_category === null ? {} : { category: row.collectible_category }),
+          timestampMs: Number(row.activity_timestamp)
         })),
         flowlines: flowlineHistory.rows.map((row) => ({
           flowlineId: row.fartlek_id,
           activityId: row.activity_id,
           lengthMeters: row.fartlek_length_m_snapshot,
-          averageSpeedMps: row.average_speed_mps
+          averageSpeedMps: row.average_speed_mps,
+          timestampMs: row.completed_at.getTime()
         }))
       };
       const mapped: QuestInstance[] = [];
       for (const row of instances.rows) {
+        const history = row.fresh_progress
+          ? historyFromQuestStart(timedHistory, row.started_at.getTime())
+          : {
+            collectibles: timedHistory.collectibles.map(({ sourceId, category }) => ({
+              sourceId,
+              ...(category === undefined ? {} : { category })
+            })),
+            flowlines: timedHistory.flowlines.map(({ flowlineId, activityId, lengthMeters, averageSpeedMps }) => ({
+              flowlineId,
+              activityId,
+              lengthMeters,
+              averageSpeedMps
+            }))
+          };
         const objectiveStates: QuestObjectiveState[] = evaluateQuestObjectives(row.objectives, history);
         const complete = objectiveStates.every((state) => state.progress.complete);
         let status = row.status;
@@ -233,14 +360,15 @@ export class QuestInstanceRepository {
              RETURNING completed_at`,
             [row.id, playerId]
           );
-          status = "completed";
           if (updated.rowCount === 1) {
+            status = "completed";
             completedAt = updated.rows[0].completed_at;
           } else {
-            const stored = await client.query<{ completed_at: Date }>(
-              "SELECT completed_at FROM quest_instances WHERE id = $1 AND player_id = $2",
+            const stored = await client.query<{ status: "active" | "completed"; completed_at: Date | null }>(
+              "SELECT status, completed_at FROM quest_instances WHERE id = $1 AND player_id = $2",
               [row.id, playerId]
             );
+            status = stored.rows[0]?.status ?? status;
             completedAt = stored.rows[0]?.completed_at ?? completedAt;
           }
         }

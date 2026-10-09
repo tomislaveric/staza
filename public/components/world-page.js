@@ -173,7 +173,7 @@ export const mountWorldPage = async (mountPoint) => {
   let selectedFilters = [];
   let collectibles = [];
   let questSuggestions = [];
-  let startingQuestId;
+  let pendingQuestId;
   let stats = emptyStats;
   let truncated = false;
   let fartleks = [];
@@ -267,9 +267,12 @@ export const mountWorldPage = async (mountPoint) => {
 
   const renderSidePanels = () => {
     statsHost.innerHTML = WorldStats(stats, truncated);
-    questHost.innerHTML = QuestList(questSuggestions, questInstances, startingQuestId);
+    questHost.innerHTML = QuestList(questSuggestions, questInstances, pendingQuestId);
     questHost.querySelectorAll("[data-quest-start]").forEach((button) => {
       button.addEventListener("click", () => void startQuest(button.dataset.questStart));
+    });
+    questHost.querySelectorAll("[data-quest-cancel]").forEach((button) => {
+      button.addEventListener("click", () => void cancelQuest(button.dataset.questCancel));
     });
   };
 
@@ -306,8 +309,8 @@ export const mountWorldPage = async (mountPoint) => {
   }
 
   async function startQuest(suggestionId) {
-    if (startingQuestId) return;
-    startingQuestId = suggestionId;
+    if (pendingQuestId) return;
+    pendingQuestId = suggestionId;
     renderSidePanels();
     try {
       await fetch("/api/quest-instances/start", {
@@ -320,7 +323,28 @@ export const mountWorldPage = async (mountPoint) => {
     } catch (error) {
       setStatus(error.message);
     } finally {
-      startingQuestId = undefined;
+      pendingQuestId = undefined;
+      renderSidePanels();
+    }
+  }
+
+  async function cancelQuest(instanceId) {
+    if (pendingQuestId || !globalThis.confirm(
+      "Cancel this quest and delete its progress? If you start it again, progress will start over."
+    )) return;
+    pendingQuestId = instanceId;
+    renderSidePanels();
+    try {
+      await fetch(`/api/quest-instances/${encodeURIComponent(instanceId)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" }
+      }).then(responseJson);
+      questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
+      await loadViewport(worldMap.getBounds());
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      pendingQuestId = undefined;
       renderSidePanels();
     }
   }

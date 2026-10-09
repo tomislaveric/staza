@@ -26,6 +26,8 @@ import { FartlekRepository } from "./persistence/fartlekRepository.js";
 import { FartlekCompletionRepository } from "./persistence/fartlekCompletionRepository.js";
 import {
   QuestInstanceRepository,
+  QuestInstanceNotFoundError,
+  QuestInstanceStateError,
   QuestTemplateUnavailableError,
   readQuestTemplateRows
 } from "./persistence/questInstanceRepository.js";
@@ -941,6 +943,25 @@ app.post("/api/quest-instances/start", requirePlayer, requireCsrf, async (reques
     response.json(instance);
   } catch (error) {
     if (error instanceof QuestTemplateUnavailableError) {
+      response.status(409).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.delete("/api/quest-instances/:instanceId", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  try {
+    const playerId = request.user!.playerId;
+    const instanceId = String(request.params.instanceId);
+    await questInstanceRepository.cancel(playerId, instanceId);
+    response.status(204).end();
+  } catch (error) {
+    if (error instanceof QuestInstanceNotFoundError) {
+      response.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof QuestInstanceStateError) {
       response.status(409).json({ error: error.message });
       return;
     }

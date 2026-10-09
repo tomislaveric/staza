@@ -17,8 +17,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Coming soon](features/coming-soon/README.md) — add a reusable multi-language
   "Coming Soon" annotation and remove the unsupported Komoot external-route feature.
 - [Default quests](features/default-quests/README.md) — generate bbox-local
-  recommendations from curated objective templates, then track explicitly
-  started quests independently of the map.
+  recommendations including Mountain Passes and mixed Flowline challenges;
+  track and cancel started quests independently of the map.
 - [Extend OSM/Wikidata Collectibles](features/extend-osm-wikidata-collectibles/README.md)
   — import named places, improve source retry/cache behavior, and trigger
   private-network DEV/PROD imports manually.

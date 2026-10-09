@@ -100,4 +100,21 @@ describe("CollectibleRepository OSM metadata", () => {
     ]);
     expect(release).toHaveBeenCalledOnce();
   });
+
+  it("persists Mountain Pass type as its collectible category", async () => {
+    const query = vi.fn().mockResolvedValue({});
+    const pool = {
+      connect: vi.fn().mockResolvedValue({ query, release: vi.fn() })
+    } as unknown as Pool;
+    const { primaryCategory: _category, ...landmark } = collectible;
+    await new CollectibleRepository(pool).upsertMany([{
+      ...landmark,
+      id: "quaeldich:pass",
+      name: "Mountain Pass",
+      type: "mountain_pass"
+    }]);
+    const insert = query.mock.calls.find(([statement]) =>
+      typeof statement === "string" && statement.includes("INSERT INTO collectibles"));
+    expect(insert?.[1]?.[15]).toBe("mountain_pass");
+  });
 });

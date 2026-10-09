@@ -77,6 +77,13 @@ describe("Quest suggestions and instances", () => {
     expect(markup).toContain("2 / 3");
     expect(markup).toContain("Started");
     expect(markup).toContain("disabled");
+    expect(markup).toContain("Cancel quest");
+  });
+
+  it("does not offer cancellation for completed quests", () => {
+    const markup = QuestList([], [instance({ status: "completed" })], undefined);
+    expect(markup).toContain("Complete");
+    expect(markup).not.toContain("Cancel quest");
   });
 
   it("shows completed instance status and escapes quest-controlled content", () => {
@@ -91,12 +98,30 @@ describe("Quest suggestions and instances", () => {
     expect(markup).toContain("Complete");
     expect(markup).not.toContain("<script>");
     expect(markup).toContain("&lt;script&gt;");
+    expect(markup).not.toContain("Cancel quest");
   });
 
   it("renders useful empty states without fabricating quests", () => {
     const markup = QuestList([], [], undefined);
     expect(markup).toContain("No curated quests match this map area yet.");
     expect(markup).toContain("Start a local recommendation to begin tracking a quest.");
+  });
+
+  it("labels Mountain Pass objectives in recommendations", () => {
+    const mountainPassQuest = suggestion({
+      objectives: [{
+        id: "passes",
+        type: "collectible_count",
+        requiredCount: 3,
+        category: "mountain_pass",
+        targets: [
+          { id: "pass-1", name: "Pass One" },
+          { id: "pass-2", name: "Pass Two" },
+          { id: "pass-3", name: "Pass Three" }
+        ]
+      }]
+    });
+    expect(QuestList([mountainPassQuest], [], undefined)).toContain("Discover 3 mountain passes");
   });
 });
 

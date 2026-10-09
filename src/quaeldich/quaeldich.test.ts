@@ -55,6 +55,7 @@ describe("normalizeQuaeldichFeature", () => {
     expect(c.value).toBe(600);
     expect(c.rarity).toBe("common");
     expect(c.status).toBe("published");
+    expect(c.primaryCategory).toBe("mountain_pass");
     expect(c.source).toEqual({
       sourceType: "quaeldich",
       sourceExternalId: "col-agnel",

@@ -291,8 +291,17 @@
   font-size: 10px;
 }
 .quest-suggestion-card ul, .quest-instance-card ul { display: grid; gap: 5px; list-style: none; margin: 0; padding: 0; }
-.quest-suggestion-card li li, .quest-instance-card li li { align-items: center; color: var(--text-primary); display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
-.quest-instance-card li li.is-complete > span { text-decoration: line-through; }
+.quest-suggestion-card article > ul > li, .quest-instance-card article > ul > li {
+  align-items: center;
+  color: var(--text-primary);
+  display: flex;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 400;
+  gap: 8px;
+  justify-content: space-between;
+}
+.quest-instance-card article > ul > li.is-complete > span { text-decoration: line-through; }
 .quest-suggestion-card button {
   background: var(--accent-yellow);
   border: 0;
@@ -308,10 +317,23 @@
 }
 .quest-suggestion-card button:disabled { cursor: default; opacity: .55; }
 .quest-instance-card.is-completed article { border-color: var(--accent-yellow); }
+.quest-instance-cancel {
+  background: transparent;
+  border: 1px solid rgb(248 113 113 / 22%);
+  border-radius: 6px;
+  color: rgb(248 113 113 / 85%);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 11px;
+  justify-self: start;
+  min-height: 32px;
+  padding: 6px 10px;
+}
+.quest-instance-cancel:disabled { cursor: default; opacity: .55; }
 .quest-card-progress { border-top: 1px solid var(--border-faint); padding-top: 7px; }
 .default-quest-empty { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin: 0; }
 .quest-card-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
-.quest-card-head strong { color: var(--text-primary); font-family: var(--font-display); font-size: 14px; }
+.quest-card-head strong { color: var(--text-primary); font-family: var(--font-body); font-size: 12px; font-weight: 600; }
 .quest-card-description { color: var(--text-muted); font-size: 12px; line-height: 1.45; overflow: hidden; }
 .quest-card-progress { display: grid; gap: 5px; }
 .quest-card-progress small { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }

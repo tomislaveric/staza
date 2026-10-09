@@ -41,13 +41,13 @@ const insertActivity = async (id: string): Promise<void> => {
   );
 };
 
-const insertDiscovery = async (activityId: string, sourceId: string): Promise<void> => {
+const insertDiscovery = async (activityId: string, sourceId: string, timestampMs = 1): Promise<void> => {
   await pool!.query(
     `INSERT INTO activity_events (
       id, activity_id, source_id, event_type, activity_timestamp, value, latitude, longitude,
       collectible_name, collectible_type, collectible_category
-    ) VALUES ($1, $2, $3, 'collectible_collected', 1, 10, 49, 8, $3, 'landmark', 'peak')`,
-    [randomUUID(), activityId, sourceId]
+    ) VALUES ($1, $2, $3, 'collectible_collected', $4, 10, 49, 8, $3, 'landmark', 'peak')`,
+    [randomUUID(), activityId, sourceId, timestampMs]
   );
 };
 
@@ -112,5 +112,32 @@ describePersistence("QuestInstanceRepository", () => {
     const instance = (await repository!.listForPlayer(playerId)).find((item) => item.id === instanceId);
     expect(instance?.status).toBe("completed");
     expect(instance?.completedAt).toBeDefined();
+  });
+
+  it("deletes a cancelled instance and starts the same scope with fresh progress", async () => {
+    await insertActivity("cancel-history-before");
+    await insertDiscovery("cancel-history-before", "peak-a");
+    await insertDiscovery("cancel-history-before", "peak-b");
+    const cancelledInstanceId = await repository!.start(playerId, suggestion);
+    expect((await repository!.listForPlayer(playerId))[0].objectives[0].progress.completed).toBe(2);
+
+    await repository!.cancel(playerId, cancelledInstanceId);
+    expect(await repository!.listForPlayer(playerId)).toEqual([]);
+    const deleted = await pool!.query("SELECT 1 FROM quest_instances WHERE id = $1", [cancelledInstanceId]);
+    expect(deleted.rowCount).toBe(0);
+
+    await insertActivity("cancel-history-after");
+    const restartedInstanceId = await repository!.start(playerId, suggestion);
+    expect(restartedInstanceId).not.toBe(cancelledInstanceId);
+    let restarted = (await repository!.listForPlayer(playerId))[0];
+    expect(restarted).toMatchObject({
+      id: restartedInstanceId,
+      status: "active",
+      objectives: [{ progress: { completed: 0, required: 3, complete: false } }]
+    });
+
+    await insertDiscovery("cancel-history-after", "peak-c", Date.now());
+    restarted = (await repository!.listForPlayer(playerId))[0];
+    expect(restarted.objectives[0].progress.completed).toBe(1);
   });
 });

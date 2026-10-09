@@ -235,8 +235,15 @@ describe("mounted World page interactions", () => {
       "map", "status", "stats", "quests", "detail", "collectible-list", "locate"
     ].map((name) => [`[data-world-${name}]`, element()]));
     const questButton = { ...element(), dataset: { questStart: "suggestion-1" }, disabled: false };
+    const questCancelButton = {
+      ...element(),
+      dataset: { questCancel: "instance-1" },
+      disabled: false
+    };
     const detail = hosts["[data-world-detail]"];
-    hosts["[data-world-quests]"].querySelectorAll = () => [questButton];
+    hosts["[data-world-quests]"].querySelectorAll = (selector) => selector === "[data-quest-start]"
+      ? [questButton]
+      : selector === "[data-quest-cancel]" ? [questCancelButton] : [];
     const mountPoint = {
       innerHTML: "",
       querySelector: (selector) => hosts[selector],
@@ -281,6 +288,9 @@ describe("mounted World page interactions", () => {
         activeInstances = [activeInstance];
         body = activeInstance;
       }
+      else if (url === "/api/quest-instances/instance-1" && options?.method === "DELETE") {
+        activeInstances = [];
+      }
       else if (url.startsWith("/api/world?bbox=")) body = viewportSnapshot;
       else throw new Error(`Unexpected fetch: ${url}`);
       return { ok: true, json: async () => body };
@@ -295,7 +305,7 @@ describe("mounted World page interactions", () => {
     await mountWorldPage(mountPoint);
     return {
       click: (filter) => buttons[filter].handlers.click(),
-      buttons, map, fetchMock, questButton,
+      buttons, map, fetchMock, questButton, questCancelButton,
       callbacks: createMap.mock.calls[0][1],
       detail,
       status: hosts["[data-world-status]"],
@@ -398,5 +408,31 @@ describe("mounted World page interactions", () => {
     expect(page.quests.innerHTML).toContain("Active");
     expect(page.quests.innerHTML).toContain("Started");
     expect(page.fetchMock.mock.calls.filter(([url]) => url === "/api/quest-instances")).toHaveLength(2);
+  });
+
+  it("confirms cancellation, deletes the instance, and allows starting it again", async () => {
+    const page = await mount();
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+    page.questButton.handlers.click();
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Active"));
+    page.questCancelButton.handlers.click();
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Start a local recommendation"));
+    expect(page.fetchMock.mock.calls.some(([url, options]) =>
+      url === "/api/quest-instances/instance-1" && options.method === "DELETE"
+    )).toBe(true);
+    expect(page.quests.innerHTML).toContain("Start quest");
+    expect(globalThis.confirm).toHaveBeenCalledWith(
+      "Cancel this quest and delete its progress? If you start it again, progress will start over."
+    );
+  });
+
+  it("does not cancel a quest when the user declines confirmation", async () => {
+    const page = await mount();
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+    page.questButton.handlers.click();
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Active"));
+    page.questCancelButton.handlers.click();
+    expect(page.fetchMock.mock.calls.some(([url]) => url === "/api/quest-instances/instance-1")).toBe(false);
+    expect(page.quests.innerHTML).toContain("Cancel quest");
   });
 });

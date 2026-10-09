@@ -40,6 +40,27 @@
     ]
   },
   {
+    "id": "mountain-pass-discoveries",
+    "version": 1,
+    "title": "Pass Collector",
+    "description": "Discover three mountain passes in this area.",
+    "recommendedLevel": 3,
+    "objectives": [
+      { "type": "collectible_count", "requiredCount": 3, "category": "mountain_pass" }
+    ]
+  },
+  {
+    "id": "mountain-passes-and-flowlines",
+    "version": 1,
+    "title": "Passes and Flowlines",
+    "description": "Discover two mountain passes and complete two Flowlines.",
+    "recommendedLevel": 4,
+    "objectives": [
+      { "type": "collectible_count", "requiredCount": 2, "category": "mountain_pass" },
+      { "type": "flowline_rule", "requiredCount": 2 }
+    ]
+  },
+  {
     "id": "landmarks-and-flowlines",
     "version": 1,
     "title": "Landmarks and Lines",

@@ -557,6 +557,61 @@ export const migrations: Migration[] = [{
         ON activity_events (collectible_category, source_id);
     `);
   }
+}, {
+  id: "024_mountain_pass_quest_categories",
+  async up(client) {
+    await client.query(`
+      UPDATE collectibles
+      SET primary_category = 'mountain_pass', updated_at = now()
+      WHERE collectible_type = 'mountain_pass'
+        AND primary_category IS DISTINCT FROM 'mountain_pass';
+      UPDATE activity_events
+      SET collectible_category = 'mountain_pass'
+      WHERE collectible_type = 'mountain_pass'
+        AND collectible_category IS DISTINCT FROM 'mountain_pass';
+    `);
+  }
+}, {
+  id: "025_quest_instance_pause",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE quest_instances
+        DROP CONSTRAINT quest_instances_status_check,
+        ADD CONSTRAINT quest_instances_status_check
+          CHECK (status IN ('active', 'paused', 'completed'));
+      CREATE TABLE quest_instance_pauses (
+        quest_instance_id UUID NOT NULL REFERENCES quest_instances(id) ON DELETE CASCADE,
+        paused_at TIMESTAMPTZ NOT NULL,
+        resumed_at TIMESTAMPTZ,
+        PRIMARY KEY (quest_instance_id, paused_at),
+        CHECK (resumed_at IS NULL OR resumed_at >= paused_at)
+      );
+      CREATE UNIQUE INDEX quest_instance_pauses_open_index
+        ON quest_instance_pauses (quest_instance_id)
+        WHERE resumed_at IS NULL;
+    `);
+  }
+}, {
+  id: "026_cancel_quest_instances",
+  async up(client) {
+    await client.query(`
+      UPDATE quest_instances SET status = 'active' WHERE status = 'paused';
+      DROP TABLE quest_instance_pauses;
+      ALTER TABLE quest_instances
+        DROP CONSTRAINT quest_instances_status_check,
+        ADD CONSTRAINT quest_instances_status_check
+          CHECK (status IN ('active', 'completed')),
+        ADD COLUMN fresh_progress BOOLEAN NOT NULL DEFAULT false;
+      CREATE TABLE quest_instance_cancellations (
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        template_id TEXT NOT NULL,
+        template_version INTEGER NOT NULL CHECK (template_version > 0),
+        scope_hash TEXT NOT NULL,
+        cancelled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (player_id, template_id, template_version, scope_hash)
+      );
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

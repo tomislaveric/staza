@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { QuestObjective, QuestTemplate, WorldCollectible, WorldFartlek } from "./domain.js";
 import { evaluateQuestObjectives, generateQuestSuggestions, validateQuestTemplate } from "./questTemplates.js";
-import { readQuestTemplateRows } from "./persistence/questInstanceRepository.js";
+import {
+  historyFromQuestStart,
+  readQuestTemplateRows
+} from "./persistence/questInstanceRepository.js";
 
 const template = (objectives: QuestTemplate["objectives"], overrides: Partial<QuestTemplate> = {}): QuestTemplate => ({
   id: "test-template",
@@ -16,7 +19,7 @@ const template = (objectives: QuestTemplate["objectives"], overrides: Partial<Qu
 const collectible = (id: string, primaryCategory: WorldCollectible["primaryCategory"] = "place"): WorldCollectible => ({
   id,
   name: `Place ${id}`,
-  type: "landmark",
+  type: primaryCategory === "mountain_pass" ? "mountain_pass" : "landmark",
   latitude: 49,
   longitude: 8,
   radiusMeters: 100,
@@ -40,8 +43,10 @@ const flowline = (id: string, lengthMeters = 2500): WorldFartlek => ({
 describe("curated quest templates", () => {
   it("validates all curated templates from the seed fixture", async () => {
     const templates = await readQuestTemplateRows("fixtures/quest-templates.json");
-    expect(templates).toHaveLength(7);
+    expect(templates).toHaveLength(9);
     expect(templates.map((item) => item.id)).toContain("first-steps");
+    expect(templates.map((item) => item.id)).toContain("mountain-pass-discoveries");
+    expect(templates.map((item) => item.id)).toContain("mountain-passes-and-flowlines");
   });
 
   it("requires multiple Flowlines and prevents a standalone single collectible quest", () => {
@@ -97,9 +102,59 @@ describe("bbox-local quest suggestion generation", () => {
     })[0];
     expect(suggestion.objectives[0].targets.map((target) => target.id)).toEqual(["a", "b", "c"]);
   });
+
+  it("generates Mountain Pass and mixed Mountain Pass/Flowline recommendations", async () => {
+    const templates = await readQuestTemplateRows("fixtures/quest-templates.json");
+    const legacyPass = collectible("pass-3", "mountain_pass");
+    delete legacyPass.primaryCategory;
+    const suggestions = generateQuestSuggestions({
+      templates,
+      collectibles: [
+        collectible("pass-1", "mountain_pass"),
+        collectible("pass-2", "mountain_pass"),
+        legacyPass,
+        collectible("peak-1", "peak"),
+        collectible("peak-2", "peak"),
+        collectible("peak-3", "peak"),
+        collectible("place-1"),
+        collectible("place-2"),
+        collectible("place-3"),
+        collectible("place-4")
+      ],
+      flowlines: ["f1", "f2", "f3", "f4", "f5"].map((id) => flowline(id))
+    });
+    const passQuest = suggestions.find((item) => item.templateId === "mountain-pass-discoveries");
+    const mixedQuest = suggestions.find((item) => item.templateId === "mountain-passes-and-flowlines");
+    expect(passQuest?.objectives[0]).toMatchObject({
+      type: "collectible_count",
+      category: "mountain_pass",
+      requiredCount: 3
+    });
+    expect(mixedQuest?.objectives.map((objective) => objective.type)).toEqual([
+      "collectible_count",
+      "flowline_rule"
+    ]);
+  });
 });
 
 describe("quest objective history evaluation", () => {
+  it("starts cancelled quest scopes with only history from the new start time", () => {
+    const history = historyFromQuestStart({
+      collectibles: [
+        { sourceId: "before", timestampMs: 99 },
+        { sourceId: "started", category: "peak", timestampMs: 100 },
+        { sourceId: "after", timestampMs: 101 }
+      ],
+      flowlines: [
+        { flowlineId: "before", activityId: "a1", lengthMeters: 1000, averageSpeedMps: 4, timestampMs: 99 },
+        { flowlineId: "started", activityId: "a2", lengthMeters: 1000, averageSpeedMps: 4, timestampMs: 100 },
+        { flowlineId: "after", activityId: "a3", lengthMeters: 1000, averageSpeedMps: 4, timestampMs: 101 }
+      ]
+    }, 100);
+    expect(history.collectibles.map((event) => event.sourceId)).toEqual(["started", "after"]);
+    expect(history.flowlines.map((completion) => completion.flowlineId)).toEqual(["started", "after"]);
+  });
+
   it("counts distinct qualifying Flowlines using length and average-speed snapshots", () => {
     const objective: QuestObjective = {
       id: "speed",

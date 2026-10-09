@@ -185,7 +185,7 @@ export class CollectibleRepository {
             collectible.source?.sourceExternalId ?? null,
             collectible.source?.sourceUrl ?? null,
             collectible.source?.sourceAttribution ?? null,
-            collectible.primaryCategory ?? null,
+            collectible.primaryCategory ?? (collectible.type === "mountain_pass" ? "mountain_pass" : null),
             collectible.tags ?? [],
             collectible.wikidataQid ?? null,
             collectible.wikipediaReference ?? null,

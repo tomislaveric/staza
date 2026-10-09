@@ -41,7 +41,7 @@ const SuggestionCard = (suggestion, started) => `
   </li>
 `;
 
-const InstanceCard = (instance) => {
+const InstanceCard = (instance, pendingQuestId) => {
   const objectiveStates = instance.objectives;
   const completed = objectiveStates.filter((item) => item.progress.complete).length;
   const ratio = objectiveStates.length ? completed / objectiveStates.length : 0;
@@ -60,16 +60,22 @@ const InstanceCard = (instance) => {
             <small>${escapeHtml(progress.completed)} / ${escapeHtml(progress.required)}</small>
           </li>
         `).join("")}</ul>
-        <span class="quest-card-progress">
-          <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
-          <small>${completed} / ${objectiveStates.length} objectives</small>
+          ${instance.status === "active" ? `
+            <button type="button" class="quest-instance-cancel" data-quest-cancel="${escapeHtml(instance.id)}"
+              ${pendingQuestId === instance.id ? "disabled" : ""}>
+              Cancel quest
+            </button>
+          ` : ""}
+          <span class="quest-card-progress">
+            <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
+            <small>${completed} / ${objectiveStates.length} objectives</small>
         </span>
       </article>
     </li>
   `;
 };
 
-export const QuestList = (suggestions, instances, startingSuggestionId) => {
+export const QuestList = (suggestions, instances, pendingQuestId) => {
   const startedIds = new Set(instances.map((instance) => instance.suggestionId));
   return `
     <section class="default-quest-list" aria-label="Suggested quests">
@@ -77,14 +83,14 @@ export const QuestList = (suggestions, instances, startingSuggestionId) => {
       ${suggestions.length
         ? `<ol>${suggestions.map((suggestion) => SuggestionCard(
           suggestion,
-          startedIds.has(suggestion.id) || startingSuggestionId === suggestion.id
+          startedIds.has(suggestion.id) || pendingQuestId === suggestion.id
         )).join("")}</ol>`
         : '<p class="default-quest-empty">No curated quests match this map area yet.</p>'}
     </section>
     <section class="quest-list" aria-label="Your quests">
       <h2>Your quests</h2>
       ${instances.length
-        ? `<ol>${instances.map(InstanceCard).join("")}</ol>`
+        ? `<ol>${instances.map((instance) => InstanceCard(instance, pendingQuestId)).join("")}</ol>`
         : '<p class="default-quest-empty">Start a local recommendation to begin tracking a quest.</p>'}
     </section>
   `;

@@ -87,6 +87,7 @@ export const normalizeQuaeldichFeature = (
     value: mountainPassValueFromElevation(elevationMeters),
     rarity: "common",
     status: "published",
+    primaryCategory: MOUNTAIN_PASS_CATEGORY,
     ...(elevationMeters === undefined ? {} : { elevationMeters }),
     source: {
       sourceType: QUAELDICH_SOURCE_TYPE,
