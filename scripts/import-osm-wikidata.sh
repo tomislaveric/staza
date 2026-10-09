@@ -78,6 +78,8 @@ ssh_options=(
   -p "$SSH_PORT"
   -o BatchMode=yes
   -o ConnectTimeout=15
+  -o ServerAliveInterval=30
+  -o ServerAliveCountMax=120
   -o StrictHostKeyChecking=yes
   -o "UserKnownHostsFile=$known_hosts"
 )

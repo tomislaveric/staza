@@ -7,6 +7,8 @@ describe("manual data import workflows", () => {
     expect(contents).toContain("name: Import Fartleks");
     expect(contents).toContain("/import-source/osm-germany-fartleks.ndjson");
     expect(contents).toContain("npm run import:fartleks -- --snapshot");
+    expect(contents).toContain("-o ServerAliveInterval=30");
+    expect(contents).toContain("-o ServerAliveCountMax=120");
     expect(contents).not.toContain("germany-latest.osm.pbf");
     expect(contents).not.toContain("extract:osm-germany-fartleks");
     expect(contents).not.toContain("osmium");
