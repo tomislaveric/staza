@@ -120,7 +120,9 @@ const stravaEnv = (): StravaConfig | undefined => {
   if (tokenEncryptionKey.length !== 32 || tokenEncryptionKey.toString("base64") !== encodedKey) {
     throw new Error("STRAVA_TOKEN_ENCRYPTION_KEY must be 32 random bytes encoded as base64.");
   }
-  const recentActivityLimit = integerEnv("STRAVA_RECENT_ACTIVITY_LIMIT", 3);
+  const recentActivityLimit = process.env.STRAVA_RECENT_ACTIVITY_LIMIT?.trim()
+    ? integerEnv("STRAVA_RECENT_ACTIVITY_LIMIT", 3)
+    : 3;
   if (recentActivityLimit > 30) throw new Error("STRAVA_RECENT_ACTIVITY_LIMIT must not exceed 30.");
   return { clientId, clientSecret, redirectUri: redirect.toString(), tokenEncryptionKey, recentActivityLimit };
 };
