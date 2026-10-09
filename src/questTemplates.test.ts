@@ -103,6 +103,22 @@ describe("bbox-local quest suggestion generation", () => {
     expect(suggestion.objectives[0].targets.map((target) => target.id)).toEqual(["a", "b", "c"]);
   });
 
+  it("excludes Flowlines already completed by the player from new recommendations", () => {
+    const suggestion = generateQuestSuggestions({
+      templates: [template([{ type: "flowline_rule", requiredCount: 2 }])],
+      collectibles: [],
+      flowlines: [
+        { ...flowline("already-ridden"), completed: true, completionCount: 1 },
+        flowline("available-1"),
+        flowline("available-2"),
+        flowline("available-3")
+      ]
+    })[0];
+
+    expect(suggestion.objectives[0].targets.map((target) => target.id))
+      .toEqual(["available-1", "available-2", "available-3"]);
+  });
+
   it("generates Mountain Pass and mixed Mountain Pass/Flowline recommendations", async () => {
     const templates = await readQuestTemplateRows("fixtures/quest-templates.json");
     const legacyPass = collectible("pass-3", "mountain_pass");

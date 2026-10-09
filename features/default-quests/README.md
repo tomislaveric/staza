@@ -147,6 +147,10 @@ continues to identify its discovery globally.
   listed Flowlines. Length, average-speed, and same-Activity constraints remain
   explicit. Started instances show progress for every listed target; completed
   Flowlines include their qualifying average speed.
+- New Flowline recommendations exclude Flowlines already completed by the
+  player, preventing quests from repeatedly offering the same finished routes.
+- Completed quest cards retain their full target list, but hide “Not complete”
+  labels for optional targets left unfinished after satisfying the requirement.
 - Selecting a recommendation or started/completed quest highlights all of its
   collectible and Flowline targets on the World map and frames them together.
   Target geometry is loaded by ID, independent of the current viewport and

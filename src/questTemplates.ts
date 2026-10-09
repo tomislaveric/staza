@@ -128,7 +128,8 @@ const resolveObjective = (
   const objectiveId = `${templateId}:objective:${index + 1}`;
   if (definition.type === "flowline_rule") {
     const candidates = sortedUniqueById(flowlines.filter((flowline) =>
-      definition.minimumLengthMeters === undefined || flowline.lengthMeters >= definition.minimumLengthMeters
+      !flowline.completed
+        && (definition.minimumLengthMeters === undefined || flowline.lengthMeters >= definition.minimumLengthMeters)
     )).slice(0, definition.requiredCount + 2);
     if (candidates.length < definition.requiredCount) return undefined;
     return {

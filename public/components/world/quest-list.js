@@ -62,7 +62,7 @@ const suggestionObjectiveStates = (suggestion) => suggestion.objectives.map((obj
   targetProgress: objective.targets.map((target) => ({ ...target, complete: false }))
 }));
 
-const objectiveGroup = (state, isSuggestion) => {
+const objectiveGroup = (state, isSuggestion, isCompletedQuest) => {
   const { objective, progress, targetProgress } = state;
   const completedLabel = isSuggestion
     ? `${progress.required} required · ${targetProgress.length} targets`
@@ -85,7 +85,9 @@ const objectiveGroup = (state, isSuggestion) => {
               <span>${escapeHtml(target.name)}${objective.type === "flowline_rule" && target.complete
                 ? ` — ${escapeHtml(flowlineAverageSpeedLabel(target))}` : ""}</span>
             </span>
-            <small>${isSuggestion ? "Target" : target.complete ? "Complete" : "Not complete"}</small>
+            ${!isSuggestion && isCompletedQuest && !target.complete
+              ? ""
+              : `<small>${isSuggestion ? "Target" : target.complete ? "Complete" : "Not complete"}</small>`}
           </li>
         `).join("")}
       </ul>
@@ -129,7 +131,7 @@ const questCard = ({
         </span>
         <span class="quest-card-description" data-user-content>${escapeHtml(description)}</span>
         <ul class="quest-objective-groups">
-          ${objectiveStates.map((state) => objectiveGroup(state, isSuggestion)).join("")}
+          ${objectiveStates.map((state) => objectiveGroup(state, isSuggestion, status === "completed")).join("")}
         </ul>
         ${isSuggestion ? "" : `
           <span class="quest-card-progress">

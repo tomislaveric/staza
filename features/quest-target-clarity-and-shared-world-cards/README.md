@@ -39,7 +39,8 @@ Home active-quest cards are out of scope.
 
 1. Review `fixtures/quest-templates.json` and `src/questTemplates.ts` for
    template, generation, and evaluation consistency. Preserve valid objective
-   behavior and clarify only misleading descriptions or labels.
+   behavior, exclude already-completed Flowlines from new recommendations, and
+   clarify misleading descriptions or labels.
 2. Refactor `public/components/world/quest-list.js` to share the core card
    structure between recommendations and quest instances. Under each
    description, list all eligible target names with objective icons, required
@@ -67,6 +68,9 @@ Home active-quest cards are out of scope.
   targets identifiable.
 - Recommendation cards show no tracked progress; started/completed cards show
   progress and per-target state in the same card structure.
+- Completed cards keep their full target list but do not label unmet optional
+  targets as “Not complete”.
+- New recommendations do not offer Flowlines the player has already completed.
 - Start and Cancel controls retain their existing behavior and do not
   accidentally select or deselect a quest.
 - Selecting any World quest highlights all associated collectible and

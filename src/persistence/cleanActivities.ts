@@ -30,7 +30,7 @@ const cleanActivities = async (): Promise<void> => {
   const prompt = createInterface({ input: stdin, output: stdout });
   try {
     const answer = await prompt.question(
-      `This removes all activities and active quests for all players from ${databaseHost}, resets all XP and journey dates, and deletes their video files. Collectibles, Fartleks, and completed quests are preserved. Type "delete" to continue: `
+      `This resets local progress for all players in ${databaseHost}: it deletes all activities, all active and completed quests, quest cancellation markers, and activity video files, then resets XP and journey dates. User accounts, Strava connections, quest templates, collectibles, and Flowlines are preserved. A later Strava sync may import activities again. Type "delete" to continue: `
     );
     if (answer !== "delete") {
       console.log("Activity cleanup cancelled.");
@@ -45,7 +45,8 @@ const cleanActivities = async (): Promise<void> => {
     await migrate(pool);
     const client = await pool.connect();
     let activityCount = 0;
-    let activeQuestCount = 0;
+    let questCount = 0;
+    let questCancellationCount = 0;
     let mediaDirectories: string[] = [];
     try {
       await client.query("BEGIN");
@@ -58,8 +59,10 @@ const cleanActivities = async (): Promise<void> => {
 
       const deleted = await client.query("DELETE FROM activities");
       activityCount = deleted.rowCount ?? 0;
-      const deletedQuests = await client.query("DELETE FROM quest_instances WHERE status = 'active'");
-      activeQuestCount = deletedQuests.rowCount ?? 0;
+      const deletedQuests = await client.query("DELETE FROM quest_instances");
+      questCount = deletedQuests.rowCount ?? 0;
+      const deletedQuestCancellations = await client.query("DELETE FROM quest_instance_cancellations");
+      questCancellationCount = deletedQuestCancellations.rowCount ?? 0;
       await client.query("UPDATE players SET total_xp = 0, journey_started_at = NULL");
       await client.query("COMMIT");
     } catch (error) {
@@ -70,7 +73,9 @@ const cleanActivities = async (): Promise<void> => {
     }
 
     await Promise.all(mediaDirectories.map((directory) => rm(directory, { recursive: true, force: true })));
-    console.log(`Deleted ${activityCount} activities and ${activeQuestCount} active quests, and reset XP and journey dates for all players.`);
+    console.log(
+      `Deleted ${activityCount} activities, ${questCount} quests, and ${questCancellationCount} quest cancellation markers; reset XP and journey dates for all players.`
+    );
   } finally {
     await pool.end();
   }

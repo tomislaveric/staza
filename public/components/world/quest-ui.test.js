@@ -141,6 +141,39 @@ describe("Quest suggestions and instances", () => {
     expect(markup).toContain("One — 33 km/h");
   });
 
+  it("hides unmet optional-target labels after a quest is completed", () => {
+    const completedQuest = instance({
+      status: "completed",
+      objectives: instance().objectives.map((state, index) => {
+        const optionalTarget = index === 1 ? { id: "f5", name: "Five", complete: false } : undefined;
+        return {
+          ...state,
+          objective: {
+            ...state.objective,
+            targets: [...state.objective.targets, ...(optionalTarget ? [optionalTarget] : [])]
+          },
+          progress: { completed: 3, required: 3, complete: true },
+          targetProgress: [
+            ...state.targetProgress.map((target, targetIndex) => ({
+              ...target,
+              complete: targetIndex < 3,
+              ...(index === 1 && targetIndex < 3 ? { averageSpeedMps: 9.1667 } : {})
+            })),
+            ...(optionalTarget ? [optionalTarget] : [])
+          ]
+        };
+      })
+    });
+    const markup = QuestList([], [completedQuest], undefined);
+    const incompleteOptionalTargets = markup.split("Not complete").length - 1;
+
+    expect(markup).toContain("3/3 complete");
+    expect(incompleteOptionalTargets).toBe(0);
+    expect(markup).toContain("Complete");
+    expect(markup).toContain("Four");
+    expect(markup).toContain("Five");
+  });
+
   it("marks a selected started quest card for map display", () => {
     const markup = QuestList([], [instance()], undefined, false, "instance:instance-1");
 
