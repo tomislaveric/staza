@@ -32,6 +32,8 @@ const result = (activityId: string, xp = 10): ActivityResult => ({
   duration: 0,
   collectedCount: 0,
   totalPoints: xp,
+  distanceXp: 0,
+  distanceXpRewards: [],
   collectibles: [],
   events: [],
   nearMisses: [],

@@ -127,6 +127,40 @@ describe("replayRewardItems / replayRewardStateAt", () => {
     expect(replayRewardStateAt(items, 1_000)).toMatchObject({ reward: { name: "Park Coin" }, cumulativeXp: 20 });
   });
 
+  it("adds distance milestone rewards at their crossing times without changing collectible or Flowline XP", () => {
+    const activityReplay = {
+      activityResult: {
+        totalPoints: 140,
+        distanceXp: 30,
+        distanceXpRewards: [
+          { distanceMeters: 10_000, xpEarned: 10, activityTimestampMs: 1_500 },
+          { distanceMeters: 20_000, xpEarned: 20, activityTimestampMs: 2_500 }
+        ],
+        events: [
+          { sourceId: "coin", activityTimestamp: 1_000, value: 20, collectible: { name: "Coin", type: "coin" } },
+          { sourceId: "peak", activityTimestamp: 3_000, value: 40, collectible: { name: "Peak", type: "landmark" } }
+        ],
+        fartlekCompletions: [{
+          fartlekId: "flowline",
+          fartlekName: "Flowline",
+          completedAtTimestampMs: 2_000
+        }]
+      }
+    };
+    const items = replayRewardItems(activityReplay, 140);
+
+    expect(items.map(({ kind, xpGain, timestampMs }) => [kind, xpGain, timestampMs])).toEqual([
+      ["collectible", 20, 1_000],
+      ["distance", 10, 1_500],
+      ["flowline", 50, 2_000],
+      ["distance", 20, 2_500],
+      ["collectible", 40, 3_000]
+    ]);
+    expect(replayRewardStateAt(items, 1_500)).toMatchObject({ reward: { name: "10 km reached" }, cumulativeXp: 30 });
+    expect(replayRewardStateAt(items, 2_500)).toMatchObject({ reward: { name: "20 km reached" }, cumulativeXp: 100 });
+    expect(replayRewardStateAt(items, 3_000).cumulativeXp).toBe(140);
+  });
+
   it("uses a stable order for rewards with identical timestamps", () => {
     const items = replayRewardItems({
       activityResult: {

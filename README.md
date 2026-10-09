@@ -5,6 +5,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 ## Features
 
 - [Activity Detail Replay Reward Presentation](features/activity-detail-replay-reward-presentation/README.md) — refine replay rewards with timestamp-driven single-item feedback and deterministic XP presentation while preserving the existing panel.
+- [Activity Distance XP Bonus](features/activity-distance-xp-bonus/README.md) — award incremental XP at distance milestones during replay while preserving collectible and Flowline rewards.
 - [Activity mode animated ride POC](features/activity-mode-animated-ride-poc/README.md)
   — make FIT activities and game events primary, with a FIT-only replay and
   optional GoPro highlights.

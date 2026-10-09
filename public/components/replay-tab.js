@@ -102,6 +102,7 @@ export const flowlineStateAt = (completion, timestampMs) =>
 
 /** Historical reward callouts ordered independently of playback direction or frame history. */
 export const replayRewardItems = (replay, persistedXp) => {
+  const activityResult = replay.activityResult;
   const events = (replay.activityResult.events ?? [])
     .filter((event) => Number.isFinite(event.activityTimestamp))
     .map((event, index) => ({
@@ -117,12 +118,25 @@ export const replayRewardItems = (replay, persistedXp) => {
       order: index
     }));
   const collectibleXp = events.reduce((total, event) => total + event.xpGain, 0);
-  const flowlines = (replay.activityResult.fartlekCompletions ?? [])
+  const distanceXp = Number.isFinite(activityResult.distanceXp) ? activityResult.distanceXp : 0;
+  const distanceItems = (activityResult.distanceXpRewards ?? [])
+    .filter((reward) => Number.isFinite(reward.activityTimestampMs) && Number.isFinite(reward.xpEarned))
+    .map((reward, index) => ({
+      id: `distance:${reward.distanceMeters}:${index}`,
+      kind: "distance",
+      timestampMs: reward.activityTimestampMs,
+      name: `${reward.distanceMeters / 1_000} km reached`,
+      typeLabel: "DISTANCE",
+      xpGain: reward.xpEarned,
+      eventLabel: "DISTANCE MILESTONE",
+      order: index
+    }));
+  const flowlines = (activityResult.fartlekCompletions ?? [])
     .filter((completion) => Number.isFinite(completion.completedAtTimestampMs));
-  const totalXp = Number.isFinite(persistedXp) ? persistedXp : replay.activityResult.totalPoints;
+  const totalXp = Number.isFinite(persistedXp) ? persistedXp : activityResult.totalPoints;
   // Replay snapshots persist Flowline timestamps, not per-completion XP values.
   const flowlineXp = flowlines.length > 0 && Number.isFinite(totalXp)
-    ? Math.max(0, totalXp - collectibleXp) / flowlines.length
+    ? Math.max(0, totalXp - collectibleXp - distanceXp) / flowlines.length
     : 0;
   const flowlineItems = flowlines.map((completion, index) => ({
     id: `flowline:${completion.fartlekId}:${index}`,
@@ -135,7 +149,7 @@ export const replayRewardItems = (replay, persistedXp) => {
     order: events.length + index
   }));
 
-  return [...events, ...flowlineItems].sort((left, right) =>
+  return [...events, ...distanceItems, ...flowlineItems].sort((left, right) =>
     left.timestampMs - right.timestampMs
     || (left.kind < right.kind ? -1 : left.kind > right.kind ? 1 : 0)
     || left.order - right.order

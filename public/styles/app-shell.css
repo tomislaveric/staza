@@ -1085,6 +1085,13 @@ input {
     height: 4px;
     width: 18px;
 }
+.activity-replay-reward-icon--distance {
+    background: var(--accent-yellow);
+    border-color: var(--accent-yellow);
+}
+.activity-replay-reward-icon--distance + .activity-replay-reward-copy .activity-replay-reward-type {
+    color: var(--accent-yellow);
+}
 .activity-replay-reward-copy {
     display: grid;
     gap: 3px;

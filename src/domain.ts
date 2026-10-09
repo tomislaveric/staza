@@ -202,10 +202,18 @@ export interface ActivityResult {
   duration?: number;
   collectedCount: number;
   totalPoints: number;
+  distanceXp: number;
+  distanceXpRewards: DistanceXpReward[];
   collectibles: Collectible[];
   events: GameEvent[];
   nearMisses: NearMissCollectible[];
   fartlekCompletions: FartlekCompletionDraft[];
+}
+
+export interface DistanceXpReward {
+  distanceMeters: number;
+  xpEarned: number;
+  activityTimestampMs: number;
 }
 
 export interface PlayerProgress {

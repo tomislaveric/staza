@@ -30,6 +30,8 @@ const result = (activityId: string, value = 25): ActivityResult => ({
   duration: 600,
   collectedCount: 1,
   totalPoints: value,
+  distanceXp: 0,
+  distanceXpRewards: [],
   collectibles: [{
     id: "historic-coin", name: "Historic Coin", type: "coin", rarity: "rare",
     latitude: 55.6761, longitude: 12.5683, radiusMeters: 15, value
@@ -281,6 +283,8 @@ describePersistence("ActivityRepository", () => {
     const fartlekResult: ActivityResult = {
       ...result(id, 0),
       totalPoints: 50,
+      distanceXp: 0,
+      distanceXpRewards: [],
       collectedCount: 0,
       collectibles: [],
       events: [],

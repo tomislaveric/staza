@@ -46,6 +46,8 @@ const result = (activityId: string): ActivityResult => ({
   duration: 3_600,
   collectedCount: 1,
   totalPoints: 25,
+  distanceXp: 0,
+  distanceXpRewards: [],
   collectibles: [catalog[1]],
   events: [{
     id: "schloss",

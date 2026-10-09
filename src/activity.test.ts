@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { deriveActivity, deriveActivityResult, MAX_NEAR_MISSES, NEAR_MISS_THRESHOLD_METERS } from "./activity.js";
+import {
+  deriveActivity,
+  deriveActivityResult,
+  deriveDistanceXpRewards,
+  distanceXpForMeters,
+  DISTANCE_XP_MILESTONES,
+  MAX_NEAR_MISSES,
+  NEAR_MISS_THRESHOLD_METERS
+} from "./activity.js";
+import { distanceMeters } from "./geometry.js";
 
 const route = [
   { latitude: 0, longitude: 0, timestampMs: 1_000 },
@@ -39,6 +48,73 @@ describe("activity derivation", () => {
   it("completes a zero-collectible activity", () => {
     const result = deriveActivityResult(deriveActivity("ride", route), []);
     expect(result).toMatchObject({ collectedCount: 0, totalPoints: 0, events: [] });
+  });
+
+  it("awards cumulative distance XP only when each milestone is reached", () => {
+    const expectedTotals = [0, 10, 30, 50, 75, 100];
+    const thresholds = [0, ...DISTANCE_XP_MILESTONES.map((milestone) => milestone.distanceMeters)];
+
+    thresholds.forEach((threshold, index) => {
+      expect(distanceXpForMeters(threshold)).toBe(expectedTotals[index]);
+      if (threshold > 0) expect(distanceXpForMeters(threshold - 0.01)).toBe(expectedTotals[index - 1]);
+    });
+    expect(distanceXpForMeters(1_000_000)).toBe(100);
+    expect(() => distanceXpForMeters(-1)).toThrow(RangeError);
+    expect(() => distanceXpForMeters(Number.NaN)).toThrow(RangeError);
+  });
+
+  it("places every distance reward at its route-crossing timestamp for any activity type", () => {
+    const totalDistanceMeters = 160_000;
+    const endLongitude = totalDistanceMeters / 6_371_000 * 180 / Math.PI;
+    const longRoute = [
+      { latitude: 0, longitude: 0, timestampMs: 1_000 },
+      { latitude: 0, longitude: endLongitude, timestampMs: 161_000 }
+    ];
+    const segmentDistance = distanceMeters(0, 0, 0, endLongitude);
+    const result = deriveActivityResult(deriveActivity("long-run", longRoute, "running"), []);
+
+    expect(result.distanceXp).toBe(100);
+    expect(result.totalPoints).toBe(100);
+    expect(result.distanceXpRewards.map(({ distanceMeters: distance, xpEarned }) => [distance, xpEarned])).toEqual([
+      [10_000, 10],
+      [20_000, 20],
+      [50_000, 20],
+      [100_000, 25],
+      [150_000, 25]
+    ]);
+    result.distanceXpRewards.forEach((reward) => {
+      expect(reward.activityTimestampMs).toBeCloseTo(
+        1_000 + 160_000 * reward.distanceMeters / segmentDistance,
+        6
+      );
+    });
+    expect(deriveDistanceXpRewards(route)).toEqual([]);
+  });
+
+  it("adds distance XP to existing collectible points without changing the collectible award", () => {
+    const longitudeAtMeters = (meters: number) => meters / 6_371_000 * 180 / Math.PI;
+    const longRide = [
+      { latitude: 0, longitude: 0, timestampMs: 1_000 },
+      { latitude: 0, longitude: longitudeAtMeters(9_500), timestampMs: 10_500 },
+      { latitude: 0, longitude: longitudeAtMeters(11_000), timestampMs: 12_000 }
+    ];
+    const collectible = {
+      id: "coin",
+      name: "Coin",
+      type: "coin" as const,
+      latitude: 0,
+      longitude: longitudeAtMeters(9_500),
+      radiusMeters: 20,
+      value: 10
+    };
+    const result = deriveActivityResult(deriveActivity("long-ride", longRide, "cycling"), [collectible]);
+
+    expect(result).toMatchObject({
+      collectedCount: 1,
+      distanceXp: 10,
+      totalPoints: 20,
+      events: [expect.objectContaining({ sourceId: "coin", value: 10 })]
+    });
   });
 
   it("uses the relevant presentation subset and retains each collected source", () => {
