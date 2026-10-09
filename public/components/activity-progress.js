@@ -10,7 +10,13 @@ export const ActivityProgress = (activity, progress) => {
   return `
     <section class="activity-progress-card" aria-label="Activity progression">
       <div class="activity-progress-top">
-        <div><p class="activity-progress-label">XP EARNED</p><strong class="activity-progress-earned">+${formatNumber(activity.xpEarned)}</strong></div>
+        <div class="activity-progress-earned-group">
+          <p class="activity-progress-label">XP EARNED</p>
+          <div class="activity-progress-earned-row">
+            <strong class="activity-progress-earned" data-activity-xp="${activity.xpEarned}">+${formatNumber(activity.xpEarned)}</strong>
+            <div class="activity-replay-reward" data-replay-reward hidden aria-live="polite"></div>
+          </div>
+        </div>
         <div class="activity-progress-found"><p class="activity-progress-label">FOUND</p><strong>${formatNumber(activity.collectedCount)}</strong><span>collectibles</span></div>
       </div>
       <div class="activity-progress-level">

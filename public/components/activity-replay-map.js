@@ -158,6 +158,8 @@ export const mountReplayMap = async ({
   basemap,
   onPlaybackStateChange = () => {},
   onProgress = () => {},
+  onReplayStart = () => {},
+  onReplayComplete = () => {},
   onReady = () => {}
 }) => {
   const { route } = activity;
@@ -212,12 +214,13 @@ export const mountReplayMap = async ({
         timestamp
       ))
     );
-    onProgress(timestamp);
+    onProgress(timestamp, progress);
   };
 
   let startedAt;
   let elapsed = 0;
   let frame;
+  let replayStarted = false;
 
   const play = (now) => {
     if (startedAt === undefined) startedAt = now - elapsed * 1000;
@@ -227,6 +230,7 @@ export const mountReplayMap = async ({
     else {
       frame = undefined;
       onPlaybackStateChange(false);
+      onReplayComplete();
     }
   };
 
@@ -243,10 +247,17 @@ export const mountReplayMap = async ({
   return {
     play: () => {
       if (frame !== undefined) return;
-      if (elapsed >= duration) {
+      const replayEnded = elapsed >= duration;
+      if (replayEnded) {
         elapsed = 0;
         startedAt = undefined;
+        replayStarted = false;
       }
+      if (!replayStarted) {
+        replayStarted = true;
+        onReplayStart();
+      }
+      if (replayEnded) render(0);
       onPlaybackStateChange(true);
       frame = requestAnimationFrame(play);
     },
@@ -254,6 +265,9 @@ export const mountReplayMap = async ({
     restart: () => {
       pause();
       elapsed = 0;
+      replayStarted = false;
+      onReplayStart();
+      replayStarted = true;
       render(0);
     },
     fitRoute,

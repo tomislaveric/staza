@@ -3,6 +3,12 @@ import { getActivityLabel } from "./activity-labels.js";
 import { CollectionPanel, collectionProgressLabel, collectionProgressPercent, collectionStateLabel } from "./shared/collection-panel.js";
 import { escapeHtml } from "./collected-list.js";
 import { formatDistance, formatElapsed, formatSpeed } from "./world/fartlek-detail.js";
+import { getAppLocale } from "../app-locales.js";
+import { replayDurationSeconds } from "../replay.js";
+
+const REWARD_WINDOW_MS = 1_500;
+const REWARD_EXIT_MS = 160;
+const XP_ANIMATION_MS = 420;
 
 /** Ride Detail replay: the shared Staza map with an activity route, position and collection. */
 export const ReplayTab = () => `
@@ -93,6 +99,73 @@ export const flowlineStateAt = (completion, timestampMs) =>
   completion.completedAtTimestampMs === undefined || timestampMs >= completion.completedAtTimestampMs
     ? "completed"
     : "unvisited";
+
+/** Historical reward callouts ordered independently of playback direction or frame history. */
+export const replayRewardItems = (replay, persistedXp) => {
+  const events = (replay.activityResult.events ?? [])
+    .filter((event) => Number.isFinite(event.activityTimestamp))
+    .map((event, index) => ({
+      id: `collectible:${event.sourceId}:${index}`,
+      kind: "collectible",
+      timestampMs: event.activityTimestamp,
+      name: event.collectible?.name || event.sourceId,
+      typeLabel: event.collectible?.type === "landmark"
+        ? "LANDMARK"
+        : event.collectible?.type === "coin" ? "COIN" : "COLLECTIBLE",
+      xpGain: Number.isFinite(event.value) ? event.value : 0,
+      eventLabel: "COLLECTIBLE FOUND",
+      order: index
+    }));
+  const collectibleXp = events.reduce((total, event) => total + event.xpGain, 0);
+  const flowlines = (replay.activityResult.fartlekCompletions ?? [])
+    .filter((completion) => Number.isFinite(completion.completedAtTimestampMs));
+  const totalXp = Number.isFinite(persistedXp) ? persistedXp : replay.activityResult.totalPoints;
+  // Replay snapshots persist Flowline timestamps, not per-completion XP values.
+  const flowlineXp = flowlines.length > 0 && Number.isFinite(totalXp)
+    ? Math.max(0, totalXp - collectibleXp) / flowlines.length
+    : 0;
+  const flowlineItems = flowlines.map((completion, index) => ({
+    id: `flowline:${completion.fartlekId}:${index}`,
+    kind: "flowline",
+    timestampMs: completion.completedAtTimestampMs,
+    name: completion.fartlekName || completion.fartlekId,
+    typeLabel: "FLOWLINE",
+    xpGain: flowlineXp,
+    eventLabel: "FLOWLINE COMPLETED",
+    order: events.length + index
+  }));
+
+  return [...events, ...flowlineItems].sort((left, right) =>
+    left.timestampMs - right.timestampMs
+    || (left.kind < right.kind ? -1 : left.kind > right.kind ? 1 : 0)
+    || left.order - right.order
+  );
+};
+
+/** Translate a real-time callout duration into the replay's compressed activity timeline. */
+export const replayRewardWindowMs = (replay) => {
+  const activityDurationMs = replay.activity.endedAt - replay.activity.startedAt;
+  if (!Number.isFinite(activityDurationMs) || activityDurationMs <= 0) return REWARD_WINDOW_MS;
+  const playbackDuration = replayDurationSeconds(
+    replay.activityResult.duration ?? activityDurationMs / 1000
+  );
+  return REWARD_WINDOW_MS * activityDurationMs / (playbackDuration * 1000);
+};
+
+/** Reward visibility and cumulative XP at an absolute activity timestamp. */
+export const replayRewardStateAt = (items, timestampMs, windowMs = REWARD_WINDOW_MS) => {
+  const reached = items.filter((item) => item.timestampMs <= timestampMs);
+  const lastIndex = reached.length - 1;
+  const last = reached[lastIndex];
+  const next = items[lastIndex + 1];
+  const visibleUntil = last
+    ? Math.min(last.timestampMs + windowMs, next?.timestampMs ?? Infinity)
+    : -Infinity;
+  return {
+    reward: last && timestampMs < visibleUntil ? last : undefined,
+    cumulativeXp: reached.reduce((total, item) => total + item.xpGain, 0)
+  };
+};
 
 const replayPanelTitle = (activity) => activity?.title || getActivityLabel(activity?.type);
 
@@ -212,6 +285,13 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
   const container = mountPoint.querySelector("[data-replay-map]");
   const panelHost = mountPoint.querySelector("[data-replay-panel]");
   const reopenButton = mountPoint.querySelector("[data-replay-panel-reopen]");
+  const xpElement = mountPoint.querySelector(".activity-progress-earned");
+  const rewardHost = mountPoint.querySelector("[data-replay-reward]");
+  const persistedXp = Number(xpElement?.dataset.activityXp ?? replay.activityResult.totalPoints ?? 0);
+  const rewards = replayRewardItems(replay, persistedXp);
+  const rewardWindowMs = replayRewardWindowMs(replay);
+  const xpFormatter = new Intl.NumberFormat(getAppLocale(), { maximumFractionDigits: 0 });
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
   const setPlayingUi = (isPlaying) => {
     button.classList.toggle("is-playing", isPlaying);
     button.setAttribute("aria-label", isPlaying ? "Pause replay" : "Play replay");
@@ -219,6 +299,99 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
   };
 
   const updatePanel = panelHost ? mountReplayPanel(panelHost, replay) : () => {};
+  let visibleXp = persistedXp;
+  let xpTarget = persistedXp;
+  let xpFrame;
+  let rewardEnterFrame;
+  let rewardTimer;
+  let displayedRewardId;
+  let pendingReward;
+  let rewardIsExiting = false;
+  let previousProgress;
+  const setXpText = (value) => {
+    visibleXp = value;
+    if (xpElement) xpElement.textContent = `+${xpFormatter.format(value)}`;
+  };
+  const setXpTarget = (target, immediate = false) => {
+    if (!Number.isFinite(target) || (target === xpTarget && !immediate)) return;
+    xpTarget = target;
+    if (xpFrame !== undefined) cancelAnimationFrame(xpFrame);
+    xpFrame = undefined;
+    if (immediate || reduceMotion) {
+      setXpText(target);
+      return;
+    }
+    const startValue = visibleXp;
+    const startTime = performance.now();
+    const animate = (now) => {
+      const fraction = Math.min(1, (now - startTime) / XP_ANIMATION_MS);
+      const eased = 1 - (1 - fraction) ** 3;
+      setXpText(Math.round(startValue + (target - startValue) * eased));
+      if (fraction < 1) xpFrame = requestAnimationFrame(animate);
+      else {
+        xpFrame = undefined;
+        setXpText(target);
+      }
+    };
+    xpFrame = requestAnimationFrame(animate);
+  };
+  const commitReward = (reward) => {
+    displayedRewardId = reward?.id;
+    rewardIsExiting = false;
+    if (!rewardHost) return;
+    rewardHost.classList.remove("is-visible", "is-exiting");
+    rewardHost.hidden = !reward;
+    rewardHost.innerHTML = reward ? `
+      <span class="activity-replay-reward-icon activity-replay-reward-icon--${reward.kind}" aria-hidden="true"></span>
+      <span class="activity-replay-reward-copy">
+        <small class="activity-replay-reward-type">${escapeHtml(reward.typeLabel)}</small>
+        <strong class="activity-replay-reward-name">${escapeHtml(reward.name)}</strong>
+        <small class="activity-replay-reward-label">${escapeHtml(reward.eventLabel)}</small>
+      </span>
+      <strong class="activity-replay-reward-xp">+${xpFormatter.format(reward.xpGain)} XP</strong>
+    ` : "";
+    if (!reward || reduceMotion) {
+      if (reward) rewardHost.classList.add("is-visible");
+      return;
+    }
+    if (rewardEnterFrame !== undefined) cancelAnimationFrame(rewardEnterFrame);
+    rewardEnterFrame = requestAnimationFrame(() => {
+      rewardEnterFrame = undefined;
+      if (displayedRewardId === reward.id) rewardHost.classList.add("is-visible");
+    });
+  };
+  const setReward = (reward, immediate = false) => {
+    pendingReward = reward;
+    if (reward?.id === displayedRewardId && !rewardIsExiting) return;
+    if (immediate) {
+      clearTimeout(rewardTimer);
+      rewardTimer = undefined;
+      commitReward(reward);
+      return;
+    }
+    if (rewardIsExiting) return;
+    if (displayedRewardId === undefined) {
+      commitReward(reward);
+      return;
+    }
+    rewardIsExiting = true;
+    rewardHost?.classList.remove("is-visible");
+    rewardHost?.classList.add("is-exiting");
+    rewardTimer = setTimeout(() => {
+      rewardTimer = undefined;
+      commitReward(pendingReward);
+    }, reduceMotion ? 0 : REWARD_EXIT_MS);
+  };
+  const updateReplayPresentation = (timestampMs, progress) => {
+    updatePanel(timestampMs);
+    const state = replayRewardStateAt(rewards, timestampMs, rewardWindowMs);
+    const hasProgress = Number.isFinite(progress);
+    const seeked = hasProgress && previousProgress !== undefined
+      && (progress < previousProgress || progress - previousProgress > 0.05);
+    setReward(state.reward, seeked || (progress === 0 && previousProgress === undefined));
+    setXpTarget(state.cumulativeXp, seeked || (progress === 0 && previousProgress === undefined));
+    if (hasProgress) previousProgress = progress;
+  };
 
   let player;
   const refitRoute = (duration) => player?.fitRoute(panelFitPadding(container, panelHost), { duration });
@@ -238,7 +411,18 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
     activityResult: replay.activityResult,
     basemap,
     onPlaybackStateChange: setPlayingUi,
-    onProgress: updatePanel,
+    onProgress: updateReplayPresentation,
+    onReplayStart: () => {
+      previousProgress = undefined;
+      setPanelOpen(false);
+      setReward(undefined, true);
+      setXpTarget(0, true);
+    },
+    onReplayComplete: () => {
+      setReward(undefined, true);
+      setPanelOpen(true);
+      setXpTarget(persistedXp, true);
+    },
     onReady: () => button.removeAttribute("disabled")
   });
 
@@ -256,5 +440,10 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
     else player.play();
   });
 
-  return () => mounted.then((instance) => instance.destroy()).catch(() => {});
+  return () => {
+    clearTimeout(rewardTimer);
+    if (xpFrame !== undefined) cancelAnimationFrame(xpFrame);
+    if (rewardEnterFrame !== undefined) cancelAnimationFrame(rewardEnterFrame);
+    return mounted.then((instance) => instance.destroy()).catch(() => {});
+  };
 };

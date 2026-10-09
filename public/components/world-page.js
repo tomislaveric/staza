@@ -11,7 +11,7 @@ import { CollectibleDetail } from "./world/collectible-detail.js";
 import { FartlekDetail } from "./world/fartlek-detail.js";
 import { mountQuestEditor } from "./world/quest-editor.js";
 
-export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place"];
+export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"];
 
 const filterLabels = {
   all: "All",
@@ -24,7 +24,8 @@ const filterLabels = {
   peak: "Peak",
   castle: "Castle",
   waterfall: "Waterfall",
-  place: "Place"
+  place: "Place",
+  mountain_pass: "Mountain pass"
 };
 
 const formatNumber = (value) => new Intl.NumberFormat(getAppLocale()).format(value);
@@ -42,7 +43,7 @@ export const availableWorldFilters = (collectibles, fartleks = []) => {
   if (visibleCollectibles.some((collectible) => collectible.rarity === "epic")) filters.add("epic");
   if (fartleks.length) filters.add("fartleks");
 
-  for (const category of ["viewpoint", "peak", "castle", "waterfall", "place"]) {
+  for (const category of ["viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"]) {
     if (visibleCollectibles.some((collectible) => collectibleCategory(collectible) === category)) {
       filters.add(category);
     }

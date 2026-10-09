@@ -1,15 +1,58 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createStazaMap } from "./shared/map/staza-map.js";
 import {
   activityCollectibleSources,
   activityFlowlineSources,
+  mountReplayMap,
   replayTimestamp,
   traveledCoordinates
 } from "./activity-replay-map.js";
+
+vi.mock("./shared/map/staza-map.js", () => ({ createStazaMap: vi.fn() }));
+vi.mock("./shared/map/staza-route-layers.js", () => ({
+  stazaRouteLayers: () => [],
+  stazaSubduedRouteLayers: () => []
+}));
+vi.mock("./shared/map/staza-fartlek-layers.js", () => ({
+  ensureFartlekLayers: vi.fn(),
+  fartleksToFeatureCollection: () => ({ type: "FeatureCollection", features: [] }),
+  setFartlekData: vi.fn()
+}));
+vi.mock("./shared/map/staza-collectible-layers.js", () => ({
+  ensureCollectibleLayers: vi.fn(),
+  setCollectibleData: vi.fn()
+}));
+vi.mock("./shared/map/staza-collectible-features.js", () => ({
+  collectiblesToFeatureCollection: () => ({ type: "FeatureCollection", features: [] })
+}));
+vi.mock("./shared/map/staza-map-utils.js", () => ({
+  lineFeature: () => ({ type: "Feature" }),
+  pointFeature: () => ({ type: "Feature" }),
+  pointsToBounds: () => undefined
+}));
 
 const route = [
   { longitude: 0, latitude: 0, timestampMs: 1_000 },
   { longitude: 10, latitude: 20, timestampMs: 3_000 }
 ];
+
+beforeEach(() => {
+  const sources = new Map();
+  const map = {
+    addSource: (id, config) => sources.set(id, {
+      ...config,
+      setData(data) {
+        this.data = data;
+      }
+    }),
+    addLayer: vi.fn(),
+    getSource: (id) => sources.get(id),
+    fitBounds: vi.fn()
+  };
+  createStazaMap.mockResolvedValue({ map, ready: Promise.resolve(), destroy: vi.fn() });
+});
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("replayTimestamp", () => {
   it("maps playback progress onto the activity's absolute time and clamps to the range", () => {
@@ -78,5 +121,62 @@ describe("activityFlowlineSources", () => {
 
   it("skips older replay completions without saved geometry", () => {
     expect(activityFlowlineSources([{ ...completion, fartlekGeometry: undefined }], 3_000)).toEqual([]);
+  });
+});
+
+describe("mountReplayMap replay lifecycle", () => {
+  it("distinguishes replay start, pause, natural completion, and restart", async () => {
+    const frames = new Map();
+    let nextFrameId = 0;
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      const id = ++nextFrameId;
+      frames.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id) => frames.delete(id));
+
+    const onReplayStart = vi.fn();
+    const onReplayComplete = vi.fn();
+    const player = await mountReplayMap({
+      container: {},
+      activity: {
+        startedAt: 1_000,
+        endedAt: 3_000,
+        route
+      },
+      activityResult: {
+        duration: 12,
+        collectibles: [],
+        events: [],
+        fartlekCompletions: []
+      },
+      onReplayStart,
+      onReplayComplete
+    });
+
+    player.play();
+    expect(onReplayStart).toHaveBeenCalledTimes(1);
+    player.pause();
+    expect(onReplayComplete).not.toHaveBeenCalled();
+
+    player.play();
+    expect(onReplayStart).toHaveBeenCalledTimes(1);
+    const firstFrameId = [...frames.keys()].at(-1);
+    const firstFrame = frames.get(firstFrameId);
+    frames.delete(firstFrameId);
+    firstFrame(0);
+    const finalFrameId = [...frames.keys()].at(-1);
+    const finalFrame = frames.get(finalFrameId);
+    frames.delete(finalFrameId);
+    finalFrame(12_000);
+    expect(onReplayComplete).toHaveBeenCalledTimes(1);
+
+    player.play();
+    expect(onReplayStart).toHaveBeenCalledTimes(2);
+    player.pause();
+    player.restart();
+    expect(onReplayStart).toHaveBeenCalledTimes(3);
+    expect(onReplayComplete).toHaveBeenCalledTimes(1);
+    player.destroy();
   });
 });

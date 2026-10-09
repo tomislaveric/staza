@@ -4,6 +4,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 
 ## Features
 
+- [Activity Detail Replay Reward Presentation](features/activity-detail-replay-reward-presentation/README.md) — refine replay rewards with timestamp-driven single-item feedback and deterministic XP presentation while preserving the existing panel.
 - [Activity mode animated ride POC](features/activity-mode-animated-ride-poc/README.md)
   — make FIT activities and game events primary, with a FIT-only replay and
   optional GoPro highlights.
@@ -130,7 +131,6 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [World Filter](features/world-filter/README.md)
   — combine multi-select, marker-keyed World map filters and remove the
   redundant map-overlay legend.
-
 ## World architecture
 
 The World screen is a **browse read model**, not the route-relevant candidate

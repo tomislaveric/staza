@@ -138,7 +138,7 @@
   width: auto;
 }
 
-/* Shared marker vocabulary: fill encodes discovery/category, ring encodes rarity. */
+/* Shared marker vocabulary: fill or glyph encodes category and discovery state. */
 .collectible-swatch {
   border-radius: 50%;
   border-style: solid;
@@ -152,10 +152,19 @@
 .collectible-swatch.is-visited { background: var(--accent-yellow); border-color: rgb(11 12 15 / 75%); }
 .collectible-swatch.is-unvisited { background: var(--surface-raised-background); border-color: var(--world-marker-ring); }
 .collectible-swatch.is-unvisited.is-viewpoint { background: #43a6c6; }
-.collectible-swatch.is-unvisited.is-peak { background: #6d9f55; }
-.collectible-swatch.is-unvisited.is-castle { background: #c47a44; }
-.collectible-swatch.is-unvisited.is-waterfall { background: #397fc4; }
 .collectible-swatch.is-unvisited.is-place { background: #b06ea8; }
+.collectible-swatch.is-icon {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--world-marker-ring);
+  font-size: 14px;
+  height: 14px;
+  line-height: 1;
+  text-align: center;
+  width: 14px;
+}
+.collectible-swatch.is-icon.is-visited { color: var(--accent-yellow); }
 .collectible-swatch.is-rare { border-color: var(--accent-rare); border-width: 2px; }
 .collectible-swatch.is-epic { border-color: var(--accent-epic); border-width: 2px; }
 .collectible-swatch.is-selected { box-shadow: 0 0 0 2px rgb(232 184 10 / 45%); }

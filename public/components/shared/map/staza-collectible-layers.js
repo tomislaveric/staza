@@ -2,6 +2,7 @@ import { EMPTY_FEATURE_COLLECTION } from "./staza-collectible-features.js";
 
 export const COLLECTIBLE_SOURCE = "staza-collectibles";
 export const COLLECTIBLE_LAYER = "staza-collectibles";
+export const COLLECTIBLE_CATEGORY_ICON_LAYER = "staza-collectible-category-icons";
 export const COLLECTIBLE_ACTIVITY_COLLECTED_LAYER = "staza-collectibles-activity-collected";
 export const COLLECTIBLE_SELECTED_GLOW_LAYER = "staza-collectibles-selected-glow";
 export const COLLECTIBLE_SELECTED_LAYER = "staza-collectibles-selected";
@@ -12,9 +13,6 @@ const NEUTRAL_RING = "#7c828c";
 const SELECTED_ACCENT = "#e8b80a";
 const CATEGORY_FILL = ["match", ["get", "category"],
   "viewpoint", "#43a6c6",
-  "peak", "#6d9f55",
-  "castle", "#c47a44",
-  "waterfall", "#397fc4",
   "place", "#b06ea8",
   UNVISITED_FILL];
 
@@ -27,8 +25,14 @@ const RARITY_RING = ["match", ["get", "rarity"],
 const SELECTED = ["==", ["get", "selected"], true];
 const IS_RARE = ["!=", ["get", "rarity"], "common"];
 const ACTIVITY_COLLECTED = ["==", ["get", "activityCollected"], true];
-/** Visited state stays gold; unvisited imported landmarks use their semantic category color. */
+/** Visited state stays gold; unvisited circle markers retain semantic category colors. */
 const FILLED = ["any", ["get", "visited"], ACTIVITY_COLLECTED];
+const HAS_CATEGORY_ICON = ["any",
+  ["==", ["get", "category"], "castle"],
+  ["==", ["get", "category"], "mountain_pass"],
+  ["==", ["get", "category"], "peak"],
+  ["==", ["get", "category"], "waterfall"]];
+const NO_CATEGORY_ICON = ["!", HAS_CATEGORY_ICON];
 
 /** Far out stays readable but uncluttered; close in stays crisp. */
 const zoomSize = (stops, condition, scale) => [
@@ -52,6 +56,7 @@ const collectibleLayer = () => ({
   id: COLLECTIBLE_LAYER,
   type: "circle",
   source: COLLECTIBLE_SOURCE,
+  filter: NO_CATEGORY_ICON,
   paint: {
     "circle-radius": zoomSize(RADIUS_STOPS, SELECTED, 1.25),
     "circle-color": ["case", FILLED, VISITED_FILL, CATEGORY_FILL],
@@ -61,6 +66,30 @@ const collectibleLayer = () => ({
       ["all", FILLED, ["!", IS_RARE]], "#0b0c0f",
       RARITY_RING],
     "circle-stroke-opacity": questOpacity(0.95)
+  }
+});
+
+const categoryIconLayer = () => ({
+  id: COLLECTIBLE_CATEGORY_ICON_LAYER,
+  type: "symbol",
+  source: COLLECTIBLE_SOURCE,
+  filter: HAS_CATEGORY_ICON,
+  layout: {
+    "text-field": ["match", ["get", "category"],
+      "castle", "\u26eb",
+      "mountain_pass", "\u26f0",
+      "peak", "\u25b2",
+      "waterfall", "💦",
+      ""],
+    "text-size": ["interpolate", ["linear"], ["zoom"], 9, 16, 12, 20, 15, 24, 17, 28],
+    "text-allow-overlap": true,
+    "text-ignore-placement": true
+  },
+  paint: {
+    "text-color": ["case", FILLED, VISITED_FILL, NEUTRAL_RING],
+    "text-opacity": questOpacity(["case", FILLED, 1, 0.88]),
+    "text-halo-color": "#0b0c0f",
+    "text-halo-width": 1
   }
 });
 
@@ -114,12 +143,13 @@ const selectedRingLayer = () => ({
   }
 });
 
-/** The canonical collectible layers in draw order: base circle, activity-collected halo, selection. */
+/** The canonical collectible layers in draw order: markers, collection halo, selection, category icons. */
 export const collectibleLayers = () => [
   collectibleLayer(),
   activityCollectedLayer(),
   selectedGlowLayer(),
-  selectedRingLayer()
+  selectedRingLayer(),
+  categoryIconLayer()
 ];
 
 /**
@@ -147,16 +177,18 @@ const featureCollectibleId = (event) => event?.features?.[0]?.properties?.id;
 
 /** Routes native layer events into the caller's selection flow. */
 export const bindCollectibleInteractions = (map, { onSelect }) => {
-  map.on("click", COLLECTIBLE_LAYER, (event) => {
-    const id = featureCollectibleId(event);
-    if (id === undefined) return;
-    if (event.originalEvent?.stopPropagation) event.originalEvent.stopPropagation();
-    onSelect(id);
-  });
-  map.on("mouseenter", COLLECTIBLE_LAYER, () => {
-    map.getCanvas().style.cursor = "pointer";
-  });
-  map.on("mouseleave", COLLECTIBLE_LAYER, () => {
-    map.getCanvas().style.cursor = "";
-  });
+  for (const layer of [COLLECTIBLE_LAYER, COLLECTIBLE_CATEGORY_ICON_LAYER]) {
+    map.on("click", layer, (event) => {
+      const id = featureCollectibleId(event);
+      if (id === undefined) return;
+      if (event.originalEvent?.stopPropagation) event.originalEvent.stopPropagation();
+      onSelect(id);
+    });
+    map.on("mouseenter", layer, () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", layer, () => {
+      map.getCanvas().style.cursor = "";
+    });
+  }
 };

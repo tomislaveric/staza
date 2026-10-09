@@ -1027,6 +1027,99 @@ input {
     line-height: 1;
     margin-top: 8px;
 }
+.activity-progress-earned-group {
+    min-width: 0;
+}
+.activity-progress-earned-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.activity-replay-reward {
+    align-items: center;
+    background: rgb(18 20 25 / 94%);
+    border: 1px solid var(--border-faint);
+    border-radius: 8px;
+    display: flex;
+    gap: 12px;
+    max-width: min(360px, 100%);
+    opacity: 0;
+    padding: 12px 14px;
+    transform: translateY(5px);
+    transition: opacity 160ms ease, transform 160ms ease;
+}
+.activity-replay-reward[hidden] {
+    display: none;
+}
+.activity-replay-reward.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.activity-replay-reward.is-exiting {
+    opacity: 0;
+    transform: translateY(-4px);
+}
+.activity-replay-reward-icon {
+    border: 1px solid var(--accent-yellow);
+    border-radius: 50%;
+    flex: 0 0 16px;
+    height: 16px;
+    position: relative;
+    width: 16px;
+}
+.activity-replay-reward-icon--collectible::after {
+    background: var(--accent-yellow);
+    border-radius: 50%;
+    content: "";
+    height: 6px;
+    left: 5px;
+    position: absolute;
+    top: 5px;
+    width: 6px;
+}
+.activity-replay-reward-icon--flowline {
+    background: #5ec8c2;
+    border: 0;
+    border-radius: 999px;
+    height: 4px;
+    width: 18px;
+}
+.activity-replay-reward-copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+.activity-replay-reward-type,
+.activity-replay-reward-label {
+    color: var(--text-subtle);
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: .11em;
+    line-height: 1.2;
+}
+.activity-replay-reward-type {
+    color: #5ec8c2;
+}
+.activity-replay-reward-icon--collectible + .activity-replay-reward-copy .activity-replay-reward-type {
+    color: var(--text-subtle);
+}
+.activity-replay-reward-name {
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.activity-replay-reward-xp {
+    color: var(--accent-yellow);
+    flex: 0 0 auto;
+    font-family: var(--font-display);
+    font-size: 14px;
+    margin-left: auto;
+    white-space: nowrap;
+}
 .activity-progress-found {
     text-align: right;
 }
@@ -1102,6 +1195,12 @@ input {
 }
 .activity-progress-caption {
     margin: 6px 0 0;
+}
+@media (prefers-reduced-motion: reduce) {
+    .activity-replay-reward {
+        transition: none;
+        transform: none;
+    }
 }
 .activity-tabs {
     background: var(--surface-background);

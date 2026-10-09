@@ -26,6 +26,12 @@ describe("World page data transformations", () => {
     expect([...availableWorldFilters([{ ...collectibles[0], visibility: "hidden" }], [])]).toEqual(["all"]);
   });
 
+  it("makes the mountain-pass filter available only when a visible pass exists", () => {
+    const pass = { ...collectibles[0], id: "pass", primaryCategory: "mountain_pass" };
+    expect(availableWorldFilters([pass], []).has("mountain_pass")).toBe(true);
+    expect(availableWorldFilters([{ ...pass, visibility: "hidden" }], []).has("mountain_pass")).toBe(false);
+  });
+
   it("keeps rarity filters independent from player discovery state", () => {
     expect(filteredWorldCollectibles(collectibles, ["found"]).map((item) => item.id)).toEqual(["common-found", "epic-found"]);
     expect(filteredWorldCollectibles(collectibles, ["unfound"]).map((item) => item.id)).toEqual(["rare-unfound"]);
@@ -62,7 +68,7 @@ describe("World page data transformations", () => {
       .toEqual(["rare-unfound", "epic-found"]);
   });
 
-  it.each(["viewpoint", "peak", "castle", "waterfall", "place"])("matches the map category for %s", (category) => {
+  it.each(["viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"])("matches the map category for %s", (category) => {
     const primary = { ...collectibles[0], id: "primary", primaryCategory: category };
     const legacy = { ...collectibles[0], id: "legacy", primaryCategory: undefined, type: category };
     const overridden = { ...collectibles[0], id: "overridden", primaryCategory: "coin", type: category };
@@ -128,10 +134,11 @@ describe("World filter controls", () => {
     const allCategories = [
       ...collectibles,
       { ...collectibles[0], id: "waterfall", primaryCategory: "waterfall" },
-      { ...collectibles[0], id: "place", primaryCategory: "place" }
+      { ...collectibles[0], id: "place", primaryCategory: "place" },
+      { ...collectibles[0], id: "mountain-pass", primaryCategory: "mountain_pass" }
     ];
     const markup = WorldFilterControls(["rare", "castle"], allCategories, fartleks);
-    expect(worldFilters).toEqual(["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place"]);
+    expect(worldFilters).toEqual(["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"]);
     expect(markup).toContain('role="group" aria-label="World collectibles and Flowlines"');
     expect(markup).not.toContain('role="tab');
     expect(markup).not.toContain("aria-selected");
@@ -151,15 +158,26 @@ describe("World filter controls", () => {
     const markup = WorldFilterControls([], [
       ...collectibles,
       { ...collectibles[0], id: "waterfall", primaryCategory: "waterfall" },
-      { ...collectibles[0], id: "place", primaryCategory: "place" }
+      { ...collectibles[0], id: "place", primaryCategory: "place" },
+      { ...collectibles[0], id: "mountain-pass", primaryCategory: "mountain_pass" }
     ], fartleks);
     expect(buttonMarkup(markup, "found")).toContain(CollectibleSwatch({ visited: true }));
     expect(buttonMarkup(markup, "unfound")).toContain(CollectibleSwatch({ visited: false }));
     for (const rarity of ["rare", "epic"]) {
       expect(buttonMarkup(markup, rarity)).toContain(CollectibleSwatch({ rarity }));
     }
-    for (const category of ["viewpoint", "peak", "castle", "waterfall", "place"]) {
+    for (const category of ["viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"]) {
       expect(buttonMarkup(markup, category)).toContain(CollectibleSwatch({ category }));
+    }
+    for (const [category, icon] of [
+      ["castle", "\u26eb"],
+      ["mountain_pass", "\u26f0"],
+      ["peak", "\u25b2"],
+      ["waterfall", "💦"]
+    ]) {
+      expect(CollectibleSwatch({ category })).toContain(icon);
+      expect(CollectibleSwatch({ category })).toContain("is-icon");
+      expect(CollectibleSwatch({ category, visited: true })).toContain("is-visited");
     }
     expect(buttonMarkup(markup, "fartleks")).toContain('<b class="fartlek-swatch" aria-hidden="true"></b>');
     expect(markup).not.toContain("is-completed");

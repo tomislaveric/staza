@@ -4,6 +4,9 @@ import {
   FartlekCompletionsSection,
   flowlineStateAt,
   replayPanelRows,
+  replayRewardItems,
+  replayRewardStateAt,
+  replayRewardWindowMs,
   rowStateAt
 } from "./replay-tab.js";
 
@@ -82,5 +85,67 @@ describe("replayPanelRows / rowStateAt", () => {
     const route = [{ latitude: 50, longitude: 8, timestampMs: 0 }, { latitude: 50.001, longitude: 8.001, timestampMs: 1000 }];
     const timestamp = closestApproachTimestamp(route, { latitude: 50.001, longitude: 8.001 });
     expect(timestamp).toBe(1000);
+  });
+});
+
+describe("replayRewardItems / replayRewardStateAt", () => {
+  const replay = {
+    activityResult: {
+      totalPoints: 110,
+      events: [
+        { sourceId: "peak", activityTimestamp: 3_000, value: 40, collectible: { name: "Peak", type: "landmark" } },
+        { sourceId: "coin", activityTimestamp: 1_000, value: 20, collectible: { name: "Park Coin", type: "coin" } }
+      ],
+      fartlekCompletions: [{
+        fartlekId: "flowline-1",
+        fartlekName: "Harbour Straight",
+        completedAtTimestampMs: 2_000
+      }]
+    }
+  };
+
+  it("orders collectible and Flowline rewards chronologically using persisted XP for Flowlines", () => {
+    const items = replayRewardItems(replay, 110);
+
+    expect(items.map(({ kind, name, xpGain }) => ({ kind, name, xpGain }))).toEqual([
+      { kind: "collectible", name: "Park Coin", xpGain: 20 },
+      { kind: "flowline", name: "Harbour Straight", xpGain: 50 },
+      { kind: "collectible", name: "Peak", xpGain: 40 }
+    ]);
+  });
+
+  it("derives one temporary reward and cumulative XP from any replay timestamp", () => {
+    const items = replayRewardItems(replay, 110);
+
+    expect(replayRewardStateAt(items, 999)).toMatchObject({ reward: undefined, cumulativeXp: 0 });
+    expect(replayRewardStateAt(items, 1_000)).toMatchObject({ reward: { name: "Park Coin" }, cumulativeXp: 20 });
+    expect(replayRewardStateAt(items, 1_999).reward?.name).toBe("Park Coin");
+    expect(replayRewardStateAt(items, 2_000)).toMatchObject({ reward: { name: "Harbour Straight" }, cumulativeXp: 70 });
+    expect(replayRewardStateAt(items, 2_999).reward?.name).toBe("Harbour Straight");
+    expect(replayRewardStateAt(items, 3_000)).toMatchObject({ reward: { name: "Peak" }, cumulativeXp: 110 });
+    expect(replayRewardStateAt(items, 4_500)).toMatchObject({ reward: undefined, cumulativeXp: 110 });
+    expect(replayRewardStateAt(items, 1_000)).toMatchObject({ reward: { name: "Park Coin" }, cumulativeXp: 20 });
+  });
+
+  it("uses a stable order for rewards with identical timestamps", () => {
+    const items = replayRewardItems({
+      activityResult: {
+        events: [{ sourceId: "coin", activityTimestamp: 1_000, value: 10, collectible: { name: "Coin", type: "coin" } }],
+        fartlekCompletions: [{ fartlekId: "line", fartlekName: "Line", completedAtTimestampMs: 1_000 }]
+      }
+    }, 60);
+
+    expect(items.map((item) => item.kind)).toEqual(["collectible", "flowline"]);
+    expect(replayRewardStateAt(items, 1_000)).toMatchObject({
+      reward: { kind: "flowline" },
+      cumulativeXp: 60
+    });
+  });
+
+  it("maps the 1,500 ms presentation window onto the compressed activity timeline", () => {
+    expect(replayRewardWindowMs({
+      activity: { startedAt: 0, endedAt: 3_600_000 },
+      activityResult: { duration: 3_600 }
+    })).toBe(180_000);
   });
 });

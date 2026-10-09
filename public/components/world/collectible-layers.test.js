@@ -3,6 +3,7 @@ import {
   bindCollectibleInteractions,
   COLLECTIBLE_ACTIVITY_COLLECTED_LAYER,
   COLLECTIBLE_LAYER,
+  COLLECTIBLE_CATEGORY_ICON_LAYER,
   COLLECTIBLE_SELECTED_GLOW_LAYER,
   COLLECTIBLE_SELECTED_LAYER,
   COLLECTIBLE_SOURCE,
@@ -49,7 +50,40 @@ describe("collectible source and layers", () => {
       COLLECTIBLE_LAYER,
       COLLECTIBLE_ACTIVITY_COLLECTED_LAYER,
       COLLECTIBLE_SELECTED_GLOW_LAYER,
-      COLLECTIBLE_SELECTED_LAYER
+      COLLECTIBLE_SELECTED_LAYER,
+      COLLECTIBLE_CATEGORY_ICON_LAYER
+    ]);
+  });
+
+  it("renders castle, pass, peak, and waterfall categories as state-colored symbols", () => {
+    const map = fakeMap();
+
+    ensureCollectibleLayers(map);
+
+    const marker = map.getLayer(COLLECTIBLE_LAYER);
+    const icons = map.getLayer(COLLECTIBLE_CATEGORY_ICON_LAYER);
+    expect(marker.filter).toEqual(["!", ["any",
+      ["==", ["get", "category"], "castle"],
+      ["==", ["get", "category"], "mountain_pass"],
+      ["==", ["get", "category"], "peak"],
+      ["==", ["get", "category"], "waterfall"]]]);
+    expect(icons.type).toBe("symbol");
+    expect(icons.filter).toEqual(["any",
+      ["==", ["get", "category"], "castle"],
+      ["==", ["get", "category"], "mountain_pass"],
+      ["==", ["get", "category"], "peak"],
+      ["==", ["get", "category"], "waterfall"]]);
+    expect(icons.layout["text-field"]).toEqual(["match", ["get", "category"],
+      "castle", "\u26eb",
+      "mountain_pass", "\u26f0",
+      "peak", "\u25b2",
+      "waterfall", "💦",
+      ""]);
+    expect(icons.paint["text-color"]).toEqual([
+      "case",
+      ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]],
+      "#e8b80a",
+      "#7c828c"
     ]);
   });
 
@@ -77,9 +111,6 @@ describe("collectible source and layers", () => {
       "#e8b80a",
       ["match", ["get", "category"],
         "viewpoint", "#43a6c6",
-        "peak", "#6d9f55",
-        "castle", "#c47a44",
-        "waterfall", "#397fc4",
         "place", "#b06ea8",
         "#171a20"]
     ]);
@@ -126,7 +157,7 @@ describe("collectible source and layers", () => {
     ensureCollectibleLayers(map);
     ensureCollectibleLayers(map);
 
-    expect(map.layers).toHaveLength(4);
+    expect(map.layers).toHaveLength(5);
   });
 
   it("updates viewport data through setData on the existing source", () => {
@@ -137,7 +168,7 @@ describe("collectible source and layers", () => {
     expect(setCollectibleData(map, featureCollection)).toBe(true);
 
     expect(map.getSource(COLLECTIBLE_SOURCE).setData).toHaveBeenCalledWith(featureCollection);
-    expect(map.layers).toHaveLength(4);
+    expect(map.layers).toHaveLength(5);
   });
 
   it("ignores data updates before the source exists", () => {
@@ -165,6 +196,16 @@ describe("collectible layer interactions", () => {
     map.emit("click", COLLECTIBLE_LAYER, { features: [] });
 
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("selects a category icon when clicked", () => {
+    const map = fakeMap();
+    const onSelect = vi.fn();
+    bindCollectibleInteractions(map, { onSelect });
+
+    map.emit("click", COLLECTIBLE_CATEGORY_ICON_LAYER, { features: [{ properties: { id: "pass-7" } }] });
+
+    expect(onSelect).toHaveBeenCalledWith("pass-7");
   });
 
   it("shows and clears the pointer cursor on hover", () => {

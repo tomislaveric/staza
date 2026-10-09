@@ -48,6 +48,8 @@ describe("Activity detail data transformation", () => {
     expect(page).not.toContain('data-activity-tab="collected"');
     expect(page).not.toContain('data-activity-tab="near-misses"');
     expect(page).toContain("data-replay-panel");
+    expect(page).toContain('data-activity-xp="25"');
+    expect(page).toContain("data-replay-reward");
   });
 
   it("keeps the Video tab functional for a valid FIT-only activity", () => {
