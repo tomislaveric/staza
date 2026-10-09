@@ -3,7 +3,8 @@ dist
 data
 .git
 npm-debug.log
-fixtures
+fixtures/**
+!fixtures/quest-templates.json
 *.osm.pbf
 *.osm.pbf.md5
 *.ndjson
