@@ -434,9 +434,15 @@ export interface QuestObjectiveProgress {
   complete: boolean;
 }
 
+export interface QuestObjectiveTargetProgress extends QuestObjectiveTarget {
+  complete: boolean;
+  averageSpeedMps?: number;
+}
+
 export interface QuestObjectiveState {
   objective: QuestObjective;
   progress: QuestObjectiveProgress;
+  targetProgress: QuestObjectiveTargetProgress[];
 }
 
 export interface QuestSuggestion {

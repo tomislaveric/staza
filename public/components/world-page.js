@@ -174,6 +174,7 @@ export const mountWorldPage = async (mountPoint) => {
   let collectibles = [];
   let questSuggestions = [];
   let pendingQuestId;
+  let showAllQuestSuggestions = false;
   let stats = emptyStats;
   let truncated = false;
   let fartleks = [];
@@ -267,7 +268,11 @@ export const mountWorldPage = async (mountPoint) => {
 
   const renderSidePanels = () => {
     statsHost.innerHTML = WorldStats(stats, truncated);
-    questHost.innerHTML = QuestList(questSuggestions, questInstances, pendingQuestId);
+    questHost.innerHTML = QuestList(questSuggestions, questInstances, pendingQuestId, showAllQuestSuggestions);
+    questHost.querySelector("[data-quest-suggestions-toggle]")?.addEventListener("click", () => {
+      showAllQuestSuggestions = !showAllQuestSuggestions;
+      renderSidePanels();
+    });
     questHost.querySelectorAll("[data-quest-start]").forEach((button) => {
       button.addEventListener("click", () => void startQuest(button.dataset.questStart));
     });

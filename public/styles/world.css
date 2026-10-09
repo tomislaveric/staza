@@ -273,26 +273,45 @@
 
 .quest-list { padding-top: 16px; }
 .quest-list h2 { color: var(--text-primary); font-family: var(--font-display); font-size: 18px; margin: 0 0 12px; }
-.quest-list ol { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); list-style: none; margin: 0; padding: 0; }
+.quest-list ol { align-items: stretch; display: grid; gap: 12px; grid-auto-rows: 1fr; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); list-style: none; margin: 0; padding: 0; }
 .default-quest-list { padding-top: 16px; }
 .default-quest-list h2 { color: var(--text-primary); font-family: var(--font-display); font-size: 18px; margin: 0 0 12px; }
-.default-quest-list > ol { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); list-style: none; margin: 0; padding: 0; }
+.quest-section-description { color: var(--text-muted); font-size: 12px; line-height: 1.45; margin: -4px 0 12px; }
+.default-quest-list > ol { align-items: stretch; display: grid; gap: 12px; grid-auto-rows: 1fr; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); list-style: none; margin: 0; padding: 0; }
+.quest-suggestion-card, .quest-instance-card { display: grid; }
 .quest-suggestion-card article, .quest-instance-card article {
+  align-content: start;
   background: var(--surface-background);
   border: 1px solid var(--border-faint);
   border-radius: var(--radius-card);
+  box-sizing: border-box;
   display: grid;
   gap: 8px;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100%;
+  min-height: 232px;
   padding: 14px;
 }
+.quest-suggestion-card article { gap: 6px; grid-template-rows: auto auto minmax(24px, 1fr) auto; min-height: 0; padding: 12px; }
+.quest-instance-card article { gap: 6px; grid-template-rows: auto auto auto auto; min-height: 0; padding: 12px; }
 .quest-suggestion-card small, .quest-instance-card small {
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 10px;
 }
-.quest-suggestion-card ul, .quest-instance-card ul { display: grid; gap: 5px; list-style: none; margin: 0; padding: 0; }
-.quest-suggestion-card article > ul > li, .quest-instance-card article > ul > li {
-  align-items: center;
+.quest-instance-card article > ul { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.quest-suggestion-goals { align-items: center; display: flex; flex-wrap: wrap; gap: 6px 12px; list-style: none; margin: 0; padding: 0; }
+.quest-suggestion-goal { align-items: center; color: var(--text-muted); display: inline-flex; font-family: var(--font-body); font-size: 11px; gap: 6px; }
+.quest-suggestion-goal .collectible-swatch { flex: none; }
+.quest-suggestion-goal .fartlek-swatch { flex: none; }
+.quest-objective-group { display: grid; gap: 5px; min-width: 0; }
+.quest-objective-group-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
+.quest-objective-group-head strong { color: var(--text-primary); font-family: var(--font-body); font-size: 11px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.quest-objective-summary { align-items: center; display: flex; gap: 8px; min-width: 0; }
+.quest-objective-group-head small, .quest-objective-targets small { flex: none; }
+.quest-objective-targets { display: grid; gap: 5px; list-style: none; margin: 0; padding: 0; }
+.quest-objective-targets > li {
+  align-items: flex-start;
   color: var(--text-primary);
   display: flex;
   font-family: var(--font-body);
@@ -301,40 +320,69 @@
   gap: 8px;
   justify-content: space-between;
 }
-.quest-instance-card article > ul > li.is-complete > span { text-decoration: line-through; }
+.quest-objective-targets > li.is-complete:not(.is-flowline-completion) .quest-objective-copy > span { text-decoration: line-through; }
+.quest-objective-copy { align-items: flex-start; display: flex; flex: 1; gap: 8px; min-width: 0; }
+.quest-objective-copy > span { min-width: 0; overflow-wrap: anywhere; }
+.quest-objective-copy .fartlek-swatch { margin-top: 6px; }
+.quest-objective-copy .collectible-swatch { flex: none; margin-top: 1px; }
 .quest-suggestion-card button {
-  background: var(--accent-yellow);
-  border: 0;
-  border-radius: 6px;
-  color: var(--world-map-background);
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  min-height: 36px;
-  padding: 7px 12px;
-  text-transform: uppercase;
-}
-.quest-suggestion-card button:disabled { cursor: default; opacity: .55; }
-.quest-instance-card.is-completed article { border-color: var(--accent-yellow); }
-.quest-instance-cancel {
   background: transparent;
-  border: 1px solid rgb(248 113 113 / 22%);
+  border: 1px solid rgb(232 184 10 / 45%);
   border-radius: 6px;
-  color: rgb(248 113 113 / 85%);
+  color: var(--accent-yellow);
   cursor: pointer;
   font-family: var(--font-body);
   font-size: 11px;
+  font-weight: 600;
   justify-self: start;
-  min-height: 32px;
+  min-height: 36px;
   padding: 6px 10px;
 }
+.quest-suggestion-card button:hover { background: rgb(232 184 10 / 8%); }
+.quest-suggestion-card button:disabled { cursor: default; opacity: .55; }
+.quest-suggestion-card button:focus-visible, .quest-suggestions-toggle:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+.quest-suggestions-toggle {
+  background: transparent;
+  border: 0;
+  color: var(--accent-yellow);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 12px;
+  min-height: 36px;
+  padding: 6px 0;
+}
+.quest-suggestions-toggle:hover { text-decoration: underline; }
+.quest-instance-card.is-completed article { border-color: var(--accent-yellow); }
+.quest-instance-cancel {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12px;
+  display: inline-flex;
+  flex: none;
+  height: 32px;
+  width: 32px;
+  min-height: 32px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+.quest-instance-cancel:focus-visible { outline: 2px solid rgb(248 113 113 / 85%); outline-offset: 2px; }
 .quest-instance-cancel:disabled { cursor: default; opacity: .55; }
 .quest-card-progress { border-top: 1px solid var(--border-faint); padding-top: 7px; }
 .default-quest-empty { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin: 0; }
 .quest-card-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
-.quest-card-head strong { color: var(--text-primary); font-family: var(--font-body); font-size: 12px; font-weight: 600; }
-.quest-card-description { color: var(--text-muted); font-size: 12px; line-height: 1.45; overflow: hidden; }
+.quest-card-head strong { color: var(--text-primary); font-family: var(--font-body); font-size: 12px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.quest-card-head small { flex: none; }
+.quest-card-description { color: var(--text-muted); font-size: 12px; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
 .quest-card-progress { display: grid; gap: 5px; }
 .quest-card-progress small { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
 

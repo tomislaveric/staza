@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import type {
   CollectibleCategory,
   QuestObjective,
-  QuestObjectiveProgress,
+  QuestObjectiveState,
+  QuestObjectiveTargetProgress,
   QuestObjectiveTemplate,
   QuestSuggestion,
   QuestTemplate,
@@ -23,6 +24,7 @@ export interface QuestHistory {
     activityId: string;
     lengthMeters: number;
     averageSpeedMps: number;
+    timestampMs?: number;
   }>;
 }
 
@@ -205,17 +207,23 @@ export const generateQuestSuggestions = ({
 export const evaluateQuestObjectives = (
   objectives: QuestObjective[],
   history: QuestHistory
-): Array<{ objective: QuestObjective; progress: QuestObjectiveProgress }> => objectives.map((objective) => {
+): QuestObjectiveState[] => objectives.map((objective) => {
   let completed = 0;
+  const targetProgress: QuestObjectiveTargetProgress[] = objective.targets.map((target) => ({
+    ...target,
+    complete: false
+  }));
   if (objective.type === "collectible_targets") {
     const discovered = new Set(history.collectibles.map((event) => event.sourceId));
-    completed = objective.targets.filter((target) => discovered.has(target.id)).length;
+    for (const target of targetProgress) target.complete = discovered.has(target.id);
+    completed = targetProgress.filter((target) => target.complete).length;
   } else if (objective.type === "collectible_count") {
     const targetIds = new Set(objective.targets.map((target) => target.id));
     const discovered = new Set(history.collectibles
       .filter((event) => event.category === objective.category && targetIds.has(event.sourceId))
       .map((event) => event.sourceId));
-    completed = discovered.size;
+    for (const target of targetProgress) target.complete = discovered.has(target.id);
+    completed = targetProgress.filter((target) => target.complete).length;
   } else {
     const targetIds = new Set(objective.targets.map((target) => target.id));
     const qualifying = history.flowlines.filter((completion) =>
@@ -224,6 +232,18 @@ export const evaluateQuestObjectives = (
         && (objective.minimumAverageSpeedMps === undefined
           || completion.averageSpeedMps >= objective.minimumAverageSpeedMps)
     );
+    const qualifyingById = new Map<string, typeof qualifying[number]>();
+    for (const completion of qualifying) {
+      const previous = qualifyingById.get(completion.flowlineId);
+      if (!previous || (completion.timestampMs ?? 0) >= (previous.timestampMs ?? 0)) {
+        qualifyingById.set(completion.flowlineId, completion);
+      }
+    }
+    for (const target of targetProgress) {
+      const completion = qualifyingById.get(target.id);
+      target.complete = completion !== undefined;
+      if (completion) target.averageSpeedMps = completion.averageSpeedMps;
+    }
     if (objective.sameActivity) {
       const byActivity = new Map<string, Set<string>>();
       for (const completion of qualifying) {
@@ -233,12 +253,13 @@ export const evaluateQuestObjectives = (
       }
       completed = Math.max(0, ...[...byActivity.values()].map((ids) => ids.size));
     } else {
-      completed = new Set(qualifying.map((completion) => completion.flowlineId)).size;
+      completed = qualifyingById.size;
     }
   }
   const boundedCompleted = Math.min(completed, objective.requiredCount);
   return {
     objective,
+    targetProgress,
     progress: {
       completed: boundedCompleted,
       required: objective.requiredCount,

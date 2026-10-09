@@ -137,8 +137,15 @@ continues to identify its discovery globally.
 - The World UI separates untracked recommendations from active/completed
   instances. The legacy authoring, publish, and activity-to-quest APIs/actions
   are no longer exposed; legacy quest rows are retained.
-- Quest card headings and objective labels use the default body font at a
-  reduced size, keeping objective copy visually secondary.
+- Quest cards reuse the World map's Flowline line and Mountain Pass glyphs,
+  share a consistent-height layout, and use a quieter Start action. The
+  recommendation grid initially shows up to three suggestions with an
+  accessible show-more/show-less control; active and completed instances remain
+  visible. Unstarted recommendations show their title and description,
+  one inline icon-and-type chip per objective, and Start without repeating
+  objective prose. Active Flowline objectives show a completed/required count
+  and only completed Flowlines, each with its latest qualifying average speed.
+  Other objective groups and completed quests retain per-target status rows.
 
 ## Acceptance criteria
 
@@ -169,7 +176,8 @@ continues to identify its discovery globally.
 - Unit-test schema validation, objective cardinalities, onboarding exceptions,
   deterministic generation, and bbox feasibility.
 - Test objective evaluation for distinct completions, same Activity,
-  length/performance thresholds, historical collection, and category snapshots.
+  length/performance thresholds, per-target completion and average speed,
+  historical collection, and category snapshots.
 - Test Start idempotency, scope freezing, immediate all-history completion,
   persistence, and reads outside the source bbox.
 - Test cancellation deletion, fresh progress boundaries after restart, and the

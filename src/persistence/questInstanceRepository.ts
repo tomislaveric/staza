@@ -69,11 +69,12 @@ export const historyFromQuestStart = (
       })),
     flowlines: history.flowlines
       .filter((completion) => completion.timestampMs >= startedAtMs)
-      .map(({ flowlineId, activityId, lengthMeters, averageSpeedMps }) => ({
+      .map(({ flowlineId, activityId, lengthMeters, averageSpeedMps, timestampMs }) => ({
         flowlineId,
         activityId,
         lengthMeters,
-        averageSpeedMps
+        averageSpeedMps,
+        timestampMs
       }))
   };
 };
@@ -342,11 +343,12 @@ export class QuestInstanceRepository {
               sourceId,
               ...(category === undefined ? {} : { category })
             })),
-            flowlines: timedHistory.flowlines.map(({ flowlineId, activityId, lengthMeters, averageSpeedMps }) => ({
+            flowlines: timedHistory.flowlines.map(({ flowlineId, activityId, lengthMeters, averageSpeedMps, timestampMs }) => ({
               flowlineId,
               activityId,
               lengthMeters,
-              averageSpeedMps
+              averageSpeedMps,
+              timestampMs
             }))
           };
         const objectiveStates: QuestObjectiveState[] = evaluateQuestObjectives(row.objectives, history);

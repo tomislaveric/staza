@@ -98,6 +98,10 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   with transaction-safe exactly-once progression.
 - [Progression V1](features/progression-v1/README.md) — make each completed ride
   contribute XP toward a derived player level without adding persistence or rewards.
+- [Quest UI optimization](features/quest-ui-optimization/README.md) — make quest
+  cards easier to scan with World-style objective icons, consistent heights, and
+  compact recommendation goal chips and completed Flowline speeds on active
+  quests, without adding quest XP or rewards.
 - [Renderer resilience output validation](features/renderer-resilience-output-validation/README.md)
   — harden highlight rendering with media inspection, timestamp-safe concat, and
   final MP4 validation.

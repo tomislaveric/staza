@@ -207,6 +207,20 @@ describe("World filter controls", () => {
     expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.world-filter-controls button\s*\{[^}]*min-height:\s*38px/s);
     expect(css).not.toContain(".world-legend");
   });
+
+  it("keeps quest cards equal-height and makes Start a quieter action", () => {
+    const css = readFileSync(new URL("../styles/world.css", import.meta.url), "utf8");
+    expect(css).toContain("grid-auto-rows: 1fr;");
+    expect(css).toContain("height: 100%;");
+    expect(css).toMatch(/\.quest-suggestion-card button\s*\{[^}]*background:\s*transparent/s);
+    expect(css).toContain(".quest-suggestion-card button:focus-visible");
+    expect(css).toContain(".quest-suggestions-toggle:focus-visible");
+    expect(css).toMatch(/\.quest-suggestion-goals\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap/s);
+    expect(css).toMatch(/\.quest-suggestion-card article\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(24px,\s*1fr\) auto;[^}]*min-height:\s*0/s);
+    expect(css).toMatch(/\.quest-instance-card article\s*\{[^}]*gap:\s*6px;[^}]*grid-template-rows:\s*auto auto auto auto;[^}]*min-height:\s*0;[^}]*padding:\s*12px/s);
+    expect(css).toMatch(/\.quest-card-head\s*\{[^}]*align-items:\s*center/s);
+    expect(css).toMatch(/\.quest-instance-cancel\s*\{[^}]*height:\s*32px;[^}]*width:\s*32px/s);
+  });
 });
 
 describe("mounted World page interactions", () => {
@@ -215,7 +229,7 @@ describe("mounted World page interactions", () => {
     vi.unstubAllGlobals();
   });
 
-  const mount = async () => {
+  const mount = async (suggestionCount = 1) => {
     const element = () => ({
       innerHTML: "",
       hidden: false,
@@ -240,8 +254,12 @@ describe("mounted World page interactions", () => {
       dataset: { questCancel: "instance-1" },
       disabled: false
     };
+    const questSuggestionsToggle = element();
     const detail = hosts["[data-world-detail]"];
-    hosts["[data-world-quests]"].querySelectorAll = (selector) => selector === "[data-quest-start]"
+    const questHost = hosts["[data-world-quests]"];
+    questHost.querySelector = (selector) => selector === "[data-quest-suggestions-toggle]"
+      && questHost.innerHTML.includes("data-quest-suggestions-toggle") ? questSuggestionsToggle : undefined;
+    questHost.querySelectorAll = (selector) => selector === "[data-quest-start]"
       ? [questButton]
       : selector === "[data-quest-cancel]" ? [questCancelButton] : [];
     const mountPoint = {
@@ -250,7 +268,7 @@ describe("mounted World page interactions", () => {
       querySelectorAll: () => Object.values(buttons)
     };
     const stats = { totalCollectibles: 3, discoveredCount: 2, rareFinds: 0, epicFinds: 1, remainingCount: 1 };
-    const questSuggestions = [{
+    const firstSuggestion = {
       id: "suggestion-1",
       templateId: "first-steps",
       templateVersion: 1,
@@ -261,7 +279,12 @@ describe("mounted World page interactions", () => {
         { id: "flowline", type: "flowline_rule", requiredCount: 1, targets: [{ id: "fartlek-1", name: "Harbour Straight" }] },
         { id: "collectible", type: "collectible_targets", requiredCount: 1, targets: [{ id: "common-found", name: "Common" }] }
       ]
-    }];
+    };
+    const questSuggestions = Array.from({ length: suggestionCount }, (_value, index) => ({
+      ...firstSuggestion,
+      id: `suggestion-${index + 1}`,
+      title: `First Steps ${index + 1}`
+    }));
     let viewportSnapshot = { collectibles, fartleks, questSuggestions, stats, truncated: false };
     let activeInstances = [];
     const activeInstance = {
@@ -275,8 +298,16 @@ describe("mounted World page interactions", () => {
       status: "active",
       startedAt: "2026-04-01T10:00:00.000Z",
       objectives: [
-        { objective: questSuggestions[0].objectives[0], progress: { completed: 0, required: 1, complete: false } },
-        { objective: questSuggestions[0].objectives[1], progress: { completed: 0, required: 1, complete: false } }
+        {
+          objective: questSuggestions[0].objectives[0],
+          progress: { completed: 0, required: 1, complete: false },
+          targetProgress: questSuggestions[0].objectives[0].targets.map((target) => ({ ...target, complete: false }))
+        },
+        {
+          objective: questSuggestions[0].objectives[1],
+          progress: { completed: 0, required: 1, complete: false },
+          targetProgress: questSuggestions[0].objectives[1].targets.map((target) => ({ ...target, complete: false }))
+        }
       ]
     };
     const fetchMock = vi.fn(async (url, options) => {
@@ -305,7 +336,7 @@ describe("mounted World page interactions", () => {
     await mountWorldPage(mountPoint);
     return {
       click: (filter) => buttons[filter].handlers.click(),
-      buttons, map, fetchMock, questButton, questCancelButton,
+      buttons, map, fetchMock, questButton, questCancelButton, questSuggestionsToggle,
       callbacks: createMap.mock.calls[0][1],
       detail,
       status: hosts["[data-world-status]"],
@@ -398,23 +429,40 @@ describe("mounted World page interactions", () => {
   it("starts a bbox suggestion explicitly and shows its persistent instance", async () => {
     const page = await mount();
     page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Active"));
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-cancel="instance-1"'));
     const startCall = page.fetchMock.mock.calls.find(([url]) => url === "/api/quest-instances/start");
     expect(startCall[1].method).toBe("POST");
     expect(JSON.parse(startCall[1].body)).toEqual({
       suggestionId: "suggestion-1",
       bbox: "8.00000,49.00000,11.00000,52.00000"
     });
-    expect(page.quests.innerHTML).toContain("Active");
+    expect(page.quests.innerHTML).toContain('aria-label="Cancel quest"');
+    expect(page.quests.innerHTML).toContain(">✕</button>");
+    expect(page.quests.innerHTML).not.toContain(">Active</small>");
     expect(page.quests.innerHTML).toContain("Started");
     expect(page.fetchMock.mock.calls.filter(([url]) => url === "/api/quest-instances")).toHaveLength(2);
+  });
+
+  it("reveals and collapses all local recommendations", async () => {
+    const page = await mount(5);
+    expect(page.quests.innerHTML.match(/data-quest-start=/g)).toHaveLength(3);
+    expect(page.quests.innerHTML).toContain("Show all 5 quests");
+
+    page.questSuggestionsToggle.handlers.click();
+    expect(page.quests.innerHTML.match(/data-quest-start=/g)).toHaveLength(5);
+    expect(page.quests.innerHTML).toContain('aria-expanded="true"');
+    expect(page.quests.innerHTML).toContain("Show fewer");
+
+    page.questSuggestionsToggle.handlers.click();
+    expect(page.quests.innerHTML.match(/data-quest-start=/g)).toHaveLength(3);
+    expect(page.quests.innerHTML).toContain('aria-expanded="false"');
   });
 
   it("confirms cancellation, deletes the instance, and allows starting it again", async () => {
     const page = await mount();
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
     page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Active"));
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-cancel="instance-1"'));
     page.questCancelButton.handlers.click();
     await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Start a local recommendation"));
     expect(page.fetchMock.mock.calls.some(([url, options]) =>
@@ -430,9 +478,10 @@ describe("mounted World page interactions", () => {
     const page = await mount();
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
     page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Active"));
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-cancel="instance-1"'));
     page.questCancelButton.handlers.click();
     expect(page.fetchMock.mock.calls.some(([url]) => url === "/api/quest-instances/instance-1")).toBe(false);
-    expect(page.quests.innerHTML).toContain("Cancel quest");
+    expect(page.quests.innerHTML).toContain('aria-label="Cancel quest"');
+    expect(page.quests.innerHTML).toContain(">✕</button>");
   });
 });

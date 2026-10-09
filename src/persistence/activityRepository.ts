@@ -6,7 +6,6 @@ import type {
   ActivitySource,
   ActivityType,
   CollectibleCategory,
-  ActivityImportResult,
   ActivityHistoryItem,
   ActivityResult,
   ActivityVideo,
