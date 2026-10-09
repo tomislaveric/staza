@@ -32,6 +32,25 @@ const formatNumber = (value) => new Intl.NumberFormat(getAppLocale()).format(val
 export const visibleWorldCollectibles = (collectibles) =>
   collectibles.filter((collectible) => collectible.visibility !== "hidden");
 
+export const availableWorldFilters = (collectibles, fartleks = []) => {
+  const visibleCollectibles = visibleWorldCollectibles(collectibles);
+  const filters = new Set(["all"]);
+
+  if (visibleCollectibles.some((collectible) => collectible.found)) filters.add("found");
+  if (visibleCollectibles.some((collectible) => !collectible.found)) filters.add("unfound");
+  if (visibleCollectibles.some((collectible) => collectible.rarity === "rare")) filters.add("rare");
+  if (visibleCollectibles.some((collectible) => collectible.rarity === "epic")) filters.add("epic");
+  if (fartleks.length) filters.add("fartleks");
+
+  for (const category of ["viewpoint", "peak", "castle", "waterfall", "place"]) {
+    if (visibleCollectibles.some((collectible) => collectibleCategory(collectible) === category)) {
+      filters.add(category);
+    }
+  }
+
+  return filters;
+};
+
 export const filteredWorldCollectibles = (collectibles, selectedFilters) =>
   visibleWorldCollectibles(collectibles).filter((collectible) =>
     selectedFilters.length === 0 || selectedFilters.some((filter) => {
@@ -66,12 +85,14 @@ const filterSwatch = (filter) => {
 const isFilterSelected = (filter, selectedFilters) =>
   filter === "all" ? selectedFilters.length === 0 : selectedFilters.includes(filter);
 
-export const WorldFilterControls = (selectedFilters) => `
-  <div class="world-filter-controls" role="group" aria-label="World collectibles and Flowlines">
+export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks = []) => {
+  const availableFilters = availableWorldFilters(collectibles, fartleks);
+  return `
+  <div class="world-filter-controls" data-world-filter-controls role="group" aria-label="World collectibles and Flowlines">
     ${worldFilters.map((filter) => {
       const selected = isFilterSelected(filter, selectedFilters);
       return `
-        <button class="${selected ? "is-active" : ""}" type="button"
+        <button class="${selected ? "is-active" : ""}" type="button"${availableFilters.has(filter) ? "" : " hidden"}
           aria-pressed="${selected}" data-world-filter="${filter}">
           ${filterSwatch(filter)}<span>${filterLabels[filter]}</span>
         </button>
@@ -79,6 +100,7 @@ export const WorldFilterControls = (selectedFilters) => `
     }).join("")}
   </div>
 `;
+};
 
 export const WorldStats = (stats, truncated) => `
   <p class="world-stats">
@@ -153,6 +175,7 @@ export const mountWorldPage = async (mountPoint) => {
   let stats = emptyStats;
   let truncated = false;
   let fartleks = [];
+  let availableFilters = availableWorldFilters(collectibles, fartleks);
   let selection;
   let selectedQuest;
   let deletingQuest = false;
@@ -274,6 +297,7 @@ export const mountWorldPage = async (mountPoint) => {
 
   const renderFilters = () => {
     mountPoint.querySelectorAll("[data-world-filter]").forEach((button) => {
+      button.hidden = !availableFilters.has(button.dataset.worldFilter);
       const selected = isFilterSelected(button.dataset.worldFilter, selectedFilters);
       button.classList.toggle("is-active", selected);
       button.setAttribute("aria-pressed", String(selected));
@@ -401,9 +425,12 @@ export const mountWorldPage = async (mountPoint) => {
       stats = snapshot.stats;
       truncated = snapshot.truncated;
       fartleks = snapshot.fartleks ?? [];
+      availableFilters = availableWorldFilters(collectibles, fartleks);
+      selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
       setStatus(collectibles.length === 0 && quests.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);
       if (selection?.kind === "collectible" && !collectibleById(selection.id)) selection = undefined;
       if (selection?.kind === "fartlek" && !fartlekById(selection.id)) selection = undefined;
+      renderFilters();
       renderCollectibles();
       renderSidePanels();
       renderDetail();

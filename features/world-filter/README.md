@@ -7,6 +7,7 @@ Unify World map filters and marker guidance so the map's active controls use the
 ## Scope
 
 - Replace the current single-select filter tabs with multi-select controls for Found, Unfound, Rare, Epic, Fartleks, Viewpoint, Peak, Castle, Waterfall, and Place.
+- Show only filters that match items in the current map viewport, while keeping All visible at all times to prevent layout shifts.
 - Show the existing marker swatch alongside each control: yellow for Found, rarity rings for Rare/Epic, category colors for collectible categories, and a blue horizontal line for Fartleks.
 - Remove the map-overlay legend and its associated styling.
 - Keep filtering client-side against the existing World snapshot and preserve existing API, map feature data, quest, and detail behavior.
@@ -28,7 +29,7 @@ Unify World map filters and marker guidance so the map's active controls use the
 ## Acceptance criteria
 
 - The World map has one set of filter controls; there is no separate marker-legend overlay.
-- Controls display map-consistent marker swatches and include every supported collectible category as well as the existing Found, Unfound, Rare, Epic, and Fartleks filters.
+- Controls display map-consistent marker swatches for every filter that matches the current viewport, including supported collectible categories, discovery states, rarity tiers, and Fartleks.
 - Multiple selected filters show the union of their matching map items; clearing all selections returns the map to the All state.
 - Existing map selection, quest, and detail behavior remains intact.
 - Filter controls remain accessible and responsive at mobile widths.
@@ -43,6 +44,7 @@ Unify World map filters and marker guidance so the map's active controls use the
 - World controls are native toggle buttons with `aria-pressed`; All resets the selected filters.
 - Selected filters match a union against the current snapshot. Category matching uses the same `primaryCategory`, `type`, and default fallback as map features.
 - Controls reuse collectible and Fartlek swatches and wrap at narrow widths. Active controls use a neutral surface with a yellow outline to preserve swatch colors.
+- Available controls update with each viewport snapshot; filters no longer applicable in the new viewport are cleared, while All remains visible even when the viewport has no map items.
 - Selected quest collectibles remain mapped alongside filtered items, without duplicates. The separate legend and its styles are removed.
 
 ## Validation

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
+import { availableWorldFilters, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
 import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import * as worldMarkers from "./world/world-markers.js";
 import * as worldMap from "./world/world-map.js";
@@ -17,6 +17,15 @@ const fartleks = [
 ];
 
 describe("World page data transformations", () => {
+  it("offers only matching filters while always retaining All", () => {
+    expect([...availableWorldFilters([], [])]).toEqual(["all"]);
+    expect([...availableWorldFilters(collectibles, [])]).toEqual([
+      "all", "found", "unfound", "rare", "epic", "viewpoint", "peak", "castle"
+    ]);
+    expect([...availableWorldFilters([], fartleks)]).toEqual(["all", "fartleks"]);
+    expect([...availableWorldFilters([{ ...collectibles[0], visibility: "hidden" }], [])]).toEqual(["all"]);
+  });
+
   it("keeps rarity filters independent from player discovery state", () => {
     expect(filteredWorldCollectibles(collectibles, ["found"]).map((item) => item.id)).toEqual(["common-found", "epic-found"]);
     expect(filteredWorldCollectibles(collectibles, ["unfound"]).map((item) => item.id)).toEqual(["rare-unfound"]);
@@ -68,7 +77,7 @@ describe("World page data transformations", () => {
 
 describe("Fartlek filtering", () => {
   it("labels the Fartleks control Flowlines alongside the collectible filters", () => {
-    const controls = WorldFilterControls([]);
+    const controls = WorldFilterControls([], collectibles, fartleks);
     const flowlineButton = controls.match(/<button[^>]*data-world-filter="fartleks"[^>]*>[\s\S]*?<\/button>/)[0];
 
     expect(worldFilters).toContain("fartleks");
@@ -116,7 +125,12 @@ describe("World filter controls", () => {
     markup.match(new RegExp(`<button[^>]*data-world-filter="${filter}"[^>]*>[\\s\\S]*?</button>`))[0];
 
   it("renders labelled toggle buttons rather than single-select tabs", () => {
-    const markup = WorldFilterControls(["rare", "castle"]);
+    const allCategories = [
+      ...collectibles,
+      { ...collectibles[0], id: "waterfall", primaryCategory: "waterfall" },
+      { ...collectibles[0], id: "place", primaryCategory: "place" }
+    ];
+    const markup = WorldFilterControls(["rare", "castle"], allCategories, fartleks);
     expect(worldFilters).toEqual(["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place"]);
     expect(markup).toContain('role="group" aria-label="World collectibles and Flowlines"');
     expect(markup).not.toContain('role="tab');
@@ -128,13 +142,17 @@ describe("World filter controls", () => {
   });
 
   it("marks only All as active when no filters are selected", () => {
-    const markup = WorldFilterControls([]);
+    const markup = WorldFilterControls([], collectibles, fartleks);
     expect(buttonMarkup(markup, "all")).toContain('aria-pressed="true"');
     expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
   });
 
   it("reuses the marker swatches for discovery, rarity, categories, and Fartleks", () => {
-    const markup = WorldFilterControls([]);
+    const markup = WorldFilterControls([], [
+      ...collectibles,
+      { ...collectibles[0], id: "waterfall", primaryCategory: "waterfall" },
+      { ...collectibles[0], id: "place", primaryCategory: "place" }
+    ], fartleks);
     expect(buttonMarkup(markup, "found")).toContain(CollectibleSwatch({ visited: true }));
     expect(buttonMarkup(markup, "unfound")).toContain(CollectibleSwatch({ visited: false }));
     for (const rarity of ["rare", "epic"]) {
@@ -153,11 +171,20 @@ describe("World filter controls", () => {
     expect(markup).not.toContain("world-legend");
     expect(markup).not.toContain("World marker legend");
     expect(worldMarkers.WorldLegend).toBeUndefined();
+    expect(buttonMarkup(WorldFilterControls([]), "all")).not.toContain(" hidden");
+  });
+
+  it("hides filters without matching viewport items", () => {
+    const markup = WorldFilterControls([], collectibles, []);
+    expect(buttonMarkup(markup, "waterfall")).toContain(" hidden");
+    expect(buttonMarkup(markup, "place")).toContain(" hidden");
+    expect(buttonMarkup(markup, "castle")).not.toContain(" hidden");
   });
 
   it("wraps controls and retains focus styling and mobile touch targets", () => {
     const css = readFileSync(new URL("../styles/world.css", import.meta.url), "utf8");
     expect(css).toMatch(/\.world-filter-controls\s*\{[^}]*flex-wrap:\s*wrap/s);
+    expect(css).toContain(".world-filter-controls button[hidden] { display: none; }");
     expect(css).toContain(".world-filter-controls button:focus-visible");
     expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.world-filter-controls button\s*\{[^}]*min-height:\s*38px/s);
     expect(css).not.toContain(".world-legend");
@@ -204,6 +231,7 @@ describe("mounted World page interactions", () => {
       querySelectorAll: () => Object.values(buttons)
     };
     const stats = { totalCollectibles: 3, discoveredCount: 2, rareFinds: 0, epicFinds: 1, remainingCount: 1 };
+    let viewportSnapshot = { collectibles, fartleks, stats, truncated: false };
     const questCollectible = { ...collectibles[0], id: "quest-only", name: "Quest viewpoint" };
     const quest = {
       id: "quest-1", title: "Viewpoint quest", status: "published", createdBy: "Ada", isOwner,
@@ -216,7 +244,7 @@ describe("mounted World page interactions", () => {
       let body;
       if (url === "/api/world/basemap") body = { styleUrl: "/style.json" };
       else if (url === "/api/world") body = { stats };
-      else if (url.startsWith("/api/world?bbox=")) body = { collectibles, fartleks, quests: deleted ? [] : [quest], stats, truncated: false };
+      else if (url.startsWith("/api/world?bbox=")) body = { ...viewportSnapshot, quests: deleted ? [] : [quest] };
       else if (url === "/api/quests/quest-1" && options?.method === "DELETE") {
         deleted = true;
         return { ok: true, status: 204 };
@@ -239,6 +267,10 @@ describe("mounted World page interactions", () => {
       callbacks: createMap.mock.calls[0][1],
       detail,
       status: hosts["[data-world-status]"],
+      changeViewport: (snapshot) => {
+        viewportSnapshot = snapshot;
+        createMap.mock.calls[0][1].onViewportChange(map.getBounds());
+      },
       quests: hosts["[data-world-quests]"],
       collectibleIds: () => map.setCollectibles.mock.lastCall[0].features.map((feature) => feature.id),
       fartlekIds: () => map.setFartleks.mock.lastCall[0].features.map((feature) => feature.id)
@@ -247,6 +279,9 @@ describe("mounted World page interactions", () => {
 
   it("toggles a union, removes individual filters, and resets without refetching", async () => {
     const page = await mount();
+    expect(page.buttons.all.hidden).toBe(false);
+    expect(page.buttons.waterfall.hidden).toBe(true);
+    expect(page.buttons.place.hidden).toBe(true);
     page.click("rare");
     expect(page.collectibleIds()).toEqual(["rare-unfound"]);
     expect(page.fartlekIds()).toEqual([]);
@@ -271,6 +306,25 @@ describe("mounted World page interactions", () => {
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
     expect(page.fartlekIds()).toEqual(fartleks.map((item) => item.id));
     expect(page.fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("updates available filters and clears selections when the viewport changes", async () => {
+    const page = await mount();
+    page.click("peak");
+    expect(page.buttons.peak.attributes["aria-pressed"]).toBe("true");
+
+    const waterfall = { ...collectibles[0], id: "waterfall", primaryCategory: "waterfall" };
+    const viewportStats = { totalCollectibles: 1, discoveredCount: 0, rareFinds: 0, epicFinds: 0, remainingCount: 1 };
+    page.changeViewport({ collectibles: [waterfall], fartleks: [], stats: viewportStats, truncated: false });
+    await vi.waitFor(() => expect(page.buttons.waterfall.hidden).toBe(false));
+    expect(page.buttons.peak.hidden).toBe(true);
+    expect(page.buttons.peak.attributes["aria-pressed"]).toBe("false");
+    expect(page.buttons.all.attributes["aria-pressed"]).toBe("true");
+    expect(page.collectibleIds()).toEqual(["waterfall"]);
+
+    page.changeViewport({ collectibles: [], fartleks: [], stats: viewportStats, truncated: false });
+    await vi.waitFor(() => expect(page.buttons.waterfall.hidden).toBe(true));
+    expect(page.buttons.all.hidden).toBe(false);
   });
 
   it("retains matching collectible details and clears selections excluded by the union", async () => {
