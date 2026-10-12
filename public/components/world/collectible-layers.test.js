@@ -100,6 +100,12 @@ describe("collectible source and layers", () => {
         ["==", ["get", "questTarget"], true]
       ]);
     }
+    expect(map.getLayer(COLLECTIBLE_SELECTED_LAYER).paint["circle-stroke-width"]).toEqual([
+      "case",
+      ["==", ["get", "selected"], true],
+      3,
+      2
+    ]);
   });
 
   it("encodes discovery and category in the fill and rarity in the ring", () => {

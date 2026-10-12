@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, PROPOSAL_SELECTION, type PlannerPolicy } from "./policy.js";
+import { traversedFlowlines } from "./validation.js";
 import { constraintActual, constraintRequested } from "./scoring.js";
 import type {
   ConstraintFitFlag,
+  FlowlineGeometry,
   ProposalHint,
   ProposalLabel,
   ProposalStop,
@@ -79,28 +81,24 @@ export const selectProposals = (routes: ScoredRoute[]): SelectedProposal[] => {
 };
 
 export const summarizeTargets = (ids: string[], targets: Map<string, QuestRouteTarget>): TargetSummary => {
-  const summary: TargetSummary = { flowlines: 0, peaks: 0, places: 0, other: 0 };
+  const summary: TargetSummary = { peaks: 0, places: 0, other: 0 };
   for (const id of ids) {
     const target = targets.get(id);
     if (!target) continue;
-    if (target.kind === "segment") summary.flowlines += 1;
-    else if (target.category === "peak") summary.peaks += 1;
+    if (target.category === "peak") summary.peaks += 1;
     else if (target.category === "place") summary.places += 1;
     else summary.other += 1;
   }
   return summary;
 };
 
-/** Composition hint: Climb for steep routes, else Flowline-rich or Discovery when one kind dominates. */
+/** Composition hint: Climb for steep routes, else Discovery for destination-rich routes. */
 export const proposalHint = (summary: TargetSummary, distanceM: number, elevationGainM?: number): ProposalHint | undefined => {
   if (elevationGainM !== undefined && distanceM > 0 && elevationGainM / (distanceM / 1000) >= PROPOSAL_SELECTION.climbMetersPerKm) {
     return "climb";
   }
-  const total = summary.flowlines + summary.peaks + summary.places + summary.other;
-  if (total < 2) return undefined;
-  if (summary.flowlines / total >= PROPOSAL_SELECTION.hintShare) return "flowline_rich";
-  if ((total - summary.flowlines) / total >= PROPOSAL_SELECTION.hintShare) return "discovery";
-  return undefined;
+  const total = summary.peaks + summary.places + summary.other;
+  return total >= 2 && (summary.peaks + summary.places) / total >= PROPOSAL_SELECTION.hintShare ? "discovery" : undefined;
 };
 
 export const constraintFitFlag = (
@@ -114,13 +112,14 @@ export const constraintFitFlag = (
   return "within";
 };
 
-export const proposalStops = (route: ScoredRoute): ProposalStop[] => route.candidate.stops.map((stop) =>
-  stop.direction ? { targetId: stop.target.id, direction: stop.direction } : { targetId: stop.target.id });
+export const proposalStops = (route: ScoredRoute): ProposalStop[] =>
+  route.candidate.stops.map((stop) => ({ targetId: stop.target.id }));
 
 export const toRouteProposal = (
   { label, route, recommended }: SelectedProposal,
   input: RoutePlanningInput,
   targets: Map<string, QuestRouteTarget>,
+  flowlines: FlowlineGeometry[],
   policy: PlannerPolicy = DEFAULT_PLANNER_POLICY
 ): RouteProposal => {
   const distanceM = Math.round(route.routing.distanceM);
@@ -143,6 +142,7 @@ export const toRouteProposal = (
     includedTargetIds: [...route.includedTargetIds].sort(),
     nearbyTargetIds: [...route.nearbyTargetIds].sort(),
     targetSummary,
+    traversedFlowlines: traversedFlowlines(route.routing, flowlines),
     constraintFit: constraintFitFlag(input, route.routing, policy),
     score: route.score
   };

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildRoutingPlan, flowlineShapingPoints, shapingPointCount } from "./flowlineRouting.js";
+import { buildRoutingPlan } from "./routingPlan.js";
 import { distanceBetween } from "./geo.js";
 import { ProposalStore } from "./proposalStore.js";
 import { assertNearTargets, parseProposalId, parseRoutePlanningInput } from "./request.js";
 import { constraintFit, isoperimetricQuotient, objectiveProgress, retraceRatio, scoreRoute } from "./scoring.js";
-import { at, pointTarget, segmentTarget, straightLineRoute, objectivesFor } from "./testFixtures.js";
+import { at, pointTarget, straightLineRoute, objectivesFor } from "./testFixtures.js";
 import type { RouteProposal, RoutingResult } from "./types.js";
 
 describe("scoring", () => {
@@ -52,27 +52,15 @@ describe("scoring", () => {
   });
 });
 
-describe("flowline routing", () => {
-  it("uses more shaping points for longer Flowlines and keeps them inside the segment", () => {
-    expect(shapingPointCount(1_000)).toBe(1);
-    expect(shapingPointCount(3_000)).toBe(2);
-    expect(shapingPointCount(10_000)).toBe(3);
-    const flowline = segmentTarget("f", "o", [0, 0], [0, 2]);
-    const forward = flowlineShapingPoints(flowline as Extract<typeof flowline, { kind: "segment" }>, "forward");
-    expect(forward).toHaveLength(4);
-    expect(distanceBetween(forward[0], at(0, 0))).toBeCloseTo(30, 0);
-    const reverse = flowlineShapingPoints(flowline as Extract<typeof flowline, { kind: "segment" }>, "reverse");
-    expect(distanceBetween(reverse[0], at(0, 2))).toBeCloseTo(30, 0);
-  });
-
-  it("maps routing location indexes to targets and uses via for points", () => {
-    const point = pointTarget("p", "o", 1, 1);
-    const flowline = segmentTarget("f", "o", [0, 0], [0, 2]);
-    const plan = buildRoutingPlan(at(0, 0), at(0, 0), [{ target: point }, { target: flowline, direction: "forward" }]);
-    expect(plan.request.waypoints[0].type).toBe("via");
-    expect(plan.request.waypoints.slice(1).every((waypoint) => waypoint.type === "through")).toBe(true);
+describe("routing plan", () => {
+  it("maps routing location indexes to destinations and uses via for every stop", () => {
+    const first = pointTarget("p", "o", 1, 1);
+    const second = pointTarget("q", "o", 2, 2);
+    const plan = buildRoutingPlan(at(0, 0), at(0, 0), [{ target: first }, { target: second }]);
+    expect(plan.request.waypoints).toHaveLength(2);
+    expect(plan.request.waypoints.every((waypoint) => waypoint.type === "via")).toBe(true);
     expect(plan.waypointTargetIds.get(1)).toBe("p");
-    expect(plan.waypointTargetIds.get(2)).toBe("f");
+    expect(plan.waypointTargetIds.get(2)).toBe("q");
     expect(JSON.stringify(plan.request)).not.toContain("\"p\"");
   });
 });

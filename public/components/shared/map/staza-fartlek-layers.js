@@ -33,6 +33,7 @@ const lineWidth = (stops) => ["interpolate", ["linear"], ["zoom"], ...stops.flat
 const CASING_WIDTH_STOPS = [[9, 2.4], [12, 3.4], [15, 4.6], [17, 5.6]];
 const LINE_WIDTH_STOPS = [[9, 1.2], [12, 1.8], [15, 2.6], [17, 3.4]];
 const SELECTED_WIDTH_STOPS = [[9, 5], [12, 7], [15, 9], [17, 11]];
+const HOVERED_WIDTH_STOPS = [[9, 7], [12, 10], [15, 13], [17, 16]];
 
 const fartlekCasingLayer = () => ({
   id: FARTLEK_CASING_LAYER,
@@ -72,9 +73,9 @@ const fartlekSelectedLayer = () => ({
   filter: SELECTED_OR_QUEST_TARGET,
   layout: { "line-cap": "round", "line-join": "round" },
   paint: {
-    "line-color": SELECTED_ACCENT,
-    "line-opacity": 0.22,
-    "line-width": lineWidth(SELECTED_WIDTH_STOPS)
+    "line-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "line-opacity": ["case", SELECTED, 0.95, 0.22],
+    "line-width": ["case", SELECTED, lineWidth(HOVERED_WIDTH_STOPS), lineWidth(SELECTED_WIDTH_STOPS)]
   }
 });
 
@@ -94,11 +95,11 @@ const fartlekHitLayer = () => ({
   }
 });
 
-/** Draw order: selection emphasis, casing, line, then the invisible hit-area on top for clicks. */
+/** Draw order: casing and line, selection emphasis, then the invisible hit-area for clicks. */
 export const fartlekLayers = () => [
-  fartlekSelectedLayer(),
   fartlekCasingLayer(),
   fartlekLineLayer(),
+  fartlekSelectedLayer(),
   fartlekHitLayer()
 ];
 

@@ -1,5 +1,5 @@
 import type { WorldCollectible, WorldFartlek } from "../domain.js";
-import type { LatLon, QuestRouteTarget, RoutePlanningInput } from "../routePlanning/types.js";
+import type { FlowlineGeometry, LatLon, QuestRouteTarget, RoutePlanningInput } from "../routePlanning/types.js";
 import type { GeoBounds } from "../worldQuery.js";
 
 /** The map area frozen when the player clicked "Explore this Area". */
@@ -19,10 +19,14 @@ export interface ExplorationSession {
   playerId: string;
   area: ExplorationAreaContext;
   input: RoutePlanningInput;
+  /** Eligible destinations; Flowlines are never targets. */
   availableTargets: QuestRouteTarget[];
   /** World objects behind the available targets, returned to the client for rendering. */
   collectibles: WorldCollectible[];
+  /** Flowlines of the area, returned so the client can highlight the ones a route rides. */
   flowlines: WorldFartlek[];
+  /** The same Flowlines as geometry, used only to analyse finished routes. */
+  flowlineGeometries: FlowlineGeometry[];
   truncated: boolean;
   expiresAtMs: number;
 }

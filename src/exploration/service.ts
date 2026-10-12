@@ -6,7 +6,7 @@ import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import type { ProposalStore } from "../routePlanning/proposalStore.js";
 import { routeTargetIds } from "../routePlanning/proposals.js";
 import { assertNearTargets, parseProposalId } from "../routePlanning/request.js";
-import { buildExplorationTargets } from "../routePlanning/targets.js";
+import { buildExplorationTargets, buildFlowlineGeometries, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
 import { PLANNER_VERSION, type QuestRouteTarget, type RouteProposal } from "../routePlanning/types.js";
 import type { GeoBounds } from "../worldQuery.js";
 import { describeExploration, explorationObjectives, withObjectiveIds } from "./objectives.js";
@@ -78,7 +78,7 @@ const toPublic = ({ score: _score, ...proposal }: RouteProposal): PublicRoutePro
 export interface GeneratedExploration {
   explorationId: string;
   proposals: PublicRouteProposal[];
-  /** Eligible World objects of the frozen area: rendered for the selected route and while adding targets. */
+  /** Eligible destinations (collectibles) and the area's Flowlines: rendered for the selected route and while adding destinations. */
   catalog: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[] };
   truncated: boolean;
   limits: { maxRouteTargets: number };
@@ -116,7 +116,9 @@ export class ExplorationService {
     const routing = this.requireRouting();
     const { area, input } = parseGenerateRequest(body);
     const loaded = await this.dependencies.loadArea(playerId, area.bounds);
-    const { targets, truncated } = buildExplorationTargets(loaded.collectibles, loaded.flowlines);
+    const { targets, truncated } = buildExplorationTargets(loaded.collectibles);
+    const flowlineGeometries = buildFlowlineGeometries(loaded.flowlines).slice(0, MAX_AVAILABLE_TARGETS);
+    const flowlineIds = new Set(flowlineGeometries.map((flowline) => flowline.id));
     if (targets.length === 0) throw new ExplorationError("no_targets");
     assertNearTargets(input, targets);
     const ids = new Set(targets.map((target) => target.id));
@@ -126,14 +128,15 @@ export class ExplorationService {
       input,
       availableTargets: targets,
       collectibles: loaded.collectibles.filter((collectible) => ids.has(collectible.id)),
-      flowlines: loaded.flowlines.filter((flowline) => ids.has(flowline.id)),
+      flowlines: loaded.flowlines.filter((flowline) => flowlineIds.has(flowline.id)),
+      flowlineGeometries,
       truncated: truncated || loaded.truncated
     });
 
     let planned: PlannedProposal[];
     try {
       planned = await generateExplorationRoutes(
-        { requestId, playerId, scopeId: session.id, targets, input },
+        { requestId, playerId, scopeId: session.id, targets, flowlines: flowlineGeometries, input },
         { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) }
       );
     } catch (error) {
@@ -180,6 +183,7 @@ export class ExplorationService {
         baseStops: base.stops,
         targets: withObjectiveIds(chosen, objectives),
         objectives,
+        flowlines: session.flowlineGeometries,
         input: session.input
       }, { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) });
     } catch (error) {

@@ -1,9 +1,9 @@
 import type { QuestObjective } from "../domain.js";
 import { distanceBetween } from "./geo.js";
-import { stopEntry, stopExit } from "./flowlineRouting.js";
+import { stopPosition } from "./routingPlan.js";
 import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, type PlannerPolicy } from "./policy.js";
 import { constraintFit, objectiveProgress } from "./scoring.js";
-import type { CandidateStop, LatLon, QuestRouteTarget, RideConstraint, RouteCandidate, RoutePlanningInput, SegmentDirection } from "./types.js";
+import type { CandidateStop, LatLon, QuestRouteTarget, RideConstraint, RouteCandidate, RoutePlanningInput } from "./types.js";
 
 /** Planning budget in meters; time constraints are converted with a heuristic speed only for pre-routing estimates. */
 export const budgetMeters = (constraint: RideConstraint, policy: PlannerPolicy = DEFAULT_PLANNER_POLICY): number =>
@@ -14,21 +14,16 @@ export const estimateTour = (start: LatLon, end: LatLon, stops: CandidateStop[],
   let position = start;
   let total = 0;
   for (const stop of stops) {
-    total += distanceBetween(position, stopEntry(stop)) * roadFactor;
-    if (stop.target.kind === "segment") total += stop.target.lengthMeters;
-    position = stopExit(stop);
+    total += distanceBetween(position, stopPosition(stop)) * roadFactor;
+    position = stopPosition(stop);
   }
   return total + distanceBetween(position, end) * roadFactor;
 };
 
-const directionsFor = (target: QuestRouteTarget): Array<SegmentDirection | undefined> =>
-  target.kind === "point" ? [undefined] : target.bidirectional ? ["forward", "reverse"] : ["forward"];
-
-const makeStop = (target: QuestRouteTarget, direction: SegmentDirection | undefined): CandidateStop =>
-  direction ? { target, direction } : { target };
+const makeStop = (target: QuestRouteTarget): CandidateStop => ({ target });
 
 const candidateKey = (stops: CandidateStop[]): string =>
-  stops.map((stop) => `${stop.target.id}${stop.direction === "reverse" ? "<" : ""}`).join(",");
+  stops.map((stop) => stop.target.id).join(",");
 
 const setKey = (stops: CandidateStop[]): string => stops.map((stop) => stop.target.id).sort().join(",");
 
@@ -43,8 +38,8 @@ export const selectTargetPool = (
   policy: PlannerPolicy = DEFAULT_PLANNER_POLICY
 ): QuestRouteTarget[] => {
   const budget = budgetMeters(input.constraint, policy);
-  const reachCost = (target: QuestRouteTarget): number => Math.min(...directionsFor(target).map((direction) =>
-    estimateTour(input.start, input.end, [makeStop(target, direction)], policy.roadFactor)));
+  const reachCost = (target: QuestRouteTarget): number =>
+    estimateTour(input.start, input.end, [makeStop(target)], policy.roadFactor);
   const reachable = targets
     .map((target) => ({ target, cost: reachCost(target) }))
     .filter(({ cost }) => cost <= budget * policy.maxEstimateRatio)
@@ -72,21 +67,14 @@ export interface Insertion {
 export const cheapestInsertion = (input: RoutePlanningInput, stops: CandidateStop[], target: QuestRouteTarget, roadFactor: number): Insertion => {
   let best: Insertion | undefined;
   for (let position = 0; position <= stops.length; position += 1) {
-    for (const direction of directionsFor(target)) {
-      const next = [...stops.slice(0, position), makeStop(target, direction), ...stops.slice(position)];
-      const estimate = estimateTour(input.start, input.end, next, roadFactor);
-      if (!best || estimate < best.estimate) best = { stops: next, estimate };
-    }
+    const next = [...stops.slice(0, position), makeStop(target), ...stops.slice(position)];
+    const estimate = estimateTour(input.start, input.end, next, roadFactor);
+    if (!best || estimate < best.estimate) best = { stops: next, estimate };
   }
   return best!;
 };
 
-const flip = (stop: CandidateStop): CandidateStop =>
-  stop.target.kind === "segment" && stop.target.bidirectional
-    ? { target: stop.target, direction: stop.direction === "reverse" ? "forward" : "reverse" }
-    : stop;
-
-/** Bounded 2-opt with segment-direction flips. Deterministic and small (≤ 12 stops). */
+/** Bounded 2-opt. Deterministic and small (≤ 12 stops). */
 export const improveOrder = (input: RoutePlanningInput, stops: CandidateStop[], roadFactor: number): CandidateStop[] => {
   let best = stops;
   let bestEstimate = estimateTour(input.start, input.end, best, roadFactor);
@@ -94,7 +82,7 @@ export const improveOrder = (input: RoutePlanningInput, stops: CandidateStop[], 
     let improved = false;
     for (let i = 0; i < best.length; i += 1) {
       for (let j = i; j < best.length; j += 1) {
-        const reversed = [...best.slice(0, i), ...best.slice(i, j + 1).reverse().map(flip), ...best.slice(j + 1)];
+        const reversed = [...best.slice(0, i), ...best.slice(i, j + 1).reverse(), ...best.slice(j + 1)];
         const estimate = estimateTour(input.start, input.end, reversed, roadFactor);
         if (estimate + 1 < bestEstimate) {
           best = reversed;
@@ -193,8 +181,8 @@ export const generateCandidates = (
 ): RouteCandidate[] => {
   const seeds = [...pool]
     .sort((a, b) => Number(a.alreadyAchieved) - Number(b.alreadyAchieved)
-      || estimateTour(input.start, input.end, [makeStop(a, directionsFor(a)[0])], policy.roadFactor)
-        - estimateTour(input.start, input.end, [makeStop(b, directionsFor(b)[0])], policy.roadFactor)
+      || estimateTour(input.start, input.end, [makeStop(a)], policy.roadFactor)
+        - estimateTour(input.start, input.end, [makeStop(b)], policy.roadFactor)
       || a.id.localeCompare(b.id));
 
   // Seeds are spread across the ranking so candidates explore different directions from the start.

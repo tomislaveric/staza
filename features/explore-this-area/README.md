@@ -54,7 +54,7 @@ routing-service changes, discovery outside the frozen bbox, social/shared quests
   warning instead of rejecting the edit.
 - Labels are relative: **Adventure** (most targets), **Quick** (shortest, ≤ 85 % of
   Adventure), **Balanced** (best remaining score), plus a composition hint
-  (Flowline-rich / Discovery / Climb).
+  (Discovery / Climb). Flowlines never influence labels or scoring.
 
 ## State machine (client)
 
@@ -63,14 +63,14 @@ routing-service changes, discovery outside the frozen bbox, social/shared quests
 | `configure` | start, Round trip / A→B (+end), Distance/Time presets + custom, Generate Routes | World markers dimmed; start/end pins |
 | `generating` | progress, Cancel | as configure |
 | `proposals` | 2–3 proposal cards; best auto-selected → `customize` | only the selected or hovered route |
-| `customize` | selected card, "Included in this route" list with remove, Add target mode, length warning, Reset, Start Exploration | selected route + its targets; add mode shows eligible targets |
+| `customize` | selected card, "Included destinations" list with remove, a read-only "Along this route" Flowline list, Add target mode, length warning, Reset, Start Exploration | selected route + its targets; hovering a target row emphasizes that target; add mode shows eligible targets |
 | `confirming` | buttons disabled | — |
 
 `customize` has a `rerouting` status while an edit is routed. Changing start, route type
 or constraint (or pressing Change ride) returns to `configure` and discards proposals.
 Reset restores a customized proposal to its generated version without a network call. Card
 hover previews a route and clicking a card selects it; only that hovered or selected route
-is drawn. Included targets use the same category and Flowline icons as the World filters
+is drawn. Included destinations use the same category icons as the World filters
 and map. Each proposal keeps its own customized version client-side. Cancel returns to the
 normal World view without network calls.
 
@@ -80,15 +80,17 @@ normal World view without network calls.
 
 Inputs: frozen-area targets, start, optional end, route type, ride constraint.
 Eligible targets reuse `buildExplorationTargets` (published, visible collectibles with a
-category and published Flowlines; already achieved stay eligible with lower value).
-Three internal strategies — `flowline_focus`, `balanced`, `discovery` — are expressed as
-synthetic objectives (per-kind required counts scaled to the budget:
+category; already achieved stay eligible with lower value). Flowlines are **not** targets:
+they are never waypoints, never affect ordering, detours or scoring, and are not required.
+Three internal strategies — `balanced`, `peak_focus`, `discovery` — are expressed as
+synthetic objectives over point destinations (per-kind required counts scaled to the budget:
 `clamp(round(budgetKm / 12), 2, 8)` targets, shares redistributed when a kind is absent).
 Each strategy reuses `selectTargetPool` and `generateCandidates` (seeded greedy cheapest
 insertion + bounded 2-opt; no brute-force permutations). Candidates are interleaved across
 strategies, deduplicated by target set and routed under one shared budget (≤ 9 requests,
-concurrency 3, 20 s deadline). Flowline shaping and traversal validation are unchanged.
-Scores combine the strategy's objective progress, constraint fit, loop quality, route
+concurrency 3, 20 s deadline). After routing, the final geometry is intersected with published Flowline geometries (midpoint
+pre-check, 30 m corridor, ≥ 80 % coverage) and returned as `traversedFlowlines` metadata.
+Scores combine destination progress, constraint fit, loop quality, route
 shape, target freshness and detour penalty. Proposals must be distinct (target-set
 Jaccard < 0.6 or distance difference > 15 %). Strategies are never shown to users.
 
@@ -105,7 +107,7 @@ addition inserts at the cheapest position; then bounded 2-opt. One route is requ
 elevationGainM?, elevationLossM?, geometry, start, end, includedTargetIds,
 nearbyTargetIds, targetSummary, constraintFit, customized?, basedOn?, droppedTargetIds? }`.
 Server-side `StoredProposal` additionally holds the ordered stops, included targets,
-exploration id and planner version (`PLANNER_VERSION = 3`).
+exploration id and planner version (`PLANNER_VERSION = 4`).
 
 ## API
 
@@ -127,8 +129,9 @@ All require authentication and CSRF.
 
 No schema change beyond migration `028_exploration_instances` (inactive `exploration`
 template row). Confirmation reads the stored (possibly customized) proposal and persists
-one QuestInstance (objectives from the route's included and nearby targets: one
-`flowline_rule` and one `collectible_targets` per category; `scope_hash` = proposal id
+one QuestInstance (objectives from the route's included and nearby destinations: one
+`collectible_targets` per category, no Flowline objective — Flowline completion still depends
+only on the imported activity; `scope_hash` = proposal id
 for idempotency; `fresh_progress = true`) and one PlannedRoute atomically. Historical
 instances keep loading and progressing.
 
@@ -149,6 +152,8 @@ instances keep loading and progressing.
 - Generate returns 2–3 distinct proposals, possibly with different target subsets.
 - All proposals are available in the cards; only the selected or hovered one renders on
   the map, and its targets are shown with the World map/filter icons.
+- Hovering a target row emphasizes its matching map target; the map entry button is
+  prominent and centered at the bottom of the map.
 - Remove/add reroutes only the selected proposal and updates geometry, distance,
   duration and summary; failures keep the previous route.
 - Targets outside the frozen area and foreign proposals are rejected.

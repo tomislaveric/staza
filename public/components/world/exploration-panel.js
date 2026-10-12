@@ -11,7 +11,6 @@ const proposalLabels = {
 };
 
 const proposalHints = {
-  flowline_rich: "Flowline-rich",
   discovery: "Discovery",
   climb: "Climb"
 };
@@ -42,6 +41,7 @@ export const createExplorationState = (area) => ({
   customizedById: {},
   selectedProposalId: undefined,
   previewProposalId: undefined,
+  hoveredTargetId: undefined,
   catalog: { collectibles: [], flowlines: [] },
   limits: { maxRouteTargets: 12 },
   truncated: false,
@@ -60,8 +60,8 @@ export const formatRouteDuration = (seconds) => {
 
 const plural = (count, singular, pluralForm) => `${count} ${count === 1 ? singular : pluralForm}`;
 
+/** Destination counts: "1 Peak · 2 Places". Flowlines are not destinations. */
 export const targetSummaryText = (summary) => [
-  summary.flowlines ? plural(summary.flowlines, "Flowline", "Flowlines") : "",
   summary.peaks ? plural(summary.peaks, "Peak", "Peaks") : "",
   summary.places ? plural(summary.places, "Place", "Places") : "",
   summary.other ? plural(summary.other, "other target", "other targets") : ""
@@ -80,20 +80,23 @@ export const routeTargetIds = (proposal) => proposal
   ? [...new Set([...proposal.includedTargetIds, ...(proposal.nearbyTargetIds ?? [])])]
   : [];
 
-/** Name and kind of a catalog target (collectible or Flowline) of the frozen area. */
+/** Flowlines a route naturally rides: derived, informational metadata. */
+export const traversedFlowlines = (proposal) => proposal?.traversedFlowlines ?? [];
+
+export const flowlinesText = (flowlines) => plural(flowlines.length, "Flowline", "Flowlines");
+
+/** Name and kind of a catalog destination (collectible) of the frozen area. */
 export const findCatalogTarget = (catalog, id) => {
   const collectible = catalog?.collectibles.find((item) => item.id === id);
-  if (collectible) {
-    return {
+  return collectible
+    ? {
       category: collectible.primaryCategory ?? collectible.type ?? "coin",
       id,
       name: collectible.name,
       rarity: collectible.rarity,
       visited: Boolean(collectible.found)
-    };
-  }
-  const flowline = catalog?.flowlines.find((item) => item.id === id);
-  return flowline ? { id, isFlowline: true, name: flowline.name } : undefined;
+    }
+    : undefined;
 };
 
 /** Validates the ride and builds the generate request; the request never contains targets. */
@@ -195,7 +198,9 @@ export const RouteProposalCard = (state, original) => {
           <span>${escapeHtml(formatRouteDuration(proposal.durationS))}</span>
           ${Number.isFinite(proposal.elevationGainM) ? `<span>\u2191 ${Math.round(proposal.elevationGainM)} m</span>` : ""}
         </span>
-        <span class="route-proposal-targets">${updating ? "Updating route..." : escapeHtml(targetSummaryText(proposal.targetSummary))}</span>
+        <span class="route-proposal-targets">${updating ? "Updating route..." : `
+          <span data-proposal-destinations>${escapeHtml(targetSummaryText(proposal.targetSummary))}</span>
+          ${traversedFlowlines(proposal).length ? `<span class="route-proposal-along" data-proposal-flowlines>Along this route: ${escapeHtml(flowlinesText(traversedFlowlines(proposal)))}</span>` : ""}`}</span>
       </button>
     </li>
   `;
@@ -262,19 +267,19 @@ const CustomizeSection = (state) => {
   const idle = state.status === "idle" && state.phase === "customize";
   const ids = state.pendingTargetIds ?? routeTargetIds(proposal);
   const atLimit = ids.length >= state.limits.maxRouteTargets;
+  // Flowlines belong to the current geometry; hide them while an edit is being re-planned.
+  const alongRoute = state.status === "rerouting" ? [] : traversedFlowlines(proposal);
   const dropped = (proposal.droppedTargetIds ?? []).map((id) => findCatalogTarget(state.catalog, id)?.name ?? id);
   return `
     <div class="exploration-targets" data-exploration-route-targets>
-      <p class="exploration-target-count"><strong>Included in this route</strong></p>
-      <ul class="exploration-selected" aria-label="Included in this route">
+      <p class="exploration-target-count"><strong>Included destinations</strong></p>
+      <ul class="exploration-selected" aria-label="Included destinations">
         ${ids.map((id) => {
           const target = findCatalogTarget(state.catalog, id);
           const name = target?.name ?? id;
-          const icon = target?.isFlowline
-            ? '<b class="fartlek-swatch" aria-hidden="true"></b>'
-            : CollectibleSwatch({ category: target?.category, rarity: target?.rarity, visited: target?.visited });
+          const icon = CollectibleSwatch({ category: target?.category, rarity: target?.rarity, visited: target?.visited });
           return `
-            <li>
+            <li data-exploration-target="${escapeHtml(id)}">
               <span class="exploration-target-name">${icon}<span data-user-content>${escapeHtml(name)}</span></span>
               <button type="button" data-exploration-remove="${escapeHtml(id)}"
                 aria-label="Remove ${escapeHtml(name)} from this route"${!idle || ids.length <= 1 ? " disabled" : ""}>\u2715</button>
@@ -282,16 +287,25 @@ const CustomizeSection = (state) => {
           `;
         }).join("")}
       </ul>
+      ${alongRoute.length ? `
+        <p class="exploration-target-count"><strong>Along this route</strong> <small>${escapeHtml(flowlinesText(alongRoute))}</small></p>
+        <ul class="exploration-along" aria-label="Along this route" data-exploration-along>
+          ${alongRoute.map((flowline) => `
+            <li data-exploration-flowline="${escapeHtml(flowline.id)}">
+              <span class="exploration-target-name"><b class="fartlek-swatch" aria-hidden="true"></b><span data-user-content>${escapeHtml(flowline.name)}</span></span>
+            </li>
+          `).join("")}
+        </ul>` : ""}
       ${dropped.length ? `<p class="route-planner-note">Couldn't route to ${escapeHtml(dropped.join(", "))}, so ${dropped.length === 1 ? "it was" : "they were"} left out.</p>` : ""}
       ${fitWarning(proposal)}
       <div class="exploration-route-actions">
         <button type="button" data-exploration-add aria-pressed="${state.adding}"${!idle || (atLimit && !state.adding) ? " disabled" : ""}>
-          ${state.adding ? "Done adding" : "Add target"}</button>
+          ${state.adding ? "Done adding" : "Add destination"}</button>
         ${state.customizedById[state.selectedProposalId]
           ? `<button type="button" data-exploration-reset${idle ? "" : " disabled"}>Reset route</button>`
           : ""}
       </div>
-      ${atLimit ? `<p class="route-planner-note">A route can include at most ${state.limits.maxRouteTargets} targets.</p>` : ""}
+      ${atLimit ? `<p class="route-planner-note">A route can include at most ${state.limits.maxRouteTargets} destinations.</p>` : ""}
       ${state.truncated ? '<p class="route-planner-note">This area has many targets. Zoom in to see all of them.</p>' : ""}
     </div>
   `;

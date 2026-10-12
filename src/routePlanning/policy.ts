@@ -87,7 +87,7 @@ export const PROPOSAL_SELECTION = {
   minDistanceDifference: 0.15,
   /** "Quick" must be at most this share of the Adventure distance. */
   quickDistanceRatio: 0.85,
-  /** Share of a route's targets of one kind that earns a composition hint. */
+  /** Share of a route's destinations of one kind that earns a composition hint. */
   hintShare: 0.6,
   /** Elevation gain per km that earns the "Climb" hint. */
   climbMetersPerKm: 15
@@ -103,7 +103,7 @@ export const VALIDATION = {
   maxPointAccessMeters: 500,
   /** Flowline samples within this corridor of the route count as traversed. */
   flowlineCorridorMeters: 30,
-  /** Minimum share of a Flowline that must be traversed for the candidate to be accepted. */
+  /** Minimum share of a Flowline the route must ride for it to count as traversed. */
   minFlowlineCoverage: 0.8,
   flowlineSampleSpacingMeters: 25,
   /** Route sampling used for loop and backtracking metrics. */
@@ -117,13 +117,4 @@ export const VALIDATION = {
   detourFreeRatio: 1.5,
   /** Additional ratio over which the detour penalty grows from 0 to 1. */
   detourPenaltySpan: 1.5
-} as const;
-
-/** Shaping points used to force traversal of a Flowline, by length. */
-export const FLOWLINE_SHAPING = {
-  /** Entry/exit points are pulled this far inside the segment ends to avoid snapping to crossings. */
-  endInsetMeters: 30,
-  maxEndInsetRatio: 0.05,
-  shortLengthMeters: 1_500,
-  mediumLengthMeters: 4_000
 } as const;

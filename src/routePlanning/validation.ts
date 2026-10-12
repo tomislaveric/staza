@@ -1,67 +1,51 @@
 import { PolylineIndex, sampleAlong } from "./geo.js";
 import { VALIDATION } from "./policy.js";
-import type { RouteCandidate, QuestRouteTarget, RoutingResult } from "./types.js";
+import type { FlowlineGeometry, QuestRouteTarget, RoutingResult, TraversedFlowline } from "./types.js";
 
 export interface RouteValidation {
-  /** False when a planned Flowline was bypassed or ridden against a restricted direction. */
-  valid: boolean;
-  reason?: "flowline_bypassed" | "flowline_wrong_direction";
-  /** Targets the route actually serves for gameplay (inside detection radius / sufficiently covered). */
+  /** Destinations the route actually serves for gameplay (inside the detection radius). */
   includedTargetIds: string[];
-  /** Point targets reachable within the access threshold but outside the detection radius. */
+  /** Destinations reachable within the access threshold but outside the detection radius. */
   nearbyTargetIds: string[];
 }
 
-export const flowlineCoverage = (index: PolylineIndex, target: Extract<QuestRouteTarget, { kind: "segment" }>): {
-  coverage: number;
-  forward: boolean;
-} => {
-  const samples = sampleAlong(target.coordinates, VALIDATION.flowlineSampleSpacingMeters);
-  const hits = samples.map((sample) => index.nearest(sample, VALIDATION.flowlineCorridorMeters));
-  const covered = hits.filter((hit) => hit !== undefined).length;
-  const first = hits.find((hit) => hit !== undefined);
-  const last = [...hits].reverse().find((hit) => hit !== undefined);
-  return {
-    coverage: samples.length > 0 ? covered / samples.length : 0,
-    forward: first !== undefined && last !== undefined ? last.along >= first.along : true
-  };
+/** Share of the Flowline's samples that lie within the corridor of the routed geometry. */
+export const flowlineCoverage = (index: PolylineIndex, flowline: FlowlineGeometry): number => {
+  const samples = sampleAlong(flowline.coordinates, VALIDATION.flowlineSampleSpacingMeters);
+  if (samples.length === 0) return 0;
+  const covered = samples.filter((sample) => index.nearest(sample, VALIDATION.flowlineCorridorMeters) !== undefined).length;
+  return covered / samples.length;
 };
 
 /**
- * Checks the routed geometry against every eligible target. Planned Flowlines must be covered,
- * otherwise the candidate is rejected; point targets count only inside their gameplay radius.
- * Unplanned targets the route happens to serve are credited too, because gameplay would count them.
+ * Flowlines the routed geometry naturally rides: derived metadata only. Flowlines never shape
+ * or constrain routing, and this never decides gameplay completion (that depends on the
+ * imported activity).
  */
-export const validateRoute = (candidate: RouteCandidate, routing: RoutingResult, eligibleTargets: QuestRouteTarget[]): RouteValidation => {
+export const traversedFlowlines = (routing: Pick<RoutingResult, "geometry">, flowlines: FlowlineGeometry[]): TraversedFlowline[] => {
+  if (flowlines.length === 0 || routing.geometry.coordinates.length < 2) return [];
   const index = new PolylineIndex(routing.geometry.coordinates);
-  const planned = new Set(candidate.stops.map((stop) => stop.target.id));
+  return flowlines
+    .filter((flowline) => {
+      // Cheap pre-check before sampling the whole Flowline.
+      const midpoint = flowline.coordinates[Math.floor(flowline.coordinates.length / 2)];
+      if (!index.nearest(midpoint, VALIDATION.flowlineCorridorMeters * 4)) return false;
+      return flowlineCoverage(index, flowline) >= VALIDATION.minFlowlineCoverage;
+    })
+    .map(({ id, name, lengthMeters }) => ({ id, name, lengthMeters }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+};
+
+/** Checks the routed geometry against every eligible destination; point targets count inside their radius. */
+export const validateRoute = (routing: RoutingResult, eligibleTargets: QuestRouteTarget[]): RouteValidation => {
+  const index = new PolylineIndex(routing.geometry.coordinates);
   const included: string[] = [];
   const nearby: string[] = [];
-
   for (const target of eligibleTargets) {
-    if (target.kind === "point") {
-      const hit = index.nearest([target.coordinate.lon, target.coordinate.lat], VALIDATION.maxPointAccessMeters);
-      if (!hit) continue;
-      if (hit.distance <= target.radiusMeters) included.push(target.id);
-      else nearby.push(target.id);
-      continue;
-    }
-    const isPlanned = planned.has(target.id);
-    if (!isPlanned) {
-      // Cheap pre-check before sampling an unplanned Flowline.
-      const midpoint = target.coordinates[Math.floor(target.coordinates.length / 2)];
-      if (!index.nearest(midpoint, VALIDATION.flowlineCorridorMeters * 4)) continue;
-    }
-    const { coverage, forward } = flowlineCoverage(index, target);
-    const covered = coverage >= VALIDATION.minFlowlineCoverage;
-    if (isPlanned && !covered) {
-      return { valid: false, reason: "flowline_bypassed", includedTargetIds: [], nearbyTargetIds: [] };
-    }
-    if (covered && !target.bidirectional && !forward) {
-      if (isPlanned) return { valid: false, reason: "flowline_wrong_direction", includedTargetIds: [], nearbyTargetIds: [] };
-      continue;
-    }
-    if (covered) included.push(target.id);
+    const hit = index.nearest([target.coordinate.lon, target.coordinate.lat], VALIDATION.maxPointAccessMeters);
+    if (!hit) continue;
+    if (hit.distance <= target.radiusMeters) included.push(target.id);
+    else nearby.push(target.id);
   }
-  return { valid: true, includedTargetIds: included, nearbyTargetIds: nearby };
+  return { includedTargetIds: included, nearbyTargetIds: nearby };
 };

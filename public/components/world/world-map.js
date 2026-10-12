@@ -78,7 +78,7 @@ export {
  * shared Staza map foundation; Staza gameplay rules stay in the World page.
  */
 export const createWorldMap = async (container, {
-  styleUrl, attribution, onViewportChange, onCollectibleSelect, onFartlekSelect, onAlternateRouteSelect
+  styleUrl, attribution, onViewportChange, onCollectibleSelect, onCollectibleHover, onFartlekSelect, onAlternateRouteSelect
 }) => {
   const staza = await createStazaMap(container, { styleUrl, attribution });
   const { map } = staza;
@@ -123,7 +123,7 @@ export const createWorldMap = async (container, {
   ensureCollectibleLayers(map);
   setCollectibleData(map, pendingCollectibles);
 
-  if (onCollectibleSelect) bindCollectibleInteractions(map, { onSelect: onCollectibleSelect });
+  if (onCollectibleSelect) bindCollectibleInteractions(map, { onSelect: onCollectibleSelect, onHover: onCollectibleHover });
   if (onFartlekSelect) bindFartlekInteractions(map, { onSelect: onFartlekSelect });
 
   map.on("moveend", () => onViewportChange(readBounds(map)));

@@ -4,9 +4,9 @@ import { PLANNING_LIMITS } from "./policy.js";
 import { constraintFitFlag, distinctRoutes, proposalHint, selectProposals } from "./proposals.js";
 import { RoutingError } from "./routingClient.js";
 import { buildStrategies, targetCountFor } from "./strategies.js";
-import { at, objectivesFor, pointTarget, segmentTarget, straightLineRoute } from "./testFixtures.js";
-import type { QuestRouteTarget, RouteCandidate, RoutePlanningInput, RoutingRequest, ScoredRoute } from "./types.js";
-import { validateRoute } from "./validation.js";
+import { at, flowlineGeometry, objectivesFor, pointTarget, straightLineRoute } from "./testFixtures.js";
+import type { FlowlineGeometry, QuestRouteTarget, RouteCandidate, RoutePlanningInput, RoutingRequest, ScoredRoute } from "./types.js";
+import { traversedFlowlines, validateRoute } from "./validation.js";
 
 const roundTrip = (km: number): RoutePlanningInput => ({
   start: at(0, 0),
@@ -20,15 +20,11 @@ const straightRouter = (): RouteProvider & { calls: RoutingRequest[] } => {
   return { calls, route: async (request) => { calls.push(request); return straightLineRoute(request); } };
 };
 
-const generate = (targets: QuestRouteTarget[], input: RoutePlanningInput, routing: RouteProvider) =>
-  generateExplorationRoutes({ requestId: "req", playerId: "player", scopeId: "exploration", targets, input }, { routing, log: () => undefined });
+const generate = (targets: QuestRouteTarget[], input: RoutePlanningInput, routing: RouteProvider, flowlines: FlowlineGeometry[] = []) =>
+  generateExplorationRoutes({ requestId: "req", playerId: "player", scopeId: "exploration", targets, flowlines, input }, { routing, log: () => undefined });
 
-/** A varied area: Flowlines, Peaks, Places and a viewpoint spread around the start. */
+/** A varied area: Peaks, Places and a viewpoint spread around the start. */
 const mixedArea = (): QuestRouteTarget[] => [
-  segmentTarget("f1", "", [3, 0], [5, 0]),
-  segmentTarget("f2", "", [0, 4], [0, 6]),
-  segmentTarget("f3", "", [-3, 0], [-5, 0]),
-  segmentTarget("f4", "", [0, -4], [0, -6]),
   pointTarget("p1", "", 4, 3, { category: "peak" }),
   pointTarget("p2", "", -4, -3, { category: "peak" }),
   pointTarget("pl1", "", 3, -4),
@@ -45,15 +41,14 @@ describe("internal target-selection strategies", () => {
     expect(targetCountFor({ type: "duration", seconds: 7_200 })).toBe(3);
   });
 
-  it("builds Flowline-focused, balanced and discovery mixes as synthetic objectives", () => {
+  it("builds peak-focused, balanced and discovery mixes from destinations only", () => {
     const strategies = buildStrategies(mixedArea(), { type: "distance", meters: 72_000 });
-    expect(strategies.map((strategy) => strategy.name)).toEqual(["balanced", "flowline_focus", "discovery"]);
+    expect(strategies.map((strategy) => strategy.name)).toEqual(["balanced", "peak_focus", "discovery"]);
     const required = (name: string, id: string) =>
       strategies.find((strategy) => strategy.name === name)!.objectives.find((objective) => objective.id === id)?.requiredCount ?? 0;
-    expect(required("flowline_focus", "flowline")).toBeGreaterThan(required("discovery", "flowline"));
-    expect(required("balanced", "flowline")).toBe(2);
-    expect(required("balanced", "peak")).toBe(2);
+    expect(required("peak_focus", "peak")).toBeGreaterThanOrEqual(required("discovery", "peak"));
     for (const strategy of strategies) {
+      expect(strategy.objectives.every((objective) => objective.type === "collectible_targets")).toBe(true);
       const total = strategy.objectives.reduce((sum, objective) => sum + objective.requiredCount, 0);
       expect(total).toBe(6);
       const peak = strategy.targets.find((target) => target.id === "p1")!;
@@ -64,7 +59,7 @@ describe("internal target-selection strategies", () => {
   it("redistributes kinds the area lacks and drops identical mixes", () => {
     const placesOnly = [pointTarget("a", "", 1, 0), pointTarget("b", "", 0, 1), pointTarget("c", "", -1, 0)];
     const strategies = buildStrategies(placesOnly, { type: "distance", meters: 36_000 });
-    expect(strategies.length).toBeLessThan(3);
+    expect(strategies.length).toBeGreaterThan(0);
     for (const strategy of strategies) {
       expect(strategy.objectives.every((objective) => objective.type === "collectible_targets")).toBe(true);
       expect(strategy.objectives.reduce((sum, objective) => sum + objective.requiredCount, 0)).toBe(3);
@@ -85,7 +80,7 @@ describe("generateExplorationRoutes", () => {
     for (const { proposal, stops } of proposals) {
       const contents = new Set([...proposal.includedTargetIds, ...proposal.nearbyTargetIds]);
       const summary = proposal.targetSummary;
-      expect(summary.flowlines + summary.peaks + summary.places + summary.other).toBe(contents.size);
+      expect(summary.peaks + summary.places + summary.other).toBe(contents.size);
       expect(contents.size).toBeGreaterThan(0);
       expect(stops.length).toBeGreaterThan(0);
       expect(["within", "short", "long"]).toContain(proposal.constraintFit);
@@ -141,9 +136,8 @@ describe("generateExplorationRoutes", () => {
   });
 
   it("bounds routing requests even with many targets", async () => {
-    const targets = Array.from({ length: 40 }, (_value, index) => index % 4 === 0
-      ? segmentTarget(`f${index}`, "", [Math.sin(index) * 8, Math.cos(index) * 8], [Math.sin(index) * 9, Math.cos(index) * 9])
-      : pointTarget(`t${String(index).padStart(2, "0")}`, "", Math.sin(index) * 8, Math.cos(index) * 8, { category: index % 3 === 0 ? "peak" : "place" }));
+    const targets = Array.from({ length: 40 }, (_value, index) =>
+      pointTarget(`t${String(index).padStart(2, "0")}`, "", Math.sin(index) * 8, Math.cos(index) * 8, { category: index % 3 === 0 ? "peak" : "place" }));
     const router = straightRouter();
     await generate(targets, roundTrip(60), router);
     expect(router.calls.length).toBeLessThanOrEqual(PLANNING_LIMITS.maxRoutingRequests);
@@ -164,6 +158,40 @@ describe("generateExplorationRoutes", () => {
     const [first] = await generate(targets, input, straightRouter());
     expect(first.proposal.routeType).toBe("point_to_point");
     expect(first.proposal.end).toEqual(at(0, 20));
+  });
+});
+
+describe("traversed Flowlines", () => {
+  const ridden = flowlineGeometry("ridden", [2, 0], [4, 0]);
+  const elsewhere = flowlineGeometry("elsewhere", [-8, -8], [-9, -8]);
+  const targets = [pointTarget("far", "", 5, 0), pointTarget("side", "", 0, -4)];
+
+  it("reports Flowlines the final route rides and ignores the rest", async () => {
+    const proposals = await generate(targets, roundTrip(24), straightRouter(), [ridden, elsewhere]);
+    const withRidden = proposals.filter(({ proposal }) => proposal.includedTargetIds.includes("far"));
+    expect(withRidden.length).toBeGreaterThan(0);
+    for (const { proposal } of withRidden) {
+      expect(proposal.traversedFlowlines).toEqual([{ id: "ridden", name: "ridden", lengthMeters: ridden.lengthMeters }]);
+    }
+    for (const { proposal } of proposals) expect(proposal.traversedFlowlines.map((flowline) => flowline.id)).not.toContain("elsewhere");
+  });
+
+  it("never lets Flowlines shape candidates, waypoints or proposals", async () => {
+    const plain = straightRouter();
+    const withFlowlines = straightRouter();
+    const strip = (entries: Awaited<ReturnType<typeof generate>>) =>
+      entries.map(({ proposal: { id: _id, traversedFlowlines: _along, ...rest }, stops }) => ({ rest, stops }));
+    expect(strip(await generate(mixedArea(), roundTrip(40), withFlowlines, [ridden, elsewhere])))
+      .toEqual(strip(await generate(mixedArea(), roundTrip(40), plain)));
+    expect(withFlowlines.calls).toEqual(plain.calls);
+    expect(withFlowlines.calls.every((call) => call.waypoints.every((waypoint) => waypoint.type === "via"))).toBe(true);
+  });
+
+  it("requires most of a Flowline to be covered and works without Flowlines", () => {
+    const route = straightLineRoute({ profile: "bicycle", start: at(0, 0), end: at(0, 0), waypoints: [{ type: "via", ...at(5, 0) }] });
+    expect(traversedFlowlines(route, [ridden, elsewhere]).map((flowline) => flowline.id)).toEqual(["ridden"]);
+    expect(traversedFlowlines(route, [flowlineGeometry("crossing", [3, -1], [3, 1])])).toEqual([]);
+    expect(traversedFlowlines(route, [])).toEqual([]);
   });
 });
 
@@ -197,10 +225,9 @@ describe("proposal selection and labels", () => {
   });
 
   it("derives composition hints and ride-length fit", () => {
-    expect(proposalHint({ flowlines: 3, peaks: 1, places: 0, other: 0 }, 40_000, 100)).toBe("flowline_rich");
-    expect(proposalHint({ flowlines: 0, peaks: 1, places: 2, other: 0 }, 40_000, 100)).toBe("discovery");
-    expect(proposalHint({ flowlines: 1, peaks: 1, places: 0, other: 0 }, 40_000, 900)).toBe("climb");
-    expect(proposalHint({ flowlines: 1, peaks: 1, places: 0, other: 0 }, 40_000, 100)).toBeUndefined();
+    expect(proposalHint({ peaks: 1, places: 2, other: 0 }, 40_000, 100)).toBe("discovery");
+    expect(proposalHint({ peaks: 1, places: 0, other: 0 }, 40_000, 900)).toBe("climb");
+    expect(proposalHint({ peaks: 0, places: 0, other: 2 }, 40_000, 100)).toBeUndefined();
     const routing = { distanceM: 70_000, durationS: 10_000 };
     expect(constraintFitFlag(roundTrip(50), routing as ScoredRoute["routing"])).toBe("long");
     expect(constraintFitFlag(roundTrip(70), routing as ScoredRoute["routing"])).toBe("within");
@@ -222,6 +249,7 @@ describe("rerouteTargets", () => {
       baseStops: [{ targetId: "a" }, { targetId: "b" }],
       targets: targets.map((target) => ({ ...target, objectiveIds: ["places"] })),
       objectives,
+      flowlines: [],
       input: roundTrip(30)
     }, { routing, log: () => undefined });
   };
@@ -272,21 +300,11 @@ describe("rerouteTargets", () => {
 });
 
 describe("validateRoute", () => {
-  it("rejects a candidate whose route bypasses a planned Flowline", () => {
-    const flowline = segmentTarget("f1", "flow", [3, 0], [5, 0]);
-    const candidate = { key: "f1", stops: [{ target: flowline, direction: "forward" as const }], estimatedDistanceM: 10_000, heuristicScore: 1, strategy: "minimal" as const };
-    const bypass = straightLineRoute({ profile: "bicycle", start: at(0, 0), end: at(0, 0), waypoints: [{ type: "through", ...at(3, 1) }, { type: "through", ...at(5, 1) }] });
-    expect(validateRoute(candidate, bypass, [flowline])).toMatchObject({ valid: false, reason: "flowline_bypassed" });
-    const ridden = straightLineRoute({ profile: "bicycle", start: at(0, 0), end: at(0, 0), waypoints: [{ type: "through", ...at(3, 0) }, { type: "through", ...at(5, 0) }] });
-    expect(validateRoute(candidate, ridden, [flowline])).toMatchObject({ valid: true, includedTargetIds: ["f1"] });
-  });
-
   it("counts point targets only within the gameplay radius and reports nearby ones", () => {
     const close = pointTarget("close", "places", 2, 0);
     const near = pointTarget("near", "places", 2, 0.3);
     const far = pointTarget("far", "places", 2, 2);
-    const candidate = { key: "close", stops: [{ target: close }], estimatedDistanceM: 5_000, heuristicScore: 1, strategy: "minimal" as const };
     const route = straightLineRoute({ profile: "bicycle", start: at(0, 0), end: at(0, 0), waypoints: [{ type: "via", ...at(2, 0) }] });
-    expect(validateRoute(candidate, route, [close, near, far])).toMatchObject({ valid: true, includedTargetIds: ["close"], nearbyTargetIds: ["near"] });
+    expect(validateRoute(route, [close, near, far])).toEqual({ includedTargetIds: ["close"], nearbyTargetIds: ["near"] });
   });
 });

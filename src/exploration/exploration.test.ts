@@ -4,8 +4,8 @@ import { UserInputError } from "../errors.js";
 import type { RouteProvider } from "../routePlanning/planner.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import { ProposalStore } from "../routePlanning/proposalStore.js";
-import { buildExplorationTargets, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
-import { at, pointTarget, segmentTarget, straightLineRoute } from "../routePlanning/testFixtures.js";
+import { buildExplorationTargets, buildFlowlineGeometries, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
+import { at, flowlineGeometry, pointTarget, straightLineRoute } from "../routePlanning/testFixtures.js";
 import { describeExploration, explorationObjectives } from "./objectives.js";
 import { parseGenerateRequest, parseRerouteRequest } from "./request.js";
 import { ExplorationService, type NewExploration } from "./service.js";
@@ -38,13 +38,12 @@ const collectible = (id: string, northKm: number, eastKm: number, overrides: Par
 };
 
 const flowline = (id: string, from: [number, number], to: [number, number], overrides: Partial<WorldFartlek> = {}): WorldFartlek => {
-  const target = segmentTarget(id, "x", from, to);
-  if (target.kind !== "segment") throw new Error("unreachable");
+  const geometry = flowlineGeometry(id, from, to);
   return {
     id,
     name: id,
-    geometry: { type: "LineString", coordinates: target.coordinates },
-    lengthMeters: target.lengthMeters,
+    geometry: { type: "LineString", coordinates: geometry.coordinates },
+    lengthMeters: geometry.lengthMeters,
     status: "published",
     source: { sourceType: "test", sourceExternalId: id },
     completed: false,
@@ -54,48 +53,51 @@ const flowline = (id: string, from: [number, number], to: [number, number], over
 };
 
 describe("buildExplorationTargets", () => {
-  it("keeps published, visible, categorized collectibles and valid Flowlines", () => {
+  it("keeps published, visible, categorized collectibles as destinations and never Flowlines", () => {
     const { targets, truncated } = buildExplorationTargets([
       collectible("ok", 1, 1, { found: true }),
       collectible("hidden", 1, 1, { visibility: "hidden" }),
       collectible("draft", 1, 1, { status: "archived" }),
       collectible("coin", 1, 1, { primaryCategory: undefined })
-    ], [
-      flowline("flow", [1, 0], [2, 0], { completed: true }),
-      flowline("unpublished", [1, 0], [2, 0], { status: "archived" })
     ]);
     expect(truncated).toBe(false);
-    expect(targets.map((target) => [target.id, target.alreadyAchieved])).toEqual([["flow", true], ["ok", true]]);
+    expect(targets.map((target) => [target.id, target.alreadyAchieved])).toEqual([["ok", true]]);
+  });
+
+  it("keeps only published Flowlines with valid geometry for route analysis", () => {
+    const geometries = buildFlowlineGeometries([
+      flowline("flow", [1, 0], [2, 0]),
+      flowline("unpublished", [1, 0], [2, 0], { status: "archived" })
+    ]);
+    expect(geometries.map((geometry) => geometry.id)).toEqual(["flow"]);
   });
 
   it("caps very dense areas and reports truncation", () => {
     const many = Array.from({ length: MAX_AVAILABLE_TARGETS + 5 }, (_value, index) => collectible(`c${index}`, 0, 0));
-    const result = buildExplorationTargets(many, []);
+    const result = buildExplorationTargets(many);
     expect(result.truncated).toBe(true);
     expect(result.targets).toHaveLength(MAX_AVAILABLE_TARGETS);
   });
 });
 
 describe("exploration objectives", () => {
-  it("requires every target, grouped by Flowlines and collectible category", () => {
+  it("requires every destination, grouped by collectible category, and never Flowlines", () => {
     const targets = [
-      segmentTarget("f1", "", [1, 0], [2, 0]),
       pointTarget("p1", "", 1, 1, { category: "peak" }),
       pointTarget("c1", "", 2, 1),
       pointTarget("c2", "", 2, 2)
     ];
     expect(explorationObjectives(targets)).toEqual([
-      { id: "flowlines", type: "flowline_rule", requiredCount: 1, targets: [{ id: "f1", name: "f1" }] },
       { id: "collectibles-peak", type: "collectible_targets", requiredCount: 1, category: "peak", targets: [{ id: "p1", name: "p1" }] },
       { id: "collectibles-place", type: "collectible_targets", requiredCount: 2, category: "place", targets: [{ id: "c1", name: "c1" }, { id: "c2", name: "c2" }] }
     ]);
-    expect(describeExploration(targets)).toEqual({ title: "Exploration: f1, p1 +2", description: "Visit 1 Flowline, 1 Peak, 2 Places." });
+    expect(describeExploration(targets)).toEqual({ title: "Exploration: p1, c1 +1", description: "Visit 1 Peak, 2 Places." });
   });
 });
 
 describe("ExplorationSessionStore", () => {
   const session = (playerId: string) => ({
-    playerId, area, input: roundTripInput, availableTargets: [], collectibles: [], flowlines: [], truncated: false
+    playerId, area, input: roundTripInput, availableTargets: [], collectibles: [], flowlines: [], flowlineGeometries: [], truncated: false
   });
 
   it("keeps one session per player, scopes access and expires idle sessions", () => {
@@ -146,7 +148,7 @@ describe("ExplorationService", () => {
     collectible("c-east", 0, 4),
     collectible("c-far", 9, 9)
   ];
-  const worldFlowlines = [flowline("f-near", [2, 0], [3, 0]), flowline("f-west", [0, -2], [0, -4])];
+  const worldFlowlines = [flowline("f-near", [2, 0], [3, 0]), flowline("f-west", [0, -2], [0, -4]), flowline("f-east", [0.2, 0.2], [0.8, 0.8])];
 
   const setup = (options: { routing?: RouteProvider | null; collectibles?: WorldCollectible[] } = {}) => {
     const created: Array<{ playerId: string; exploration: NewExploration; route: NewPlannedRoute }> = [];
@@ -192,11 +194,24 @@ describe("ExplorationService", () => {
     expect(result.proposals[0]).not.toHaveProperty("score");
     expect(result.proposals[0]).not.toHaveProperty("stops");
     expect(result.catalog.collectibles.map((item) => item.id)).toEqual(["c-near", "c-mid", "c-east", "c-far"]);
-    expect(result.catalog.flowlines.map((item) => item.id)).toEqual(["f-near", "f-west"]);
+    expect(result.catalog.flowlines.map((item) => item.id)).toEqual(["f-near", "f-west", "f-east"]);
     expect(result.limits.maxRouteTargets).toBe(PLANNING_LIMITS.maxRouteTargets);
-    const catalogIds = new Set(["c-near", "c-mid", "c-east", "c-far", "f-near", "f-west"]);
+    const catalogIds = new Set(["c-near", "c-mid", "c-east", "c-far"]);
     for (const proposal of result.proposals) expect(contents(proposal).every((id) => catalogIds.has(id))).toBe(true);
     expect(created).toHaveLength(0);
+  });
+
+  it("reports Flowlines a route rides as derived metadata, never as targets", async () => {
+    const { service, routeCalls } = setup();
+    const { proposals } = await service.generate("p1", generateBody);
+    const eastRoutes = proposals.filter((proposal) => contents(proposal).includes("c-near"));
+    expect(eastRoutes.length).toBeGreaterThan(0);
+    for (const proposal of eastRoutes) expect(proposal.traversedFlowlines.map((flowline) => flowline.id)).toContain("f-east");
+    for (const proposal of proposals) {
+      expect(proposal.targetSummary).not.toHaveProperty("flowlines");
+      expect(proposal.traversedFlowlines.map((flowline) => flowline.id)).not.toContain("f-west");
+    }
+    expect(JSON.stringify(routeCalls)).not.toContain('"through"');
   });
 
   it("reports empty areas and missing routing with stable codes", async () => {
@@ -210,7 +225,7 @@ describe("ExplorationService", () => {
     const { explorationId, proposals } = await service.generate("p1", generateBody);
     const base = proposals.find((proposal) => proposal.recommended)!;
     const removed = contents(base)[0];
-    const added = ["c-near", "c-mid", "c-east", "c-far", "f-near", "f-west"].find((id) => !contents(base).includes(id))!;
+    const added = ["c-near", "c-mid", "c-east", "c-far"].find((id) => !contents(base).includes(id))!;
     const edited = [...contents(base).filter((id) => id !== removed), added];
     const { proposal } = await service.reroute("p1", explorationId, { proposalId: base.id, targetIds: edited });
     expect(proposal).toMatchObject({ customized: true, basedOn: base.id, label: base.label });
@@ -227,6 +242,7 @@ describe("ExplorationService", () => {
     const { explorationId, proposals } = await service.generate("p1", generateBody);
     const base = proposals[0];
     await expect(service.reroute("p1", explorationId, { proposalId: base.id, targetIds: ["elsewhere"] })).rejects.toBeInstanceOf(UserInputError);
+    await expect(service.reroute("p1", explorationId, { proposalId: base.id, targetIds: ["f-east"] })).rejects.toBeInstanceOf(UserInputError);
     await expect(service.reroute("p2", explorationId, { proposalId: base.id, targetIds: ["c-near"] }))
       .rejects.toMatchObject({ code: "exploration_expired" });
     const next = await service.generate("p1", generateBody);
@@ -240,14 +256,15 @@ describe("ExplorationService", () => {
   it("confirms one exploration with objectives derived from the route contents, idempotently", async () => {
     const { service, created } = setup();
     const { explorationId, proposals } = await service.generate("p1", generateBody);
-    const { proposal } = await service.reroute("p1", explorationId, { proposalId: proposals[0].id, targetIds: ["c-near", "f-near"] });
+    const { proposal } = await service.reroute("p1", explorationId, { proposalId: proposals[0].id, targetIds: ["c-near", "c-mid"] });
 
     await expect(service.confirm("p2", { proposalId: proposal.id })).rejects.toMatchObject({ code: "proposal_expired" });
     const instanceId = await service.confirm("p1", { proposalId: proposal.id });
     expect(await service.confirm("p1", { proposalId: proposal.id })).toBe(instanceId);
     expect(created).toHaveLength(1);
     expect(created[0].exploration.proposalId).toBe(proposal.id);
-    expect(created[0].exploration.objectives.map((objective) => objective.id)).toEqual(["flowlines", "collectibles-place"]);
+    expect(created[0].exploration.objectives.map((objective) => objective.id)).toEqual(["collectibles-peak", "collectibles-place"]);
+    expect(created[0].exploration.objectives.some((objective) => objective.type === "flowline_rule")).toBe(false);
     expect(created[0].exploration.objectives.every((objective) => objective.requiredCount === objective.targets.length)).toBe(true);
     expect(created[0].route).toMatchObject({ proposalId: proposal.id, geometry: proposal.geometry, includedTargetIds: proposal.includedTargetIds });
   });

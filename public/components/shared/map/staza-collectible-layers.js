@@ -121,12 +121,12 @@ const selectedGlowLayer = () => ({
   source: COLLECTIBLE_SOURCE,
   filter: SELECTED_OR_QUEST_TARGET,
   paint: {
-    "circle-radius": zoomSize(SELECTED_GLOW_STOPS),
-    "circle-color": SELECTED_ACCENT,
-    "circle-opacity": 0.08,
+    "circle-radius": zoomSize(SELECTED_GLOW_STOPS, SELECTED, 1.35),
+    "circle-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "circle-opacity": ["case", SELECTED, 0.2, 0.08],
     "circle-stroke-width": 1,
-    "circle-stroke-color": SELECTED_ACCENT,
-    "circle-stroke-opacity": 0.28
+    "circle-stroke-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "circle-stroke-opacity": ["case", SELECTED, 0.8, 0.28]
   }
 });
 
@@ -136,11 +136,11 @@ const selectedRingLayer = () => ({
   source: COLLECTIBLE_SOURCE,
   filter: SELECTED_OR_QUEST_TARGET,
   paint: {
-    "circle-radius": zoomSize(SELECTED_RING_STOPS),
-    "circle-color": SELECTED_ACCENT,
-    "circle-opacity": 0.14,
-    "circle-stroke-width": 2,
-    "circle-stroke-color": SELECTED_ACCENT,
+    "circle-radius": zoomSize(SELECTED_RING_STOPS, SELECTED, 1.25),
+    "circle-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "circle-opacity": ["case", SELECTED, 0.28, 0.14],
+    "circle-stroke-width": ["case", SELECTED, 3, 2],
+    "circle-stroke-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
     "circle-stroke-opacity": 0.95
   }
 });
@@ -178,7 +178,7 @@ export const setCollectibleData = (map, featureCollection) => {
 const featureCollectibleId = (event) => event?.features?.[0]?.properties?.id;
 
 /** Routes native layer events into the caller's selection flow. */
-export const bindCollectibleInteractions = (map, { onSelect }) => {
+export const bindCollectibleInteractions = (map, { onSelect, onHover }) => {
   for (const layer of [COLLECTIBLE_LAYER, COLLECTIBLE_CATEGORY_ICON_LAYER]) {
     map.on("click", layer, (event) => {
       const id = featureCollectibleId(event);
@@ -186,11 +186,13 @@ export const bindCollectibleInteractions = (map, { onSelect }) => {
       if (event.originalEvent?.stopPropagation) event.originalEvent.stopPropagation();
       onSelect(id);
     });
-    map.on("mouseenter", layer, () => {
+    map.on("mouseenter", layer, (event) => {
       map.getCanvas().style.cursor = "pointer";
+      if (onHover) onHover(featureCollectibleId(event));
     });
     map.on("mouseleave", layer, () => {
       map.getCanvas().style.cursor = "";
+      if (onHover) onHover(undefined);
     });
   }
 };

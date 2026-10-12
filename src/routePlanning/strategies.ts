@@ -6,11 +6,12 @@ import type { QuestRouteTarget, RideConstraint } from "./types.js";
 /**
  * Internal target-selection strategies. Each is expressed as synthetic objectives (required
  * counts per target group) so the existing pool selection, candidate generation and scoring
- * are reused unchanged. Strategies are planning details and are never shown to players.
+ * are reused unchanged. Strategies only choose destinations (Flowlines are never targets) and
+ * are planning details never shown to players.
  */
-export type StrategyName = "flowline_focus" | "balanced" | "discovery";
+export type StrategyName = "peak_focus" | "balanced" | "discovery";
 
-type TargetGroup = "flowline" | "peak" | "place" | "collectible";
+type TargetGroup = "peak" | "place" | "collectible";
 
 export const STRATEGY_TUNING = {
   /** One target per this many kilometres of budget… */
@@ -19,7 +20,7 @@ export const STRATEGY_TUNING = {
   minTargets: 2,
   maxTargets: 8,
   /** Fallback order when a group has fewer targets than a strategy asks for. */
-  redistributionOrder: ["collectible", "flowline", "place", "peak"] as TargetGroup[]
+  redistributionOrder: ["collectible", "place", "peak"] as TargetGroup[]
 } as const;
 
 export interface PlanningStrategy {
@@ -30,10 +31,9 @@ export interface PlanningStrategy {
 }
 
 const groupsOf = (target: QuestRouteTarget): TargetGroup[] =>
-  target.kind === "segment" ? ["flowline"]
-    : target.category === "peak" ? ["peak", "collectible"]
-      : target.category === "place" ? ["place", "collectible"]
-        : ["collectible"];
+  target.category === "peak" ? ["peak", "collectible"]
+    : target.category === "place" ? ["place", "collectible"]
+      : ["collectible"];
 
 /** Number of targets a strategy aims for, scaled to the ride budget. */
 export const targetCountFor = (constraint: RideConstraint, policy: PlannerPolicy = DEFAULT_PLANNER_POLICY): number => {
@@ -42,19 +42,17 @@ export const targetCountFor = (constraint: RideConstraint, policy: PlannerPolicy
 };
 
 const mixFor = (name: StrategyName, count: number): Record<TargetGroup, number> => {
-  if (name === "flowline_focus") {
-    const flowline = Math.ceil(count * 0.6);
-    return { flowline, peak: 0, place: 0, collectible: count - flowline };
+  if (name === "peak_focus") {
+    const peak = Math.ceil(count * 0.6);
+    return { peak, place: 0, collectible: count - peak };
   }
   if (name === "discovery") {
-    const flowline = count >= 4 ? 1 : 0;
-    const peak = Math.round((count - flowline) / 3);
-    const place = Math.round((count - flowline) / 3);
-    return { flowline, peak, place, collectible: count - flowline - peak - place };
+    const peak = Math.round(count / 3);
+    const place = Math.round(count / 3);
+    return { peak, place, collectible: count - peak - place };
   }
-  const flowline = Math.max(1, Math.round(count / 3));
-  const peak = Math.floor((count - flowline) / 2);
-  return { flowline, peak, place: count - flowline - peak, collectible: 0 };
+  const peak = Math.floor(count / 2);
+  return { peak, place: count - peak, collectible: 0 };
 };
 
 /** Caps each group at its availability and moves the shortfall to groups with spare targets. */
@@ -65,7 +63,7 @@ const redistribute = (mix: Record<TargetGroup, number>, available: Record<Target
     ? available.collectible - result.peak - result.place - result.collectible
     : available[group] - result[group];
   let shortfall = 0;
-  for (const group of ["flowline", "peak", "place"] as TargetGroup[]) {
+  for (const group of ["peak", "place"] as TargetGroup[]) {
     const excess = Math.max(0, result[group] - available[group]);
     result[group] -= excess;
     shortfall += excess;
@@ -84,7 +82,6 @@ const redistribute = (mix: Record<TargetGroup, number>, available: Record<Target
 
 const objectiveFor = (group: TargetGroup, requiredCount: number, targets: QuestRouteTarget[]): QuestObjective => {
   const references = targets.filter((target) => groupsOf(target).includes(group)).map(({ id, name }) => ({ id, name }));
-  if (group === "flowline") return { id: "flowline", type: "flowline_rule", requiredCount, targets: references };
   return {
     id: group,
     type: "collectible_targets",
@@ -100,12 +97,12 @@ export const buildStrategies = (
   constraint: RideConstraint,
   policy: PlannerPolicy = DEFAULT_PLANNER_POLICY
 ): PlanningStrategy[] => {
-  const available: Record<TargetGroup, number> = { flowline: 0, peak: 0, place: 0, collectible: 0 };
+  const available: Record<TargetGroup, number> = { peak: 0, place: 0, collectible: 0 };
   for (const target of targets) for (const group of groupsOf(target)) available[group] += 1;
   const count = targetCountFor(constraint, policy);
   const seen = new Set<string>();
   const strategies: PlanningStrategy[] = [];
-  for (const name of ["balanced", "flowline_focus", "discovery"] as StrategyName[]) {
+  for (const name of ["balanced", "peak_focus", "discovery"] as StrategyName[]) {
     const mix = redistribute(mixFor(name, count), available);
     const key = JSON.stringify(mix);
     if (seen.has(key)) continue;

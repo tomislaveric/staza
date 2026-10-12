@@ -1,6 +1,6 @@
 import type { QuestObjective } from "../domain.js";
 import { lineLengthMeters, type LonLat } from "./geo.js";
-import type { LatLon, QuestRouteTarget, RoutingRequest, RoutingResult } from "./types.js";
+import type { FlowlineGeometry, LatLon, QuestRouteTarget, RoutingRequest, RoutingResult } from "./types.js";
 
 /** Shared synthetic world used by route-planning tests. Not imported by production code. */
 export const ORIGIN: LatLon = { lat: 46.0, lon: 15.0 };
@@ -30,27 +30,12 @@ export const pointTarget = (
   alreadyAchieved: options.alreadyAchieved ?? false
 });
 
-export const segmentTarget = (
-  id: string,
-  objectiveId: string,
-  from: [number, number],
-  to: [number, number],
-  options: { alreadyAchieved?: boolean; bidirectional?: boolean } = {}
-): QuestRouteTarget => {
+export const flowlineGeometry = (id: string, from: [number, number], to: [number, number]): FlowlineGeometry => {
   const coordinates = Array.from({ length: 6 }, (_value, index) => {
     const t = index / 5;
     return lonLat(at(from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t));
   });
-  return {
-    kind: "segment",
-    id,
-    name: id,
-    objectiveIds: [objectiveId],
-    coordinates,
-    lengthMeters: lineLengthMeters(coordinates),
-    bidirectional: options.bidirectional ?? true,
-    alreadyAchieved: options.alreadyAchieved ?? false
-  };
+  return { id, name: id, coordinates, lengthMeters: lineLengthMeters(coordinates) };
 };
 
 export const objectivesFor = (targets: QuestRouteTarget[], required: Record<string, number>): QuestObjective[] =>
@@ -58,10 +43,7 @@ export const objectivesFor = (targets: QuestRouteTarget[], required: Record<stri
     const objectiveTargets = targets
       .filter((target) => target.objectiveIds.includes(objectiveId))
       .map((target) => ({ id: target.id, name: target.name }));
-    const isFlowline = targets.some((target) => target.objectiveIds.includes(objectiveId) && target.kind === "segment");
-    return isFlowline
-      ? { id: objectiveId, type: "flowline_rule", requiredCount, targets: objectiveTargets }
-      : { id: objectiveId, type: "collectible_targets", requiredCount, targets: objectiveTargets };
+    return { id: objectiveId, type: "collectible_targets" as const, requiredCount, targets: objectiveTargets };
   });
 
 const densify = (points: LonLat[], stepMeters = 50): LonLat[] => {

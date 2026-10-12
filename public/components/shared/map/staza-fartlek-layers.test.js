@@ -19,12 +19,12 @@ const fartlek = (overrides = {}) => ({
 });
 
 describe("fartlekLayers", () => {
-  it("draws selection emphasis and casing under the line, with the hit-area last", () => {
+  it("draws casing and line under selection emphasis, with the hit-area last", () => {
     const layers = fartlekLayers();
     expect(layers.map((layer) => layer.id)).toEqual([
-      "staza-fartleks-selected",
       "staza-fartleks-casing",
       "staza-fartleks-line",
+      "staza-fartleks-selected",
       "staza-fartleks-hit"
     ]);
     expect(layers.every((layer) => layer.type === "line")).toBe(true);
@@ -55,6 +55,12 @@ describe("fartlekLayers", () => {
     expect(selectedLayer.filter).toEqual(["any",
       ["==", ["get", "selected"], true],
       ["==", ["get", "questTarget"], true]
+    ]);
+    expect(selectedLayer.paint["line-color"]).toEqual([
+      "case", ["==", ["get", "selected"], true], "#fff1a8", "#e8b80a"
+    ]);
+    expect(selectedLayer.paint["line-opacity"]).toEqual([
+      "case", ["==", ["get", "selected"], true], 0.95, 0.22
     ]);
   });
 });

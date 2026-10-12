@@ -51,9 +51,7 @@ export const parseRoutePlanningInput = (body: Record<string, unknown>): RoutePla
 
 /** Prevents planning arbitrary far-away routes: start and end must be near the exploration's targets. */
 export const assertNearTargets = (input: RoutePlanningInput, targets: QuestRouteTarget[]): void => {
-  const anchors = targets.flatMap((target) => target.kind === "point"
-    ? [target.coordinate]
-    : [target.coordinates[0], target.coordinates[target.coordinates.length - 1]].map(([lon, lat]) => ({ lat, lon })));
+  const anchors = targets.map((target) => target.coordinate);
   const near = (point: LatLon) => anchors.some((anchor) => distanceBetween(point, anchor) <= PLANNING_LIMITS.maxStartToTargetMeters);
   if (!near(input.start) || !near(input.end)) {
     throw new UserInputError("Start and destination must be near this exploration's targets.");

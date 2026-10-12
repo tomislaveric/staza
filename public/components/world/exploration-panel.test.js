@@ -30,24 +30,25 @@ const proposal = (id, label, overrides = {}) => ({
   geometry: { type: "LineString", coordinates: [[9, 50], [9.1, 50.1]] },
   start: { lat: 50, lon: 9 },
   end: { lat: 50, lon: 9 },
-  includedTargetIds: ["c1", "f1"],
+  includedTargetIds: ["c1", "c2"],
   nearbyTargetIds: [],
-  targetSummary: { flowlines: 1, peaks: 0, places: 1, other: 0 },
+  targetSummary: { peaks: 0, places: 1, other: 0 },
+  traversedFlowlines: [{ id: "f1", name: "River Line", lengthMeters: 900 }],
   recommended: false,
   constraintFit: "within",
   ...overrides
 });
 const catalog = {
-  collectibles: [{ id: "c1", name: "Castle <One>", primaryCategory: "castle" }, { id: "c2", name: "Peak Two", primaryCategory: "mountain_pass" }],
+  collectibles: [{ id: "c1", name: "Castle <One>", primaryCategory: "castle" }, { id: "c2", name: "Peak Two", primaryCategory: "mountain_pass" }, { id: "c3", name: "Hidden Pass", primaryCategory: "mountain_pass" }],
   flowlines: [{ id: "f1", name: "River Line" }]
 };
 const customizing = (overrides = {}) => configured({
   phase: "customize",
   explorationId: "exp-1",
   proposals: [
-    proposal("p1", "quick", { includedTargetIds: ["c1"], targetSummary: { flowlines: 0, peaks: 0, places: 1, other: 0 } }),
-    proposal("p2", "balanced", { recommended: true, hint: "flowline_rich" }),
-    proposal("p3", "adventure", { includedTargetIds: ["c1", "c2", "f1"], hint: "climb" })
+    proposal("p1", "quick", { includedTargetIds: ["c1"], traversedFlowlines: [] }),
+    proposal("p2", "balanced", { recommended: true, hint: "discovery" }),
+    proposal("p3", "adventure", { includedTargetIds: ["c1", "c2"], hint: "climb" })
   ],
   selectedProposalId: "p2",
   catalog,
@@ -60,8 +61,8 @@ describe("exploration route formatting", () => {
     expect(formatRouteDistance(123_456)).toBe("123 km");
     expect(formatRouteDuration(5_400)).toBe("1:30 h");
     expect(formatRouteDuration(600)).toBe("0:10 h");
-    expect(targetSummaryText({ flowlines: 2, peaks: 1, places: 0, other: 1 }))
-      .toBe("2 Flowlines · 1 Peak · 1 other target");
+    expect(targetSummaryText({ peaks: 1, places: 0, other: 1 }))
+      .toBe("1 Peak · 1 other target");
     expect(plannedRouteSummary({ distanceM: 42_300, durationS: 5_400, routeType: "point_to_point" }))
       .toBe("42.3 km · 1:30 h · A to B");
   });
@@ -111,7 +112,7 @@ describe("ExplorationPanel configure step", () => {
     expect(markup).toContain('data-exploration-preset="50" aria-pressed="true"');
     expect(markup).toContain("Generate Routes");
     expect(markup).toContain("data-exploration-cancel");
-    for (const hidden of ["Included in this route", "data-exploration-remove", "data-exploration-add", "data-exploration-proposal", "Flowline", "data-exploration-confirm"]) {
+    for (const hidden of ["Included destinations", "Along this route", "data-exploration-remove", "data-exploration-add", "data-exploration-proposal", "Flowline", "data-exploration-confirm"]) {
       expect(markup).not.toContain(hidden);
     }
   });
@@ -129,7 +130,7 @@ describe("ExplorationPanel configure step", () => {
     expect(markup).toContain("data-exploration-stop");
     expect(markup).not.toContain("data-exploration-generate");
     expect(markup).toMatch(/data-exploration-preset="50" aria-pressed="true" disabled/);
-    expect(markup).not.toContain("Included in this route");
+    expect(markup).not.toContain("Included destinations");
   });
 
   it("shows errors as escaped alerts", () => {
@@ -147,28 +148,33 @@ describe("ExplorationPanel route step", () => {
     expect(markup).toContain("Quick");
     expect(markup).toContain("Balanced");
     expect(markup).toContain("Adventure");
-    expect(markup).toContain("Recommended · Flowline-rich");
+    expect(markup).toContain("Recommended · Discovery");
     expect(markup).toContain("Climb");
     expect(markup).toContain("42.3 km");
     expect(markup).toContain("↑ 412 m");
-    expect(markup).toContain("1 Flowline · 1 Place");
+    expect(markup).toContain("<span data-proposal-destinations>1 Place</span>");
+    expect(markup).toContain("Along this route: 1 Flowline");
     expect(markup).toContain('data-exploration-proposal="p2" aria-pressed="true"');
     expect(markup).not.toContain("score");
     expect(markup).toMatch(/data-exploration-confirm>Start Exploration/);
   });
 
-  it("lists only the selected route's targets with remove controls and Add target", () => {
+  it("lists destinations with remove controls and Flowlines separately under Along this route", () => {
     const markup = ExplorationPanel(customizing());
-    expect(markup).toContain("Included in this route");
+    expect(markup).toContain("Included destinations");
     expect(markup).toContain("Castle &lt;One&gt;");
-    expect(markup).toContain("River Line");
-    expect(markup).not.toContain("Peak Two");
+    expect(markup).toContain("Peak Two");
+    expect(markup).not.toContain("Hidden Pass");
+    const [destinations, along] = markup.split('data-exploration-along');
+    expect(destinations).not.toContain("River Line");
+    expect(along).toContain("River Line");
+    expect(along).not.toContain("data-exploration-remove");
+    expect(markup).toContain("Along this route");
     expect(markup).toContain("collectible-swatch is-unvisited is-common is-castle is-icon");
     expect(markup).toContain('class="fartlek-swatch" aria-hidden="true"');
-    expect(markup).not.toContain("<small>Flowline</small>");
     expect(markup).not.toContain("<small>Castle</small>");
     expect(markup).toMatch(/data-exploration-remove="c1"\s+aria-label="Remove Castle &lt;One&gt; from this route">/);
-    expect(markup).toMatch(/data-exploration-add aria-pressed="false">\s*Add target/);
+    expect(markup).toMatch(/data-exploration-add aria-pressed="false">\s*Add destination/);
     expect(markup).not.toContain("data-exploration-reset");
 
     const single = ExplorationPanel(customizing({ selectedProposalId: "p1" }));
@@ -179,14 +185,14 @@ describe("ExplorationPanel route step", () => {
   it("shows the customized version with its warnings, dropped targets and Reset", () => {
     const edited = proposal("p2-custom", "balanced", {
       recommended: true, customized: true, basedOn: "p2", includedTargetIds: ["c1", "c2"],
-      constraintFit: "long", droppedTargetIds: ["f1"], distanceM: 61_000
+      constraintFit: "long", droppedTargetIds: ["c3"], distanceM: 61_000, traversedFlowlines: []
     });
     const markup = ExplorationPanel(customizing({ customizedById: { p2: edited } }));
     expect(markup).toContain("Customized");
     expect(markup).toContain("61.0 km");
     expect(markup).toContain("Peak Two");
     expect(markup).toContain("This route is longer than your planned ride.");
-    expect(markup).toContain("Couldn't route to River Line, so it was left out.");
+    expect(markup).toContain("Couldn't route to Hidden Pass, so it was left out.");
     expect(markup).toContain("data-exploration-reset");
     expect(ExplorationPanel(customizing({ customizedById: { p2: { ...edited, constraintFit: "short", droppedTargetIds: [] } } })))
       .toContain("This route is shorter than your planned ride.");
@@ -205,7 +211,7 @@ describe("ExplorationPanel route step", () => {
   it("blocks adding beyond the route target limit", () => {
     const markup = ExplorationPanel(customizing({ limits: { maxRouteTargets: 2 } }));
     expect(markup).toMatch(/data-exploration-add aria-pressed="false" disabled/);
-    expect(markup).toContain("A route can include at most 2 targets.");
+    expect(markup).toContain("A route can include at most 2 destinations.");
   });
 });
 
@@ -219,7 +225,7 @@ describe("exploration helpers", () => {
   });
 
   it("finds catalog targets by id", () => {
-    expect(findCatalogTarget(catalog, "f1")).toEqual({ id: "f1", isFlowline: true, name: "River Line" });
+    expect(findCatalogTarget(catalog, "f1")).toBeUndefined();
     expect(findCatalogTarget(catalog, "c2")).toEqual({
       category: "mountain_pass", id: "c2", name: "Peak Two", rarity: undefined, visited: false
     });

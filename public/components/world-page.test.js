@@ -219,6 +219,7 @@ describe("World filter controls", () => {
     expect(css).toContain("height: 100%;");
     expect(css).not.toContain("quest-suggestion");
     expect(css).toContain(".world-explore:focus-visible");
+    expect(css).toMatch(/\.world-explore\s*\{[^}]*font-size:\s*20px;[^}]*min-height:\s*52px;[^}]*padding:\s*16px 20px;/s);
     expect(css).toMatch(/\.world-explore\s*\{[^}]*bottom:\s*16px;[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*transform:\s*translateX\(-50%\)/s);
     expect(css).toContain(".quest-card-select:focus-visible");
     expect(css).toMatch(/\.quest-objective-groups\s*\{[^}]*display:\s*grid/s);
@@ -268,11 +269,12 @@ describe("mounted World page interactions", () => {
   const routeGeometry = { type: "LineString", coordinates: [[9, 50], [9.1, 50.1], [9, 50]] };
   const quickGeometry = { type: "LineString", coordinates: [[9, 50], [9.05, 50.02], [9, 50]] };
   const customGeometry = { type: "LineString", coordinates: [[9, 50], [9.2, 50.2], [9, 50]] };
-  const routeProposal = (id, label, includedTargetIds = ["fartlek-1", "common-found"], overrides = {}) => ({
+  const routeProposal = (id, label, includedTargetIds = ["common-found"], overrides = {}) => ({
     id, label, distanceM: 42_000, durationS: 6_000, geometry: routeGeometry,
     routeType: "round_trip", start: { lat: 50, lon: 9 }, end: { lat: 50, lon: 9 },
     includedTargetIds, nearbyTargetIds: [], recommended: false, constraintFit: "within",
-    targetSummary: { flowlines: 1, peaks: 0, places: 1, other: 0 },
+    targetSummary: { peaks: 0, places: 1, other: 0 },
+    traversedFlowlines: [{ id: "fartlek-1", name: "Harbour Straight", lengthMeters: 1000 }],
     ...overrides
   });
   const plannedRoute = {
@@ -308,6 +310,7 @@ describe("mounted World page interactions", () => {
     /** Dataset values the fake panel controls report when "clicked". */
     detail.datasets = {
       "[data-exploration-proposal]": { explorationProposal: "proposal-quick" },
+      "[data-exploration-target]": { explorationTarget: "common-found" },
       "[data-exploration-remove]": { explorationRemove: "common-found" },
       "[data-exploration-pick]": { explorationPick: "start" }
     };
@@ -350,7 +353,7 @@ describe("mounted World page interactions", () => {
           explorationId: "exp-1",
           proposals: [
             routeProposal("proposal-quick", "quick", ["common-found"], { geometry: quickGeometry }),
-            routeProposal("proposal-balanced", "balanced", ["fartlek-1", "common-found"], { recommended: true })
+            routeProposal("proposal-balanced", "balanced", ["common-found"], { recommended: true })
           ],
           catalog: { collectibles: [collectibles[0], collectibles[1]], flowlines: [fartleks[0]] },
           truncated: false,
@@ -426,7 +429,8 @@ describe("mounted World page interactions", () => {
       quests: questHost,
       collectibleIds: () => map.setCollectibles.mock.lastCall[0].features.map((feature) => feature.id),
       fartlekIds: () => map.setFartleks.mock.lastCall[0].features.map((feature) => feature.id),
-      collectibleFeature: (id) => map.setCollectibles.mock.lastCall[0].features.find((feature) => feature.id === id)
+      collectibleFeature: (id) => map.setCollectibles.mock.lastCall[0].features.find((feature) => feature.id === id),
+      fartlekFeature: (id) => map.setFartleks.mock.lastCall[0].features.find((feature) => feature.id === id)
     };
     return page;
   };
@@ -559,7 +563,7 @@ describe("mounted World page interactions", () => {
     expect(page.detail.innerHTML).toContain("Step 1");
     expect(page.detail.innerHTML).toContain("data-exploration-locate");
     expect(page.detail.innerHTML).toContain("Generate Routes");
-    expect(page.detail.innerHTML).not.toContain("Included in this route");
+    expect(page.detail.innerHTML).not.toContain("Included destinations");
     expect(page.detail.innerHTML).not.toContain("data-exploration-remove");
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
     expect(page.map.setCollectibles.mock.lastCall[0].features.every((feature) => !feature.properties.questRelated)).toBe(true);
@@ -570,7 +574,7 @@ describe("mounted World page interactions", () => {
     expect(page.map.setRouteEndpoints).toHaveBeenLastCalledWith({ start: { lat: 50, lon: 9 }, end: undefined });
     expect(page.detail.innerHTML).toContain("50.0000, 9.0000");
     expect(page.fetchMock.mock.calls.some(([url]) => url.startsWith("/api/explorations"))).toBe(false);
-    expect(page.detail.innerHTML).not.toContain("Included in this route");
+    expect(page.detail.innerHTML).not.toContain("Included destinations");
   });
 
   it("generates routes from the ride alone and auto-selects the recommended one", async () => {
@@ -589,7 +593,7 @@ describe("mounted World page interactions", () => {
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
     expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
     expect(page.map.fitTo).toHaveBeenCalled();
-    expect(page.detail.innerHTML).toContain("Included in this route");
+    expect(page.detail.innerHTML).toContain("Included destinations");
     expect(page.detail.innerHTML).toContain("Harbour Straight");
     expect(page.collectibleIds()).toEqual(["common-found", "rare-unfound"]);
     expect(page.collectibleFeature("common-found").properties.questTarget).toBe(true);
@@ -625,8 +629,18 @@ describe("mounted World page interactions", () => {
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: quickGeometry });
     expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
     expect(page.collectibleFeature("common-found").properties.questTarget).toBe(true);
-    expect(page.map.setFartleks.mock.lastCall[0].features.find((feature) => feature.id === "fartlek-1").properties.questRelated).toBe(false);
+    expect(page.map.setFartleks.mock.lastCall[0].features.find((feature) => feature.id === "fartlek-1").properties.questRelated).toBe(true);
     expect(page.calls("/api/explorations/generate")).toHaveLength(1);
+  });
+
+  it("highlights an included target on the map while its list row is hovered", async () => {
+    const page = await mount();
+    await page.generate();
+    expect(page.collectibleFeature("common-found").properties.selected).toBe(false);
+    page.bound("[data-exploration-target]:mouseenter")();
+    expect(page.collectibleFeature("common-found").properties.selected).toBe(true);
+    page.bound("[data-exploration-target]:mouseleave")();
+    expect(page.collectibleFeature("common-found").properties.selected).toBe(false);
   });
 
   it("customizes only the selected route: add and remove re-plan it, Reset restores it", async () => {
@@ -637,10 +651,13 @@ describe("mounted World page interactions", () => {
 
     page.bound("[data-exploration-add]:click")();
     expect(page.collectibleFeature("rare-unfound").properties.questRelated).toBe(true);
+    page.callbacks.onCollectibleHover("rare-unfound");
+    expect(page.collectibleFeature("rare-unfound").properties.selected).toBe(true);
+    page.callbacks.onCollectibleHover(undefined);
     page.callbacks.onCollectibleSelect("rare-unfound");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Customized"));
     expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[0][1].body))
-      .toEqual({ proposalId: "proposal-balanced", targetIds: ["fartlek-1", "common-found", "rare-unfound"] });
+      .toEqual({ proposalId: "proposal-balanced", targetIds: ["common-found", "rare-unfound"] });
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: customGeometry });
     expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
     expect(page.collectibleFeature("rare-unfound").properties.questTarget).toBe(true);
@@ -650,7 +667,7 @@ describe("mounted World page interactions", () => {
     page.bound("[data-exploration-remove]:click")();
     await vi.waitFor(() => expect(page.calls("/api/explorations/exp-1/reroute", "POST")).toHaveLength(2));
     expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[1][1].body))
-      .toEqual({ proposalId: "proposal-custom-1", targetIds: ["fartlek-1", "rare-unfound"] });
+      .toEqual({ proposalId: "proposal-custom-1", targetIds: ["rare-unfound"] });
     await vi.waitFor(() => expect(page.detail.innerHTML).not.toContain("Updating route"));
     expect(page.collectibleFeature("common-found").properties.questRelated).toBe(false);
 
@@ -664,7 +681,8 @@ describe("mounted World page interactions", () => {
   it("keeps the previous route when re-planning fails and restarts when routes expired", async () => {
     const page = await mount({ rerouteError: { error: "No suitable route was found.", code: "no_route" } });
     await page.generate();
-    page.bound("[data-exploration-remove]:click")();
+    page.bound("[data-exploration-add]:click")();
+    page.callbacks.onCollectibleSelect("rare-unfound");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("No suitable route was found."));
     expect(page.detail.innerHTML).toContain("Step 2");
     expect(page.detail.innerHTML).toContain('data-exploration-remove="common-found"');
@@ -672,7 +690,8 @@ describe("mounted World page interactions", () => {
 
     const expired = await mount({ rerouteError: { error: "Expired.", code: "exploration_expired", status: 409 } });
     await expired.generate();
-    expired.bound("[data-exploration-remove]:click")();
+    expired.bound("[data-exploration-add]:click")();
+    expired.callbacks.onCollectibleSelect("rare-unfound");
     await vi.waitFor(() => expect(expired.detail.innerHTML).toContain("These routes expired."));
     expect(expired.detail.innerHTML).toContain("Step 1");
     expect(expired.map.setRoute).toHaveBeenLastCalledWith(undefined);
@@ -681,7 +700,8 @@ describe("mounted World page interactions", () => {
   it("starts exactly the selected, possibly customized route", async () => {
     const page = await mount();
     await page.generate();
-    page.bound("[data-exploration-remove]:click")();
+    page.bound("[data-exploration-add]:click")();
+    page.callbacks.onCollectibleSelect("rare-unfound");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Customized"));
     page.bound("[data-exploration-confirm]:click")();
     await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-cancel="instance-1"'));

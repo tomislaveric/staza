@@ -276,7 +276,7 @@
 .exploration-selected button:disabled, .exploration-route-actions button:disabled, .exploration-ride button:disabled { cursor: default; opacity: .55; }
 .exploration-selected button:focus-visible, .exploration-route-actions button:focus-visible, .exploration-ride button:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
 .exploration-selected { display: grid; gap: 4px; list-style: none; margin: 0; padding: 0; }
-.exploration-selected li { align-items: center; color: var(--text-primary); display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
+.exploration-selected li, .exploration-along li { align-items: center; color: var(--text-primary); display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
 .exploration-selected li > span { min-width: 0; overflow-wrap: anywhere; }
 .exploration-target-name { align-items: center; display: inline-flex; gap: 8px; }
 .exploration-target-name > .collectible-swatch, .exploration-target-name > .fartlek-swatch { flex: none; }
@@ -306,6 +306,9 @@
 .route-proposal-head small { color: var(--accent-yellow); font-size: 11px; }
 .route-proposal-metrics { color: var(--text-primary); display: flex; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12px; gap: 10px; }
 .route-proposal-targets, .route-proposal-hint { font-size: 11px; }
+.route-proposal-targets { display: grid; gap: 2px; }
+.route-proposal-along { opacity: 0.75; }
+.exploration-along { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
 .quest-card-route { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
 .quest-card-route small { color: var(--text-subtle); font-family: var(--font-body); letter-spacing: .08em; margin-right: 4px; text-transform: uppercase; }
 

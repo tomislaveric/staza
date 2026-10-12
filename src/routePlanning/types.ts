@@ -1,7 +1,7 @@
 import type { CollectibleCategory, QuestObjective } from "../domain.js";
 
 /** Bumped whenever candidate generation or scoring changes meaningfully; persisted with PlannedRoutes. */
-export const PLANNER_VERSION = 3;
+export const PLANNER_VERSION = 4;
 
 export interface LatLon {
   lat: number;
@@ -26,36 +26,37 @@ export interface RoutePlanningInput {
  * An exploration target as seen by the planner. It references an existing World object and never
  * duplicates its persistence; geometry is copied only for in-memory planning.
  */
-export type QuestRouteTarget =
-  | {
-      kind: "point";
-      id: string;
-      name: string;
-      objectiveIds: string[];
-      category?: CollectibleCategory;
-      coordinate: LatLon;
-      /** Gameplay detection radius: the route must pass this close for the target to count. */
-      radiusMeters: number;
-      alreadyAchieved: boolean;
-    }
-  | {
-      kind: "segment";
-      id: string;
-      name: string;
-      objectiveIds: string[];
-      /** [lon, lat] pairs, in the Flowline's canonical a→b direction. */
-      coordinates: [number, number][];
-      lengthMeters: number;
-      bidirectional: boolean;
-      alreadyAchieved: boolean;
-    };
+export interface QuestRouteTarget {
+  kind: "point";
+  id: string;
+  name: string;
+  objectiveIds: string[];
+  category?: CollectibleCategory;
+  coordinate: LatLon;
+  /** Gameplay detection radius: the route must pass this close for the target to count. */
+  radiusMeters: number;
+  alreadyAchieved: boolean;
+}
 
-export type SegmentDirection = "forward" | "reverse";
+/** A Flowline's geometry, used only after routing to find the Flowlines a route happens to ride. */
+export interface FlowlineGeometry {
+  id: string;
+  name: string;
+  /** [lon, lat] pairs. */
+  coordinates: [number, number][];
+  lengthMeters: number;
+}
 
-/** One ordered stop of a candidate: a point target or a Flowline in a chosen direction. */
+/** A Flowline a route naturally traverses: derived, informational route metadata. */
+export interface TraversedFlowline {
+  id: string;
+  name: string;
+  lengthMeters: number;
+}
+
+/** One ordered stop of a candidate. */
 export interface CandidateStop {
   target: QuestRouteTarget;
-  direction?: SegmentDirection;
 }
 
 export interface RouteCandidate {
@@ -133,7 +134,7 @@ export interface ScoredRoute {
 export type ProposalLabel = "quick" | "balanced" | "adventure";
 
 /** Composition hint shown next to the label, derived from the route's contents. */
-export type ProposalHint = "flowline_rich" | "discovery" | "climb";
+export type ProposalHint = "discovery" | "climb";
 
 /** How the routed length relates to the requested ride (acceptable band = within). */
 export type ConstraintFitFlag = "within" | "short" | "long";
@@ -141,11 +142,10 @@ export type ConstraintFitFlag = "within" | "short" | "long";
 /** Ordered stop of a stored proposal; used to keep the order when a route is customized. */
 export interface ProposalStop {
   targetId: string;
-  direction?: SegmentDirection;
 }
 
+/** Destination counts by kind. Flowlines are not destinations; see `traversedFlowlines`. */
 export interface TargetSummary {
-  flowlines: number;
   peaks: number;
   places: number;
   other: number;
@@ -165,12 +165,14 @@ export interface RouteProposal {
   geometry: { type: "LineString"; coordinates: [number, number][] };
   start: LatLon;
   end: LatLon;
-  /** Targets the route serves for gameplay. */
+  /** Destination targets the route serves for gameplay. */
   includedTargetIds: string[];
   /** Planned point targets reachable on foot from the route but outside their detection radius. */
   nearbyTargetIds: string[];
   /** Summary of included and nearby targets: the route's contents. */
   targetSummary: TargetSummary;
+  /** Flowlines the final geometry naturally rides; informational, never routing constraints. */
+  traversedFlowlines: TraversedFlowline[];
   constraintFit: ConstraintFitFlag;
   /** Set on routes re-planned after the player edited their targets. */
   customized?: boolean;

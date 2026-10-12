@@ -1,6 +1,6 @@
 import type { QuestObjective } from "../domain.js";
 import { cheapestInsertion, generateCandidates, improveOrder, makeCandidate, selectTargetPool, withoutTarget } from "./candidates.js";
-import { buildRoutingPlan } from "./flowlineRouting.js";
+import { buildRoutingPlan } from "./routingPlan.js";
 import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, type PlannerPolicy } from "./policy.js";
 import { proposalStops, routeTargetIds, selectProposals, toRouteProposal } from "./proposals.js";
 import { RoutingError } from "./routingClient.js";
@@ -8,6 +8,7 @@ import { objectiveProgress, scoreRoute } from "./scoring.js";
 import { buildStrategies } from "./strategies.js";
 import type {
   CandidateStop,
+  FlowlineGeometry,
   ProposalStop,
   QuestRouteTarget,
   RouteCandidate,
@@ -104,11 +105,7 @@ const routeCandidates = async (
   };
 
   const evaluate = ({ candidate, objectives, strategy }: QueuedCandidate, result: RoutingResult) => {
-    const validation = validateRoute(candidate, result, eligibleTargets);
-    if (!validation.valid) {
-      failureCodes.push(validation.reason ?? "invalid_route");
-      return;
-    }
+    const validation = validateRoute(result, eligibleTargets);
     const planned = new Set(candidate.stops.map((stop) => stop.target.id));
     const nearbyTargetIds = validation.nearbyTargetIds.filter((id) => planned.has(id));
     if (validation.includedTargetIds.length + nearbyTargetIds.length === 0) {
@@ -179,19 +176,21 @@ export interface GenerateExplorationRoutesInput {
   playerId: string;
   /** Correlation id for logs (the exploration session id). */
   scopeId: string;
-  /** Every eligible target of the frozen area; the planner chooses subsets itself. */
+  /** Every eligible destination of the frozen area; the planner chooses subsets itself. */
   targets: QuestRouteTarget[];
+  /** Flowlines of the frozen area, analysed only after routing; never routing constraints. */
+  flowlines: FlowlineGeometry[];
   input: RoutePlanningInput;
 }
 
 /**
  * Route-first generation: builds candidates for several internal target-selection strategies
- * (Flowline-focused, balanced, discovery), interleaves them under one routing budget and
+ * (peak-focused, balanced, discovery), interleaves them under one routing budget and
  * returns up to three distinct, relatively labelled proposals that may contain different
  * targets. It never touches gameplay state.
  */
 export const generateExplorationRoutes = async (
-  { requestId, playerId, scopeId, targets, input }: GenerateExplorationRoutesInput,
+  { requestId, playerId, scopeId, targets, flowlines, input }: GenerateExplorationRoutesInput,
   { routing, policy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal[]> => {
   const startedAt = now();
@@ -222,7 +221,7 @@ export const generateExplorationRoutes = async (
     : { scored: [], failureCodes: [], routingRequests: 0, unroutable: new Set<string>() };
   const targetsById = new Map(targets.map((target) => [target.id, target]));
   const proposals = selectProposals(run.scored).map((selected) => ({
-    proposal: toRouteProposal(selected, input, targetsById, policy),
+    proposal: toRouteProposal(selected, input, targetsById, flowlines, policy),
     stops: proposalStops(selected.route)
   }));
   log({
@@ -255,6 +254,7 @@ export interface RerouteTargetsInput {
   /** The exact edited target set, with objective ids assigned. */
   targets: QuestRouteTarget[];
   objectives: QuestObjective[];
+  flowlines: FlowlineGeometry[];
   input: RoutePlanningInput;
 }
 
@@ -269,7 +269,7 @@ export const customizedStops = (
   let stops: CandidateStop[] = baseStops.flatMap((stop) => {
     const target = byId.get(stop.targetId);
     if (!target) return [];
-    return [target.kind === "segment" && stop.direction ? { target, direction: stop.direction } : { target }];
+    return [{ target }];
   });
   const kept = new Set(stops.map((stop) => stop.target.id));
   for (const target of targets) {
@@ -284,7 +284,7 @@ export const customizedStops = (
  * reported. Only the edited targets count, so removed targets the road passes are not re-added.
  */
 export const rerouteTargets = async (
-  { requestId, playerId, scopeId, base, baseStops, targets, objectives, input }: RerouteTargetsInput,
+  { requestId, playerId, scopeId, base, baseStops, targets, objectives, flowlines, input }: RerouteTargetsInput,
   { routing, policy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal> => {
   const startedAt = now();
@@ -311,7 +311,7 @@ export const rerouteTargets = async (
   const served = new Set(routeTargetIds(best));
   const droppedTargetIds = targets.map((target) => target.id).filter((id) => !served.has(id)).sort();
   const proposal = toRouteProposal({ label: base.label, route: best, recommended: base.recommended }, input,
-    new Map(targets.map((target) => [target.id, target])), policy);
+    new Map(targets.map((target) => [target.id, target])), flowlines, policy);
   return {
     proposal: { ...proposal, customized: true, basedOn: base.id, ...(droppedTargetIds.length > 0 ? { droppedTargetIds } : {}) },
     stops: proposalStops(best)

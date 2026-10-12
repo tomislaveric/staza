@@ -14,7 +14,8 @@ import {
   createExplorationState,
   ExplorationPanel,
   findCatalogTarget,
-  routeTargetIds
+  routeTargetIds,
+  traversedFlowlines
 } from "./world/exploration-panel.js";
 
 export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"];
@@ -252,8 +253,8 @@ export const mountWorldPage = async (mountPoint) => {
   /**
    * Exploration markers by phase. While configuring, World markers stay as dimmed context and no
    * exploration targets are revealed. Once a route is selected, the frozen area's targets are shown
-   * dimmed and only the selected route's contents are highlighted; in add mode every eligible
-   * target is highlighted so it can be picked.
+   * dimmed and only the selected route's contents are highlighted; hovering any marker highlights it,
+   * so eligible targets stay visible and pickable in add mode.
    */
   const renderExplorationTargets = () => {
     if (exploration.phase === "configure" || exploration.phase === "generating") {
@@ -267,11 +268,19 @@ export const mountWorldPage = async (mountPoint) => {
     const { catalog } = exploration;
     const mapped = visibleWorldCollectibles(catalog.collectibles);
     const highlighted = exploration.adding
-      ? [...catalog.collectibles.map((item) => item.id), ...catalog.flowlines.map((item) => item.id)]
+      ? catalog.collectibles.map((item) => item.id)
       : exploration.pendingTargetIds ?? routeTargetIds(activeProposal(exploration));
-    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { questCollectibleIds: highlighted }));
-    worldMap?.setFartleks(fartleksToFeatureCollection(catalog.flowlines, { questTargetIds: highlighted }));
-    renderCollectibleList(mapped, undefined, catalog.flowlines, undefined);
+    const alongIds = new Set(traversedFlowlines(activeProposal(exploration)).map((flowline) => flowline.id));
+    const alongFlowlines = catalog.flowlines.filter((flowline) => alongIds.has(flowline.id));
+    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, {
+      selectedId: exploration.hoveredTargetId,
+      questCollectibleIds: highlighted
+    }));
+    worldMap?.setFartleks(fartleksToFeatureCollection(alongFlowlines, {
+      selectedId: exploration.hoveredTargetId,
+      questTargetIds: [...alongIds]
+    }));
+    renderCollectibleList(mapped, undefined, alongFlowlines, undefined);
   };
 
   const renderCollectibles = () => {
@@ -560,6 +569,7 @@ export const mountWorldPage = async (mountPoint) => {
       customizedById: {},
       selectedProposalId: undefined,
       previewProposalId: undefined,
+      hoveredTargetId: undefined,
       catalog: { collectibles: [], flowlines: [] },
       truncated: false,
       adding: false,
@@ -648,7 +658,7 @@ export const mountWorldPage = async (mountPoint) => {
     if (exploration.phase !== "proposals" && exploration.phase !== "customize") return;
     const proposal = activeProposal(exploration, id);
     if (!proposal) return;
-    Object.assign(exploration, { selectedProposalId: id, previewProposalId: undefined, adding: false, error: undefined, phase: "customize" });
+    Object.assign(exploration, { selectedProposalId: id, previewProposalId: undefined, hoveredTargetId: undefined, adding: false, error: undefined, phase: "customize" });
     worldMap.fitTo(geometryPoints(proposal.geometry));
     renderExploration();
   }
@@ -667,7 +677,14 @@ export const mountWorldPage = async (mountPoint) => {
     if (!current || exploration.phase !== "customize" || exploration.status !== "idle") return;
     const originalId = exploration.selectedProposalId;
     const token = ++explorationToken;
-    Object.assign(exploration, { status: "rerouting", pendingTargetIds: targetIds, adding: false, previewProposalId: undefined, error: undefined });
+    Object.assign(exploration, {
+      status: "rerouting",
+      pendingTargetIds: targetIds,
+      adding: false,
+      previewProposalId: undefined,
+      hoveredTargetId: undefined,
+      error: undefined
+    });
     renderExploration();
     try {
       const { proposal } = await jsonRequest(
@@ -693,6 +710,14 @@ export const mountWorldPage = async (mountPoint) => {
     const contents = routeTargetIds(activeProposal(exploration));
     if (contents.length <= 1 || !contents.includes(id)) return;
     void rerouteSelected(contents.filter((targetId) => targetId !== id));
+  }
+
+  /** Briefly emphasize the matching map marker while a route target row is hovered. */
+  function previewExplorationTarget(id) {
+    if (!exploration || exploration.phase !== "customize") return;
+    if (exploration.hoveredTargetId === id) return;
+    exploration.hoveredTargetId = id;
+    renderCollectibles();
   }
 
   /** In add mode, a map or list selection of an eligible target of the frozen area adds it. */
@@ -790,6 +815,8 @@ export const mountWorldPage = async (mountPoint) => {
     on("[data-exploration-proposal]", "click", (button) => selectProposal(button.dataset.explorationProposal));
     on("[data-exploration-proposal]", "mouseenter", (button) => previewProposal(button.dataset.explorationProposal));
     on("[data-exploration-proposal]", "mouseleave", () => previewProposal(undefined));
+    on("[data-exploration-target]", "mouseenter", (item) => previewExplorationTarget(item.dataset.explorationTarget));
+    on("[data-exploration-target]", "mouseleave", () => previewExplorationTarget(undefined));
     on("[data-exploration-remove]", "click", (button) => removeExplorationTarget(button.dataset.explorationRemove));
     on("[data-exploration-add]", "click", () => {
       if (exploration.status !== "idle" || exploration.phase !== "customize") return;
@@ -886,6 +913,7 @@ export const mountWorldPage = async (mountPoint) => {
       attribution: basemap.attribution,
       onViewportChange: scheduleViewportLoad,
       onCollectibleSelect: (id) => selectCollectible(id),
+      onCollectibleHover: (id) => previewExplorationTarget(id),
       onFartlekSelect: (id) => selectFartlek(id),
       onAlternateRouteSelect: (id) => selectProposal(id)
     });
