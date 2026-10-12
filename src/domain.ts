@@ -369,35 +369,6 @@ export interface QuestDetail extends QuestSummary {
   route?: QuestRoute;
 }
 
-export type QuestObjectiveTemplate =
-  | {
-      type: "flowline_rule";
-      requiredCount: number;
-      minimumLengthMeters?: number;
-      minimumAverageSpeedMps?: number;
-      sameActivity?: boolean;
-    }
-  | {
-      type: "collectible_count";
-      requiredCount: number;
-      category: CollectibleCategory;
-    }
-  | {
-      type: "collectible_targets";
-      requiredCount: number;
-      category?: CollectibleCategory;
-    };
-
-export interface QuestTemplate {
-  id: string;
-  version: number;
-  title: string;
-  description: string;
-  recommendedLevel: number;
-  objectives: QuestObjectiveTemplate[];
-  onboarding?: boolean;
-}
-
 export interface QuestObjectiveTarget {
   id: string;
   name: string;
@@ -445,18 +416,9 @@ export interface QuestObjectiveState {
   targetProgress: QuestObjectiveTargetProgress[];
 }
 
-export interface QuestSuggestion {
-  id: string;
-  templateId: string;
-  templateVersion: number;
-  title: string;
-  description: string;
-  recommendedLevel: number;
-  objectives: QuestObjective[];
-}
-
 export interface QuestInstance {
   id: string;
+  /** Scope key: the confirmed proposal id for explorations, the suggestion id for legacy quests. */
   suggestionId: string;
   templateId: string;
   templateVersion: number;
@@ -468,6 +430,27 @@ export interface QuestInstance {
   completedAt?: string;
   objectives: QuestObjectiveState[];
 }
+
+/** The route a player selected when starting an exploration. Planning aid only: never affects progress. */
+export interface PlannedRoute {
+  id: string;
+  questInstanceId: string;
+  proposalId: string;
+  profile: string;
+  routeType: "round_trip" | "point_to_point";
+  start: { lat: number; lon: number };
+  end: { lat: number; lon: number };
+  distanceM: number;
+  durationS: number;
+  elevationGainM?: number;
+  elevationLossM?: number;
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  includedTargetIds: string[];
+  plannerVersion: number;
+  createdAt: string;
+}
+
+export type NewPlannedRoute = Omit<PlannedRoute, "id" | "questInstanceId" | "createdAt">;
 
 export interface QuestInstancesResponse {
   instances: QuestInstance[];
@@ -493,7 +476,6 @@ export interface QuestInput {
 export interface WorldViewportResponse extends WorldSnapshot {
   truncated: boolean;
   fartleks: WorldFartlek[];
-  questSuggestions?: QuestSuggestion[];
 }
 
 export type JobState = "processing" | "awaiting_selection" | "rendering" | "succeeded" | "failed";

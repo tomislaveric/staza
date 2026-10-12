@@ -8,6 +8,14 @@ import { boundsToParameter, createWorldMap } from "./world/world-map.js";
 import { QuestList } from "./world/quest-list.js";
 import { CollectibleDetail } from "./world/collectible-detail.js";
 import { FartlekDetail } from "./world/fartlek-detail.js";
+import {
+  activeProposal,
+  buildGenerateRequest,
+  createExplorationState,
+  ExplorationPanel,
+  findCatalogTarget,
+  routeTargetIds
+} from "./world/exploration-panel.js";
 
 export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"];
 
@@ -140,7 +148,10 @@ export const WorldPage = ({ lifetime, selectedFilters }) => `
       <ul class="world-collectible-list" aria-label="Collectibles on the map" data-world-collectible-list></ul>
       <a class="world-osm-attribution" href="https://www.openstreetmap.org/copyright"
         target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
-      <button class="world-locate" type="button" data-world-locate>LOCATE ME</button>
+      <div class="world-map-actions">
+        <button class="world-locate" type="button" data-world-locate>LOCATE ME</button>
+      </div>
+      <button class="world-explore" type="button" data-world-explore>EXPLORE THIS AREA</button>
       <p class="world-map-status" data-world-status role="status" hidden></p>
       <div class="world-detail-host" data-world-detail hidden></div>
     </div>
@@ -152,11 +163,37 @@ export const WorldPage = ({ lifetime, selectedFilters }) => `
 const responseJson = async (response) => {
   if (response.status === 204) return undefined;
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? "Unable to load World data.");
+  if (!response.ok) {
+    const error = new Error(body.error ?? "Unable to load World data.");
+    error.code = body.code;
+    throw error;
+  }
   return body;
 };
 
+const geometryPoints = (geometry) => geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude }));
+
+const jsonRequest = (method, url, body) => fetch(url, {
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body)
+}).then(responseJson);
+
+/** A quest's PlannedRoute, or null when it was started without one. */
+const loadPlannedRoute = async (instanceId) => {
+  const response = await fetch(`/api/quest-instances/${encodeURIComponent(instanceId)}/planned-route`);
+  if (response.status === 404) return null;
+  return responseJson(response);
+};
+
 const emptyStats = { totalCollectibles: 0, discoveredCount: 0, rareFinds: 0, epicFinds: 0, remainingCount: 0 };
+
+const expiredCodes = new Set(["exploration_expired", "proposal_expired"]);
+
+export const explorationErrorMessage = (error) => {
+  if (expiredCodes.has(error.code)) return "These routes expired. Generate routes again.";
+  return error.message;
+};
 
 export const mountWorldPage = async (mountPoint) => {
   mountPoint.innerHTML = '<section class="world-page"><p class="world-loading" role="status">Loading World...</p></section>';
@@ -180,9 +217,7 @@ export const mountWorldPage = async (mountPoint) => {
 
   let selectedFilters = [];
   let collectibles = [];
-  let questSuggestions = [];
   let pendingQuestId;
-  let showAllQuestSuggestions = false;
   let stats = emptyStats;
   let truncated = false;
   let fartleks = [];
@@ -193,6 +228,10 @@ export const mountWorldPage = async (mountPoint) => {
   let questSelectionToken = 0;
   let requestToken = 0;
   let worldMap;
+  /** Active "Explore this Area" session; undefined in the NORMAL map state. */
+  let exploration;
+  let explorationToken = 0;
+  const plannedRoutes = new Map();
 
   mountPoint.innerHTML = WorldPage({ lifetime, selectedFilters });
   const mapContainer = mountPoint.querySelector("[data-world-map]");
@@ -201,6 +240,7 @@ export const mountWorldPage = async (mountPoint) => {
   const questHost = mountPoint.querySelector("[data-world-quests]");
   const detailHost = mountPoint.querySelector("[data-world-detail]");
   const collectibleListHost = mountPoint.querySelector("[data-world-collectible-list]");
+  const exploreButton = mountPoint.querySelector("[data-world-explore]");
   const setStatus = (message) => {
     statusHost.hidden = !message;
     statusHost.textContent = message ?? "";
@@ -209,7 +249,36 @@ export const mountWorldPage = async (mountPoint) => {
   const collectibleById = (id) => collectibles.find((collectible) => collectible.id === id);
   const fartlekById = (id) => fartleks.find((fartlek) => fartlek.id === id);
 
+  /**
+   * Exploration markers by phase. While configuring, World markers stay as dimmed context and no
+   * exploration targets are revealed. Once a route is selected, the frozen area's targets are shown
+   * dimmed and only the selected route's contents are highlighted; in add mode every eligible
+   * target is highlighted so it can be picked.
+   */
+  const renderExplorationTargets = () => {
+    if (exploration.phase === "configure" || exploration.phase === "generating") {
+      const mapped = mappedWorldCollectibles(collectibles, selectedFilters, []);
+      const mappedFartleks = mappedWorldFartleks(fartleks, selectedFilters, []);
+      worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { questCollectibleIds: [] }));
+      worldMap?.setFartleks(fartleksToFeatureCollection(mappedFartleks, { questTargetIds: [] }));
+      renderCollectibleList(mapped, undefined, mappedFartleks, undefined);
+      return;
+    }
+    const { catalog } = exploration;
+    const mapped = visibleWorldCollectibles(catalog.collectibles);
+    const highlighted = exploration.adding
+      ? [...catalog.collectibles.map((item) => item.id), ...catalog.flowlines.map((item) => item.id)]
+      : exploration.pendingTargetIds ?? routeTargetIds(activeProposal(exploration));
+    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { questCollectibleIds: highlighted }));
+    worldMap?.setFartleks(fartleksToFeatureCollection(catalog.flowlines, { questTargetIds: highlighted }));
+    renderCollectibleList(mapped, undefined, catalog.flowlines, undefined);
+  };
+
   const renderCollectibles = () => {
+    if (exploration) {
+      renderExplorationTargets();
+      return;
+    }
     const selectedCollectibleId = selection?.kind === "collectible" ? selection.id : undefined;
     const questCollectibleIds = selectedQuestKey
       ? selectedQuestTargets.collectibles.map((collectible) => collectible.id)
@@ -255,11 +324,23 @@ export const mountWorldPage = async (mountPoint) => {
     });
   };
 
+  const hideDetail = () => {
+    detailHost.hidden = true;
+    detailHost.innerHTML = "";
+    worldMap?.setDetailPanelOpen(false);
+  };
+
   const renderDetail = () => {
+    if (exploreButton) exploreButton.hidden = Boolean(exploration);
+    if (exploration) {
+      detailHost.hidden = false;
+      worldMap?.setDetailPanelOpen(true);
+      detailHost.innerHTML = ExplorationPanel(exploration);
+      bindExploration();
+      return;
+    }
     if (!selection) {
-      detailHost.hidden = true;
-      detailHost.innerHTML = "";
-      worldMap?.setDetailPanelOpen(false);
+      hideDetail();
       return;
     }
     detailHost.hidden = false;
@@ -267,18 +348,14 @@ export const mountWorldPage = async (mountPoint) => {
     if (selection.kind === "fartlek") {
       const fartlek = fartlekById(selection.id);
       if (!fartlek) {
-        detailHost.hidden = true;
-        detailHost.innerHTML = "";
-        worldMap?.setDetailPanelOpen(false);
+        hideDetail();
         return;
       }
       detailHost.innerHTML = FartlekDetail(fartlek);
     } else {
       const collectible = collectibleById(selection.id);
       if (!collectible) {
-        detailHost.hidden = true;
-        detailHost.innerHTML = "";
-        worldMap?.setDetailPanelOpen(false);
+        hideDetail();
         return;
       }
       detailHost.innerHTML = CollectibleDetail(collectible, []);
@@ -291,20 +368,7 @@ export const mountWorldPage = async (mountPoint) => {
 
   const renderSidePanels = () => {
     statsHost.innerHTML = WorldStats(stats, truncated);
-    questHost.innerHTML = QuestList(
-      questSuggestions,
-      questInstances,
-      pendingQuestId,
-      showAllQuestSuggestions,
-      selectedQuestKey
-    );
-    questHost.querySelector("[data-quest-suggestions-toggle]")?.addEventListener("click", () => {
-      showAllQuestSuggestions = !showAllQuestSuggestions;
-      renderSidePanels();
-    });
-    questHost.querySelectorAll("[data-quest-start]").forEach((button) => {
-      button.addEventListener("click", () => void startQuest(button.dataset.questStart));
-    });
+    questHost.innerHTML = QuestList(questInstances, pendingQuestId, selectedQuestKey, plannedRoutes);
     questHost.querySelectorAll("[data-quest-cancel]").forEach((button) => {
       button.addEventListener("click", () => void cancelQuest(button.dataset.questCancel));
     });
@@ -336,6 +400,10 @@ export const mountWorldPage = async (mountPoint) => {
   }
 
   function selectCollectible(id) {
+    if (exploration) {
+      addExplorationTarget(id);
+      return;
+    }
     selection = selection?.kind === "collectible" && selection.id === id
       ? undefined
       : { kind: "collectible", id };
@@ -344,6 +412,10 @@ export const mountWorldPage = async (mountPoint) => {
   }
 
   function selectFartlek(id) {
+    if (exploration) {
+      addExplorationTarget(id);
+      return;
+    }
     selection = selection?.kind === "fartlek" && selection.id === id
       ? undefined
       : { kind: "fartlek", id };
@@ -352,28 +424,23 @@ export const mountWorldPage = async (mountPoint) => {
   }
 
   async function selectQuest(key) {
+    if (exploration) return;
     const token = ++questSelectionToken;
     if (selectedQuestKey === key) {
       selectedQuestKey = undefined;
       selectedQuestTargets = { collectibles: [], flowlines: [] };
+      syncRouteLayers();
       renderCollectibles();
       renderSidePanels();
-      void loadViewport(worldMap.getBounds());
       return;
     }
 
-    const suggestion = key.startsWith("suggestion:")
-      ? questSuggestions.find((item) => item.id === key.slice("suggestion:".length))
-      : undefined;
     const instance = key.startsWith("instance:")
       ? questInstances.find((item) => item.id === key.slice("instance:".length))
       : undefined;
-    const quest = suggestion ?? instance;
-    if (!quest) return;
+    if (!instance) return;
 
-    const objectives = suggestion
-      ? quest.objectives
-      : quest.objectives.map((state) => state.objective);
+    const objectives = instance.objectives.map((state) => state.objective);
     const collectibleIds = [...new Set(objectives
       .filter((objective) => objective.type !== "flowline_rule")
       .flatMap((objective) => objective.targets.map((target) => target.id)))];
@@ -387,22 +454,30 @@ export const mountWorldPage = async (mountPoint) => {
     selectedQuestKey = key;
     selectedQuestTargets = { collectibles: [], flowlines: [] };
     selection = undefined;
+    syncRouteLayers();
     renderCollectibles();
     renderSidePanels();
     renderDetail();
     try {
-      const targets = await fetch(`/api/world/quest-targets?${query.toString()}`).then(responseJson);
+      const [targets] = await Promise.all([
+        fetch(`/api/world/quest-targets?${query.toString()}`).then(responseJson),
+        !plannedRoutes.has(instance.id)
+          ? loadPlannedRoute(instance.id).then((route) => plannedRoutes.set(instance.id, route))
+          : undefined
+      ]);
       if (token !== questSelectionToken) return;
       selectedQuestTargets = {
         collectibles: targets.collectibles,
         flowlines: targets.flowlines
       };
       renderCollectibles();
+      renderSidePanels();
+      syncRouteLayers();
+      const plannedRoute = plannedRoutes.get(instance.id);
       const points = [
         ...targets.collectibles.map(({ latitude, longitude }) => ({ latitude, longitude })),
-        ...targets.flowlines.flatMap((flowline) => flowline.geometry.coordinates.map(
-          ([longitude, latitude]) => ({ latitude, longitude })
-        ))
+        ...targets.flowlines.flatMap((flowline) => geometryPoints(flowline.geometry)),
+        ...(plannedRoute ? geometryPoints(plannedRoute.geometry) : [])
       ];
       worldMap.fitTo(points);
     } catch (error) {
@@ -415,29 +490,320 @@ export const mountWorldPage = async (mountPoint) => {
     }
   }
 
-  async function startQuest(suggestionId) {
-    if (pendingQuestId) return;
-    pendingQuestId = suggestionId;
-    renderSidePanels();
-    try {
-      await fetch("/api/quest-instances/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suggestionId, bbox: boundsToParameter(worldMap.getBounds()) })
-      }).then(responseJson);
-      questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
-      await loadViewport(worldMap.getBounds());
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      pendingQuestId = undefined;
-      renderSidePanels();
+  /**
+   * Routes shown on the map. While exploring, only the selected or hovered proposal is visible;
+   * otherwise the selected quest's PlannedRoute.
+   */
+  function syncRouteLayers() {
+    if (!worldMap) return;
+    worldMap.setPickHandler(exploration?.picking ? pickExplorationPoint : undefined);
+    if (exploration) {
+      const shownId = exploration.previewProposalId ?? exploration.selectedProposalId;
+      const shown = activeProposal(exploration, shownId);
+      worldMap.setRouteEndpoints({
+        start: exploration.start,
+        end: exploration.routeType === "point_to_point" ? exploration.end : undefined
+      });
+      worldMap.setRoute(shown ? { geometry: shown.geometry } : undefined);
+      worldMap.setAlternateRoutes([]);
+      return;
     }
+    worldMap.setAlternateRoutes([]);
+    const instanceId = selectedQuestKey?.startsWith("instance:") ? selectedQuestKey.slice("instance:".length) : undefined;
+    const plannedRoute = instanceId ? plannedRoutes.get(instanceId) : undefined;
+    worldMap.setRouteEndpoints(plannedRoute ? {
+      start: plannedRoute.start,
+      end: plannedRoute.routeType === "point_to_point" ? plannedRoute.end : undefined
+    } : {});
+    worldMap.setRoute(plannedRoute ? { geometry: plannedRoute.geometry } : undefined);
+  }
+
+  const renderExploration = () => {
+    syncRouteLayers();
+    renderCollectibles();
+    renderDetail();
+  };
+
+  /** NORMAL → CONFIGURE: freezes the visible area for the whole exploration. */
+  function openExploration() {
+    if (!worldMap || exploration) return;
+    const view = worldMap.getView();
+    explorationToken += 1;
+    selectedQuestKey = undefined;
+    selectedQuestTargets = { collectibles: [], flowlines: [] };
+    selection = undefined;
+    exploration = createExplorationState({
+      bbox: boundsToParameter(worldMap.getBounds()),
+      center: view.center,
+      zoom: view.zoom
+    });
+    setStatus(undefined);
+    renderSidePanels();
+    renderExploration();
+  }
+
+  /** Any phase → NORMAL. Server-side proposals simply expire; nothing was persisted. */
+  function closeExploration() {
+    explorationToken += 1;
+    exploration = undefined;
+    renderExploration();
+  }
+
+  /** Back to CONFIGURE with the ride kept; generated proposals and customizations are discarded. */
+  function returnToConfigure(error) {
+    explorationToken += 1;
+    Object.assign(exploration, {
+      phase: "configure",
+      status: "idle",
+      explorationId: undefined,
+      proposals: [],
+      customizedById: {},
+      selectedProposalId: undefined,
+      previewProposalId: undefined,
+      catalog: { collectibles: [], flowlines: [] },
+      truncated: false,
+      adding: false,
+      pendingTargetIds: undefined,
+      error
+    });
+  }
+
+  function pickExplorationPoint(point) {
+    if (!exploration?.picking || exploration.phase !== "configure") return;
+    if (exploration.picking === "end") exploration.end = point;
+    else exploration.start = point;
+    exploration.picking = exploration.routeType === "point_to_point" && !exploration.end ? "end" : undefined;
+    exploration.error = undefined;
+    renderExploration();
+  }
+
+  function locateExplorationStart() {
+    const geolocation = globalThis.navigator?.geolocation;
+    if (!geolocation) {
+      exploration.error = "Location is not available in this browser. Select your start on the map.";
+      renderDetail();
+      return;
+    }
+    geolocation.getCurrentPosition(
+      (position) => {
+        if (!exploration || exploration.phase !== "configure") return;
+        exploration.picking = "start";
+        pickExplorationPoint({ lat: position.coords.latitude, lon: position.coords.longitude });
+      },
+      () => {
+        if (!exploration) return;
+        exploration.error = "Location permission was denied. Select your start on the map.";
+        renderDetail();
+      }
+    );
+  }
+
+  /** CONFIGURE → GENERATING → CUSTOMIZE: the planner picks targets; the best route is auto-selected. */
+  async function generateRoutes() {
+    if (!exploration || exploration.phase !== "configure") return;
+    const { body, error } = buildGenerateRequest(exploration);
+    if (error) {
+      exploration.error = error;
+      renderDetail();
+      return;
+    }
+    const token = ++explorationToken;
+    exploration.phase = "generating";
+    exploration.picking = undefined;
+    exploration.error = undefined;
+    renderExploration();
+    try {
+      const result = await jsonRequest("POST", "/api/explorations/generate", body);
+      if (token !== explorationToken || !exploration) return;
+      const preferred = result.proposals.find((proposal) => proposal.recommended) ?? result.proposals[0];
+      Object.assign(exploration, {
+        explorationId: result.explorationId,
+        proposals: result.proposals,
+        customizedById: {},
+        catalog: result.catalog,
+        truncated: Boolean(result.truncated),
+        limits: result.limits ?? exploration.limits,
+        selectedProposalId: preferred?.id,
+        phase: preferred ? "customize" : "proposals"
+      });
+      worldMap.fitTo(result.proposals.flatMap((proposal) => geometryPoints(proposal.geometry)));
+    } catch (generateError) {
+      if (token !== explorationToken || !exploration) return;
+      exploration.phase = "configure";
+      exploration.error = explorationErrorMessage(generateError);
+    }
+    renderExploration();
+  }
+
+  /** GENERATING → CONFIGURE without waiting; a late response is ignored. */
+  function stopGenerating() {
+    if (exploration?.phase !== "generating") return;
+    returnToConfigure(undefined);
+    renderExploration();
+  }
+
+  /** PROPOSALS/CUSTOMIZE → CUSTOMIZE for another proposal; its own edits are kept. */
+  function selectProposal(id) {
+    if (!exploration || exploration.status !== "idle") return;
+    if (exploration.phase !== "proposals" && exploration.phase !== "customize") return;
+    const proposal = activeProposal(exploration, id);
+    if (!proposal) return;
+    Object.assign(exploration, { selectedProposalId: id, previewProposalId: undefined, adding: false, error: undefined, phase: "customize" });
+    worldMap.fitTo(geometryPoints(proposal.geometry));
+    renderExploration();
+  }
+
+  /** Temporarily draws a hovered proposal strong without changing the selection. */
+  function previewProposal(id) {
+    if (!exploration || (exploration.phase !== "proposals" && exploration.phase !== "customize")) return;
+    if (exploration.previewProposalId === id) return;
+    exploration.previewProposalId = id;
+    syncRouteLayers();
+  }
+
+  /** CUSTOMIZE: re-plans only the selected route for an edited target set. */
+  async function rerouteSelected(targetIds) {
+    const current = activeProposal(exploration);
+    if (!current || exploration.phase !== "customize" || exploration.status !== "idle") return;
+    const originalId = exploration.selectedProposalId;
+    const token = ++explorationToken;
+    Object.assign(exploration, { status: "rerouting", pendingTargetIds: targetIds, adding: false, previewProposalId: undefined, error: undefined });
+    renderExploration();
+    try {
+      const { proposal } = await jsonRequest(
+        "POST",
+        `/api/explorations/${encodeURIComponent(exploration.explorationId)}/reroute`,
+        { proposalId: current.id, targetIds }
+      );
+      if (token !== explorationToken || !exploration) return;
+      exploration.customizedById = { ...exploration.customizedById, [originalId]: proposal };
+      exploration.status = "idle";
+      exploration.pendingTargetIds = undefined;
+    } catch (rerouteError) {
+      if (token !== explorationToken || !exploration) return;
+      exploration.status = "idle";
+      exploration.pendingTargetIds = undefined;
+      if (expiredCodes.has(rerouteError.code)) returnToConfigure(explorationErrorMessage(rerouteError));
+      else exploration.error = explorationErrorMessage(rerouteError);
+    }
+    renderExploration();
+  }
+
+  function removeExplorationTarget(id) {
+    const contents = routeTargetIds(activeProposal(exploration));
+    if (contents.length <= 1 || !contents.includes(id)) return;
+    void rerouteSelected(contents.filter((targetId) => targetId !== id));
+  }
+
+  /** In add mode, a map or list selection of an eligible target of the frozen area adds it. */
+  function addExplorationTarget(id) {
+    if (!exploration?.adding || exploration.status !== "idle" || exploration.phase !== "customize") return;
+    if (!findCatalogTarget(exploration.catalog, id)) return;
+    const contents = routeTargetIds(activeProposal(exploration));
+    if (contents.includes(id)) return;
+    if (contents.length >= exploration.limits.maxRouteTargets) {
+      exploration.error = `A route can include at most ${exploration.limits.maxRouteTargets} targets.`;
+      renderDetail();
+      return;
+    }
+    void rerouteSelected([...contents, id]);
+  }
+
+  /** Restores the originally generated version of the selected route (no network). */
+  function resetSelectedRoute() {
+    if (!exploration || exploration.status !== "idle") return;
+    const { [exploration.selectedProposalId]: _discarded, ...rest } = exploration.customizedById;
+    exploration.customizedById = rest;
+    exploration.adding = false;
+    exploration.error = undefined;
+    const proposal = activeProposal(exploration);
+    if (proposal) worldMap.fitTo(geometryPoints(proposal.geometry));
+    renderExploration();
+  }
+
+  /** CUSTOMIZE → CONFIRMING → NORMAL with the new exploration selected on the map. */
+  async function confirmExploration() {
+    const proposal = activeProposal(exploration);
+    if (!proposal || exploration.phase !== "customize" || exploration.status !== "idle") return;
+    const token = ++explorationToken;
+    exploration.phase = "confirming";
+    exploration.adding = false;
+    exploration.error = undefined;
+    renderExploration();
+    try {
+      const { instance, plannedRoute } = await jsonRequest("POST", "/api/explorations/confirm", { proposalId: proposal.id });
+      if (token !== explorationToken || !exploration) return;
+      plannedRoutes.set(instance.id, plannedRoute ?? null);
+      questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
+      exploration = undefined;
+      renderExploration();
+      await selectQuest(`instance:${instance.id}`);
+    } catch (confirmError) {
+      if (token !== explorationToken || !exploration) return;
+      exploration.phase = "customize";
+      if (expiredCodes.has(confirmError.code)) returnToConfigure(explorationErrorMessage(confirmError));
+      else exploration.error = explorationErrorMessage(confirmError);
+      renderExploration();
+    }
+  }
+
+  function bindExploration() {
+    const on = (selector, event, handler) => detailHost.querySelectorAll(selector).forEach((element) => {
+      element.addEventListener(event, (domEvent) => handler(element, domEvent));
+    });
+    const updateRide = (change) => {
+      if (exploration.phase !== "configure") return;
+      change();
+      exploration.error = undefined;
+      renderExploration();
+    };
+    on("[data-exploration-cancel]", "click", () => closeExploration());
+    on("[data-exploration-pick]", "click", (button) => updateRide(() => {
+      exploration.picking = exploration.picking === button.dataset.explorationPick ? undefined : button.dataset.explorationPick;
+    }));
+    on("[data-exploration-locate]", "click", () => locateExplorationStart());
+    on("[data-exploration-route-type]", "click", (button) => updateRide(() => {
+      exploration.routeType = button.dataset.explorationRouteType;
+      exploration.picking = exploration.routeType === "point_to_point" && !exploration.end ? "end" : undefined;
+    }));
+    on("[data-exploration-constraint]", "click", (button) => updateRide(() => {
+      exploration.constraintType = button.dataset.explorationConstraint;
+    }));
+    on("[data-exploration-preset]", "click", (button) => updateRide(() => {
+      if (exploration.constraintType === "distance") exploration.distanceKm = Number(button.dataset.explorationPreset);
+      else exploration.durationMin = Number(button.dataset.explorationPreset);
+    }));
+    on("[data-exploration-custom]", "change", (input) => updateRide(() => {
+      if (exploration.constraintType === "distance") exploration.distanceKm = Number(input.value);
+      else exploration.durationMin = Number(input.value);
+    }));
+    on("[data-exploration-form]", "submit", (_form, event) => {
+      event?.preventDefault?.();
+      void generateRoutes();
+    });
+    on("[data-exploration-stop]", "click", () => stopGenerating());
+    on("[data-exploration-edit-ride]", "click", () => {
+      if (exploration.status !== "idle") return;
+      returnToConfigure(undefined);
+      renderExploration();
+    });
+    on("[data-exploration-proposal]", "click", (button) => selectProposal(button.dataset.explorationProposal));
+    on("[data-exploration-proposal]", "mouseenter", (button) => previewProposal(button.dataset.explorationProposal));
+    on("[data-exploration-proposal]", "mouseleave", () => previewProposal(undefined));
+    on("[data-exploration-remove]", "click", (button) => removeExplorationTarget(button.dataset.explorationRemove));
+    on("[data-exploration-add]", "click", () => {
+      if (exploration.status !== "idle" || exploration.phase !== "customize") return;
+      exploration.adding = !exploration.adding;
+      exploration.error = undefined;
+      renderExploration();
+    });
+    on("[data-exploration-reset]", "click", () => resetSelectedRoute());
+    on("[data-exploration-confirm]", "click", () => void confirmExploration());
   }
 
   async function cancelQuest(instanceId) {
     if (pendingQuestId || !globalThis.confirm(
-      "Cancel this quest and delete its progress? If you start it again, progress will start over."
+      "Cancel this exploration and delete its progress? This cannot be undone."
     )) return;
     pendingQuestId = instanceId;
     renderSidePanels();
@@ -447,7 +813,13 @@ export const mountWorldPage = async (mountPoint) => {
         headers: { "Content-Type": "application/json" }
       }).then(responseJson);
       questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
-      await loadViewport(worldMap.getBounds());
+      plannedRoutes.delete(instanceId);
+      if (selectedQuestKey === `instance:${instanceId}`) {
+        selectedQuestKey = undefined;
+        selectedQuestTargets = { collectibles: [], flowlines: [] };
+        syncRouteLayers();
+        renderCollectibles();
+      }
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -458,31 +830,22 @@ export const mountWorldPage = async (mountPoint) => {
 
   async function loadViewport(bounds) {
     const token = ++requestToken;
-    const preserveQuestSuggestions = Boolean(selectedQuestKey);
-    const url = `/api/world?bbox=${boundsToParameter(bounds)}${
-      preserveQuestSuggestions ? "&includeQuestSuggestions=false" : ""
-    }`;
     try {
-      const snapshot = await fetch(url).then(responseJson);
+      const snapshot = await fetch(`/api/world?bbox=${boundsToParameter(bounds)}`).then(responseJson);
       if (token !== requestToken) return;
       collectibles = snapshot.collectibles;
-      if (!selectedQuestKey && !preserveQuestSuggestions) {
-        questSuggestions = snapshot.questSuggestions ?? [];
-      }
       stats = snapshot.stats;
       truncated = snapshot.truncated;
       fartleks = snapshot.fartleks ?? [];
       availableFilters = availableWorldFilters(collectibles, fartleks);
       selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
-      setStatus(collectibles.length === 0 && questSuggestions.length === 0 && fartleks.length === 0
-        ? "Nothing curated here yet."
-        : undefined);
+      setStatus(collectibles.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);
       if (selection?.kind === "collectible" && !collectibleById(selection.id)) selection = undefined;
       if (selection?.kind === "fartlek" && !fartlekById(selection.id)) selection = undefined;
       renderFilters();
       renderCollectibles();
       renderSidePanels();
-      renderDetail();
+      if (!exploration) renderDetail();
     } catch (error) {
       if (token !== requestToken) return;
       setStatus(error.message);
@@ -511,7 +874,7 @@ export const mountWorldPage = async (mountPoint) => {
       }
       renderFilters();
       renderCollectibles();
-      renderDetail();
+      if (!exploration) renderDetail();
     });
   });
 
@@ -523,12 +886,15 @@ export const mountWorldPage = async (mountPoint) => {
       attribution: basemap.attribution,
       onViewportChange: scheduleViewportLoad,
       onCollectibleSelect: (id) => selectCollectible(id),
-      onFartlekSelect: (id) => selectFartlek(id)
+      onFartlekSelect: (id) => selectFartlek(id),
+      onAlternateRouteSelect: (id) => selectProposal(id)
     });
   } catch (error) {
     mapContainer.innerHTML = `<p class="world-load-error" role="alert">Unable to load the map: ${escapeHtml(error.message)}</p>`;
     return;
   }
+
+  exploreButton?.addEventListener("click", () => openExploration());
 
   mountPoint.querySelector("[data-world-locate]").addEventListener("click", () => {
     if (!navigator.geolocation) {

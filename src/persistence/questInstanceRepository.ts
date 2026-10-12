@@ -1,31 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type {
   CollectibleCategory,
+  NewPlannedRoute,
+  PlannedRoute,
   QuestInstance,
   QuestObjective,
-  QuestObjectiveTemplate,
-  QuestObjectiveState,
-  QuestSuggestion,
-  QuestTemplate
+  QuestObjectiveState
 } from "../domain.js";
-import {
-  evaluateQuestObjectives,
-  isCollectibleCategory,
-  validateQuestTemplate,
-  type QuestHistory
-} from "../questTemplates.js";
+import type { NewExploration } from "../exploration/service.js";
+import { evaluateQuestObjectives, type QuestHistory } from "../questObjectives.js";
 
-interface TemplateRow {
-  id: string;
-  version: number;
-  title: string;
-  description: string;
-  recommended_level: number;
-  objectives: QuestTemplate["objectives"];
-  onboarding: boolean;
-}
+/** Template row every player-created exploration references (created by migration 028). */
+export const EXPLORATION_TEMPLATE = { id: "exploration", version: 1 } as const;
 
 interface InstanceRow {
   id: string;
@@ -41,6 +28,44 @@ interface InstanceRow {
   completed_at: Date | null;
   fresh_progress: boolean;
 }
+
+interface PlannedRouteRow {
+  id: string;
+  quest_instance_id: string;
+  proposal_id: string;
+  profile: string;
+  route_type: PlannedRoute["routeType"];
+  start_lat: number;
+  start_lon: number;
+  end_lat: number;
+  end_lon: number;
+  distance_m: number;
+  duration_s: number;
+  elevation_gain_m: number | null;
+  elevation_loss_m: number | null;
+  geometry: PlannedRoute["geometry"];
+  included_target_ids: string[];
+  planner_version: number;
+  created_at: Date;
+}
+
+const mapPlannedRoute = (row: PlannedRouteRow): PlannedRoute => ({
+  id: row.id,
+  questInstanceId: row.quest_instance_id,
+  proposalId: row.proposal_id,
+  profile: row.profile,
+  routeType: row.route_type,
+  start: { lat: row.start_lat, lon: row.start_lon },
+  end: { lat: row.end_lat, lon: row.end_lon },
+  distanceM: row.distance_m,
+  durationS: row.duration_s,
+  ...(row.elevation_gain_m !== null ? { elevationGainM: row.elevation_gain_m } : {}),
+  ...(row.elevation_loss_m !== null ? { elevationLossM: row.elevation_loss_m } : {}),
+  geometry: row.geometry,
+  includedTargetIds: row.included_target_ids,
+  plannerVersion: row.planner_version,
+  createdAt: row.created_at.toISOString()
+});
 
 interface TimedCollectibleHistory {
   sourceId: string;
@@ -79,22 +104,6 @@ export const historyFromQuestStart = (
   };
 };
 
-const mapTemplate = (row: TemplateRow): QuestTemplate => ({
-  id: row.id,
-  version: row.version,
-  title: row.title,
-  description: row.description,
-  recommendedLevel: row.recommended_level,
-  objectives: row.objectives,
-  ...(row.onboarding ? { onboarding: true } : {})
-});
-
-export class QuestTemplateUnavailableError extends Error {
-  constructor() {
-    super("This quest template is no longer available.");
-  }
-}
-
 export class QuestInstanceNotFoundError extends Error {
   constructor() {
     super("Quest instance not found.");
@@ -110,102 +119,90 @@ export class QuestInstanceStateError extends Error {
 export class QuestInstanceRepository {
   constructor(private readonly pool: Pool) {}
 
-  async listActiveTemplates(): Promise<QuestTemplate[]> {
-    const result = await this.pool.query<TemplateRow>(
-      `SELECT DISTINCT ON (id) id, version, title, description, recommended_level, objectives, onboarding
-       FROM quest_templates
-       WHERE active = true
-       ORDER BY id, version DESC`
-    );
-    return result.rows.map(mapTemplate);
-  }
-
-  async replaceTemplates(templates: QuestTemplate[]): Promise<void> {
-    for (const template of templates) validateQuestTemplate(template);
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query("UPDATE quest_templates SET active = false, updated_at = now()");
-      for (const template of templates) {
-        await client.query(
-          `INSERT INTO quest_templates (
-            id, version, title, description, recommended_level, objectives, onboarding, active
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, true)
-          ON CONFLICT (id, version) DO UPDATE SET
-            title = EXCLUDED.title,
-            description = EXCLUDED.description,
-            recommended_level = EXCLUDED.recommended_level,
-            objectives = EXCLUDED.objectives,
-            onboarding = EXCLUDED.onboarding,
-            active = true,
-            updated_at = now()`,
-          [
-            template.id,
-            template.version,
-            template.title,
-            template.description,
-            template.recommendedLevel,
-            JSON.stringify(template.objectives),
-            template.onboarding ?? false
-          ]
-        );
-      }
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
-  async start(playerId: string, suggestion: QuestSuggestion): Promise<string> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      const template = await client.query(
-        "SELECT 1 FROM quest_templates WHERE id = $1 AND version = $2 AND active = true",
-        [suggestion.templateId, suggestion.templateVersion]
-      );
-      if (template.rowCount !== 1) throw new QuestTemplateUnavailableError();
-      const cancellation = await client.query(
-        `SELECT 1 FROM quest_instance_cancellations
-         WHERE player_id = $1 AND template_id = $2 AND template_version = $3 AND scope_hash = $4`,
-        [playerId, suggestion.templateId, suggestion.templateVersion, suggestion.id]
-      );
-      const id = randomUUID();
+  /**
+   * Persists a confirmed exploration and its PlannedRoute in one transaction. Progress counts
+   * only from confirmation. The proposal id is the idempotency key: confirming the same proposal
+   * again returns the existing exploration without changing it.
+   */
+  async createExploration(playerId: string, exploration: NewExploration, route: NewPlannedRoute): Promise<string> {
+    return this.inTransaction(async (client) => {
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO quest_instances (
           id, player_id, template_id, template_version, scope_hash,
           title, description, recommended_level, objectives, fresh_progress
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, true)
         ON CONFLICT (player_id, template_id, template_version, scope_hash) DO NOTHING
         RETURNING id`,
         [
-          id,
+          randomUUID(),
           playerId,
-          suggestion.templateId,
-          suggestion.templateVersion,
-          suggestion.id,
-          suggestion.title,
-          suggestion.description,
-          suggestion.recommendedLevel,
-          JSON.stringify(suggestion.objectives),
-          cancellation.rows.length > 0
+          EXPLORATION_TEMPLATE.id,
+          EXPLORATION_TEMPLATE.version,
+          exploration.proposalId,
+          exploration.title,
+          exploration.description,
+          JSON.stringify(exploration.objectives)
         ]
       );
-      if (inserted.rowCount === 1) {
-        await client.query("COMMIT");
-        return inserted.rows[0].id;
+      if (inserted.rowCount !== 1) {
+        const existing = await client.query<{ id: string }>(
+          `SELECT id FROM quest_instances
+           WHERE player_id = $1 AND template_id = $2 AND template_version = $3 AND scope_hash = $4`,
+          [playerId, EXPLORATION_TEMPLATE.id, EXPLORATION_TEMPLATE.version, exploration.proposalId]
+        );
+        if (existing.rowCount !== 1) throw new Error("Unable to resolve an existing exploration.");
+        return existing.rows[0].id;
       }
-      const existing = await client.query<{ id: string }>(
-        `SELECT id FROM quest_instances
-         WHERE player_id = $1 AND template_id = $2 AND template_version = $3 AND scope_hash = $4`,
-        [playerId, suggestion.templateId, suggestion.templateVersion, suggestion.id]
+      const instanceId = inserted.rows[0].id;
+      await client.query(
+        `INSERT INTO planned_routes (
+          id, player_id, quest_instance_id, proposal_id, profile, route_type,
+          start_lat, start_lon, end_lat, end_lon, distance_m, duration_s,
+          elevation_gain_m, elevation_loss_m, geometry, included_target_ids, planner_version
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+        [
+          randomUUID(),
+          playerId,
+          instanceId,
+          route.proposalId,
+          route.profile,
+          route.routeType,
+          route.start.lat,
+          route.start.lon,
+          route.end.lat,
+          route.end.lon,
+          route.distanceM,
+          route.durationS,
+          route.elevationGainM ?? null,
+          route.elevationLossM ?? null,
+          JSON.stringify(route.geometry),
+          JSON.stringify(route.includedTargetIds),
+          route.plannerVersion
+        ]
       );
-      if (existing.rowCount !== 1) throw new Error("Unable to resolve an existing quest instance.");
+      return instanceId;
+    });
+  }
+
+  async getPlannedRoute(playerId: string, instanceId: string): Promise<PlannedRoute | undefined> {
+    const result = await this.pool.query<PlannedRouteRow>(
+      `SELECT id, quest_instance_id, proposal_id, profile, route_type, start_lat, start_lon, end_lat, end_lon,
+              distance_m, duration_s, elevation_gain_m, elevation_loss_m, geometry, included_target_ids,
+              planner_version, created_at
+       FROM planned_routes
+       WHERE quest_instance_id = $1 AND player_id = $2`,
+      [instanceId, playerId]
+    );
+    return result.rows[0] ? mapPlannedRoute(result.rows[0]) : undefined;
+  }
+
+  private async inTransaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await work(client);
       await client.query("COMMIT");
-      return existing.rows[0].id;
+      return result;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -398,79 +395,3 @@ export class QuestInstanceRepository {
     }
   }
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const parseObjectiveTemplate = (value: unknown, templateId: string): QuestObjectiveTemplate => {
-  if (!isRecord(value) || typeof value.requiredCount !== "number"
-    || !Number.isSafeInteger(value.requiredCount) || typeof value.type !== "string") {
-    throw new Error(`Quest template ${templateId} has an invalid objective.`);
-  }
-  const requiredCount = value.requiredCount;
-  if (value.type === "flowline_rule") {
-    if ((value.minimumLengthMeters !== undefined && typeof value.minimumLengthMeters !== "number")
-      || (value.minimumAverageSpeedMps !== undefined && typeof value.minimumAverageSpeedMps !== "number")
-      || (value.sameActivity !== undefined && typeof value.sameActivity !== "boolean")) {
-      throw new Error(`Quest template ${templateId} has invalid Flowline objective criteria.`);
-    }
-    return {
-      type: value.type,
-      requiredCount,
-      ...(value.minimumLengthMeters === undefined ? {} : { minimumLengthMeters: value.minimumLengthMeters }),
-      ...(value.minimumAverageSpeedMps === undefined ? {} : { minimumAverageSpeedMps: value.minimumAverageSpeedMps }),
-      ...(value.sameActivity === undefined ? {} : { sameActivity: value.sameActivity })
-    };
-  }
-  if (value.type === "collectible_count") {
-    if (!isCollectibleCategory(value.category)) {
-      throw new Error(`Quest template ${templateId} has an invalid collectible category.`);
-    }
-    return { type: value.type, requiredCount, category: value.category };
-  }
-  if (value.type === "collectible_targets") {
-    if (value.category !== undefined && !isCollectibleCategory(value.category)) {
-      throw new Error(`Quest template ${templateId} has an invalid collectible category.`);
-    }
-    return {
-      type: value.type,
-      requiredCount,
-      ...(value.category === undefined ? {} : { category: value.category })
-    };
-  }
-  throw new Error(`Quest template ${templateId} has an unsupported objective type.`);
-};
-
-const parseQuestTemplate = (value: unknown): QuestTemplate => {
-  if (!isRecord(value) || typeof value.id !== "string" || typeof value.title !== "string"
-    || typeof value.description !== "string" || typeof value.version !== "number"
-    || typeof value.recommendedLevel !== "number" || !Array.isArray(value.objectives)
-    || (value.onboarding !== undefined && typeof value.onboarding !== "boolean")) {
-    throw new Error("Quest template has invalid top-level fields.");
-  }
-  const templateId = value.id;
-  const template: QuestTemplate = {
-    id: templateId,
-    version: value.version,
-    title: value.title,
-    description: value.description,
-    recommendedLevel: value.recommendedLevel,
-    objectives: value.objectives.map((objective) => parseObjectiveTemplate(objective, templateId)),
-    ...(value.onboarding === true ? { onboarding: true } : {})
-  };
-  validateQuestTemplate(template);
-  return template;
-};
-
-export const readQuestTemplateRows = async (file: string): Promise<QuestTemplate[]> => {
-  const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
-  if (!Array.isArray(parsed)) throw new Error(`${file} must contain a quest-template array.`);
-  const templates = parsed.map(parseQuestTemplate);
-  const seen = new Set<string>();
-  for (const template of templates) {
-    const key = `${template.id}:${template.version}`;
-    if (seen.has(key)) throw new Error(`Duplicate quest template ${key}.`);
-    seen.add(key);
-  }
-  return templates;
-};

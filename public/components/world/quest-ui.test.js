@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_VISIBLE_QUEST_SUGGESTIONS, QuestList } from "./quest-list.js";
+import { QuestList } from "./quest-list.js";
 import { markerLabel } from "./world-markers.js";
 import { CollectibleSwatch } from "./collectible-swatch.js";
 
@@ -72,49 +72,15 @@ const instance = (overrides = {}) => ({
   ...overrides
 });
 
-describe("Quest suggestions and instances", () => {
-  it("renders bbox suggestions without tracked progress and offers explicit Start", () => {
-    const markup = QuestList([suggestion()], [], undefined);
-    expect(markup).toContain("Local recommendations");
-    expect(markup).toContain("data-quest-start=\"suggestion-1\"");
-    expect(markup).toContain("Start quest");
-    expect(markup).toContain("Flowline");
-    expect(markup).toContain("places");
-    expect(markup).toContain('<b class="fartlek-swatch" aria-hidden="true"></b>');
+describe("Started explorations", () => {
+  it("renders started explorations with persistent progress and no suggestion list", () => {
+    const markup = QuestList([instance()], undefined);
+    expect(markup).toContain("Your Explorations");
+    expect(markup).toContain('aria-label="Your explorations"');
+    expect(markup).not.toContain("Local recommendations");
+    expect(markup).not.toContain("data-quest-explore");
     expect(markup).toContain("Complete 3 of these 4 Flowlines");
     expect(markup).toContain("at least 2 km each, at least 30 km/h average each, in one Activity");
-    expect(markup).toContain("Visit 3 of these 3 places");
-    expect(markup).toContain("Castle");
-    expect(markup).toContain("Bridge");
-    expect(markup).toContain("Tower");
-    expect(markup).toContain("One");
-    expect(markup).toContain("Three");
-    expect(markup).toContain("Four");
-    expect(markup).toContain("data-quest-select=\"suggestion:suggestion-1\"");
-    expect(markup).not.toContain("Level 2");
-    expect(markup).not.toContain("0 / 2 objectives");
-  });
-
-  it("collapses recommendations after the first three and renders an accessible disclosure", () => {
-    const suggestions = Array.from({ length: 5 }, (_value, index) =>
-      suggestion({ id: `suggestion-${index + 1}` })
-    );
-    const collapsed = QuestList(suggestions, [], undefined);
-    expect(collapsed.match(/data-quest-start=/g)).toHaveLength(INITIAL_VISIBLE_QUEST_SUGGESTIONS);
-    expect(collapsed).toContain('aria-controls="quest-recommendations" aria-expanded="false"');
-    expect(collapsed).toContain("Show all 5 quests");
-    expect(collapsed).not.toContain('data-quest-start="suggestion-4"');
-
-    const expanded = QuestList(suggestions, [], undefined, true);
-    expect(expanded.match(/data-quest-start=/g)).toHaveLength(suggestions.length);
-    expect(expanded).toContain('aria-controls="quest-recommendations" aria-expanded="true"');
-    expect(expanded).toContain("Show fewer");
-  });
-
-  it("separates persistent active progress from ephemeral recommendations", () => {
-    const markup = QuestList([suggestion()], [instance()], undefined);
-    expect(markup).toContain("Your running Quests");
-    expect(markup).toContain('aria-label="Your running quests"');
     expect(markup).not.toContain(">Active</small>");
     expect(markup).toContain('<b class="fartlek-swatch" aria-hidden="true"></b>');
     expect(markup).toContain("Castle");
@@ -127,15 +93,13 @@ describe("Quest suggestions and instances", () => {
     expect(markup).toContain("Complete");
     expect(markup).toContain("Not complete");
     expect(markup).toContain('<b class="fartlek-swatch is-completed" aria-hidden="true"></b>');
-    expect(markup).toContain("Started");
-    expect(markup).toContain("disabled");
-    expect(markup).toContain('aria-label="Cancel quest"');
-    expect(markup).toContain('title="Cancel quest"');
+    expect(markup).toContain('aria-label="Cancel exploration"');
+    expect(markup).toContain('title="Cancel exploration"');
     expect(markup).toContain(">✕</button>");
   });
 
   it("does not offer cancellation for completed quests", () => {
-    const markup = QuestList([], [instance({ status: "completed" })], undefined);
+    const markup = QuestList([instance({ status: "completed" })], undefined);
     expect(markup).toContain("Complete");
     expect(markup).not.toContain("data-quest-cancel=");
     expect(markup).toContain("One — 33 km/h");
@@ -164,7 +128,7 @@ describe("Quest suggestions and instances", () => {
         };
       })
     });
-    const markup = QuestList([], [completedQuest], undefined);
+    const markup = QuestList([completedQuest], undefined);
     const incompleteOptionalTargets = markup.split("Not complete").length - 1;
 
     expect(markup).toContain("3/3 complete");
@@ -175,7 +139,7 @@ describe("Quest suggestions and instances", () => {
   });
 
   it("marks a selected started quest card for map display", () => {
-    const markup = QuestList([], [instance()], undefined, false, "instance:instance-1");
+    const markup = QuestList([instance()], undefined, "instance:instance-1");
 
     expect(markup).toContain("quest-card is-active is-map-selected");
     expect(markup).toContain('data-quest-select="instance:instance-1"');
@@ -183,7 +147,7 @@ describe("Quest suggestions and instances", () => {
   });
 
   it("shows completed instance status and escapes quest-controlled content", () => {
-    const markup = QuestList([], [instance({
+    const markup = QuestList([instance({
       title: "<script>",
       status: "completed",
       objectives: instance().objectives.map((item) => ({
@@ -198,9 +162,8 @@ describe("Quest suggestions and instances", () => {
   });
 
   it("renders useful empty states without fabricating quests", () => {
-    const markup = QuestList([], [], undefined);
-    expect(markup).toContain("No curated quests match this map area yet.");
-    expect(markup).toContain("Start a local recommendation to begin tracking a quest.");
+    const markup = QuestList([], undefined);
+    expect(markup).toContain("Use Explore this Area on the map to pick targets, plan a route and start an exploration.");
   });
 
   it("shows per-target Mountain Pass progress on started quests", () => {
@@ -218,7 +181,7 @@ describe("Quest suggestions and instances", () => {
       }]
     });
     const objective = mountainPassQuest.objectives[0];
-    const markup = QuestList([], [instance({
+    const markup = QuestList([instance({
       objectives: [{
         objective,
         progress: { completed: 1, required: 3, complete: false },
@@ -234,8 +197,8 @@ describe("Quest suggestions and instances", () => {
     expect(markup).toContain('<b class="collectible-swatch is-visited is-common is-mountain_pass is-icon" aria-hidden="true">\u26f0</b>');
   });
 
-  it("lists named Mountain Pass and peak targets on recommendations", () => {
-    const recommendation = suggestion({
+  it("lists named Mountain Pass and peak targets that are not complete yet", () => {
+    const exploration = suggestion({
       objectives: [
         {
           id: "passes",
@@ -253,7 +216,13 @@ describe("Quest suggestions and instances", () => {
         }
       ]
     });
-    const markup = QuestList([recommendation], [], undefined);
+    const markup = QuestList([instance({
+      objectives: exploration.objectives.map((objective) => ({
+        objective,
+        progress: { completed: 0, required: objective.requiredCount, complete: false },
+        targetProgress: objective.targets.map((target) => ({ ...target, complete: false }))
+      }))
+    })], undefined);
     expect(markup).toContain("mountain passes");
     expect(markup).toContain("peaks");
     expect(markup).toContain("Pass One");
@@ -295,7 +264,7 @@ describe("Quest suggestions and instances", () => {
       }))
     });
 
-    const markup = QuestList([], [active], undefined);
+    const markup = QuestList([active], undefined);
     expect(markup).toContain("Complete 1 of these 1 Flowlines");
     expect(markup).toContain("River Line — 15 km/h");
     expect(markup).toContain("Forest Line");

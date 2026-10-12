@@ -1,7 +1,6 @@
 import { escapeHtml } from "../collected-list.js";
 import { CollectibleSwatch } from "./collectible-swatch.js";
-
-export const INITIAL_VISIBLE_QUEST_SUGGESTIONS = 3;
+import { plannedRouteSummary } from "./exploration-panel.js";
 
 const categoryNames = {
   peak: "peaks",
@@ -52,21 +51,9 @@ const flowlineAverageSpeedLabel = (target) => {
   return `${Math.round(target.averageSpeedMps * 3.6)} km/h`;
 };
 
-const suggestionObjectiveStates = (suggestion) => suggestion.objectives.map((objective) => ({
-  objective,
-  progress: {
-    completed: 0,
-    required: objective.requiredCount,
-    complete: false
-  },
-  targetProgress: objective.targets.map((target) => ({ ...target, complete: false }))
-}));
-
-const objectiveGroup = (state, isSuggestion, isCompletedQuest) => {
+const objectiveGroup = (state, isCompletedQuest) => {
   const { objective, progress, targetProgress } = state;
-  const completedLabel = isSuggestion
-    ? `${progress.required} required · ${targetProgress.length} targets`
-    : `${progress.completed}/${progress.required} complete`;
+  const completedLabel = `${progress.completed}/${progress.required} complete`;
   return `
     <li class="quest-objective-group">
       <div class="quest-objective-group-head">
@@ -85,9 +72,9 @@ const objectiveGroup = (state, isSuggestion, isCompletedQuest) => {
               <span>${escapeHtml(target.name)}${objective.type === "flowline_rule" && target.complete
                 ? ` — ${escapeHtml(flowlineAverageSpeedLabel(target))}` : ""}</span>
             </span>
-            ${!isSuggestion && isCompletedQuest && !target.complete
+            ${isCompletedQuest && !target.complete
               ? ""
-              : `<small>${isSuggestion ? "Target" : target.complete ? "Complete" : "Not complete"}</small>`}
+              : `<small>${target.complete ? "Complete" : "Not complete"}</small>`}
           </li>
         `).join("")}
       </ul>
@@ -95,23 +82,14 @@ const objectiveGroup = (state, isSuggestion, isCompletedQuest) => {
   `;
 };
 
-const questCard = ({
-  key,
-  title,
-  description,
-  objectiveStates,
-  status,
-  selectedQuestKey,
-  pendingQuestId,
-  suggestionId,
-  instanceId,
-  alreadyStarted
-}) => {
-  const isSuggestion = suggestionId !== undefined;
+const InstanceCard = (instance, pendingQuestId, selectedQuestKey, plannedRoute) => {
+  const key = `instance:${instance.id}`;
+  const { title, description, status } = instance;
+  const objectiveStates = instance.objectives;
   const completed = objectiveStates.filter((item) => item.progress.complete).length;
   const ratio = objectiveStates.length ? completed / objectiveStates.length : 0;
   return `
-    <li class="${isSuggestion ? "quest-suggestion-card" : "quest-instance-card"} quest-card is-${status}${selectedQuestKey === key ? " is-map-selected" : ""}">
+    <li class="quest-instance-card quest-card is-${status}${selectedQuestKey === key ? " is-map-selected" : ""}">
       <article data-quest-card="${escapeHtml(key)}">
         <span class="quest-card-head">
           <button type="button" class="quest-card-select" data-quest-select="${escapeHtml(key)}"
@@ -119,84 +97,37 @@ const questCard = ({
             <strong data-user-content>${escapeHtml(title)}</strong>
             <span aria-hidden="true">⌖</span>
           </button>
-          ${isSuggestion
-            ? `<button type="button" data-quest-start="${escapeHtml(suggestionId)}"${alreadyStarted ? " disabled" : ""}>
-                ${alreadyStarted ? "Started" : "Start quest"}
-              </button>`
-            : status === "active" ? `
-              <button type="button" class="quest-instance-cancel" data-quest-cancel="${escapeHtml(instanceId)}"
-                aria-label="Cancel quest" title="Cancel quest"
-                ${pendingQuestId === instanceId ? "disabled" : ""}>\u2715</button>
-            ` : "<small>Complete</small>"}
+          ${status === "active" ? `
+            <button type="button" class="quest-instance-cancel" data-quest-cancel="${escapeHtml(instance.id)}"
+              aria-label="Cancel exploration" title="Cancel exploration"
+              ${pendingQuestId === instance.id ? "disabled" : ""}>\u2715</button>
+          ` : "<small>Complete</small>"}
         </span>
         <span class="quest-card-description" data-user-content>${escapeHtml(description)}</span>
+        ${plannedRoute ? `<span class="quest-card-route"><small>Planned route</small> ${escapeHtml(plannedRouteSummary(plannedRoute))}</span>` : ""}
         <ul class="quest-objective-groups">
-          ${objectiveStates.map((state) => objectiveGroup(state, isSuggestion, status === "completed")).join("")}
+          ${objectiveStates.map((state) => objectiveGroup(state, status === "completed")).join("")}
         </ul>
-        ${isSuggestion ? "" : `
-          <span class="quest-card-progress">
-            <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
-            <small>${completed} / ${objectiveStates.length} objectives</small>
-          </span>
-        `}
+        <span class="quest-card-progress">
+          <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
+          <small>${completed} / ${objectiveStates.length} objectives</small>
+        </span>
       </article>
     </li>
   `;
 };
 
-const SuggestionCard = (suggestion, started, selectedQuestKey) => questCard({
-  key: `suggestion:${suggestion.id}`,
-  title: suggestion.title,
-  description: suggestion.description,
-  objectiveStates: suggestionObjectiveStates(suggestion),
-  status: "suggested",
-  selectedQuestKey,
-  suggestionId: suggestion.id,
-  alreadyStarted: started
-});
-
-const InstanceCard = (instance, pendingQuestId, selectedQuestKey) => questCard({
-  key: `instance:${instance.id}`,
-  title: instance.title,
-  description: instance.description,
-  objectiveStates: instance.objectives,
-  status: instance.status,
-  selectedQuestKey,
-  pendingQuestId,
-  instanceId: instance.id
-});
-
-export const QuestList = (suggestions, instances, pendingQuestId, showAllSuggestions = false, selectedQuestKey) => {
-  const startedIds = new Set(instances.map((instance) => instance.suggestionId));
-  const visibleSuggestions = showAllSuggestions
-    ? suggestions
-    : suggestions.slice(0, INITIAL_VISIBLE_QUEST_SUGGESTIONS);
-  const hasHiddenSuggestions = suggestions.length > INITIAL_VISIBLE_QUEST_SUGGESTIONS;
-  return `
-    <section class="default-quest-list" aria-label="Suggested quests">
-      <h2>Local recommendations</h2>
-      <p class="quest-section-description">
-        Optional challenges for exploring places and completing Flowlines. Select a quest to see its targets on the map.
-      </p>
-      ${suggestions.length
-        ? `<ol id="quest-recommendations">${visibleSuggestions.map((suggestion) => SuggestionCard(
-          suggestion,
-          startedIds.has(suggestion.id) || pendingQuestId === suggestion.id,
-          selectedQuestKey
-        )).join("")}</ol>
-          ${hasHiddenSuggestions ? `
-            <button type="button" class="quest-suggestions-toggle" data-quest-suggestions-toggle
-              aria-controls="quest-recommendations" aria-expanded="${showAllSuggestions}">
-              ${showAllSuggestions ? "Show fewer" : `Show all ${suggestions.length} quests`}
-            </button>
-          ` : ""}`
-        : '<p class="default-quest-empty">No curated quests match this map area yet.</p>'}
-    </section>
-    <section class="quest-list" aria-label="Your running quests">
-      <h2>Your running Quests</h2>
-      ${instances.length
-        ? `<ol>${instances.map((instance) => InstanceCard(instance, pendingQuestId, selectedQuestKey)).join("")}</ol>`
-        : '<p class="default-quest-empty">Start a local recommendation to begin tracking a quest.</p>'}
-    </section>
-  `;
-};
+/** The player's started Explorations (and quests started before Explore this Area) with progress. */
+export const QuestList = (instances, pendingQuestId, selectedQuestKey, plannedRoutes = new Map()) => `
+  <section class="quest-list" aria-label="Your explorations">
+    <h2>Your Explorations</h2>
+    ${instances.length
+      ? `<ol>${instances.map((instance) => InstanceCard(
+        instance,
+        pendingQuestId,
+        selectedQuestKey,
+        plannedRoutes.get(instance.id)
+      )).join("")}</ol>`
+      : '<p class="default-quest-empty">Use Explore this Area on the map to pick targets, plan a route and start an exploration.</p>'}
+  </section>
+`;

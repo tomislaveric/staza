@@ -11,7 +11,6 @@ import { createCanonicalActivityProcessor } from "./activityProcessing.js";
 import { config } from "./config.js";
 import type { ActivityImportResult, ActivityVideo, Fartlek, HudTimeline, Job, MappedGameEvent, PersistedActivity, WorldFartlek } from "./domain.js";
 import { ActivityImportRejectedError, UserInputError } from "./errors.js";
-import { generateQuestSuggestions } from "./questTemplates.js";
 import { parseFitTrack, parseFitMetadata } from "./fit.js";
 import { extractGps5Times, mapToVideoSecond } from "./gpmf.js";
 import {
@@ -27,9 +26,7 @@ import { FartlekCompletionRepository } from "./persistence/fartlekCompletionRepo
 import {
   QuestInstanceRepository,
   QuestInstanceNotFoundError,
-  QuestInstanceStateError,
-  QuestTemplateUnavailableError,
-  readQuestTemplateRows
+  QuestInstanceStateError
 } from "./persistence/questInstanceRepository.js";
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
@@ -43,6 +40,10 @@ import { TokenCipher } from "./strava/tokenCipher.js";
 import { toWorldFartlek } from "./fartlek.js";
 import { createWorldSnapshot } from "./world.js";
 import { getBasemapConfig, getBasemapOrigins } from "./basemap.js";
+import { ProposalStore } from "./routePlanning/proposalStore.js";
+import { RoutingClient } from "./routePlanning/routingClient.js";
+import { ExplorationSessionStore } from "./exploration/sessionStore.js";
+import { ExplorationError, ExplorationService } from "./exploration/service.js";
 import { AuthService, EmailSender, type SessionUser } from "./auth.js";
 import { translateLandingTemplate } from "./landing/locales.js";
 
@@ -63,9 +64,6 @@ const collectibleRepository = new CollectibleRepository(databasePool);
 const fartlekRepository = new FartlekRepository(databasePool);
 const fartlekCompletionRepository = new FartlekCompletionRepository(databasePool);
 const questInstanceRepository = new QuestInstanceRepository(databasePool);
-await questInstanceRepository.replaceTemplates(
-  await readQuestTemplateRows(path.resolve("fixtures/quest-templates.json"))
-);
 const smtpConfig = config.smtpHost && config.smtpUser && config.smtpPassword && config.mailFrom
   ? {
       host: config.smtpHost,
@@ -878,7 +876,7 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
       const stats = await collectibleRepository.worldStats(discoveredSourceIds);
-      response.json({ collectibles: [], stats, questSuggestions: [], truncated: false, fartleks: [] });
+      response.json({ collectibles: [], stats, truncated: false, fartleks: [] });
       return;
     }
     const [viewport, fartlekCandidates] = await Promise.all([
@@ -887,16 +885,8 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     ]);
     const fartleks = await worldFartleksForPlayer(playerId, fartlekCandidates);
     const world = createWorldSnapshot(viewport.collectibles, discoveredSourceIds);
-    const questSuggestions = request.query.includeQuestSuggestions === "false"
-      ? []
-      : generateQuestSuggestions({
-          templates: await questInstanceRepository.listActiveTemplates(),
-          collectibles: world.collectibles,
-          flowlines: fartleks
-        });
     response.json({
       ...world,
-      questSuggestions,
       truncated: viewport.truncated,
       fartleks
     });
@@ -948,42 +938,97 @@ app.get("/api/quest-instances", requirePlayer, async (request: UploadRequest, re
   }
 });
 
-app.post("/api/quest-instances/start", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const suggestionId = request.body?.suggestionId;
-    if (typeof suggestionId !== "string" || !/^[a-f0-9]{32}$/.test(suggestionId)) {
-      throw new UserInputError("A valid quest suggestion is required.");
-    }
-    const bounds = parseBoundsParameter(request.body?.bbox);
-    if (!bounds) throw new UserInputError("A map bounding box is required to start a local quest.");
-
-    const [viewport, flowlineCandidates] = await Promise.all([
+const explorationService = new ExplorationService({
+  loadArea: async (playerId, bounds) => {
+    const [viewport, flowlineCandidates, discoveredSourceIds] = await Promise.all([
       collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      fartlekRepository.listWithinBounds(bounds)
+      fartlekRepository.listWithinBounds(bounds),
+      activityRepository.listDiscoveredCollectibleSourceIds(playerId)
     ]);
-    const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(request.user!.playerId);
-    const world = createWorldSnapshot(viewport.collectibles, discoveredSourceIds);
-    const flowlines = await worldFartleksForPlayer(request.user!.playerId, flowlineCandidates);
-    const candidates = generateQuestSuggestions({
-      templates: await questInstanceRepository.listActiveTemplates(),
-      collectibles: world.collectibles,
-      flowlines
-    });
-    const suggestion = candidates.find((candidate) => candidate.id === suggestionId);
-    if (!suggestion) {
-      response.status(409).json({ error: "This suggestion is no longer available in the selected map area." });
-      return;
-    }
-    const instanceId = await questInstanceRepository.start(request.user!.playerId, suggestion);
-    const instance = (await questInstanceRepository.listForPlayer(request.user!.playerId))
-      .find((item) => item.id === instanceId);
-    if (!instance) throw new Error("Started quest instance could not be loaded.");
-    response.json(instance);
+    return {
+      collectibles: createWorldSnapshot(viewport.collectibles, discoveredSourceIds).collectibles,
+      flowlines: await worldFartleksForPlayer(playerId, flowlineCandidates),
+      truncated: viewport.truncated
+    };
+  },
+  ...(config.routingServiceUrl
+    ? { routing: new RoutingClient({ baseUrl: config.routingServiceUrl, timeoutMs: config.routingServiceTimeoutMs }) }
+    : {}),
+  sessions: new ExplorationSessionStore(),
+  proposals: new ProposalStore(),
+  explorations: questInstanceRepository
+});
+
+const routePlanningLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (request) => (request as UploadRequest).user?.playerId ?? "anonymous",
+  handler: (_request, response) => {
+    response.status(429).json({ error: "Too many route plans. Wait a minute and try again.", code: "rate_limited" });
+  }
+});
+
+/** Customizing re-routes on every add/remove, so edits get a separate, larger budget. */
+const routeEditLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 40,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (request) => (request as UploadRequest).user?.playerId ?? "anonymous",
+  handler: (_request, response) => {
+    response.status(429).json({ error: "Too many route changes. Wait a minute and try again.", code: "rate_limited" });
+  }
+});
+
+const loadQuestInstance = async (playerId: string, instanceId: string) => {
+  const instance = (await questInstanceRepository.listForPlayer(playerId)).find((item) => item.id === instanceId);
+  if (!instance) throw new Error("Started exploration could not be loaded.");
+  return instance;
+};
+
+app.post("/api/explorations/generate", requirePlayer, requireCsrf, routePlanningLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    response.json(await explorationService.generate(request.user!.playerId, request.body));
   } catch (error) {
-    if (error instanceof QuestTemplateUnavailableError) {
-      response.status(409).json({ error: error.message });
+    next(error);
+  }
+});
+
+app.post("/api/explorations/:explorationId/reroute", requirePlayer, requireCsrf, routeEditLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    response.json(await explorationService.reroute(request.user!.playerId, request.params.explorationId, request.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/explorations/confirm", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  try {
+    const playerId = request.user!.playerId;
+    const instanceId = await explorationService.confirm(playerId, request.body);
+    const [instance, plannedRoute] = await Promise.all([
+      loadQuestInstance(playerId, instanceId),
+      questInstanceRepository.getPlannedRoute(playerId, instanceId)
+    ]);
+    response.json({ instance, plannedRoute });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/quest-instances/:instanceId/planned-route", requirePlayer, async (request: UploadRequest, response, next) => {
+  try {
+    const instanceId = String(request.params.instanceId);
+    const validId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(instanceId);
+    const plannedRoute = validId ? await questInstanceRepository.getPlannedRoute(request.user!.playerId, instanceId) : undefined;
+    if (!plannedRoute) {
+      response.status(404).json({ error: "This quest has no planned route." });
       return;
     }
+    response.json(plannedRoute);
+  } catch (error) {
     next(error);
   }
 });
@@ -1221,6 +1266,11 @@ app.use((error: Error, request: UploadRequest, response: Response, _next: NextFu
   }
   if (error instanceof ActivityImportRejectedError) {
     response.status(409).json({ error: error.message, code: error.code, ...error.details });
+    return;
+  }
+  if (error instanceof ExplorationError) {
+    if (error.status >= 500) console.error("Exploration planning failed:", error.code);
+    response.status(error.status).json({ error: error.message, code: error.code });
     return;
   }
   console.error("Request failed:", error);

@@ -612,6 +612,44 @@ export const migrations: Migration[] = [{
       );
     `);
   }
+}, {
+  id: "027_planned_routes",
+  async up(client) {
+    await client.query(`
+      CREATE TABLE planned_routes (
+        id UUID PRIMARY KEY,
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        quest_instance_id UUID NOT NULL UNIQUE REFERENCES quest_instances(id) ON DELETE CASCADE,
+        proposal_id UUID NOT NULL,
+        profile TEXT NOT NULL,
+        route_type TEXT NOT NULL CHECK (route_type IN ('round_trip', 'point_to_point')),
+        start_lat DOUBLE PRECISION NOT NULL,
+        start_lon DOUBLE PRECISION NOT NULL,
+        end_lat DOUBLE PRECISION NOT NULL,
+        end_lon DOUBLE PRECISION NOT NULL,
+        distance_m DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
+        duration_s DOUBLE PRECISION NOT NULL CHECK (duration_s >= 0),
+        elevation_gain_m DOUBLE PRECISION,
+        elevation_loss_m DOUBLE PRECISION,
+        geometry JSONB NOT NULL,
+        included_target_ids JSONB NOT NULL,
+        planner_version INTEGER NOT NULL CHECK (planner_version > 0),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX planned_routes_player_idx ON planned_routes (player_id);
+    `);
+  }
+}, {
+  id: "028_exploration_instances",
+  async up(client) {
+    // Player-created explorations reference one inactive template row so the existing foreign
+    // key and historical template rows stay valid; scope_hash holds the confirmed proposal id.
+    await client.query(`
+      INSERT INTO quest_templates (id, version, title, description, recommended_level, objectives, onboarding, active)
+      VALUES ('exploration', 1, 'Exploration', 'A player-created exploration of a map area.', 1, '[]'::jsonb, false, false)
+      ON CONFLICT (id, version) DO NOTHING;
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

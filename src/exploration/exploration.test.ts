@@ -1,0 +1,254 @@
+import { describe, expect, it } from "vitest";
+import type { NewPlannedRoute, WorldCollectible, WorldFartlek } from "../domain.js";
+import { UserInputError } from "../errors.js";
+import type { RouteProvider } from "../routePlanning/planner.js";
+import { PLANNING_LIMITS } from "../routePlanning/policy.js";
+import { ProposalStore } from "../routePlanning/proposalStore.js";
+import { buildExplorationTargets, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
+import { at, pointTarget, segmentTarget, straightLineRoute } from "../routePlanning/testFixtures.js";
+import { describeExploration, explorationObjectives } from "./objectives.js";
+import { parseGenerateRequest, parseRerouteRequest } from "./request.js";
+import { ExplorationService, type NewExploration } from "./service.js";
+import { ExplorationSessionStore } from "./sessionStore.js";
+import type { ExplorationAreaContext } from "./types.js";
+
+const area: ExplorationAreaContext = {
+  bounds: { minLatitude: at(-10, 0).lat, maxLatitude: at(10, 0).lat, minLongitude: at(0, -10).lon, maxLongitude: at(0, 10).lon },
+  center: at(0, 0),
+  zoom: 11
+};
+const roundTripInput = { start: at(0, 0), end: at(0, 0), routeType: "round_trip" as const, constraint: { type: "distance" as const, meters: 40_000 } };
+const bbox = `${area.bounds.minLongitude},${area.bounds.minLatitude},${area.bounds.maxLongitude},${area.bounds.maxLatitude}`;
+
+const collectible = (id: string, northKm: number, eastKm: number, overrides: Partial<WorldCollectible> = {}): WorldCollectible => {
+  const point = at(northKm, eastKm);
+  return {
+    id,
+    name: id,
+    type: "landmark",
+    latitude: point.lat,
+    longitude: point.lon,
+    radiusMeters: 100,
+    value: 10,
+    primaryCategory: "place",
+    found: false,
+    visibility: "visible",
+    ...overrides
+  };
+};
+
+const flowline = (id: string, from: [number, number], to: [number, number], overrides: Partial<WorldFartlek> = {}): WorldFartlek => {
+  const target = segmentTarget(id, "x", from, to);
+  if (target.kind !== "segment") throw new Error("unreachable");
+  return {
+    id,
+    name: id,
+    geometry: { type: "LineString", coordinates: target.coordinates },
+    lengthMeters: target.lengthMeters,
+    status: "published",
+    source: { sourceType: "test", sourceExternalId: id },
+    completed: false,
+    completionCount: 0,
+    ...overrides
+  } as WorldFartlek;
+};
+
+describe("buildExplorationTargets", () => {
+  it("keeps published, visible, categorized collectibles and valid Flowlines", () => {
+    const { targets, truncated } = buildExplorationTargets([
+      collectible("ok", 1, 1, { found: true }),
+      collectible("hidden", 1, 1, { visibility: "hidden" }),
+      collectible("draft", 1, 1, { status: "archived" }),
+      collectible("coin", 1, 1, { primaryCategory: undefined })
+    ], [
+      flowline("flow", [1, 0], [2, 0], { completed: true }),
+      flowline("unpublished", [1, 0], [2, 0], { status: "archived" })
+    ]);
+    expect(truncated).toBe(false);
+    expect(targets.map((target) => [target.id, target.alreadyAchieved])).toEqual([["flow", true], ["ok", true]]);
+  });
+
+  it("caps very dense areas and reports truncation", () => {
+    const many = Array.from({ length: MAX_AVAILABLE_TARGETS + 5 }, (_value, index) => collectible(`c${index}`, 0, 0));
+    const result = buildExplorationTargets(many, []);
+    expect(result.truncated).toBe(true);
+    expect(result.targets).toHaveLength(MAX_AVAILABLE_TARGETS);
+  });
+});
+
+describe("exploration objectives", () => {
+  it("requires every target, grouped by Flowlines and collectible category", () => {
+    const targets = [
+      segmentTarget("f1", "", [1, 0], [2, 0]),
+      pointTarget("p1", "", 1, 1, { category: "peak" }),
+      pointTarget("c1", "", 2, 1),
+      pointTarget("c2", "", 2, 2)
+    ];
+    expect(explorationObjectives(targets)).toEqual([
+      { id: "flowlines", type: "flowline_rule", requiredCount: 1, targets: [{ id: "f1", name: "f1" }] },
+      { id: "collectibles-peak", type: "collectible_targets", requiredCount: 1, category: "peak", targets: [{ id: "p1", name: "p1" }] },
+      { id: "collectibles-place", type: "collectible_targets", requiredCount: 2, category: "place", targets: [{ id: "c1", name: "c1" }, { id: "c2", name: "c2" }] }
+    ]);
+    expect(describeExploration(targets)).toEqual({ title: "Exploration: f1, p1 +2", description: "Visit 1 Flowline, 1 Peak, 2 Places." });
+  });
+});
+
+describe("ExplorationSessionStore", () => {
+  const session = (playerId: string) => ({
+    playerId, area, input: roundTripInput, availableTargets: [], collectibles: [], flowlines: [], truncated: false
+  });
+
+  it("keeps one session per player, scopes access and expires idle sessions", () => {
+    let now = 0;
+    const store = new ExplorationSessionStore(() => now, 1_000, 100);
+    const first = store.create(session("p1"));
+    expect(store.get("p2", first.id)).toBeUndefined();
+    const second = store.create(session("p1"));
+    expect(store.get("p1", first.id)).toBeUndefined();
+    now = 999;
+    expect(store.get("p1", second.id)).toBeDefined();
+    now = 1_998;
+    expect(store.get("p1", second.id)).toBeDefined();
+    now = 2_998;
+    expect(store.get("p1", second.id)).toBeUndefined();
+    expect(store.size).toBe(0);
+  });
+});
+
+describe("exploration requests", () => {
+  const ride = { start: at(0, 0), routeType: "round_trip", constraint: { type: "distance", value: 40_000 } };
+
+  it("freezes the area with the ride and never accepts targets", () => {
+    const parsed = parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 }, ...ride, targetIds: ["x"] });
+    expect(parsed.area.bounds).toEqual(area.bounds);
+    expect(parsed.input.constraint).toEqual({ type: "distance", meters: 40_000 });
+    expect(parsed).not.toHaveProperty("targetIds");
+    expect(() => parseGenerateRequest({ area: { bbox: "0,0,5,5", center: area.center, zoom: 5 }, ...ride })).toThrow(UserInputError);
+    expect(() => parseGenerateRequest({ area: { bbox, center: area.center }, ...ride })).toThrow(UserInputError);
+    expect(() => parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 }, start: at(0, 0) })).toThrow(UserInputError);
+  });
+
+  it("accepts a bounded, de-duplicated target list for rerouting", () => {
+    const proposalId = "0b8f1c1e-3c3a-4c1e-9f5e-1c2d3e4f5a6b";
+    expect(parseRerouteRequest({ proposalId, targetIds: ["a", "b", "a"] })).toEqual({ proposalId, targetIds: ["a", "b"] });
+    expect(() => parseRerouteRequest({ proposalId, targetIds: [] })).toThrow(UserInputError);
+    expect(() => parseRerouteRequest({ proposalId, targetIds: [1] })).toThrow(UserInputError);
+    expect(() => parseRerouteRequest({ proposalId: "nope", targetIds: ["a"] })).toThrow(UserInputError);
+    const tooMany = Array.from({ length: PLANNING_LIMITS.maxRouteTargets + 1 }, (_value, index) => `t${index}`);
+    expect(() => parseRerouteRequest({ proposalId, targetIds: tooMany })).toThrow(UserInputError);
+  });
+});
+
+describe("ExplorationService", () => {
+  const worldCollectibles = [
+    collectible("c-near", 1, 1),
+    collectible("c-mid", -2, 2, { primaryCategory: "peak" }),
+    collectible("c-east", 0, 4),
+    collectible("c-far", 9, 9)
+  ];
+  const worldFlowlines = [flowline("f-near", [2, 0], [3, 0]), flowline("f-west", [0, -2], [0, -4])];
+
+  const setup = (options: { routing?: RouteProvider | null; collectibles?: WorldCollectible[] } = {}) => {
+    const created: Array<{ playerId: string; exploration: NewExploration; route: NewPlannedRoute }> = [];
+    const routeCalls: unknown[] = [];
+    const routing = options.routing === null
+      ? undefined
+      : options.routing ?? { route: async (request) => { routeCalls.push(request); return straightLineRoute(request); } };
+    const service = new ExplorationService({
+      loadArea: async () => ({
+        collectibles: options.collectibles ?? worldCollectibles,
+        flowlines: options.collectibles ? [] : worldFlowlines,
+        truncated: false
+      }),
+      ...(routing ? { routing } : {}),
+      sessions: new ExplorationSessionStore(),
+      proposals: new ProposalStore(),
+      explorations: {
+        createExploration: async (playerId, exploration, route) => {
+          const existing = created.find((entry) => entry.exploration.proposalId === exploration.proposalId);
+          if (existing) return `instance-${existing.exploration.proposalId}`;
+          created.push({ playerId, exploration, route });
+          return `instance-${exploration.proposalId}`;
+        }
+      },
+      log: () => undefined
+    });
+    return { service, created, routeCalls };
+  };
+  const generateBody = {
+    area: { bbox, center: area.center, zoom: 11 },
+    start: at(0, 0),
+    routeType: "round_trip",
+    constraint: { type: "distance", value: 30_000 }
+  };
+  const contents = (proposal: { includedTargetIds: string[]; nearbyTargetIds: string[] }) =>
+    [...proposal.includedTargetIds, ...proposal.nearbyTargetIds];
+
+  it("generates route proposals from the ride alone, with the area catalog and no persistence", async () => {
+    const { service, created } = setup();
+    const result = await service.generate("p1", generateBody);
+    expect(result.proposals.length).toBeGreaterThan(0);
+    expect(result.proposals.filter((proposal) => proposal.recommended)).toHaveLength(1);
+    expect(result.proposals[0]).not.toHaveProperty("score");
+    expect(result.proposals[0]).not.toHaveProperty("stops");
+    expect(result.catalog.collectibles.map((item) => item.id)).toEqual(["c-near", "c-mid", "c-east", "c-far"]);
+    expect(result.catalog.flowlines.map((item) => item.id)).toEqual(["f-near", "f-west"]);
+    expect(result.limits.maxRouteTargets).toBe(PLANNING_LIMITS.maxRouteTargets);
+    const catalogIds = new Set(["c-near", "c-mid", "c-east", "c-far", "f-near", "f-west"]);
+    for (const proposal of result.proposals) expect(contents(proposal).every((id) => catalogIds.has(id))).toBe(true);
+    expect(created).toHaveLength(0);
+  });
+
+  it("reports empty areas and missing routing with stable codes", async () => {
+    await expect(setup({ collectibles: [collectible("hidden", 1, 1, { visibility: "hidden" })] }).service.generate("p1", generateBody))
+      .rejects.toMatchObject({ code: "no_targets" });
+    await expect(setup({ routing: null }).service.generate("p1", generateBody)).rejects.toMatchObject({ code: "planning_unavailable" });
+  });
+
+  it("reroutes one proposal for an edited target set without touching the others", async () => {
+    const { service } = setup();
+    const { explorationId, proposals } = await service.generate("p1", generateBody);
+    const base = proposals.find((proposal) => proposal.recommended)!;
+    const removed = contents(base)[0];
+    const added = ["c-near", "c-mid", "c-east", "c-far", "f-near", "f-west"].find((id) => !contents(base).includes(id))!;
+    const edited = [...contents(base).filter((id) => id !== removed), added];
+    const { proposal } = await service.reroute("p1", explorationId, { proposalId: base.id, targetIds: edited });
+    expect(proposal).toMatchObject({ customized: true, basedOn: base.id, label: base.label });
+    expect(proposal.id).not.toBe(base.id);
+    expect(new Set(contents(proposal))).toEqual(new Set(edited));
+    expect(contents(proposal)).not.toContain(removed);
+    for (const other of proposals) {
+      expect(await service.confirm("p1", { proposalId: other.id })).toBe(`instance-${other.id}`);
+    }
+  });
+
+  it("rejects targets outside the frozen area and foreign or expired proposals", async () => {
+    const { service } = setup();
+    const { explorationId, proposals } = await service.generate("p1", generateBody);
+    const base = proposals[0];
+    await expect(service.reroute("p1", explorationId, { proposalId: base.id, targetIds: ["elsewhere"] })).rejects.toBeInstanceOf(UserInputError);
+    await expect(service.reroute("p2", explorationId, { proposalId: base.id, targetIds: ["c-near"] }))
+      .rejects.toMatchObject({ code: "exploration_expired" });
+    const next = await service.generate("p1", generateBody);
+    await expect(service.reroute("p1", explorationId, { proposalId: base.id, targetIds: ["c-near"] }))
+      .rejects.toMatchObject({ code: "exploration_expired" });
+    await expect(service.reroute("p1", next.explorationId, { proposalId: base.id, targetIds: ["c-near"] }))
+      .rejects.toMatchObject({ code: "proposal_expired" });
+    await expect(service.confirm("p1", { proposalId: base.id })).rejects.toMatchObject({ code: "proposal_expired" });
+  });
+
+  it("confirms one exploration with objectives derived from the route contents, idempotently", async () => {
+    const { service, created } = setup();
+    const { explorationId, proposals } = await service.generate("p1", generateBody);
+    const { proposal } = await service.reroute("p1", explorationId, { proposalId: proposals[0].id, targetIds: ["c-near", "f-near"] });
+
+    await expect(service.confirm("p2", { proposalId: proposal.id })).rejects.toMatchObject({ code: "proposal_expired" });
+    const instanceId = await service.confirm("p1", { proposalId: proposal.id });
+    expect(await service.confirm("p1", { proposalId: proposal.id })).toBe(instanceId);
+    expect(created).toHaveLength(1);
+    expect(created[0].exploration.proposalId).toBe(proposal.id);
+    expect(created[0].exploration.objectives.map((objective) => objective.id)).toEqual(["flowlines", "collectibles-place"]);
+    expect(created[0].exploration.objectives.every((objective) => objective.requiredCount === objective.targets.length)).toBe(true);
+    expect(created[0].route).toMatchObject({ proposalId: proposal.id, geometry: proposal.geometry, includedTargetIds: proposal.includedTargetIds });
+  });
+});

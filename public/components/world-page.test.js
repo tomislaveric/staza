@@ -213,15 +213,16 @@ describe("World filter controls", () => {
     expect(css).not.toContain(".world-legend");
   });
 
-  it("keeps quest cards equal-height and makes Start a quieter action", () => {
+  it("keeps exploration cards equal-height and styles the Explore this Area entry point", () => {
     const css = readFileSync(new URL("../styles/world.css", import.meta.url), "utf8");
     expect(css).toContain("grid-auto-rows: 1fr;");
     expect(css).toContain("height: 100%;");
-    expect(css).toMatch(/\.quest-suggestion-card button\[data-quest-start\]\s*\{[^}]*background:\s*transparent/s);
+    expect(css).not.toContain("quest-suggestion");
+    expect(css).toContain(".world-explore:focus-visible");
+    expect(css).toMatch(/\.world-explore\s*\{[^}]*bottom:\s*16px;[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*transform:\s*translateX\(-50%\)/s);
     expect(css).toContain(".quest-card-select:focus-visible");
-    expect(css).toContain(".quest-suggestions-toggle:focus-visible");
     expect(css).toMatch(/\.quest-objective-groups\s*\{[^}]*display:\s*grid/s);
-    expect(css).toMatch(/\.quest-suggestion-card article, \.quest-instance-card article\s*\{[^}]*gap:\s*6px;[^}]*min-height:\s*0;[^}]*padding:\s*12px/s);
+    expect(css).toMatch(/\.quest-instance-card article\s*\{[^}]*gap:\s*6px;[^}]*min-height:\s*0;[^}]*padding:\s*12px/s);
     expect(css).toMatch(/\.quest-card-head\s*\{[^}]*align-items:\s*center/s);
     expect(css).toMatch(/\.quest-instance-cancel\s*\{[^}]*height:\s*32px;[^}]*width:\s*32px/s);
   });
@@ -233,7 +234,55 @@ describe("mounted World page interactions", () => {
     vi.unstubAllGlobals();
   });
 
-  const mount = async (suggestionCount = 1, withRemoteQuest = false) => {
+  const flowlineObjective = { id: "flowlines", type: "flowline_rule", requiredCount: 1, targets: [{ id: "fartlek-1", name: "Harbour Straight" }] };
+  const collectibleObjective = { id: "collectibles-viewpoint", type: "collectible_targets", requiredCount: 1, category: "viewpoint", targets: [{ id: "common-found", name: "Common" }] };
+  const activeInstance = {
+    id: "instance-1",
+    suggestionId: "proposal-full",
+    templateId: "exploration",
+    templateVersion: 1,
+    title: "Exploration: Harbour Straight & Common",
+    description: "Visit 1 Flowline, 1 Viewpoint.",
+    recommendedLevel: 1,
+    status: "active",
+    startedAt: "2026-04-01T10:00:00.000Z",
+    objectives: [flowlineObjective, collectibleObjective].map((objective) => ({
+      objective,
+      progress: { completed: 0, required: 1, complete: false },
+      targetProgress: objective.targets.map((target) => ({ ...target, complete: false }))
+    }))
+  };
+  const remoteCollectible = { ...collectibles[0], id: "remote-place", name: "Remote Place", latitude: 55, longitude: 12 };
+  const remoteFlowline = {
+    ...fartleks[0], id: "remote-flowline", name: "Remote Flowline",
+    geometry: { type: "LineString", coordinates: [[12, 55], [12.2, 55.2]] }
+  };
+  const remoteInstance = {
+    ...activeInstance,
+    id: "instance-remote",
+    objectives: [
+      { ...activeInstance.objectives[0], objective: { ...flowlineObjective, targets: [{ id: remoteFlowline.id, name: remoteFlowline.name }] } },
+      { ...activeInstance.objectives[1], objective: { ...collectibleObjective, targets: [{ id: remoteCollectible.id, name: remoteCollectible.name }] } }
+    ]
+  };
+  const routeGeometry = { type: "LineString", coordinates: [[9, 50], [9.1, 50.1], [9, 50]] };
+  const quickGeometry = { type: "LineString", coordinates: [[9, 50], [9.05, 50.02], [9, 50]] };
+  const customGeometry = { type: "LineString", coordinates: [[9, 50], [9.2, 50.2], [9, 50]] };
+  const routeProposal = (id, label, includedTargetIds = ["fartlek-1", "common-found"], overrides = {}) => ({
+    id, label, distanceM: 42_000, durationS: 6_000, geometry: routeGeometry,
+    routeType: "round_trip", start: { lat: 50, lon: 9 }, end: { lat: 50, lon: 9 },
+    includedTargetIds, nearbyTargetIds: [], recommended: false, constraintFit: "within",
+    targetSummary: { flowlines: 1, peaks: 0, places: 1, other: 0 },
+    ...overrides
+  });
+  const plannedRoute = {
+    id: "route-1", questInstanceId: "instance-1", proposalId: "proposal-full", profile: "road_bike",
+    routeType: "round_trip", start: { lat: 50, lon: 9 }, end: { lat: 50, lon: 9 },
+    distanceM: 42_000, durationS: 6_000, geometry: routeGeometry, includedTargetIds: ["fartlek-1"],
+    plannerVersion: 2, createdAt: "2026-04-01T10:00:00.000Z"
+  };
+
+  const mount = async ({ instances = [], generateError, rerouteError } = {}) => {
     const element = () => ({
       innerHTML: "",
       hidden: false,
@@ -250,115 +299,41 @@ describe("mounted World page interactions", () => {
       filter, { ...element(), dataset: { worldFilter: filter } }
     ]));
     const hosts = Object.fromEntries([
-      "map", "status", "stats", "quests", "detail", "collectible-list", "locate"
+      "map", "status", "stats", "quests", "detail", "collectible-list", "locate", "explore"
     ].map((name) => [`[data-world-${name}]`, element()]));
-    const questButton = { ...element(), dataset: { questStart: "suggestion-1" }, disabled: false };
-    const questCancelButton = {
-      ...element(),
-      dataset: { questCancel: "instance-1" },
-      disabled: false
-    };
-    const questSelectButton = {
-      ...element(),
-      dataset: { questSelect: "suggestion:suggestion-1" }
-    };
-    const remoteQuestSelectButton = {
-      ...element(),
-      dataset: { questSelect: "instance:instance-remote" }
-    };
-    const questSuggestionsToggle = element();
+    const questCancelButton = { ...element(), dataset: { questCancel: "instance-1" } };
+    const questSelectButton = { ...element(), dataset: { questSelect: "instance:instance-1" } };
+    const remoteQuestSelectButton = { ...element(), dataset: { questSelect: "instance:instance-remote" } };
     const detail = hosts["[data-world-detail]"];
+    /** Dataset values the fake panel controls report when "clicked". */
+    detail.datasets = {
+      "[data-exploration-proposal]": { explorationProposal: "proposal-quick" },
+      "[data-exploration-remove]": { explorationRemove: "common-found" },
+      "[data-exploration-pick]": { explorationPick: "start" }
+    };
+    detail.bound = {};
+    detail.querySelectorAll = (selector) => {
+      if (!selector.startsWith("[data-exploration-")) return [];
+      const marker = selector.slice(1, -1);
+      if (!detail.innerHTML.includes(marker)) return [];
+      return [{
+        dataset: detail.datasets[selector] ?? {},
+        value: "",
+        addEventListener(event, handler) { detail.bound[`${selector}:${event}`] = handler; }
+      }];
+    };
     const questHost = hosts["[data-world-quests]"];
-    questHost.querySelector = (selector) => selector === "[data-quest-suggestions-toggle]"
-      && questHost.innerHTML.includes("data-quest-suggestions-toggle") ? questSuggestionsToggle : undefined;
-    questHost.querySelectorAll = (selector) => selector === "[data-quest-start]"
-      ? [questButton]
-      : selector === "[data-quest-cancel]" ? [questCancelButton]
-        : selector === "[data-quest-select]" ? [questSelectButton, remoteQuestSelectButton] : [];
+    questHost.querySelectorAll = (selector) => selector === "[data-quest-cancel]" ? [questCancelButton]
+      : selector === "[data-quest-select]" ? [questSelectButton, remoteQuestSelectButton] : [];
     const mountPoint = {
       innerHTML: "",
       querySelector: (selector) => hosts[selector],
       querySelectorAll: () => Object.values(buttons)
     };
     const stats = { totalCollectibles: 3, discoveredCount: 2, rareFinds: 0, epicFinds: 1, remainingCount: 1 };
-    const firstSuggestion = {
-      id: "suggestion-1",
-      templateId: "first-steps",
-      templateVersion: 1,
-      title: "First Steps",
-      description: "Complete a Flowline and discover a collectible.",
-      recommendedLevel: 1,
-      objectives: [
-        { id: "flowline", type: "flowline_rule", requiredCount: 1, targets: [{ id: "fartlek-1", name: "Harbour Straight" }] },
-        { id: "collectible", type: "collectible_targets", requiredCount: 1, targets: [{ id: "common-found", name: "Common" }] }
-      ]
-    };
-    const questSuggestions = Array.from({ length: suggestionCount }, (_value, index) => ({
-      ...firstSuggestion,
-      id: `suggestion-${index + 1}`,
-      title: `First Steps ${index + 1}`
-    }));
-    let viewportSnapshot = { collectibles, fartleks, questSuggestions, stats, truncated: false };
-    let activeInstances = [];
-    const activeInstance = {
-      id: "instance-1",
-      suggestionId: "suggestion-1",
-      templateId: "first-steps",
-      templateVersion: 1,
-      title: "First Steps",
-      description: "Complete a Flowline and discover a collectible.",
-      recommendedLevel: 1,
-      status: "active",
-      startedAt: "2026-04-01T10:00:00.000Z",
-      objectives: [
-        {
-          objective: questSuggestions[0].objectives[0],
-          progress: { completed: 0, required: 1, complete: false },
-          targetProgress: questSuggestions[0].objectives[0].targets.map((target) => ({ ...target, complete: false }))
-        },
-        {
-          objective: questSuggestions[0].objectives[1],
-          progress: { completed: 0, required: 1, complete: false },
-          targetProgress: questSuggestions[0].objectives[1].targets.map((target) => ({ ...target, complete: false }))
-        }
-      ]
-    };
-    const remoteCollectible = {
-      ...collectibles[0],
-      id: "remote-place",
-      name: "Remote Place",
-      latitude: 55,
-      longitude: 12
-    };
-    const remoteFlowline = {
-      ...fartleks[0],
-      id: "remote-flowline",
-      name: "Remote Flowline",
-      geometry: { type: "LineString", coordinates: [[12, 55], [12.2, 55.2]] }
-    };
-    const remoteInstance = {
-      ...activeInstance,
-      id: "instance-remote",
-      objectives: [
-        {
-          objective: {
-            ...questSuggestions[0].objectives[0],
-            targets: [{ id: remoteFlowline.id, name: remoteFlowline.name }]
-          },
-          progress: { completed: 0, required: 1, complete: false },
-          targetProgress: [{ id: remoteFlowline.id, name: remoteFlowline.name, complete: false }]
-        },
-        {
-          objective: {
-            ...questSuggestions[0].objectives[1],
-            targets: [{ id: remoteCollectible.id, name: remoteCollectible.name }]
-          },
-          progress: { completed: 0, required: 1, complete: false },
-          targetProgress: [{ id: remoteCollectible.id, name: remoteCollectible.name, complete: false }]
-        }
-      ]
-    };
-    if (withRemoteQuest) activeInstances = [remoteInstance];
+    let viewportSnapshot = { collectibles, fartleks, stats, truncated: false };
+    let activeInstances = instances;
+    let customized = 0;
     const fetchMock = vi.fn(async (url, options) => {
       let body;
       if (url === "/api/world/basemap") body = { styleUrl: "/style.json" };
@@ -369,52 +344,98 @@ describe("mounted World page interactions", () => {
           : { collectibles: [collectibles[0]], flowlines: [fartleks[0]] };
       }
       else if (url === "/api/quest-instances") body = { instances: activeInstances };
-      else if (url === "/api/quest-instances/start" && options?.method === "POST") {
+      else if (url === "/api/explorations/generate" && options?.method === "POST") {
+        if (generateError) return { ok: false, status: 422, json: async () => generateError };
+        body = {
+          explorationId: "exp-1",
+          proposals: [
+            routeProposal("proposal-quick", "quick", ["common-found"], { geometry: quickGeometry }),
+            routeProposal("proposal-balanced", "balanced", ["fartlek-1", "common-found"], { recommended: true })
+          ],
+          catalog: { collectibles: [collectibles[0], collectibles[1]], flowlines: [fartleks[0]] },
+          truncated: false,
+          limits: { maxRouteTargets: 12 }
+        };
+      }
+      else if (url === "/api/explorations/exp-1/reroute" && options?.method === "POST") {
+        if (rerouteError) return { ok: false, status: rerouteError.status ?? 422, json: async () => rerouteError };
+        const request = JSON.parse(options.body);
+        customized += 1;
+        body = {
+          proposal: routeProposal(`proposal-custom-${customized}`, "balanced", request.targetIds, {
+            recommended: true, customized: true, basedOn: request.proposalId, geometry: customGeometry, constraintFit: "long"
+          })
+        };
+      }
+      else if (url === "/api/explorations/confirm" && options?.method === "POST") {
         activeInstances = [activeInstance];
-        body = activeInstance;
+        body = { instance: activeInstance, plannedRoute };
+      }
+      else if (url.endsWith("/planned-route")) {
+        if (!url.includes("/instance-1/")) return { ok: false, status: 404, json: async () => ({ error: "No planned route." }) };
+        body = plannedRoute;
       }
       else if (url === "/api/quest-instances/instance-1" && options?.method === "DELETE") {
         activeInstances = [];
       }
-      else if (url.startsWith("/api/world?bbox=")) body = url.includes("includeQuestSuggestions=false")
-        ? { ...viewportSnapshot, questSuggestions: [] }
-        : viewportSnapshot;
+      else if (url.startsWith("/api/world?bbox=")) body = viewportSnapshot;
       else throw new Error(`Unexpected fetch: ${url}`);
       return { ok: true, json: async () => body };
     });
     vi.stubGlobal("fetch", fetchMock);
     const map = {
       getBounds: () => ({ west: 8, south: 49, east: 11, north: 52 }),
+      getView: () => ({ center: { lat: 50.5, lon: 9.5 }, zoom: 8 }),
       setCollectibles: vi.fn(), setFartleks: vi.fn(), setDetailPanelOpen: vi.fn(),
-      setRoute: vi.fn(), fitTo: vi.fn()
+      setRoute: vi.fn(), setAlternateRoutes: vi.fn(), fitTo: vi.fn(), setRouteEndpoints: vi.fn(),
+      setPickHandler: vi.fn(), isPicking: vi.fn(() => false)
     };
     const createMap = vi.spyOn(worldMap, "createWorldMap").mockResolvedValue(map);
     await mountWorldPage(mountPoint);
-    return {
+    const exploreButton = hosts["[data-world-explore]"];
+    const page = {
       click: (filter) => buttons[filter].handlers.click(),
-      buttons, map, fetchMock, questButton, questCancelButton, questSuggestionsToggle,
-      questSelectButton,
-      remoteQuestSelectButton,
+      bound: (key) => detail.bound[key],
+      /** NORMAL → CONFIGURE with a start picked on the map. */
+      configure: () => {
+        exploreButton.handlers.click();
+        map.setPickHandler.mock.lastCall[0]({ lat: 50, lon: 9 });
+      },
+      /** CONFIGURE → GENERATING → CUSTOMIZE with the recommended proposal selected. */
+      generate: async () => {
+        page.configure();
+        detail.bound["[data-exploration-form]:submit"]({ preventDefault() {} });
+        await vi.waitFor(() => expect(detail.innerHTML).toContain("Step 2"));
+      },
+      startExploration: async () => {
+        await page.generate();
+        detail.bound["[data-exploration-confirm]:click"]();
+        await vi.waitFor(() => expect(questHost.innerHTML).toContain('data-quest-cancel="instance-1"'));
+      },
+      calls: (url, method) => fetchMock.mock.calls.filter(([calledUrl, options]) =>
+        calledUrl === url && (!method || options?.method === method)),
+      buttons, map, fetchMock, exploreButton, questCancelButton, questSelectButton, remoteQuestSelectButton,
       callbacks: createMap.mock.calls[0][1],
       detail,
+      mountPoint,
       status: hosts["[data-world-status]"],
       changeViewport: (snapshot) => {
         viewportSnapshot = snapshot;
         createMap.mock.calls[0][1].onViewportChange(map.getBounds());
       },
-      get viewportSnapshot() { return viewportSnapshot; },
-      quests: hosts["[data-world-quests]"],
+      quests: questHost,
       collectibleIds: () => map.setCollectibles.mock.lastCall[0].features.map((feature) => feature.id),
-      fartlekIds: () => map.setFartleks.mock.lastCall[0].features.map((feature) => feature.id)
+      fartlekIds: () => map.setFartleks.mock.lastCall[0].features.map((feature) => feature.id),
+      collectibleFeature: (id) => map.setCollectibles.mock.lastCall[0].features.find((feature) => feature.id === id)
     };
+    return page;
   };
 
   it("toggles a union, removes individual filters, and resets without refetching", async () => {
     const page = await mount();
-    expect(page.quests.innerHTML).toContain("Suggested quests");
-    expect(page.quests.innerHTML).toContain("First Steps");
-    expect(page.quests.innerHTML).toContain("Start quest");
-    expect(page.quests.innerHTML).not.toContain("0 / 2 objectives");
+    expect(page.quests.innerHTML).toContain("Your Explorations");
+    expect(page.quests.innerHTML).not.toContain("Local recommendations");
+    expect(page.mountPoint.innerHTML).toContain("EXPLORE THIS AREA");
     expect(page.buttons.all.hidden).toBe(false);
     expect(page.buttons.waterfall.hidden).toBe(true);
     expect(page.buttons.place.hidden).toBe(true);
@@ -442,6 +463,7 @@ describe("mounted World page interactions", () => {
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
     expect(page.fartlekIds()).toEqual(fartleks.map((item) => item.id));
     expect(page.fetchMock).toHaveBeenCalledTimes(4);
+    expect(page.fetchMock.mock.calls.some(([url]) => url.includes("includeQuestSuggestions"))).toBe(false);
   });
 
   it("updates available filters and clears selections when the viewport changes", async () => {
@@ -470,7 +492,7 @@ describe("mounted World page interactions", () => {
     page.click("found");
     page.click("rare");
     expect(page.detail.innerHTML).toContain("Epic");
-    expect(page.map.setCollectibles.mock.lastCall[0].features.find((feature) => feature.id === "epic-found").properties.selected).toBe(true);
+    expect(page.collectibleFeature("epic-found").properties.selected).toBe(true);
     page.click("found");
     expect(page.detail.hidden).toBe(true);
     expect(page.detail.innerHTML).toBe("");
@@ -485,48 +507,39 @@ describe("mounted World page interactions", () => {
     expect(page.detail.hidden).toBe(true);
   });
 
-  it("highlights all selected quest targets, includes filtered targets, and frames them together", async () => {
-    const page = await mount();
+  it("highlights a started exploration's targets, includes filtered targets, and frames them with its route", async () => {
+    const page = await mount({ instances: [activeInstance] });
     page.click("rare");
     page.questSelectButton.handlers.click();
 
     await vi.waitFor(() => expect(page.map.fitTo).toHaveBeenCalled());
-    expect(page.fetchMock.mock.calls.some(([url]) => url
-      === "/api/world/quest-targets?collectibleId=common-found&flowlineId=fartlek-1")).toBe(true);
-    expect(page.map.setCollectibles.mock.lastCall[0].features
-      .find((feature) => feature.id === "common-found").properties).toMatchObject({
-      questTarget: true,
-      questRelated: true
-    });
-    expect(page.map.setCollectibles.mock.lastCall[0].features
-      .find((feature) => feature.id === "rare-unfound").properties.questRelated).toBe(false);
+    expect(page.calls("/api/world/quest-targets?collectibleId=common-found&flowlineId=fartlek-1")).toHaveLength(1);
+    expect(page.collectibleFeature("common-found").properties).toMatchObject({ questTarget: true, questRelated: true });
+    expect(page.collectibleFeature("rare-unfound").properties.questRelated).toBe(false);
     expect(page.map.setFartleks.mock.lastCall[0].features
-      .find((feature) => feature.id === "fartlek-1").properties).toMatchObject({
-      questTarget: true,
-      questRelated: true
-    });
-    expect(page.map.fitTo).toHaveBeenCalledWith([
+      .find((feature) => feature.id === "fartlek-1").properties).toMatchObject({ questTarget: true, questRelated: true });
+    expect(page.map.fitTo.mock.lastCall[0]).toEqual(expect.arrayContaining([
       { latitude: 49, longitude: 8 },
-      { latitude: 49, longitude: 8 },
-      { latitude: 49.01, longitude: 8.01 }
-    ]);
-    expect(page.quests.innerHTML).toContain('aria-pressed="true"');
+      { latitude: 49.01, longitude: 8.01 },
+      { latitude: 50.1, longitude: 9.1 }
+    ]));
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
+    expect(page.quests.innerHTML).toContain("Planned route");
 
     page.questSelectButton.handlers.click();
-    expect(page.map.setCollectibles.mock.lastCall[0].features.map((feature) => feature.id)).toEqual(["rare-unfound"]);
+    expect(page.collectibleIds()).toEqual(["rare-unfound"]);
     expect(page.map.setFartleks.mock.lastCall[0].features).toEqual([]);
-    expect(page.quests.innerHTML).toContain('aria-pressed="false"');
+    expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
   });
 
-  it("loads and frames frozen quest targets outside the current viewport", async () => {
-    const page = await mount(1, true);
+  it("loads and frames frozen exploration targets outside the current viewport", async () => {
+    const page = await mount({ instances: [remoteInstance] });
     page.remoteQuestSelectButton.handlers.click();
 
     await vi.waitFor(() => expect(page.map.fitTo).toHaveBeenCalled());
     expect(page.fetchMock.mock.calls.some(([url]) => url.includes("collectibleId=remote-place")
       && url.includes("flowlineId=remote-flowline"))).toBe(true);
-    expect(page.map.setCollectibles.mock.lastCall[0].features
-      .find((feature) => feature.id === "remote-place").properties.questTarget).toBe(true);
+    expect(page.collectibleFeature("remote-place").properties.questTarget).toBe(true);
     expect(page.map.setFartleks.mock.lastCall[0].features
       .find((feature) => feature.id === "remote-flowline").properties.questTarget).toBe(true);
     expect(page.map.fitTo).toHaveBeenCalledWith([
@@ -536,88 +549,209 @@ describe("mounted World page interactions", () => {
     ]);
   });
 
-  it("does not regenerate quest recommendations while selected and refreshes after deselection", async () => {
+  const submit = (page) => page.bound("[data-exploration-form]:submit")({ preventDefault() {} });
+  const pressed = (page, id) => page.detail.innerHTML.includes(`data-exploration-proposal="${id}" aria-pressed="true"`);
+
+  it("configures only the ride before generating, with World markers dimmed and no targets", async () => {
     const page = await mount();
-    page.questSelectButton.handlers.click();
-    await vi.waitFor(() => expect(page.map.fitTo).toHaveBeenCalled());
+    page.exploreButton.handlers.click();
+    expect(page.exploreButton.hidden).toBe(true);
+    expect(page.detail.innerHTML).toContain("Step 1");
+    expect(page.detail.innerHTML).toContain("data-exploration-locate");
+    expect(page.detail.innerHTML).toContain("Generate Routes");
+    expect(page.detail.innerHTML).not.toContain("Included in this route");
+    expect(page.detail.innerHTML).not.toContain("data-exploration-remove");
+    expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
+    expect(page.map.setCollectibles.mock.lastCall[0].features.every((feature) => !feature.properties.questRelated)).toBe(true);
+    expect(page.map.setFartleks.mock.lastCall[0].features.every((feature) => !feature.properties.questRelated)).toBe(true);
 
-    page.changeViewport({
-      ...page.viewportSnapshot,
-      questSuggestions: [{
-        ...page.viewportSnapshot.questSuggestions[0],
-        id: "new-area-suggestion",
-        title: "New viewport recommendation"
-      }]
-    });
-    await vi.waitFor(() => expect(page.fetchMock.mock.calls.some(([url]) =>
-      url.startsWith("/api/world?bbox=") && url.includes("includeQuestSuggestions=false")
-    )).toBe(true), { timeout: 2000 });
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("First Steps 1"));
-    expect(page.quests.innerHTML).not.toContain("New viewport recommendation");
-
-    page.questSelectButton.handlers.click();
-    await vi.waitFor(() => expect(page.fetchMock.mock.calls.some(([url]) =>
-      url.startsWith("/api/world?bbox=") && !url.includes("includeQuestSuggestions=false")
-    )).toBe(true));
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("New viewport recommendation"));
+    page.map.setPickHandler.mock.lastCall[0]({ lat: 50, lon: 9 });
+    expect(page.map.setPickHandler).toHaveBeenLastCalledWith(undefined);
+    expect(page.map.setRouteEndpoints).toHaveBeenLastCalledWith({ start: { lat: 50, lon: 9 }, end: undefined });
+    expect(page.detail.innerHTML).toContain("50.0000, 9.0000");
+    expect(page.fetchMock.mock.calls.some(([url]) => url.startsWith("/api/explorations"))).toBe(false);
+    expect(page.detail.innerHTML).not.toContain("Included in this route");
   });
 
-  it("starts a bbox suggestion explicitly and shows its persistent instance", async () => {
+  it("generates routes from the ride alone and auto-selects the recommended one", async () => {
     const page = await mount();
-    page.questButton.handlers.click();
+    await page.generate();
+    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body)).toEqual({
+      area: { bbox: "8.00000,49.00000,11.00000,52.00000", center: { lat: 50.5, lon: 9.5 }, zoom: 8 },
+      routeType: "round_trip",
+      start: { lat: 50, lon: 9 },
+      constraint: { type: "distance", value: 50_000 }
+    });
+    expect(page.detail.innerHTML).toContain("Quick");
+    expect(page.detail.innerHTML).toContain("Balanced");
+    expect(page.detail.innerHTML).toContain("Recommended");
+    expect(pressed(page, "proposal-balanced")).toBe(true);
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
+    expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
+    expect(page.map.fitTo).toHaveBeenCalled();
+    expect(page.detail.innerHTML).toContain("Included in this route");
+    expect(page.detail.innerHTML).toContain("Harbour Straight");
+    expect(page.collectibleIds()).toEqual(["common-found", "rare-unfound"]);
+    expect(page.collectibleFeature("common-found").properties.questTarget).toBe(true);
+    expect(page.collectibleFeature("rare-unfound").properties.questRelated).toBe(false);
+    expect(page.detail.innerHTML).toMatch(/data-exploration-confirm>Start Exploration/);
+  });
+
+  it("uses the device location only after Locate Me is pressed", async () => {
+    const page = await mount();
+    const getCurrentPosition = vi.fn((success) => success({ coords: { latitude: 50.2, longitude: 9.2 } }));
+    vi.stubGlobal("navigator", { geolocation: { getCurrentPosition } });
+    page.exploreButton.handlers.click();
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    page.bound("[data-exploration-locate]:click")();
+    expect(page.detail.innerHTML).toContain("50.2000, 9.2000");
+    submit(page);
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Step 2"));
+    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body).start).toEqual({ lat: 50.2, lon: 9.2 });
+  });
+
+  it("shows only the hovered or selected proposal on the map", async () => {
+    const page = await mount();
+    await page.generate();
+    page.bound("[data-exploration-proposal]:mouseenter")();
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: quickGeometry });
+    expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
+    page.bound("[data-exploration-proposal]:mouseleave")();
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
+    expect(pressed(page, "proposal-balanced")).toBe(true);
+
+    page.bound("[data-exploration-proposal]:click")();
+    expect(pressed(page, "proposal-quick")).toBe(true);
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: quickGeometry });
+    expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
+    expect(page.collectibleFeature("common-found").properties.questTarget).toBe(true);
+    expect(page.map.setFartleks.mock.lastCall[0].features.find((feature) => feature.id === "fartlek-1").properties.questRelated).toBe(false);
+    expect(page.calls("/api/explorations/generate")).toHaveLength(1);
+  });
+
+  it("customizes only the selected route: add and remove re-plan it, Reset restores it", async () => {
+    const page = await mount();
+    await page.generate();
+    page.callbacks.onCollectibleSelect("rare-unfound");
+    expect(page.calls("/api/explorations/exp-1/reroute")).toHaveLength(0);
+
+    page.bound("[data-exploration-add]:click")();
+    expect(page.collectibleFeature("rare-unfound").properties.questRelated).toBe(true);
+    page.callbacks.onCollectibleSelect("rare-unfound");
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Customized"));
+    expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[0][1].body))
+      .toEqual({ proposalId: "proposal-balanced", targetIds: ["fartlek-1", "common-found", "rare-unfound"] });
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: customGeometry });
+    expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
+    expect(page.collectibleFeature("rare-unfound").properties.questTarget).toBe(true);
+    expect(page.detail.innerHTML).toContain("This route is longer than your planned ride.");
+    expect(page.detail.innerHTML).toContain("data-exploration-reset");
+
+    page.bound("[data-exploration-remove]:click")();
+    await vi.waitFor(() => expect(page.calls("/api/explorations/exp-1/reroute", "POST")).toHaveLength(2));
+    expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[1][1].body))
+      .toEqual({ proposalId: "proposal-custom-1", targetIds: ["fartlek-1", "rare-unfound"] });
+    await vi.waitFor(() => expect(page.detail.innerHTML).not.toContain("Updating route"));
+    expect(page.collectibleFeature("common-found").properties.questRelated).toBe(false);
+
+    page.bound("[data-exploration-reset]:click")();
+    expect(page.detail.innerHTML).not.toContain("Customized");
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
+    expect(page.calls("/api/explorations/generate")).toHaveLength(1);
+    expect(page.calls("/api/explorations/exp-1/reroute")).toHaveLength(2);
+  });
+
+  it("keeps the previous route when re-planning fails and restarts when routes expired", async () => {
+    const page = await mount({ rerouteError: { error: "No suitable route was found.", code: "no_route" } });
+    await page.generate();
+    page.bound("[data-exploration-remove]:click")();
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("No suitable route was found."));
+    expect(page.detail.innerHTML).toContain("Step 2");
+    expect(page.detail.innerHTML).toContain('data-exploration-remove="common-found"');
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
+
+    const expired = await mount({ rerouteError: { error: "Expired.", code: "exploration_expired", status: 409 } });
+    await expired.generate();
+    expired.bound("[data-exploration-remove]:click")();
+    await vi.waitFor(() => expect(expired.detail.innerHTML).toContain("These routes expired."));
+    expect(expired.detail.innerHTML).toContain("Step 1");
+    expect(expired.map.setRoute).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it("starts exactly the selected, possibly customized route", async () => {
+    const page = await mount();
+    await page.generate();
+    page.bound("[data-exploration-remove]:click")();
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Customized"));
+    page.bound("[data-exploration-confirm]:click")();
     await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-cancel="instance-1"'));
-    const startCall = page.fetchMock.mock.calls.find(([url]) => url === "/api/quest-instances/start");
-    expect(startCall[1].method).toBe("POST");
-    expect(JSON.parse(startCall[1].body)).toEqual({
-      suggestionId: "suggestion-1",
-      bbox: "8.00000,49.00000,11.00000,52.00000"
-    });
-    expect(page.quests.innerHTML).toContain('aria-label="Cancel quest"');
-    expect(page.quests.innerHTML).toContain(">✕</button>");
-    expect(page.quests.innerHTML).not.toContain(">Active</small>");
-    expect(page.quests.innerHTML).toContain("Started");
-    expect(page.fetchMock.mock.calls.filter(([url]) => url === "/api/quest-instances")).toHaveLength(2);
+    expect(JSON.parse(page.calls("/api/explorations/confirm", "POST")[0][1].body)).toEqual({ proposalId: "proposal-custom-1" });
+    expect(page.quests.innerHTML).toContain("Planned route");
+    expect(page.detail.innerHTML).not.toContain("data-exploration-confirm");
+    expect(page.exploreButton.hidden).toBe(false);
+    expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
+    expect(page.calls("/api/quest-instances")).toHaveLength(2);
   });
 
-  it("reveals and collapses all local recommendations", async () => {
-    const page = await mount(5);
-    expect(page.quests.innerHTML.match(/data-quest-start=/g)).toHaveLength(3);
-    expect(page.quests.innerHTML).toContain("Show all 5 quests");
-
-    page.questSuggestionsToggle.handlers.click();
-    expect(page.quests.innerHTML.match(/data-quest-start=/g)).toHaveLength(5);
-    expect(page.quests.innerHTML).toContain('aria-expanded="true"');
-    expect(page.quests.innerHTML).toContain("Show fewer");
-
-    page.questSuggestionsToggle.handlers.click();
-    expect(page.quests.innerHTML.match(/data-quest-start=/g)).toHaveLength(3);
-    expect(page.quests.innerHTML).toContain('aria-expanded="false"');
+  it("returns to the ride configuration and discards proposals when the ride changes", async () => {
+    const page = await mount();
+    await page.generate();
+    page.bound("[data-exploration-edit-ride]:click")();
+    expect(page.detail.innerHTML).toContain("Step 1");
+    expect(page.detail.innerHTML).not.toContain("data-exploration-proposal");
+    expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
+    expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
+    page.bound("[data-exploration-constraint]:click")();
+    submit(page);
+    await vi.waitFor(() => expect(page.calls("/api/explorations/generate", "POST")).toHaveLength(2));
   });
 
-  it("confirms cancellation, deletes the instance, and allows starting it again", async () => {
+  it("cancels from any phase back to the normal map without network cleanup", async () => {
+    const page = await mount();
+    page.exploreButton.handlers.click();
+    page.bound("[data-exploration-cancel]:click")();
+    expect(page.detail.hidden).toBe(true);
+    expect(page.exploreButton.hidden).toBe(false);
+    expect(page.map.setPickHandler).toHaveBeenLastCalledWith(undefined);
+
+    await page.generate();
+    const callsBefore = page.fetchMock.mock.calls.length;
+    page.bound("[data-exploration-cancel]:click")();
+    expect(page.fetchMock.mock.calls.length).toBe(callsBefore);
+    expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
+    expect(page.collectibleFeature("common-found").properties.questRelated).toBe(true);
+    expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
+    expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
+    expect(page.map.setRouteEndpoints).toHaveBeenLastCalledWith({});
+  });
+
+  it("explains failed generation and stays in configuration", async () => {
+    const page = await mount({ generateError: { error: "No exploration targets can be reached.", code: "no_reachable_targets" } });
+    page.configure();
+    submit(page);
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("No exploration targets can be reached."));
+    expect(page.detail.innerHTML).toContain("Step 1");
+    expect(page.detail.innerHTML).toContain("Generate Routes");
+  });
+
+  it("confirms cancellation and deletes the started exploration", async () => {
     const page = await mount();
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
-    page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-cancel="instance-1"'));
+    await page.startExploration();
     page.questCancelButton.handlers.click();
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Start a local recommendation"));
-    expect(page.fetchMock.mock.calls.some(([url, options]) =>
-      url === "/api/quest-instances/instance-1" && options.method === "DELETE"
-    )).toBe(true);
-    expect(page.quests.innerHTML).toContain("Start quest");
-    expect(globalThis.confirm).toHaveBeenCalledWith(
-      "Cancel this quest and delete its progress? If you start it again, progress will start over."
-    );
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Use Explore this Area"));
+    expect(page.calls("/api/quest-instances/instance-1", "DELETE")).toHaveLength(1);
+    expect(globalThis.confirm).toHaveBeenCalledWith("Cancel this exploration and delete its progress? This cannot be undone.");
+    expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
   });
 
-  it("does not cancel a quest when the user declines confirmation", async () => {
+  it("does not cancel an exploration when the user declines confirmation", async () => {
     const page = await mount();
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
-    page.questButton.handlers.click();
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-cancel="instance-1"'));
+    await page.startExploration();
     page.questCancelButton.handlers.click();
-    expect(page.fetchMock.mock.calls.some(([url]) => url === "/api/quest-instances/instance-1")).toBe(false);
-    expect(page.quests.innerHTML).toContain('aria-label="Cancel quest"');
-    expect(page.quests.innerHTML).toContain(">✕</button>");
+    expect(page.calls("/api/quest-instances/instance-1")).toHaveLength(0);
+    expect(page.quests.innerHTML).toContain('aria-label="Cancel exploration"');
   });
 });

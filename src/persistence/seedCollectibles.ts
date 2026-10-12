@@ -7,9 +7,7 @@ import { createDatabasePool } from "./database.js";
 import { migrate } from "./migrate.js";
 import { CollectibleRepository } from "./collectibleRepository.js";
 import { QuestRepository } from "./questRepository.js";
-import { QuestInstanceRepository, readQuestTemplateRows } from "./questInstanceRepository.js";
 import type { Collectible } from "../domain.js";
-import path from "node:path";
 
 interface SeedDocument {
   collectibles: Collectible[];
@@ -41,7 +39,7 @@ const readSeedDocument = async (file: string): Promise<SeedDocument> => {
   const document = parsed as Record<string, unknown>;
   if (document.quests !== undefined
     && (!Array.isArray(document.quests) || document.quests.length > 0)) {
-    throw new Error("Quest rows are no longer seeded; curate quest templates in fixtures/quest-templates.json.");
+    throw new Error("Quest rows are no longer seeded; players create explorations from the World map.");
   }
   const curator = document.curator as { displayName?: unknown } | undefined;
   return {
@@ -74,15 +72,13 @@ const pool = createDatabasePool(config.databaseUrl);
 try {
   await migrate(pool);
   const document = await readSeedDocument(file);
-  const templates = await readQuestTemplateRows(path.resolve("fixtures/quest-templates.json"));
-  await new QuestInstanceRepository(pool).replaceTemplates(templates);
   const count = await new CollectibleRepository(pool).upsertMany(document.collectibles);
   const hasRetiredQuests = document.removeQuests.length > 0;
   const curatorId = hasRetiredQuests ? await ensureCurator(pool, document.curatorDisplayName) : undefined;
   const removedQuestCount = curatorId === undefined
     ? 0
     : await removeSeedQuests(pool, curatorId, document.removeQuests);
-  console.log(`Seeded ${count} collectibles and ${templates.length} quest templates; removed ${removedQuestCount} retired quests from ${file}.`);
+  console.log(`Seeded ${count} collectibles; removed ${removedQuestCount} retired quests from ${file}.`);
 } finally {
   await pool.end();
 }

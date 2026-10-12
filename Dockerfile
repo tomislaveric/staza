@@ -36,8 +36,6 @@ RUN npm ci
 COPY --from=build /app/dist ./dist
 
 COPY public ./public
-COPY fixtures/quest-templates.json ./fixtures/quest-templates.json
-
 VOLUME ["/data"]
 
 EXPOSE 3000

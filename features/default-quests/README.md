@@ -1,5 +1,10 @@
 # default-quests
 
+> **Superseded by [Explore this Area](../explore-this-area/README.md).** Quest
+> suggestions, curated templates, `POST /api/quest-instances/start` and
+> `/api/quest-route-plans*` were removed. Quests started through this flow still load,
+> progress, and can be cancelled.
+
 ## Goal
 
 Replace the provisional bbox-generated default-quest suggestions with curated

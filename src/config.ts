@@ -188,7 +188,10 @@ export const config = {
   smtpUser: process.env.SMTP_USER?.trim() || undefined,
   smtpPassword: smtpPasswordEnv(),
   mailFrom: process.env.MAIL_FROM?.trim() || undefined,
-  strava: stravaEnv()
+  strava: stravaEnv(),
+  /** Base URL of the standalone staza-routing service; quest route planning is disabled when unset. */
+  routingServiceUrl: optionalUrlEnv("ROUTING_SERVICE_URL"),
+  routingServiceTimeoutMs: integerEnv("ROUTING_SERVICE_TIMEOUT_MS", 15_000)
 };
 
 if (config.nodeEnv === "production") {

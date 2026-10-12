@@ -16,9 +16,12 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   with a 2.5D Collect effect, reward, and generated audio Chime.
 - [Coming soon](features/coming-soon/README.md) — add a reusable multi-language
   "Coming Soon" annotation and remove the unsupported Komoot external-route feature.
-- [Default quests](features/default-quests/README.md) — generate bbox-local
-  recommendations including Mountain Passes and mixed Flowline challenges;
-  track and cancel started quests independently of the map.
+- [Default quests](features/default-quests/README.md) — *superseded by Explore this
+  Area*; generated bbox-local recommendations including Mountain Passes and mixed
+  Flowline challenges; track and cancel started quests independently of the map.
+- [Explore this Area](features/explore-this-area/README.md) — route-first exploration:
+  choose start and ride length, pick one of several generated routes from the frozen map
+  area, tweak its targets, and confirm it as a single exploration.
 - [Extend OSM/Wikidata Collectibles](features/extend-osm-wikidata-collectibles/README.md)
   — import named places, improve source retry/cache behavior, and trigger
   private-network DEV/PROD imports manually.
@@ -101,6 +104,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   with transaction-safe exactly-once progression.
 - [Progression V1](features/progression-v1/README.md) — make each completed ride
   contribute XP toward a derived player level without adding persistence or rewards.
+- [Quest Route Exploration V1](features/quest-route-exploration-v1/README.md) —
+  *planner reused by Explore this Area*; explore a quest by generating scored ride-route proposals via the standalone
+  routing service, then commit the quest and selected PlannedRoute together.
 - [Quest target clarity and shared World cards](features/quest-target-clarity-and-shared-world-cards/README.md) —
   list concrete quest targets and requirements on shared World cards, and highlight
   and frame all targets when a quest is selected.
@@ -257,9 +263,9 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
 - **Telemetry:** This POC supports **GPS5** only. The correct GoPro chapter must cover the FIT coin-passage time.
 - **Collectibles:** The curated catalog lives in the PostgreSQL `collectibles`
   table. `fixtures/world-v1-seed.json` is the default seed document: run
-  `npm run seed:collectibles` to upsert its collectibles by `id` and synchronize
-  curated quest templates from `fixtures/quest-templates.json`. Templates are
-  also synchronized at server startup. Legacy quest rows are not seeded or
+  `npm run seed:collectibles` to upsert its collectibles by `id`. Explorations are
+  built from the player's selected map targets, so no quest templates are seeded.
+  Legacy quest rows are not seeded or
   deleted except when explicitly named in the document's `removeQuests` list;
   collectible rows are never deleted by seeding.
   Pass a file explicitly, for example `npm run seed:collectibles -- fixtures/other-world.json`,

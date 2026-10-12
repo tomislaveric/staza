@@ -1,11 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import type { QuestTemplate } from "../domain.js";
 
 describe("manual data import workflows", () => {
-  it("retires old demo quests and keeps curated templates separate from World objects", async () => {
+  it("retires old demo quests without seeding quest rows", async () => {
     const seed = JSON.parse(await readFile("fixtures/world-v1-seed.json", "utf8"));
-    const templates = JSON.parse(await readFile("fixtures/quest-templates.json", "utf8")) as QuestTemplate[];
 
     expect(seed).not.toHaveProperty("quests");
     expect(seed.removeQuests).toEqual([
@@ -14,9 +12,6 @@ describe("manual data import workflows", () => {
       "Rhine and Harbour",
       "Alb Valley Climb"
     ]);
-    expect(templates.map((template) => template.id)).toContain("peak-discoveries");
-    expect(templates.every((template) => !template.objectives.some((objective) => objective.type === "collectible_targets"
-      && objective.requiredCount === 1) || template.onboarding === true)).toBe(true);
   });
 
   it("imports the uploaded Fartlek snapshot without requiring a PBF", async () => {
