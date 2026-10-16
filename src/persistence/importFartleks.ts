@@ -1,11 +1,17 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { once } from "node:events";
 import path from "node:path";
 import { config } from "../config.js";
 import { scoreFartlekCandidate } from "../osm/fartlekScore.js";
+import {
+  ROAD_CYCLING_MIN_DATA_CONFIDENCE,
+  ROAD_CYCLING_MIN_QUALITY_SCORE
+} from "../osm/roadCyclingFlowlineQuality.js";
 import { fartlekFromScoredCandidate } from "../osm/fartlekModel.js";
 import type { FartlekCandidate } from "../osm/fartlekModel.js";
 import type { Fartlek } from "../domain.js";
-import { readFartlekOSMSnapshot } from "../osm/fartlekSnapshot.js";
+import { hasCompleteFartlekOSMSelectorCoverage, readFartlekOSMSnapshot } from "../osm/fartlekSnapshot.js";
 import { buildFartlekCandidates } from "../osm/fartlekCandidates.js";
 import { createDatabasePool } from "./database.js";
 import { migrate } from "./migrate.js";
@@ -77,39 +83,88 @@ const readJsonArray = async <T>(file: string, label: string): Promise<T[]> => {
 
 interface CandidateImportResult {
   toPublish: Fartlek[];
-  report: string[];
-  reviewLines: string[];
+  summary: Map<string, number>;
 }
 
-const fromCandidates = (candidates: FartlekCandidate[]): CandidateImportResult => {
-  const report: string[] = [];
-  const reviewLines: string[] = [];
+const fromCandidates = async (
+  candidates: FartlekCandidate[],
+  writeReviewFile?: string
+): Promise<CandidateImportResult> => {
+  const summary = new Map<string, number>();
   const toPublish: Fartlek[] = [];
+  const reviewStream = writeReviewFile
+    ? createWriteStream(writeReviewFile, { encoding: "utf8" })
+    : undefined;
+  const reviewFinished = reviewStream
+    ? new Promise<void>((resolve, reject) => {
+      reviewStream.once("finish", resolve);
+      reviewStream.once("error", reject);
+    })
+    : undefined;
+  let reviewFailure: Error | undefined;
+  reviewFinished?.catch((error: unknown) => {
+    reviewFailure = error instanceof Error ? error : new Error(String(error));
+  });
+  const increment = (key: string): void => {
+    summary.set(key, (summary.get(key) ?? 0) + 1);
+  };
+
   for (const candidate of candidates) {
     const scored = scoreFartlekCandidate(candidate);
-    if (scored.decision !== "AUTO_PUBLISH") {
-      report.push(
-        `SKIP ${candidate.id} (${scored.decision}, score=${scored.suitabilityScore}, ` +
-          `mappingConfidence=${scored.mappingConfidence}): ${scored.rejectionReason ?? scored.reasons.join("; ")}`
-      );
-      reviewLines.push(JSON.stringify({ ...scored }));
-      continue;
+    increment(`decision.${scored.decision}`);
+    increment(`quality.${Math.floor(scored.suitabilityScore / 10) * 10}`);
+    increment(`confidence.${Math.floor(scored.mappingConfidence / 10) * 10}`);
+    for (const qualityThreshold of [70, 75, 80, 85]) {
+      for (const confidenceThreshold of [60, 70, 80]) {
+        if (!scored.rejectionReason &&
+          scored.suitabilityScore >= qualityThreshold &&
+          scored.mappingConfidence >= confidenceThreshold) {
+          increment(`threshold.${qualityThreshold}.${confidenceThreshold}.candidate`);
+          if (candidate.name) increment(`threshold.${qualityThreshold}.${confidenceThreshold}.named`);
+        }
+      }
     }
-    if (!candidate.name) {
-      report.push(`SKIP ${candidate.id} (AUTO_PUBLISH but missing a name; assign one before publishing)`);
-      reviewLines.push(JSON.stringify({ ...scored }));
-      continue;
+    const highwayClasses = new Set(candidate.tagsBySegment.map((tags) =>
+      (tags.highway ?? "unknown").replace(/_link$/, "")
+    ));
+    for (const highway of highwayClasses) {
+      increment(`highway.${highway}`);
+      increment(`highwayDecision.${highway}.${scored.decision}`);
     }
-    toPublish.push(fartlekFromScoredCandidate(scored));
-    report.push(`PUBLISH ${candidate.id} -> ${candidate.name} (score=${scored.suitabilityScore})`);
+    if (scored.decision === "AUTO_PUBLISH" && candidate.name) {
+      toPublish.push(fartlekFromScoredCandidate(scored));
+      increment("publish.named");
+      for (const highway of highwayClasses) increment(`publish.highway.${highway}`);
+    } else {
+      if (scored.decision === "AUTO_PUBLISH") increment("skip.missing_name");
+      else {
+        increment(`reason.${scored.rejectionReason ?? (
+          scored.suitabilityScore < ROAD_CYCLING_MIN_QUALITY_SCORE
+            ? "REJECT_LOW_QUALITY_SCORE"
+            : scored.mappingConfidence < ROAD_CYCLING_MIN_DATA_CONFIDENCE
+              ? "REJECT_LOW_DATA_CONFIDENCE"
+              : "REVIEW_REQUIRED"
+        )}`);
+      }
+      if (reviewStream) {
+        if (reviewFailure) throw reviewFailure;
+        if (!reviewStream.write(`${JSON.stringify(scored)}\n`)) await once(reviewStream, "drain");
+        if (reviewFailure) throw reviewFailure;
+      }
+    }
   }
-  return { toPublish, report, reviewLines };
+
+  if (reviewStream) {
+    reviewStream.end();
+    await reviewFinished;
+  }
+  return { toPublish, summary };
 };
 
 const run = async (): Promise<void> => {
   const args = argumentsFrom(process.argv.slice(2));
   let toPublish: Fartlek[];
-  let reviewLines: string[] = [];
+  let archiveAbsentOsmFlowlines = false;
   if (args.snapshotFile) {
     const snapshot = await readFartlekOSMSnapshot(args.snapshotFile);
     const ways = snapshot.records.filter((record) => record.osmType === "way");
@@ -120,26 +175,27 @@ const run = async (): Promise<void> => {
     const candidates = buildFartlekCandidates(ways, { boundaryNodes, controlNodes });
     console.log(`${candidates.length} candidate(s) generated from ${ways.length} way(s), ` +
       `${boundaryNodes.length} boundary node(s), ${controlNodes.length} control node(s).`);
-    const result = fromCandidates(candidates);
-    for (const line of result.report) console.log(line);
+    const result = await fromCandidates(candidates, args.writeReviewFile);
+    for (const [key, count] of result.summary) console.log(`${key}: ${count}`);
+    if (args.writeReviewFile) console.log(`Wrote candidate review details: ${args.writeReviewFile}`);
     toPublish = result.toPublish;
-    reviewLines = result.reviewLines;
+    archiveAbsentOsmFlowlines = hasCompleteFartlekOSMSelectorCoverage(snapshot.metadata);
   } else if (args.candidatesFile) {
     const candidates = await readJsonArray<FartlekCandidate>(args.candidatesFile, "FartlekCandidate objects");
-    const result = fromCandidates(candidates);
-    for (const line of result.report) console.log(line);
+    const result = await fromCandidates(candidates, args.writeReviewFile);
+    for (const [key, count] of result.summary) console.log(`${key}: ${count}`);
+    if (args.writeReviewFile) console.log(`Wrote candidate review details: ${args.writeReviewFile}`);
     toPublish = result.toPublish;
-    reviewLines = result.reviewLines;
   } else {
     toPublish = await readJsonArray<Fartlek>(args.fartleksFile!, "Fartlek objects");
   }
 
-  if (args.writeReviewFile && reviewLines.length > 0) {
-    await writeFile(args.writeReviewFile, `${reviewLines.join("\n")}\n`, "utf8");
-    console.log(`Wrote ${reviewLines.length} non-published candidate(s) for review: ${args.writeReviewFile}`);
-  }
-
   console.log(`${toPublish.length} Fartlek(s) ready to publish.`);
+  if (archiveAbsentOsmFlowlines) {
+    console.log("Complete snapshot import: previously published OSM Flowlines absent from this snapshot will be archived.");
+  } else if (args.snapshotFile) {
+    console.log("Snapshot coverage is incomplete; absent OSM Flowlines will not be archived.");
+  }
   if (args.dryRun) {
     console.log("Dry run: no database changes made.");
     return;
@@ -148,7 +204,7 @@ const run = async (): Promise<void> => {
   const pool = createDatabasePool(config.databaseUrl);
   try {
     await migrate(pool);
-    const count = await new FartlekRepository(pool).upsertMany(toPublish);
+    const count = await new FartlekRepository(pool).upsertMany(toPublish, { archiveAbsentOsmFlowlines });
     console.log(`Upserted ${count} Fartlek(s).`);
   } finally {
     await pool.end();

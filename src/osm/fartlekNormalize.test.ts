@@ -4,6 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { fartlekRecordFromExportFeature, fartlekRecordsFromExportStream } from "./fartlekNormalize.js";
+import { hasCompleteFartlekOSMSelectorCoverage } from "./fartlekSnapshot.js";
+import {
+  FARTLEK_BOUNDARY_NODE_TAGS,
+  FARTLEK_CONTROL_NODE_TAGS,
+  FARTLEK_HIGHWAY_CLASSES
+} from "./fartlekSelectors.js";
 
 const feature = (
   id: string,
@@ -34,7 +40,7 @@ describe("Fartlek OSM export conversion", () => {
     )))).toBeUndefined();
   });
 
-  it("drops residential and cycleway ways at bulk-extraction time (too voluminous country-wide)", () => {
+  it("drops residential but preserves cycleway ways for strict suitability scoring", () => {
     expect(fartlekRecordFromExportFeature(JSON.parse(feature(
       "w3004",
       { type: "LineString", coordinates: [[11, 48], [12, 49]] },
@@ -43,8 +49,12 @@ describe("Fartlek OSM export conversion", () => {
     expect(fartlekRecordFromExportFeature(JSON.parse(feature(
       "w3005",
       { type: "LineString", coordinates: [[11, 48], [12, 49]] },
-      { highway: "cycleway" }
-    )))).toBeUndefined();
+      { highway: "cycleway", surface: "asphalt", bicycle: "designated" }
+    )))).toMatchObject({
+      osmType: "way",
+      osmId: "3005",
+      tags: { highway: "cycleway", surface: "asphalt", bicycle: "designated" }
+    });
   });
 
   it("keeps boundary and traffic-control nodes as single-point records", () => {
@@ -114,8 +124,13 @@ describe("Fartlek OSM snapshot round-trip", () => {
           sourceUrl: "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
           sourceVersion: "geofabrik-germany-2026-10-05",
           generatedAt: "2026-10-05T18:00:00.000Z",
-          selectors: ["highway=secondary"],
-          scanned: 1
+          selectors: [
+            ...[...FARTLEK_HIGHWAY_CLASSES].map((value) => `highway=${value}`),
+            ...FARTLEK_BOUNDARY_NODE_TAGS.map(([key, value]) => `${key}=${value}`),
+            ...FARTLEK_CONTROL_NODE_TAGS.map(([key, value]) => `${key}=${value}`)
+          ],
+          scanned: 1,
+          coverageComplete: true
         }
       }),
       JSON.stringify({ osmType: "way", osmId: "1", coordinates: [[11, 48], [12, 49]], tags: { highway: "secondary" } })
@@ -124,6 +139,7 @@ describe("Fartlek OSM snapshot round-trip", () => {
 
     const snapshot = await readFartlekOSMSnapshot(file);
     expect(snapshot.metadata.coverageComplete).toBe(true);
+    expect(hasCompleteFartlekOSMSelectorCoverage(snapshot.metadata)).toBe(true);
     expect(snapshot.records).toHaveLength(1);
     expect(snapshot.records[0]).toMatchObject({ osmType: "way", osmId: "1" });
   });
@@ -148,5 +164,22 @@ describe("Fartlek OSM snapshot round-trip", () => {
       metadata: { snapshotVersion: FARTLEK_OSM_SNAPSHOT_VERSION }
     })}\n`, "utf8");
     await expect(readFartlekOSMSnapshot(missingSourceUrl)).rejects.toThrow(/requires a sourceUrl/);
+  });
+
+  it("does not assume coverage is complete when the snapshot metadata omits it", async () => {
+    const { readFartlekOSMSnapshot, FARTLEK_OSM_SNAPSHOT_VERSION } = await import("./fartlekSnapshot.js");
+    const directory = await mkdtemp(path.join(os.tmpdir(), "staza-fartlek-snapshot-"));
+    temporaryDirectories.push(directory);
+    const file = path.join(directory, "partial-snapshot.ndjson");
+    await writeFile(file, `${JSON.stringify({
+      metadata: {
+        snapshotVersion: FARTLEK_OSM_SNAPSHOT_VERSION,
+        sourceUrl: "https://example.test/extract"
+      }
+    })}\n`, "utf8");
+
+    const snapshot = await readFartlekOSMSnapshot(file);
+    expect(snapshot.metadata.coverageComplete).toBe(false);
+    expect(hasCompleteFartlekOSMSelectorCoverage(snapshot.metadata)).toBe(false);
   });
 });

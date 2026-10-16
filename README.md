@@ -114,6 +114,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   cards easier to scan with World-style objective icons, consistent heights, and
   compact recommendation goal chips and completed Flowline speeds on active
   quests, without adding quest XP or rewards.
+- [Road-cycling Flowline extraction refinement](features/road-cycling-flowline-extraction-refinement/README.md)
+  — publish high-quality road-cycling Flowlines using explicit suitability,
+  confidence, continuity, and history-safe reimport rules.
 - [Renderer resilience output validation](features/renderer-resilience-output-validation/README.md)
   — harden highlight rendering with media inspection, timestamp-safe concat, and
   final MP4 validation.

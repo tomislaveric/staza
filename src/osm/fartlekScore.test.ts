@@ -31,13 +31,10 @@ describe("scoreFartlekCandidate", () => {
     expect(scored.mappingConfidence).toBeGreaterThanOrEqual(85);
   });
 
-  it("REVIEWs an incomplete-metadata candidate even with a continuous road", () => {
+  it("REVIEWs an unclassified candidate with only partial suitability evidence", () => {
     const candidate = baseCandidate({
       lengthMeters: 4_100,
-      tagsBySegment: [
-        { highway: "secondary", surface: "asphalt" },
-        { highway: "secondary" }
-      ]
+      tagsBySegment: [{ highway: "unclassified", smoothness: "intermediate", bicycle: "yes" }]
     });
     const scored = scoreFartlekCandidate(candidate);
     expect(scored.decision).toBe("REVIEW");
@@ -49,7 +46,7 @@ describe("scoreFartlekCandidate", () => {
     });
     const scored = scoreFartlekCandidate(candidate);
     expect(scored.decision).toBe("REJECT");
-    expect(scored.rejectionReason).toMatch(/bicycle=no/);
+    expect(scored.rejectionReason).toBe("REJECT_BICYCLE_FORBIDDEN");
   });
 
   it("REJECTs candidates shorter than the 1 km minimum", () => {
@@ -58,7 +55,7 @@ describe("scoreFartlekCandidate", () => {
     expect(scored.decision).toBe("REJECT");
   });
 
-  it("never AUTO_PUBLISHes poor-quality roads with stop signs and inconsistent surface", () => {
+  it("never AUTO_PUBLISHes poor-quality roads with stop signs and unsuitable surfaces", () => {
     const candidate = baseCandidate({
       lengthMeters: 1_800,
       junctionCount: 6,
@@ -74,11 +71,11 @@ describe("scoreFartlekCandidate", () => {
     expect(["IGNORE", "REVIEW", "REJECT"]).toContain(scored.decision);
   });
 
-  it("never lets a high score override missing critical metadata into AUTO_PUBLISH", () => {
+  it("does not let score override weak unclassified evidence", () => {
     const candidate = baseCandidate({
       junctionCount: 0,
       trafficControlCount: 0,
-      tagsBySegment: [{ highway: "secondary", bicycle: "yes" }]
+      tagsBySegment: [{ highway: "unclassified", smoothness: "intermediate" }]
     });
     const scored = scoreFartlekCandidate(candidate);
     expect(scored.decision).not.toBe("AUTO_PUBLISH");

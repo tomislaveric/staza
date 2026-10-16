@@ -26,6 +26,16 @@ describe("manual data import workflows", () => {
     expect(contents).not.toContain("osmium");
   });
 
+  it("extracts cycleway candidates and marks only complete pipeline snapshots as complete", async () => {
+    const extraction = await readFile("scripts/extract-osm-germany-fartleks.sh", "utf8");
+    const builder = await readFile("src/osm/buildFartlekSnapshot.ts", "utf8");
+
+    expect(extraction).toContain("unclassified,cycleway");
+    expect(extraction).toContain("--coverage-complete");
+    expect(builder).toContain("coverageComplete: false");
+    expect(builder).toContain("coverageComplete: args.coverageComplete");
+  });
+
   it("runs the compiled quäldich package command without a dry-run option", async () => {
     const workflow = await readFile(".github/workflows/import-quaeldich.yml", "utf8");
     const packageJson = await readFile("package.json", "utf8");

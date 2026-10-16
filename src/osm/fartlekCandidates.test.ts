@@ -174,4 +174,31 @@ describe("buildFartlekCandidates", () => {
     });
     expect(candidates[0].mostlyNonUrban).toBe(false);
   });
+
+  it("splits connected ways at surface and access suitability transitions", () => {
+    const ways = [
+      way("asphalt-1", 0, 2_000, { ref: "K1", surface: "asphalt" }),
+      way("gravel", 2_000, 2_800, { ref: "K1", surface: "gravel" }),
+      way("asphalt-2", 2_800, 5_300, { ref: "K1", surface: "asphalt" })
+    ];
+    const candidates = buildFartlekCandidates(ways, { boundaryNodes: [], controlNodes: [] });
+
+    expect(candidates).toHaveLength(3);
+    expect(candidates.every((candidate) => candidate.tagsBySegment.length === 1)).toBe(true);
+    expect(candidates.map((candidate) => candidate.sourceWayIds[0]).sort())
+      .toEqual(["asphalt-1", "asphalt-2", "gravel"]);
+    expect(candidates.every((candidate) => candidate.coordinates.length === 2)).toBe(true);
+  });
+
+  it("allows a compatible link only as part of a parent-road candidate", () => {
+    const candidates = buildFartlekCandidates([
+      way("road", 0, 2_000, { ref: "B1", highway: "secondary", surface: "asphalt" }),
+      way("connector", 2_000, 2_500, { ref: "B1", highway: "secondary_link", surface: "asphalt" })
+    ], { boundaryNodes: [], controlNodes: [] });
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].sourceWayIds).toEqual(["road", "connector"]);
+    expect(candidates[0].tagsBySegment.map((tags) => tags.highway))
+      .toEqual(["secondary", "secondary_link"]);
+  });
 });

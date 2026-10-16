@@ -3,6 +3,11 @@ import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import type { Readable } from "node:stream";
 import type { OSMWayRecord } from "./fartlekModel.js";
+import {
+  FARTLEK_BOUNDARY_NODE_TAGS,
+  FARTLEK_CONTROL_NODE_TAGS,
+  FARTLEK_HIGHWAY_CLASSES
+} from "./fartlekSelectors.js";
 
 // v2: newline-delimited JSON (one metadata line, then one record per line) instead of a single
 // JSON document. A country-scale way-geometry extract can be several hundred MB to multiple GB —
@@ -29,6 +34,19 @@ export interface FartlekOSMSnapshot {
   metadata: FartlekOSMSnapshotMetadata;
   records: OSMWayRecord[];
 }
+
+export const hasCompleteFartlekOSMSelectorCoverage = (
+  metadata: FartlekOSMSnapshotMetadata
+): boolean => {
+  if (metadata.coverageComplete !== true || !Array.isArray(metadata.selectors)) return false;
+  const selectors = new Set(metadata.selectors);
+  const required = [
+    ...[...FARTLEK_HIGHWAY_CLASSES].map((value) => `highway=${value}`),
+    ...FARTLEK_BOUNDARY_NODE_TAGS.map(([key, value]) => `${key}=${value}`),
+    ...FARTLEK_CONTROL_NODE_TAGS.map(([key, value]) => `${key}=${value}`)
+  ];
+  return required.every((selector) => selectors.has(selector));
+};
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -85,7 +103,7 @@ export const readFartlekOSMSnapshot = async (file: string): Promise<FartlekOSMSn
     throw new Error(`Fartlek OSM snapshot metadata requires a sourceUrl: ${file}`);
   }
   return {
-    metadata: { coverageComplete: true, ...metadata } as unknown as FartlekOSMSnapshotMetadata,
+    metadata: { ...metadata, coverageComplete: metadata.coverageComplete === true } as FartlekOSMSnapshotMetadata,
     records
   };
 };

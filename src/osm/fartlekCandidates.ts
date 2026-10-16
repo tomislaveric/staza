@@ -1,5 +1,6 @@
 import { distanceMeters } from "../geometry.js";
 import { FARTLEK_CANDIDATE_GENERATION_VERSION, type FartlekCandidate, type OSMWayRecord } from "./fartlekModel.js";
+import { roadCyclingCompatibilityKey } from "./roadCyclingFlowlineQuality.js";
 
 /** Shared OSM nodes have identical coordinates; round to ~1cm to treat them as the same point. */
 const coordinateKey = (coordinate: [number, number]): string =>
@@ -94,7 +95,7 @@ interface Endpoint {
 const buildChains = (ways: OSMWayRecord[]): Chain[] => {
   const byIdentity = new Map<string, OSMWayRecord[]>();
   for (const way of ways) {
-    const key = roadIdentity(way);
+    const key = `${roadIdentity(way)}|${roadCyclingCompatibilityKey(way.tags)}`;
     const bucket = byIdentity.get(key);
     if (bucket) bucket.push(way);
     else byIdentity.set(key, [way]);
@@ -283,6 +284,13 @@ export const buildFartlekCandidates = (
         (count, vertex) => count + (controlIndex.near(vertex.coordinate, CONTROL_MATCH_TOLERANCE_METERS).length > 0 ? 1 : 0),
         0
       );
+      let linkLengthMeters = 0;
+      for (let index = 1; index < slice.length; index += 1) {
+        if (!slice[index].tags.highway?.endsWith("_link")) continue;
+        const [previousLongitude, previousLatitude] = slice[index - 1].coordinate;
+        const [longitude, latitude] = slice[index].coordinate;
+        linkLengthMeters += distanceMeters(previousLatitude, previousLongitude, latitude, longitude);
+      }
       const hasClearBoundaries = boundaryHitIndices.has(startIndex) && boundaryHitIndices.has(endIndex);
       const startName = boundaryNameAt(slice[0].coordinate);
       const endName = boundaryNameAt(slice[slice.length - 1].coordinate);
@@ -296,7 +304,7 @@ export const buildFartlekCandidates = (
             : roadName;
 
       candidates.push({
-        id: `fartlek-osm:${sourceWayIds[0]}:${sourceWayIds[sourceWayIds.length - 1]}:${startIndex}:${endIndex}`,
+        id: `fartlek-osm-v3:${sourceWayIds[0]}:${sourceWayIds[sourceWayIds.length - 1]}:${startIndex}:${endIndex}`,
         ...(name ? { name } : {}),
         coordinates: slice.map((vertex) => vertex.coordinate),
         lengthMeters,
@@ -304,6 +312,7 @@ export const buildFartlekCandidates = (
         candidateGenerationVersion: FARTLEK_CANDIDATE_GENERATION_VERSION,
         junctionCount,
         trafficControlCount,
+        linkLengthMeters,
         tagsBySegment,
         hasClearBoundaries,
         mostlyNonUrban: isMostlyNonUrban(slice)

@@ -99,8 +99,11 @@ export class FartlekRepository {
     return result.rows.map(mapFartlek);
   }
 
-  async upsertMany(fartleks: Fartlek[]): Promise<number> {
-    if (fartleks.length === 0) return 0;
+  async upsertMany(
+    fartleks: Fartlek[],
+    options: { archiveAbsentOsmFlowlines?: boolean } = {}
+  ): Promise<number> {
+    if (fartleks.length === 0 && !options.archiveAbsentOsmFlowlines) return 0;
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -160,6 +163,17 @@ export class FartlekRepository {
             geometryBounds.minLongitude,
             geometryBounds.maxLongitude
           ]
+        );
+      }
+      if (options.archiveAbsentOsmFlowlines) {
+        const sourceExternalIds = fartleks.map((fartlek) => fartlek.source.sourceExternalId);
+        await client.query(
+          `UPDATE fartleks
+           SET status = 'archived', updated_at = now()
+           WHERE source_type = 'osm'
+             AND status = 'published'
+             AND NOT (source_external_id = ANY($1::text[]))`,
+          [sourceExternalIds]
         );
       }
       await client.query("COMMIT");

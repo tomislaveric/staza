@@ -62,7 +62,7 @@ osmium tags-filter \
   --overwrite \
   --output "$FILTERED" \
   "$PBF" \
-  w/highway=primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,unclassified \
+  w/highway=primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,unclassified,cycleway \
   n/traffic_sign=city_limit \
   n/highway=traffic_signals,stop,give_way \
   n/traffic_calming
@@ -100,7 +100,8 @@ node "$BUILD_SCRIPT" \
   --input "$EXPORTED" \
   --output "$OUTPUT" \
   --source-url "https://download.geofabrik.de/europe/germany-latest.osm.pbf" \
-  --source-version "$SOURCE_VERSION"
+  --source-version "$SOURCE_VERSION" \
+  --coverage-complete
 
 if [ ! -f "$OUTPUT" ]; then
   echo "Snapshot was not created: $OUTPUT" >&2

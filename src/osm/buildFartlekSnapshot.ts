@@ -18,14 +18,21 @@ interface Arguments {
   output: string;
   sourceUrl: string;
   sourceVersion?: string;
+  coverageComplete: boolean;
 }
 
 const argumentsFrom = (values: string[]): Arguments => {
-  const result: Arguments = { output: DEFAULT_FARTLEK_OSM_SNAPSHOT_FILE, sourceUrl: GEOFABRIK_URL };
+  const result: Arguments = {
+    output: DEFAULT_FARTLEK_OSM_SNAPSHOT_FILE,
+    sourceUrl: GEOFABRIK_URL,
+    coverageComplete: false
+  };
   for (let index = 0; index < values.length; index += 1) {
     const value = values[index];
     const next = values[index + 1];
-    if (value === "--input" || value === "--output" || value === "--source-url" ||
+    if (value === "--coverage-complete") {
+      result.coverageComplete = true;
+    } else if (value === "--input" || value === "--output" || value === "--source-url" ||
       value === "--source-version") {
       if (!next || next.startsWith("--")) throw new Error(`${value} requires a value.`);
       index += 1;
@@ -58,7 +65,7 @@ const run = async (): Promise<void> => {
     license: `ODbL 1.0 (${OSM_COPYRIGHT_URL})`,
     generatedAt: new Date().toISOString(),
     selectors,
-    coverageComplete: true,
+    coverageComplete: args.coverageComplete,
     scanned: parsed.records.length,
     exportedFeatures: parsed.scanned,
     skippedFeatures: parsed.skipped
