@@ -1,5 +1,8 @@
+import { SEGMENT_SCORING_VERSION, type SegmentQualityScores } from "./roadSegment/scoring.js";
+
 export const FARTLEK_SOURCE_TYPE = "osm";
 export const FARTLEK_CANDIDATE_GENERATION_VERSION = "fartlek-candidates-v3";
+/** Legacy free-form scoring tag retained in `sourceMetadata` for continuity. */
 export const FARTLEK_SCORING_VERSION = "road-cycling-score-v1";
 
 export const FARTLEK_MIN_LENGTH_METERS = 1_000;
@@ -51,6 +54,8 @@ export interface ScoredFartlekCandidate {
   reasons: string[];
   decision: FartlekDecision;
   rejectionReason?: string;
+  /** Full independent score set; `flow` equals `suitabilityScore`. */
+  scores?: SegmentQualityScores;
 }
 
 /** Builds a publishable Fartlek domain object from an AUTO_PUBLISH-scored OSM candidate. */
@@ -59,6 +64,7 @@ export const fartlekFromScoredCandidate = (scored: ScoredFartlekCandidate): impo
   if (!candidate.name) throw new Error(`Cannot publish unnamed Fartlek candidate ${candidate.id}.`);
   const start = candidate.coordinates[0];
   const end = candidate.coordinates[candidate.coordinates.length - 1];
+  const scores = scored.scores;
   return {
     id: candidate.id,
     name: candidate.name,
@@ -77,11 +83,22 @@ export const fartlekFromScoredCandidate = (scored: ScoredFartlekCandidate): impo
     sourceMetadata: {
       sourceWayIds: candidate.sourceWayIds,
       candidateGenerationVersion: candidate.candidateGenerationVersion,
-      scoringVersion: FARTLEK_SCORING_VERSION
+      scoringVersion: FARTLEK_SCORING_VERSION,
+      segmentScoringVersion: SEGMENT_SCORING_VERSION
     },
     suitabilityScore: scored.suitabilityScore,
     suitabilityReasons: scored.reasons,
     mappingConfidence: scored.mappingConfidence,
-    geometryVersion: 1
+    geometryVersion: 1,
+    // Flowline publication is a flow-score view of the generic segment model; all style scores
+    // are persisted so endurance/explore routing can use them later without recomputation.
+    flowScore: scores ? scores.flow : scored.suitabilityScore,
+    ...(scores ? {
+      enduranceScore: scores.endurance,
+      exploreScore: scores.explore,
+      roadQualityScore: scores.roadQuality,
+      dataConfidence: Math.round(scores.dataConfidence * 100)
+    } : {}),
+    scoringVersion: SEGMENT_SCORING_VERSION
   };
 };

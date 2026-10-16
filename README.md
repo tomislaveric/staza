@@ -117,6 +117,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Road-cycling Flowline extraction refinement](features/road-cycling-flowline-extraction-refinement/README.md)
   — publish high-quality road-cycling Flowlines using explicit suitability,
   confidence, continuity, and history-safe reimport rules.
+- [Road-cycling segment intelligence](features/road-cycling-segment-intelligence/README.md)
+  — generic multi-score road segment model (flow/endurance/explore + road quality
+  and confidence) that Flowlines, route character, and ride-style planning build on.
 - [Renderer resilience output validation](features/renderer-resilience-output-validation/README.md)
   — harden highlight rendering with media inspection, timestamp-safe concat, and
   final MP4 validation.

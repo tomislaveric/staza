@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { scoreFartlekCandidate } from "./fartlekScore.js";
-import type { FartlekCandidate } from "./fartlekModel.js";
+import { fartlekFromScoredCandidate, type FartlekCandidate } from "./fartlekModel.js";
 
 const baseCandidate = (overrides: Partial<FartlekCandidate> = {}): FartlekCandidate => ({
   id: "fartlek-candidate-1",
@@ -29,6 +29,21 @@ describe("scoreFartlekCandidate", () => {
     expect(scored.decision).toBe("AUTO_PUBLISH");
     expect(scored.suitabilityScore).toBeGreaterThanOrEqual(80);
     expect(scored.mappingConfidence).toBeGreaterThanOrEqual(85);
+  });
+
+  it("converts normalized segment confidence to an integer percentage for the persisted Fartlek", () => {
+    const candidate = baseCandidate({
+      tagsBySegment: [
+        { highway: "secondary", surface: "asphalt", smoothness: "good", bicycle: "yes", ref: "B500" }
+      ]
+    });
+    const scored = scoreFartlekCandidate(candidate);
+    const fartlek = fartlekFromScoredCandidate(scored);
+
+    expect(fartlek.dataConfidence).toBe(Math.round((scored.scores?.dataConfidence ?? 0) * 100));
+    expect(Number.isInteger(fartlek.dataConfidence)).toBe(true);
+    expect(fartlek.dataConfidence).toBeGreaterThanOrEqual(0);
+    expect(fartlek.dataConfidence).toBeLessThanOrEqual(100);
   });
 
   it("REVIEWs an unclassified candidate with only partial suitability evidence", () => {

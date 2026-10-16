@@ -650,6 +650,38 @@ export const migrations: Migration[] = [{
       ON CONFLICT (id, version) DO NOTHING;
     `);
   }
+}, {
+  id: "029_road_cycling_segment_scores",
+  async up(client) {
+    // Flowlines become one flow-score expression of a generic road-cycling segment model; every
+    // published segment now carries independent style scores so endurance/explore routing can read
+    // them without recomputation. flow_score mirrors suitability_score for backward compatibility.
+    await client.query(`
+      ALTER TABLE fartleks
+        ADD COLUMN IF NOT EXISTS flow_score INTEGER,
+        ADD COLUMN IF NOT EXISTS endurance_score INTEGER,
+        ADD COLUMN IF NOT EXISTS explore_score INTEGER,
+        ADD COLUMN IF NOT EXISTS road_quality_score INTEGER,
+        ADD COLUMN IF NOT EXISTS data_confidence INTEGER,
+        ADD COLUMN IF NOT EXISTS scoring_version INTEGER NOT NULL DEFAULT 1;
+    `);
+    // Backfill flow_score/data_confidence from the pre-existing single-score columns so historical
+    // rows are immediately usable by the generic model.
+    await client.query(`
+      UPDATE fartleks
+      SET flow_score = COALESCE(flow_score, suitability_score),
+          data_confidence = COALESCE(data_confidence, mapping_confidence)
+      WHERE flow_score IS NULL OR data_confidence IS NULL;
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS fartleks_endurance_score_idx ON fartleks (endurance_score)
+        WHERE status = 'published';
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS fartleks_explore_score_idx ON fartleks (explore_score)
+        WHERE status = 'published';
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

@@ -37,6 +37,15 @@ const repositoryWithQueryLog = () => {
 };
 
 describe("FartlekRepository complete snapshot synchronization", () => {
+  it("persists data confidence as an integer percentage", async () => {
+    const { repository, calls } = repositoryWithQueryLog();
+    await repository.upsertMany([{ ...flowline(), dataConfidence: 84.2 }]);
+
+    const insert = calls.find((call) => call.sql.includes("INSERT INTO fartleks"));
+    expect(insert?.values?.[26]).toBe(84);
+    expect(Number.isInteger(insert?.values?.[26])).toBe(true);
+  });
+
   it("archives absent OSM Flowlines in the same transaction as upserts without deleting history", async () => {
     const { repository, calls } = repositoryWithQueryLog();
     await repository.upsertMany([flowline()], { archiveAbsentOsmFlowlines: true });

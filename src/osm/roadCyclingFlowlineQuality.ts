@@ -5,99 +5,37 @@ import {
   FARTLEK_MIN_LENGTH_METERS,
   type FartlekCandidate
 } from "./fartlekModel.js";
+import {
+  classifyRoadCyclingSurface,
+  type RoadSurfaceSuitability
+} from "./roadSegment/surface.js";
+import {
+  classifyRoadCyclingSmoothness,
+  type RoadSmoothnessSuitability
+} from "./roadSegment/smoothness.js";
+import {
+  evaluateRoadCyclingEligibility,
+  isRoadCyclingAccessible,
+  normalizeTag,
+  roadCyclingCompatibilityKey,
+  roadCyclingRejectionReason,
+  type RoadCyclingAccessResult
+} from "./roadSegment/eligibility.js";
+import { scoreRoadCyclingSegment, type SegmentQualityScores } from "./roadSegment/scoring.js";
 
-export type RoadSurfaceSuitability = "GOOD" | "ACCEPTABLE" | "UNKNOWN" | "BAD";
-export type RoadSmoothnessSuitability = "GOOD" | "ACCEPTABLE" | "UNKNOWN" | "BAD";
+// Re-exported so existing importers keep a single, stable entry point while the canonical
+// definitions now live in the reusable `roadSegment/` model.
+export {
+  classifyRoadCyclingSurface,
+  classifyRoadCyclingSmoothness,
+  isRoadCyclingAccessible,
+  roadCyclingCompatibilityKey,
+  evaluateRoadCyclingEligibility
+};
+export type { RoadSurfaceSuitability, RoadSmoothnessSuitability, RoadCyclingAccessResult };
 
 export const ROAD_CYCLING_MIN_QUALITY_SCORE = 80;
 export const ROAD_CYCLING_MIN_DATA_CONFIDENCE = 70;
-const MAX_LINK_CONNECTOR_LENGTH_METERS = 300;
-const MAX_LINK_CONNECTOR_CANDIDATE_FRACTION = 0.2;
-
-const GOOD_SURFACES = new Set(["asphalt", "concrete", "concrete:lanes", "chipseal", "tared"]);
-const ACCEPTABLE_SURFACES = new Set(["paved"]);
-const BAD_SURFACES = new Set([
-  "unpaved", "gravel", "fine_gravel", "compacted", "dirt", "ground", "earth", "mud", "sand",
-  "grass", "grass_paver", "woodchips", "wood", "pebblestone", "sett", "cobblestone",
-  "cobblestone:flattened", "cobblestone_flatened", "unhewn_cobblestone", "paving_stones",
-  "paving_stones:lanes", "concrete:plates", "concrete_plates", "plates", "rock", "clay"
-]);
-const BAD_SMOOTHNESS = new Set(["bad", "very_bad", "horrible", "very_horrible", "impassable", "poor"]);
-const GOOD_SMOOTHNESS = new Set(["excellent", "very_good", "good"]);
-const ACCEPTABLE_SMOOTHNESS = new Set(["intermediate"]);
-const BICYCLE_ALLOWED = new Set(["yes", "designated", "permissive", "official", "optional_sidepath"]);
-const ACCESS_ALLOWED = new Set(["yes", "all", "designated", "permissive"]);
-const RESTRICTED_ACCESS = new Set([
-  "agricultural", "forestry", "customers", "permit", "military", "restricted", "emergency"
-]);
-const RESTRICTED_BICYCLE = new Set(["no", "private", "destination", "customers", "permit", "dismount", "discouraged"]);
-
-const normalizeTag = (value: string | undefined): string | undefined =>
-  value?.trim().toLowerCase() || undefined;
-
-const surfaceParts = (value: string): string[] =>
-  value.split(/[;,]/).map((part) => part.trim().toLowerCase()).filter(Boolean);
-
-export const classifyRoadCyclingSurface = (surface: string | undefined): RoadSurfaceSuitability => {
-  if (!surface?.trim()) return "UNKNOWN";
-  const parts = surfaceParts(surface);
-  if (parts.length === 0) return "UNKNOWN";
-  if (parts.some((part) => BAD_SURFACES.has(part))) return "BAD";
-  if (parts.every((part) => GOOD_SURFACES.has(part))) return "GOOD";
-  if (parts.every((part) => GOOD_SURFACES.has(part) || ACCEPTABLE_SURFACES.has(part))) {
-    return "ACCEPTABLE";
-  }
-  return "UNKNOWN";
-};
-
-export const classifyRoadCyclingSmoothness = (
-  smoothness: string | undefined
-): RoadSmoothnessSuitability => {
-  const value = normalizeTag(smoothness);
-  if (!value) return "UNKNOWN";
-  if (BAD_SMOOTHNESS.has(value)) return "BAD";
-  if (GOOD_SMOOTHNESS.has(value)) return "GOOD";
-  if (ACCEPTABLE_SMOOTHNESS.has(value)) return "ACCEPTABLE";
-  return "UNKNOWN";
-};
-
-export interface RoadCyclingAccessResult {
-  allowed: boolean;
-  confidence: number;
-  reason?: string;
-}
-
-/** Evaluates access in the context of the way type; `use_sidepath` only rejects carriageways. */
-export const isRoadCyclingAccessible = (tags: Record<string, string>): RoadCyclingAccessResult => {
-  const highway = normalizeTag(tags.highway);
-  const access = normalizeTag(tags.access);
-  const bicycle = normalizeTag(tags.bicycle);
-
-  if (access === "no") return { allowed: false, confidence: 100, reason: "REJECT_ACCESS_NO" };
-  if (access === "private") return { allowed: false, confidence: 100, reason: "REJECT_PRIVATE_ACCESS" };
-  if (RESTRICTED_ACCESS.has(access ?? "")) {
-    return { allowed: false, confidence: 90, reason: "REJECT_RESTRICTED_ACCESS" };
-  }
-  if (bicycle === "no") return { allowed: false, confidence: 100, reason: "REJECT_BICYCLE_FORBIDDEN" };
-  if (bicycle === "use_sidepath" && highway !== "cycleway") {
-    return { allowed: false, confidence: 100, reason: "REJECT_BICYCLE_USE_SIDEPATH" };
-  }
-  if (bicycle === "use_sidepath" && highway === "cycleway") {
-    return { allowed: true, confidence: 55 };
-  }
-  if (RESTRICTED_BICYCLE.has(bicycle ?? "")) {
-    return { allowed: false, confidence: 90, reason: "REJECT_BICYCLE_RESTRICTED" };
-  }
-  if (access === "destination" && !BICYCLE_ALLOWED.has(bicycle ?? "")) {
-    return { allowed: false, confidence: 100, reason: "REJECT_DESTINATION_ACCESS" };
-  }
-  if (BICYCLE_ALLOWED.has(bicycle ?? "") || ACCESS_ALLOWED.has(access ?? "")) {
-    return { allowed: true, confidence: 96 };
-  }
-  if (access === "destination") return { allowed: true, confidence: 76 };
-  if (access || bicycle) return { allowed: false, confidence: 35, reason: "REJECT_UNKNOWN_ACCESS" };
-  return { allowed: true, confidence: 62 };
-};
 
 const highwayClassConfidence = (highway: string | undefined): number => {
   switch (highway) {
@@ -138,53 +76,6 @@ const numericMaxspeed = (value: string | undefined): number | undefined => {
 
 const average = (values: number[]): number =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-
-const linkOnly = (tagsBySegment: Record<string, string>[]): boolean =>
-  tagsBySegment.length > 0 && tagsBySegment.every((tags) => normalizeTag(tags.highway)?.endsWith("_link"));
-
-const linkDominatesCandidate = (candidate: FartlekCandidate): boolean => {
-  const hasLink = candidate.tagsBySegment.some((tags) => normalizeTag(tags.highway)?.endsWith("_link"));
-  return hasLink &&
-    (candidate.linkLengthMeters ?? 0) >
-      Math.min(MAX_LINK_CONNECTOR_LENGTH_METERS, candidate.lengthMeters * MAX_LINK_CONNECTOR_CANDIDATE_FRACTION);
-};
-
-const hasUnclassifiedWithoutEvidence = (tagsBySegment: Record<string, string>[]): boolean =>
-  tagsBySegment.some((tags) =>
-    normalizeTag(tags.highway) === "unclassified" &&
-    !tags.surface?.trim() &&
-    !tags.smoothness?.trim()
-  );
-
-const cyclewayHasEvidence = (tagsBySegment: Record<string, string>[]): boolean =>
-  tagsBySegment.every((tags) => {
-    if (normalizeTag(tags.highway) !== "cycleway") return true;
-    const surface = normalizeTag(tags.surface);
-    return surface !== undefined &&
-      ["asphalt", "paved", "concrete"].includes(surface) &&
-      classifyRoadCyclingSurface(surface) !== "BAD";
-  });
-
-const candidateHardRejection = (candidate: FartlekCandidate): string | undefined => {
-  if (candidate.coordinates.length < 2) return "REJECT_MALFORMED_GEOMETRY";
-  if (candidate.lengthMeters < FARTLEK_MIN_LENGTH_METERS) return "REJECT_TOO_SHORT";
-  if (linkOnly(candidate.tagsBySegment)) return "REJECT_LINK_STANDALONE";
-  for (const tags of candidate.tagsBySegment) {
-    if (!["primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link",
-      "unclassified", "cycleway"].includes(normalizeTag(tags.highway) ?? "")) {
-      return "REJECT_UNSUITABLE_HIGHWAY";
-    }
-    const surface = classifyRoadCyclingSurface(tags.surface);
-    if (surface === "BAD") return "REJECT_BAD_SURFACE";
-    if (classifyRoadCyclingSmoothness(tags.smoothness) === "BAD") return "REJECT_BAD_SMOOTHNESS";
-    const access = isRoadCyclingAccessible(tags);
-    if (!access.allowed) return access.reason ?? "REJECT_ACCESS";
-  }
-  if (linkDominatesCandidate(candidate)) return "REJECT_LINK_DOMINATED";
-  if (hasUnclassifiedWithoutEvidence(candidate.tagsBySegment)) return "REJECT_LOW_CONFIDENCE_UNCLASSIFIED";
-  if (!cyclewayHasEvidence(candidate.tagsBySegment)) return "REJECT_CYCLEWAY_SURFACE_EVIDENCE";
-  return undefined;
-};
 
 const surfaceQualityPoints = (tags: Record<string, string>): number => {
   switch (classifyRoadCyclingSurface(tags.surface)) {
@@ -274,23 +165,28 @@ export const calculateRoadCyclingFlowlineDataConfidence = (candidate: FartlekCan
 };
 
 export interface RoadCyclingFlowlineQuality {
+  /** Flow score (0..100); historically the single "suitability" score. */
   qualityScore: number;
   dataConfidence: number;
   reasons: string[];
   rejectionReason?: string;
+  /** Full independent score set (flow/endurance/explore/roadQuality + dataConfidence 0..1). */
+  scores: SegmentQualityScores;
 }
 
 /** Hard-invalid candidates are rejected before quality or confidence can permit publication. */
 export const calculateRoadCyclingFlowlineQuality = (
   candidate: FartlekCandidate
 ): RoadCyclingFlowlineQuality => {
-  const rejectionReason = candidateHardRejection(candidate);
+  const rejectionReason = roadCyclingRejectionReason(candidate);
   if (rejectionReason) {
+    const dataConfidence = calculateRoadCyclingFlowlineDataConfidence(candidate);
     return {
       qualityScore: 0,
-      dataConfidence: calculateRoadCyclingFlowlineDataConfidence(candidate),
+      dataConfidence,
       reasons: [rejectionReason],
-      rejectionReason
+      rejectionReason,
+      scores: scoreRoadCyclingSegment(candidate, { qualityScore: 0, dataConfidence })
     };
   }
 
@@ -341,7 +237,12 @@ export const calculateRoadCyclingFlowlineQuality = (
     `DATA_CONFIDENCE_${dataConfidence}`
   ];
   if (priorityRoadPenalty) reasons.push("PRIORITY_ROAD_TRAFFIC_CONTEXT_PENALTY");
-  return { qualityScore: score, dataConfidence, reasons };
+  return {
+    qualityScore: score,
+    dataConfidence,
+    reasons,
+    scores: scoreRoadCyclingSegment(candidate, { qualityScore: score, dataConfidence })
+  };
 };
 
 export const shouldPublishRoadCyclingFlowline = (
@@ -350,18 +251,3 @@ export const shouldPublishRoadCyclingFlowline = (
   !quality.rejectionReason &&
   quality.qualityScore >= ROAD_CYCLING_MIN_QUALITY_SCORE &&
   quality.dataConfidence >= ROAD_CYCLING_MIN_DATA_CONFIDENCE;
-
-/** Chain join guard: do not join across material surface, smoothness, access, or road-class changes. */
-export const roadCyclingCompatibilityKey = (tags: Record<string, string>): string => [
-  classifyRoadCyclingSurface(tags.surface),
-  classifyRoadCyclingSmoothness(tags.smoothness),
-  normalizeTag(tags.highway)?.replace(/_link$/, ""),
-  normalizeTag(tags.access) === "destination" ? "destination" :
-    RESTRICTED_ACCESS.has(normalizeTag(tags.access) ?? "") ? "restricted" :
-      normalizeTag(tags.access) ? "explicit" : "default",
-  normalizeTag(tags.bicycle) === "use_sidepath" || RESTRICTED_BICYCLE.has(normalizeTag(tags.bicycle) ?? "")
-    ? "restricted"
-    : BICYCLE_ALLOWED.has(normalizeTag(tags.bicycle) ?? "")
-      ? "explicit"
-      : normalizeTag(tags.bicycle) ?? "default"
-].join("|");

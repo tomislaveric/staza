@@ -141,6 +141,16 @@ export interface Fartlek {
   suitabilityScore: number;
   suitabilityReasons: string[];
   mappingConfidence: number;
+  /** Flow score (0..100). Equals `suitabilityScore`; the generic model's "flow" expression. */
+  flowScore?: number;
+  /** Independent road-cycling style scores (0..100) from the generic segment model. */
+  enduranceScore?: number;
+  exploreScore?: number;
+  roadQualityScore?: number;
+  /** Data confidence, 0..100 (persisted); equals `mappingConfidence`. */
+  dataConfidence?: number;
+  /** Integer segment scoring-model version persisted alongside the scores. */
+  scoringVersion?: number;
   /** Bumped whenever the source geometry is refreshed; snapshotted onto completions. */
   geometryVersion: number;
   createdAt?: string;

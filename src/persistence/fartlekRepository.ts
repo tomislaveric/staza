@@ -21,6 +21,12 @@ interface FartlekRow {
   suitability_score: number;
   suitability_reasons: string[];
   mapping_confidence: number;
+  flow_score: number | null;
+  endurance_score: number | null;
+  explore_score: number | null;
+  road_quality_score: number | null;
+  data_confidence: number | null;
+  scoring_version: number | null;
   geometry_version: number;
   created_at: Date;
   updated_at: Date;
@@ -46,6 +52,12 @@ const mapFartlek = (row: FartlekRow): Fartlek => ({
   suitabilityScore: row.suitability_score,
   suitabilityReasons: row.suitability_reasons,
   mappingConfidence: row.mapping_confidence,
+  ...(row.flow_score === null ? {} : { flowScore: row.flow_score }),
+  ...(row.endurance_score === null ? {} : { enduranceScore: row.endurance_score }),
+  ...(row.explore_score === null ? {} : { exploreScore: row.explore_score }),
+  ...(row.road_quality_score === null ? {} : { roadQualityScore: row.road_quality_score }),
+  ...(row.data_confidence === null ? {} : { dataConfidence: row.data_confidence }),
+  ...(row.scoring_version === null ? {} : { scoringVersion: row.scoring_version }),
   geometryVersion: row.geometry_version,
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString()
@@ -54,7 +66,9 @@ const mapFartlek = (row: FartlekRow): Fartlek => ({
 const SELECT_COLUMNS =
   "id, name, geometry, start_latitude, start_longitude, end_latitude, end_longitude, length_meters, status, " +
   "direction_restricted, source_type, source_external_id, source_attribution, source_metadata, " +
-  "suitability_score, suitability_reasons, mapping_confidence, geometry_version, created_at, updated_at";
+  "suitability_score, suitability_reasons, mapping_confidence, " +
+  "flow_score, endurance_score, explore_score, road_quality_score, data_confidence, scoring_version, " +
+  "geometry_version, created_at, updated_at";
 
 export class FartlekRepository {
   constructor(private readonly pool: Pool) {}
@@ -114,8 +128,10 @@ export class FartlekRepository {
             id, name, geometry, start_latitude, start_longitude, end_latitude, end_longitude, length_meters,
             status, direction_restricted, source_type, source_external_id, source_attribution, source_metadata,
             suitability_score, suitability_reasons, mapping_confidence, geometry_version,
-            bbox_min_latitude, bbox_max_latitude, bbox_min_longitude, bbox_max_longitude
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+            bbox_min_latitude, bbox_max_latitude, bbox_min_longitude, bbox_max_longitude,
+            flow_score, endurance_score, explore_score, road_quality_score, data_confidence, scoring_version
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+            $23, $24, $25, $26, $27, $28)
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             geometry = EXCLUDED.geometry,
@@ -133,6 +149,12 @@ export class FartlekRepository {
             suitability_score = EXCLUDED.suitability_score,
             suitability_reasons = EXCLUDED.suitability_reasons,
             mapping_confidence = EXCLUDED.mapping_confidence,
+            flow_score = EXCLUDED.flow_score,
+            endurance_score = EXCLUDED.endurance_score,
+            explore_score = EXCLUDED.explore_score,
+            road_quality_score = EXCLUDED.road_quality_score,
+            data_confidence = EXCLUDED.data_confidence,
+            scoring_version = EXCLUDED.scoring_version,
             bbox_min_latitude = EXCLUDED.bbox_min_latitude,
             bbox_max_latitude = EXCLUDED.bbox_max_latitude,
             bbox_min_longitude = EXCLUDED.bbox_min_longitude,
@@ -161,7 +183,13 @@ export class FartlekRepository {
             geometryBounds.minLatitude,
             geometryBounds.maxLatitude,
             geometryBounds.minLongitude,
-            geometryBounds.maxLongitude
+            geometryBounds.maxLongitude,
+            fartlek.flowScore ?? fartlek.suitabilityScore,
+            fartlek.enduranceScore ?? null,
+            fartlek.exploreScore ?? null,
+            fartlek.roadQualityScore ?? null,
+            Math.round(fartlek.dataConfidence ?? fartlek.mappingConfidence),
+            fartlek.scoringVersion ?? 1
           ]
         );
       }

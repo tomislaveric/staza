@@ -22,6 +22,7 @@ export const scoreFartlekCandidate = (candidate: FartlekCandidate): ScoredFartle
     mappingConfidence: quality.dataConfidence,
     reasons: quality.reasons,
     decision,
+    scores: quality.scores,
     ...(quality.rejectionReason ? { rejectionReason: quality.rejectionReason } : {})
   };
 };
