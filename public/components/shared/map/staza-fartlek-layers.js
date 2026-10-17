@@ -75,7 +75,9 @@ const fartlekSelectedLayer = () => ({
   paint: {
     "line-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
     "line-opacity": ["case", SELECTED, 0.95, 0.22],
-    "line-width": ["case", SELECTED, lineWidth(HOVERED_WIDTH_STOPS), lineWidth(SELECTED_WIDTH_STOPS)]
+    // MapLibre allows one zoom interpolate per expression, so the state switch sits inside each stop.
+    "line-width": ["interpolate", ["linear"], ["zoom"],
+      ...SELECTED_WIDTH_STOPS.flatMap(([zoom, quest], index) => [zoom, ["case", SELECTED, HOVERED_WIDTH_STOPS[index][1], quest]])]
   }
 });
 

@@ -337,6 +337,7 @@ describe("mounted World page interactions", () => {
     let viewportSnapshot = { collectibles, fartleks, stats, truncated: false };
     let activeInstances = instances;
     let customized = 0;
+    let viewportShifts = 0;
     const fetchMock = vi.fn(async (url, options) => {
       let body;
       if (url === "/api/world/basemap") body = { styleUrl: "/style.json" };
@@ -424,7 +425,10 @@ describe("mounted World page interactions", () => {
       status: hosts["[data-world-status]"],
       changeViewport: (snapshot) => {
         viewportSnapshot = snapshot;
-        createMap.mock.calls[0][1].onViewportChange(map.getBounds());
+        // Each change leaves the previously cached collectible area, forcing a reload.
+        const shift = (viewportShifts += 20);
+        const { west, south, east, north } = map.getBounds();
+        createMap.mock.calls[0][1].onViewportChange({ west: west + shift, south, east: east + shift, north });
       },
       quests: questHost,
       collectibleIds: () => map.setCollectibles.mock.lastCall[0].features.map((feature) => feature.id),

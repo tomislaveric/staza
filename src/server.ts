@@ -881,15 +881,22 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
       return;
     }
     const flowlinePolicy = flowlinePolicyForBounds(bounds, config.worldFlowlineLimit);
+    // The client caches collectibles for a wider area; it asks for them only when leaving that area.
+    const areaBounds = parseBoundsParameter(request.query.collectibleBbox);
+    const skipCollectibles = request.query.skipCollectibles === "1";
     const [viewport, fartlekResult] = await Promise.all([
-      collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
+      skipCollectibles
+        ? undefined
+        : areaBounds
+          ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit)
+          : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
       fartlekRepository.listWithinBoundsLimited(bounds, flowlinePolicy)
     ]);
     const fartleks = await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
-    const world = createWorldSnapshot(viewport.collectibles, discoveredSourceIds);
+    const world = viewport ? createWorldSnapshot(viewport.collectibles, discoveredSourceIds) : undefined;
     response.json({
-      ...world,
-      truncated: viewport.truncated,
+      ...(world ?? {}),
+      ...(viewport ? { truncated: viewport.truncated } : { collectiblesSkipped: true }),
       fartlekTruncated: fartlekResult.truncated,
       fartleks
     });

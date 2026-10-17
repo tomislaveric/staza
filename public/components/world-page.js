@@ -5,6 +5,7 @@ import { collectibleCategory, collectiblesToFeatureCollection } from "./world/co
 import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import { fartleksToFeatureCollection } from "./world/fartlek-features.js";
 import { boundsToParameter, createWorldMap } from "./world/world-map.js";
+import { boundsContain, expandBounds, isServedByLoadedArea, scaleBounds } from "./shared/map/staza-map-utils.js";
 import { QuestList } from "./world/quest-list.js";
 import { CollectibleDetail } from "./world/collectible-detail.js";
 import { FartlekDetail } from "./world/fartlek-detail.js";
@@ -228,6 +229,8 @@ export const mountWorldPage = async (mountPoint) => {
   let selectedQuestTargets = { collectibles: [], flowlines: [] };
   let questSelectionToken = 0;
   let requestToken = 0;
+  /** Collectible cache: the wide area last loaded, so panning inside it never reloads icons. */
+  let loadedArea;
   let worldMap;
   /** Active "Explore this Area" session; undefined in the NORMAL map state. */
   let exploration;
@@ -858,11 +861,24 @@ export const mountWorldPage = async (mountPoint) => {
   async function loadViewport(bounds) {
     const token = ++requestToken;
     try {
-      const snapshot = await fetch(`/api/world?bbox=${boundsToParameter(bounds)}`).then(responseJson);
+      const cached = isServedByLoadedArea(loadedArea, bounds);
+      // Load twice the viewport (at least 200 km) so zoomed-out maps still get room to pan.
+      const area = cached ? undefined : expandBounds(scaleBounds(bounds, 2));
+      const query = `bbox=${boundsToParameter(bounds)}`
+        + (cached ? "&skipCollectibles=1" : `&collectibleBbox=${boundsToParameter(area)}`);
+      const snapshot = await fetch(`/api/world?${query}`).then(responseJson);
       if (token !== requestToken) return;
-      collectibles = snapshot.collectibles;
-      stats = snapshot.stats;
-      truncated = snapshot.truncated || snapshot.fartlekTruncated === true;
+      if (!cached) {
+        loadedArea = { bounds: area, truncated: Boolean(snapshot.truncated) };
+        // Keep nearby items already shown so a capped reload never makes icons vanish or swap.
+        const keep = scaleBounds(area, 1.5);
+        const loadedIds = new Set(snapshot.collectibles.map((item) => item.id));
+        const retained = collectibles.filter((item) => !loadedIds.has(item.id)
+          && boundsContain(keep, { west: item.longitude, east: item.longitude, south: item.latitude, north: item.latitude }));
+        collectibles = [...snapshot.collectibles, ...retained];
+        stats = snapshot.stats;
+      }
+      truncated = loadedArea.truncated || snapshot.fartlekTruncated === true;
       fartleks = snapshot.fartleks ?? [];
       availableFilters = availableWorldFilters(collectibles, fartleks);
       selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));

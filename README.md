@@ -146,6 +146,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Staza landing page localization](features/staza-landing-page-localization/README.md)
   — render the public landing page in English and German with localized URLs
   while preserving one shared page structure and the existing app routes.
+- [Stable peak loading](features/stable-peak-loading/README.md) — cache a ≥200 km
+  area of World collectibles so icons stay put while panning the map.
 - [Strava OAuth and manual activity import](features/strava-oauth-manual-activity-import/README.md)
   — connect Strava for an explicit single-activity import through the canonical
   activity pipeline, with an immutable journey-start boundary.

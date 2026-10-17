@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   boundsToParameter,
+  expandBounds,
+  isServedByLoadedArea,
   LAYER_ORDER,
   lineFeature,
   pointFeature,
@@ -59,5 +61,33 @@ describe("LAYER_ORDER", () => {
       "selection",
       "position"
     ]);
+  });
+});
+
+describe("area cache helpers", () => {
+  const km = (bounds) => ({
+    height: (bounds.north - bounds.south) * 111.32,
+    width: (bounds.east - bounds.west) * 111.32 * Math.cos(((bounds.north + bounds.south) / 2) * Math.PI / 180)
+  });
+
+  it("expands small bounds to at least 200 km around the same center and never shrinks large ones", () => {
+    const small = { west: 8.3, south: 48.9, east: 8.5, north: 49.0 };
+    const expanded = expandBounds(small);
+    expect(km(expanded).width).toBeGreaterThanOrEqual(199);
+    expect(km(expanded).height).toBeGreaterThanOrEqual(199);
+    expect((expanded.west + expanded.east) / 2).toBeCloseTo(8.4);
+    const large = { west: 0, south: 40, east: 10, north: 50 };
+    expect(expandBounds(large)).toEqual(large);
+  });
+
+  it("serves viewports inside the loaded area, only from its center when truncated", () => {
+    const area = { west: 0, south: 0, east: 10, north: 10 };
+    const nearEdge = { west: 0.5, south: 4, east: 1.5, north: 5 };
+    const centered = { west: 4, south: 4, east: 6, north: 6 };
+    expect(isServedByLoadedArea(undefined, centered)).toBe(false);
+    expect(isServedByLoadedArea({ bounds: area, truncated: false }, nearEdge)).toBe(true);
+    expect(isServedByLoadedArea({ bounds: area, truncated: true }, nearEdge)).toBe(false);
+    expect(isServedByLoadedArea({ bounds: area, truncated: true }, centered)).toBe(true);
+    expect(isServedByLoadedArea({ bounds: area, truncated: false }, { ...centered, east: 11 })).toBe(false);
   });
 });

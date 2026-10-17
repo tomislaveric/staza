@@ -71,3 +71,61 @@ export const LAYER_ORDER = Object.freeze([
   "selection",
   "position"
 ]);
+
+const METERS_PER_DEGREE_LATITUDE = 111_320;
+
+/**
+ * Grows `{ west, south, east, north }` bounds around their center so they are at least `minKm`
+ * wide and high (never shrinks). Longitude degrees are latitude-aware; results are clamped.
+ */
+export const expandBounds = (bounds, minKm = 200) => {
+  const centerLatitude = (bounds.south + bounds.north) / 2;
+  const centerLongitude = (bounds.west + bounds.east) / 2;
+  const minHeight = (minKm * 1000) / METERS_PER_DEGREE_LATITUDE;
+  const cosine = Math.max(Math.cos(centerLatitude * Math.PI / 180), 0.01);
+  const minWidth = minHeight / cosine;
+  const height = Math.max(bounds.north - bounds.south, minHeight);
+  const width = Math.max(bounds.east - bounds.west, minWidth);
+  return {
+    west: Math.max(-180, centerLongitude - width / 2),
+    south: Math.max(-90, centerLatitude - height / 2),
+    east: Math.min(180, centerLongitude + width / 2),
+    north: Math.min(90, centerLatitude + height / 2)
+  };
+};
+
+/** Scales bounds around their center (factor 2 = twice as wide and high), clamped to the globe. */
+export const scaleBounds = (bounds, factor) => {
+  const longitudeInset = (bounds.east - bounds.west) * (factor - 1) / 2;
+  const latitudeInset = (bounds.north - bounds.south) * (factor - 1) / 2;
+  return {
+    west: Math.max(-180, bounds.west - longitudeInset),
+    south: Math.max(-90, bounds.south - latitudeInset),
+    east: Math.min(180, bounds.east + longitudeInset),
+    north: Math.min(90, bounds.north + latitudeInset)
+  };
+};
+
+export const boundsContain = (outer, inner) =>
+  inner.west >= outer.west && inner.east <= outer.east && inner.south >= outer.south && inner.north <= outer.north;
+
+/** The centered fraction (0-1) of the bounds, used as the "safe" region of a truncated area load. */
+export const centralBounds = (bounds, fraction) => {
+  const longitudeInset = (bounds.east - bounds.west) * (1 - fraction) / 2;
+  const latitudeInset = (bounds.north - bounds.south) * (1 - fraction) / 2;
+  return {
+    west: bounds.west + longitudeInset,
+    south: bounds.south + latitudeInset,
+    east: bounds.east - longitudeInset,
+    north: bounds.north - latitudeInset
+  };
+};
+
+/**
+ * Whether the viewport can be served from the cached collectible area. A truncated area only
+ * covers its center reliably, so the viewport must stay in the central half.
+ */
+export const isServedByLoadedArea = (loaded, viewport) => {
+  if (!loaded) return false;
+  return boundsContain(loaded.truncated ? centralBounds(loaded.bounds, 0.5) : loaded.bounds, viewport);
+};
