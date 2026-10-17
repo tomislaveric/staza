@@ -112,6 +112,8 @@ export const createWorldMap = async (container, {
     for (const layer of endpointLayers()) map.addLayer(layer);
   };
 
+  map.addControl(new staza.maplibre.ScaleControl({ maxWidth: 110, unit: "metric" }), "bottom-left");
+
   await staza.ready;
   styleReady = true;
   ensureAlternateLayers();

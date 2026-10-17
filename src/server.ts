@@ -31,6 +31,7 @@ import {
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
+import { flowlinePolicyForBounds } from "./flowlinePolicy.js";
 import { parseBoundsParameter } from "./worldQuery.js";
 import { StravaConnectionRepository, type StravaReturnLocale } from "./persistence/stravaConnectionRepository.js";
 import { StravaClient } from "./strava/client.js";
@@ -879,15 +880,17 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
       response.json({ collectibles: [], stats, truncated: false, fartleks: [] });
       return;
     }
-    const [viewport, fartlekCandidates] = await Promise.all([
+    const flowlinePolicy = flowlinePolicyForBounds(bounds, config.worldFlowlineLimit);
+    const [viewport, fartlekResult] = await Promise.all([
       collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      fartlekRepository.listWithinBounds(bounds)
+      fartlekRepository.listWithinBoundsLimited(bounds, flowlinePolicy)
     ]);
-    const fartleks = await worldFartleksForPlayer(playerId, fartlekCandidates);
+    const fartleks = await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
     const world = createWorldSnapshot(viewport.collectibles, discoveredSourceIds);
     response.json({
       ...world,
       truncated: viewport.truncated,
+      fartlekTruncated: fartlekResult.truncated,
       fartleks
     });
   } catch (error) {

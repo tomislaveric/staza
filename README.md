@@ -157,6 +157,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [World Filter](features/world-filter/README.md)
   — combine multi-select, marker-keyed World map filters and remove the
   redundant map-overlay legend.
+- [Zoom-based Flowline thinning](features/zoom-based-flowline-thinning/README.md)
+  — load fewer Flowlines when zoomed out and add a map scale bar.
+
 ## World architecture
 
 The World screen is a **browse read model**, not the route-relevant candidate

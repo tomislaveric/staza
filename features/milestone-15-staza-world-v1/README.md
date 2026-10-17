@@ -185,6 +185,7 @@ CREATE INDEX collectibles_bbox_index ON collectibles (latitude, longitude);
   predicate for unit testing; the repository performs the bounded query.
 - Results are capped by `WORLD_VIEWPORT_LIMIT` (default 300), retaining those closest
   to the viewport centre, and the response sets `truncated: true` when capped.
+- Flowlines are thinned by the `zoom` query parameter (min length and count cap per tier, capped by `WORLD_FLOWLINE_LIMIT`, default 2000); see `features/zoom-based-flowline-thinning`.
 - Response shape: `{ collectibles, stats, quests, truncated }`, where `stats` is
   viewport-scoped.
 - Omitting `bbox` preserves the current global behavior, so `/api/player/profile`

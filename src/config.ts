@@ -150,6 +150,7 @@ export const config = {
   fitSampleGapWarningSeconds: decimalEnv("FIT_SAMPLE_GAP_WARNING_SECONDS", 30),
   worldQueryPaddingMeters: decimalEnv("WORLD_QUERY_PADDING_METERS", 500),
   worldViewportLimit: integerEnv("WORLD_VIEWPORT_LIMIT", 300),
+  worldFlowlineLimit: integerEnv("WORLD_FLOWLINE_LIMIT", 2000),
   basemapStyleUrl: httpsUrlEnv("BASEMAP_STYLE_URL", "https://tiles.openfreemap.org/styles/liberty"),
   basemapAttribution: process.env.BASEMAP_ATTRIBUTION?.trim()
     || "\u00a9 OpenFreeMap \u00b7 \u00a9 OpenMapTiles \u00b7 \u00a9 OpenStreetMap contributors",

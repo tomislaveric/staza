@@ -99,18 +99,36 @@ export class FartlekRepository {
    * GiST index, so a world load only deserializes the handful of geometries that overlap the bbox
    * rather than the entire published catalog.
    */
-  async listWithinBounds(bounds: GeoBounds): Promise<Fartlek[]> {
+  async listWithinBounds(
+    bounds: GeoBounds,
+    options: { minLengthMeters?: number; limit?: number } = {}
+  ): Promise<Fartlek[]> {
+    return (await this.listWithinBoundsLimited(bounds, options)).fartleks;
+  }
+
+  /** Best-scored (then longest) Fartleks first when capped; `truncated` reports dropped rows. */
+  async listWithinBoundsLimited(
+    bounds: GeoBounds,
+    { minLengthMeters = 0, limit }: { minLengthMeters?: number; limit?: number } = {}
+  ): Promise<{ fartleks: Fartlek[]; truncated: boolean }> {
     const result = await this.pool.query<FartlekRow>(
       `SELECT ${SELECT_COLUMNS} FROM fartleks
        WHERE status = 'published'
+         AND length_meters >= $5
          AND box(
                point(bbox_min_longitude, bbox_min_latitude),
                point(bbox_max_longitude, bbox_max_latitude)
              ) && box(point($1, $3), point($2, $4))
-       ORDER BY id`,
-      [bounds.minLongitude, bounds.maxLongitude, bounds.minLatitude, bounds.maxLatitude]
+       ORDER BY flow_score DESC, length_meters DESC, id
+       LIMIT $6`,
+      [
+        bounds.minLongitude, bounds.maxLongitude, bounds.minLatitude, bounds.maxLatitude,
+        minLengthMeters, limit === undefined ? null : limit + 1
+      ]
     );
-    return result.rows.map(mapFartlek);
+    const truncated = limit !== undefined && result.rows.length > limit;
+    const rows = (truncated ? result.rows.slice(0, limit) : result.rows).map(mapFartlek);
+    return { fartleks: rows.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)), truncated };
   }
 
   async upsertMany(

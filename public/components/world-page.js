@@ -862,7 +862,7 @@ export const mountWorldPage = async (mountPoint) => {
       if (token !== requestToken) return;
       collectibles = snapshot.collectibles;
       stats = snapshot.stats;
-      truncated = snapshot.truncated;
+      truncated = snapshot.truncated || snapshot.fartlekTruncated === true;
       fartleks = snapshot.fartleks ?? [];
       availableFilters = availableWorldFilters(collectibles, fartleks);
       selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
