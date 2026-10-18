@@ -171,12 +171,16 @@ describe("World filter controls", () => {
     for (const [category, icon] of [
       ["castle", "\u26eb"],
       ["mountain_pass", "\u26f0"],
-      ["peak", "\u25b2"],
-      ["waterfall", "💦"]
+      ["peak", "\u25b2"]
     ]) {
       expect(CollectibleSwatch({ category })).toContain(icon);
       expect(CollectibleSwatch({ category })).toContain("is-icon");
       expect(CollectibleSwatch({ category, visited: true })).toContain("is-visited");
+    }
+    for (const category of ["viewpoint", "place", "waterfall"]) {
+      expect(CollectibleSwatch({ category })).toContain(`collectible-${category}-muted.svg`);
+      expect(CollectibleSwatch({ category, visited: true })).toContain(`collectible-${category}.svg`);
+      expect(CollectibleSwatch({ category })).toContain("is-svg");
     }
     expect(buttonMarkup(markup, "fartleks")).toContain('<b class="fartlek-swatch" aria-hidden="true"></b>');
     expect(markup).not.toContain("is-completed");

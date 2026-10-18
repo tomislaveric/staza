@@ -1,10 +1,9 @@
 const CATEGORY_ICONS = {
   castle: "\u26eb",
   mountain_pass: "\u26f0",
-  peak: "\u25b2",
-  waterfall: "💦"
+  peak: "\u25b2"
 };
-const SVG_CATEGORIES = new Set(["viewpoint", "place"]);
+const SVG_CATEGORIES = new Set(["viewpoint", "place", "waterfall"]);
 
 /**
  * One marker vocabulary shared by the World filters and the quest collectible rows:

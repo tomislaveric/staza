@@ -2,18 +2,6 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("manual data import workflows", () => {
-  it("retires old demo quests without seeding quest rows", async () => {
-    const seed = JSON.parse(await readFile("fixtures/world-v1-seed.json", "utf8"));
-
-    expect(seed).not.toHaveProperty("quests");
-    expect(seed.removeQuests).toEqual([
-      "Karlsruhe City Classics",
-      "Durlach and the Turmberg",
-      "Rhine and Harbour",
-      "Alb Valley Climb"
-    ]);
-  });
-
   it("imports the uploaded Fartlek snapshot without requiring a PBF", async () => {
     const contents = await readFile(".github/workflows/data-import.yml", "utf8");
     expect(contents).toContain("name: Import Fartleks");

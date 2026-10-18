@@ -118,8 +118,8 @@ continues to identify its discovery globally.
 
 ## Implemented behavior
 
-- `fixtures/quest-templates.json` is the curated template source. Startup and
-  `npm run seed:collectibles` validate and synchronize versioned templates.
+- This approach was superseded by map-driven Explore this Area. No default
+  quest templates are synchronized at startup.
 - Migration `023_quest_templates_and_instances` adds template/instance storage
   and a collectible-category event snapshot. Migration
   `024_mountain_pass_quest_categories` backfills Mountain Pass categories on

@@ -166,7 +166,7 @@
   width: 12px;
 }
 .collectible-swatch.is-visited { background: var(--accent-yellow); border-color: rgb(11 12 15 / 75%); }
-.collectible-swatch.is-unvisited { background: var(--surface-raised-background); border-color: var(--world-marker-ring); }
+.collectible-swatch.is-unvisited { background: #315b68; border-color: var(--world-marker-ring); }
 .collectible-swatch.is-icon {
   background: transparent;
   border: 0;
@@ -197,9 +197,10 @@
   display: block;
   flex: none;
   height: 4px;
+  opacity: .72;
   width: 16px;
 }
-.fartlek-swatch.is-completed { background: var(--accent-yellow); }
+.fartlek-swatch.is-completed { background: var(--accent-yellow); opacity: 1; }
 
 .world-detail-host {
   backdrop-filter: blur(12px);

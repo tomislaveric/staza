@@ -207,7 +207,6 @@ npm install
 docker compose up -d postgres
 export DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_ride_ar
 npm run migrate
-npm run seed:collectibles
 npm run build
 npm start
 ```
@@ -275,23 +274,9 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
 - **FIT:** Must contain at least two time-stamped GPS trackpoints.
 - **MP4 (optional):** To generate highlights, use an original GoPro chapter copied directly from the camera. QuickTime trimming, re-encoding, or export removes the required `gpmd` GPMF metadata track.
 - **Telemetry:** This POC supports **GPS5** only. The correct GoPro chapter must cover the FIT coin-passage time.
-- **Collectibles:** The curated catalog lives in the PostgreSQL `collectibles`
-  table. `fixtures/world-v1-seed.json` is the default seed document: run
-  `npm run seed:collectibles` to upsert its collectibles by `id`. Explorations are
-  built from the player's selected map targets, so no quest templates are seeded.
-  Legacy quest rows are not seeded or
-  deleted except when explicitly named in the document's `removeQuests` list;
-  collectible rows are never deleted by seeding.
-  Pass a file explicitly, for example `npm run seed:collectibles -- fixtures/other-world.json`,
-  or set `COLLECTIBLE_SEED_FILE` to change the default. A seed document holds a
-  `collectibles` list, an optional `curator`, and optional `removeQuests`; a plain
-  nonempty list of Collectibles is also accepted. Legacy entries with `id`,
-  `latitude`, `longitude`, `radius_m`, and `value` normalize to a `coin` named
-  after its ID. Rich entries may additionally set a nonblank `name`, `type`
-  (`coin` or `landmark`) and optional nonblank `description`. Coordinates must
-  be finite and in range,
-  `radius_m` must be positive, `value` must be finite and nonnegative, and ids
-  must be unique.
+- **Collectibles:** The catalog is stored in the PostgreSQL `collectibles` table
+  and populated by the OSM/Wikidata and quäldich import workflows below. No
+  demo seed catalog is installed by the application.
 - **quäldich pass catalog:** `npm run import:quaeldich` imports cycling mountain
   passes from the official quäldich Pässelexikon GeoJSON
   (`https://www.quaeldich.de/common/js/paesse_geojson.php?license=odbl`, licensed

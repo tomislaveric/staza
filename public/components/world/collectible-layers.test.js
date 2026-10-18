@@ -126,7 +126,7 @@ describe("collectible source and layers", () => {
     ]);
   });
 
-  it("uses neutral discovery markers for categories without SVG icons", () => {
+  it("uses a shared blue discovery color for unvisited circle markers", () => {
     const map = fakeMap();
 
     ensureCollectibleLayers(map);
@@ -136,13 +136,10 @@ describe("collectible source and layers", () => {
       "case",
       ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]],
       "#e8b80a",
-      ["match", ["get", "category"],
-        "viewpoint", "#43a6c6",
-        "place", "#b06ea8",
-        "#171a20"]
+      "#315b68"
     ]);
     const stroke = JSON.stringify(paint["circle-stroke-color"]);
-    expect(stroke).toContain("#7c828c");
+    expect(stroke).toContain("#7fbad0");
     expect(stroke).not.toContain("#4d9de0");
     expect(stroke).not.toContain("#9b6ddf");
   });

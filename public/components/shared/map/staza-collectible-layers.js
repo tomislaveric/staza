@@ -22,13 +22,9 @@ export const COLLECTIBLE_CATEGORY_ICONS = [
 ];
 
 const VISITED_FILL = "#e8b80a";
-const UNVISITED_FILL = "#171a20";
-const NEUTRAL_RING = "#7c828c";
+const UNVISITED_FILL = "#315b68";
+const UNVISITED_RING = "#7fbad0";
 const SELECTED_ACCENT = "#e8b80a";
-const CATEGORY_FILL = ["match", ["get", "category"],
-  "viewpoint", "#43a6c6",
-  "place", "#b06ea8",
-  UNVISITED_FILL];
 
 const SELECTED = ["==", ["get", "selected"], true];
 const QUEST_TARGET = ["==", ["get", "questTarget"], true];
@@ -78,10 +74,10 @@ const collectibleLayer = () => ({
   filter: NO_CATEGORY_ICON,
   paint: {
     "circle-radius": zoomSize(RADIUS_STOPS, SELECTED_OR_QUEST_TARGET, 1.25),
-    "circle-color": ["case", FILLED, VISITED_FILL, CATEGORY_FILL],
+    "circle-color": ["case", FILLED, VISITED_FILL, UNVISITED_FILL],
     "circle-opacity": questOpacity(["case", FILLED, 1, 0.88]),
     "circle-stroke-width": zoomSize(STROKE_STOPS),
-    "circle-stroke-color": ["case", FILLED, "#0b0c0f", NEUTRAL_RING],
+    "circle-stroke-color": ["case", FILLED, "#0b0c0f", UNVISITED_RING],
     "circle-stroke-opacity": questOpacity(0.95)
   }
 });

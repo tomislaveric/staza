@@ -45,8 +45,8 @@ describe("fartlekLayers", () => {
     expect(lineLayer.paint["line-opacity"]).toEqual([
       "case",
       ["==", ["get", "questRelated"], false],
-      0.35,
-      ["case", completed, 0.95, 0.82]
+      0.28,
+      ["case", completed, 0.95, 0.68]
     ]);
   });
 

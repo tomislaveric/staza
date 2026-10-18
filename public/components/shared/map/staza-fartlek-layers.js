@@ -20,7 +20,7 @@ const CASING_COLOR = "#0b0c0f";
 const UNCOMPLETED_LINE = "#6b9eac";
 const COMPLETED_LINE = "#e8b80a";
 const SELECTED_ACCENT = "#e8b80a";
-const UNCOMPLETED_OPACITY = 0.82;
+const UNCOMPLETED_OPACITY = 0.68;
 const COMPLETED_OPACITY = 0.95;
 
 const SELECTED = ["==", ["get", "selected"], true];
@@ -58,7 +58,7 @@ const fartlekLineLayer = () => ({
     "line-opacity": [
       "case",
       ["==", ["get", "questRelated"], false],
-      0.35,
+      0.28,
       ["case", COMPLETED, COMPLETED_OPACITY, UNCOMPLETED_OPACITY]
     ],
     "line-width": lineWidth(LINE_WIDTH_STOPS)

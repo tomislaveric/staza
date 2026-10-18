@@ -11,7 +11,6 @@
     "test:sync": "tsx src/runSyncValidation.ts",
     "migrate": "tsx src/persistence/migrate.ts",
     "clean:activities": "tsx src/persistence/cleanActivities.ts",
-    "seed:collectibles": "tsx src/persistence/seedCollectibles.ts",
     "import:quaeldich": "tsx src/persistence/importQuaeldichPasses.ts",
     "analyze:road-segments": "tsx src/osm/analyzeRoadSegments.ts",
     "import:osm-wikidata": "tsx src/persistence/importOSMWikidata.ts",
