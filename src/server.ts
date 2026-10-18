@@ -884,7 +884,8 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     // The client caches collectibles for a wider area; it asks for them only when leaving that area.
     const areaBounds = parseBoundsParameter(request.query.collectibleBbox);
     const skipCollectibles = request.query.skipCollectibles === "1";
-    const [viewport, fartlekResult] = await Promise.all([
+    const [stats, viewport, fartlekResult] = await Promise.all([
+      collectibleRepository.worldStatsWithinBounds(bounds, discoveredSourceIds),
       skipCollectibles
         ? undefined
         : areaBounds
@@ -896,6 +897,7 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const world = viewport ? createWorldSnapshot(viewport.collectibles, discoveredSourceIds) : undefined;
     response.json({
       ...(world ?? {}),
+      stats,
       ...(viewport ? { truncated: viewport.truncated } : { collectiblesSkipped: true }),
       fartlekTruncated: fartlekResult.truncated,
       fartleks

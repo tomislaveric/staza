@@ -860,15 +860,15 @@ export const mountWorldPage = async (mountPoint) => {
       const snapshot = await fetch(`/api/world?${query}`).then(responseJson);
       if (token !== requestToken) return;
       if (!cached) {
-        loadedArea = { bounds: area, truncated: Boolean(snapshot.truncated) };
+        loadedArea = { bounds: area, sourceViewport: bounds, truncated: Boolean(snapshot.truncated) };
         // Keep nearby items already shown so a capped reload never makes icons vanish or swap.
         const keep = scaleBounds(area, 1.5);
         const loadedIds = new Set(snapshot.collectibles.map((item) => item.id));
         const retained = collectibles.filter((item) => !loadedIds.has(item.id)
           && boundsContain(keep, { west: item.longitude, east: item.longitude, south: item.latitude, north: item.latitude }));
         collectibles = [...snapshot.collectibles, ...retained];
-        stats = snapshot.stats;
       }
+      stats = snapshot.stats;
       truncated = loadedArea.truncated || snapshot.fartlekTruncated === true;
       fartleks = snapshot.fartleks ?? [];
       availableFilters = availableWorldFilters(collectibles, fartleks);

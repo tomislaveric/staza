@@ -73,6 +73,27 @@ describe("CollectibleRepository OSM metadata", () => {
     expect(params).toEqual([["a", "b"]]);
   });
 
+  it("aggregates collectible stats inside the requested bbox, including antimeridian bounds", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ total: 20, discovered: 3 }]
+    });
+    const pool = { query } as unknown as Pool;
+    const stats = await new CollectibleRepository(pool).worldStatsWithinBounds(
+      { minLatitude: -10, maxLatitude: 10, minLongitude: 170, maxLongitude: -170 },
+      ["a", "b"]
+    );
+
+    expect(stats).toEqual({
+      totalCollectibles: 20,
+      discoveredCount: 3,
+      remainingCount: 17
+    });
+    const [statement, params] = query.mock.calls[0];
+    expect(statement).toContain("latitude >= $2 AND latitude <= $3");
+    expect(statement).toContain("(longitude >= $4 AND longitude <= $5) OR (longitude >= $6 AND longitude <= $7)");
+    expect(params).toEqual([["a", "b"], -10, 10, 170, 180, -180, -170]);
+  });
+
   it("upserts metadata on the canonical collectible row without touching history", async () => {
     const query = vi.fn().mockResolvedValue({});
     const release = vi.fn();

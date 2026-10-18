@@ -90,6 +90,31 @@ export class CollectibleRepository {
     };
   }
 
+  async worldStatsWithinBounds(bounds: GeoBounds, discoveredSourceIds: Iterable<string>): Promise<WorldStats> {
+    const ids = [...new Set(discoveredSourceIds)];
+    const ranges = splitBoundsAtAntimeridian(bounds);
+    const clauses = ranges.map((_range, index) => {
+      const base = index * 2;
+      return `(longitude >= $${base + 4} AND longitude <= $${base + 5})`;
+    });
+    const parameters: unknown[] = [ids, bounds.minLatitude, bounds.maxLatitude];
+    for (const range of ranges) parameters.push(range.minLongitude, range.maxLongitude);
+    const result = await this.pool.query<{ total: number; discovered: number }>(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE id = ANY($1::text[]))::int AS discovered
+       FROM collectibles
+       WHERE latitude >= $2 AND latitude <= $3 AND (${clauses.join(" OR ")})`,
+      parameters
+    );
+    const { total, discovered } = result.rows[0];
+    return {
+      totalCollectibles: total,
+      discoveredCount: discovered,
+      remainingCount: total - discovered
+    };
+  }
+
   async listWithinBounds(bounds: GeoBounds, limit: number): Promise<{ collectibles: Collectible[]; truncated: boolean }> {
     const ranges = splitBoundsAtAntimeridian(bounds);
     const center = boundsCenter(bounds);

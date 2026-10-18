@@ -123,9 +123,17 @@ export const centralBounds = (bounds, fraction) => {
 
 /**
  * Whether the viewport can be served from the cached collectible area. A truncated area only
- * covers its center reliably, so the viewport must stay in the central half.
+ * covers its center reliably, so the viewport must stay in the central half and not zoom in
+ * beyond the view used to load that incomplete area.
  */
 export const isServedByLoadedArea = (loaded, viewport) => {
   if (!loaded) return false;
+  if (loaded.truncated && loaded.sourceViewport) {
+    const loadedWidth = loaded.sourceViewport.east - loaded.sourceViewport.west;
+    const loadedHeight = loaded.sourceViewport.north - loaded.sourceViewport.south;
+    const viewportWidth = viewport.east - viewport.west;
+    const viewportHeight = viewport.north - viewport.south;
+    if (viewportWidth < loadedWidth || viewportHeight < loadedHeight) return false;
+  }
   return boundsContain(loaded.truncated ? centralBounds(loaded.bounds, 0.5) : loaded.bounds, viewport);
 };

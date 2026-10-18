@@ -90,4 +90,15 @@ describe("area cache helpers", () => {
     expect(isServedByLoadedArea({ bounds: area, truncated: true }, centered)).toBe(true);
     expect(isServedByLoadedArea({ bounds: area, truncated: false }, { ...centered, east: 11 })).toBe(false);
   });
+
+  it("reloads a truncated cache when zooming in beyond its source viewport", () => {
+    const loaded = {
+      bounds: { west: 0, south: 0, east: 10, north: 10 },
+      sourceViewport: { west: 4, south: 4, east: 6, north: 6 },
+      truncated: true
+    };
+
+    expect(isServedByLoadedArea(loaded, { west: 4, south: 4, east: 6, north: 6 })).toBe(true);
+    expect(isServedByLoadedArea(loaded, { west: 4.5, south: 4.5, east: 5.5, north: 5.5 })).toBe(false);
+  });
 });
