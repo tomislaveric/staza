@@ -4,9 +4,12 @@ import {
   ROUTE_SOURCE_ID,
   alternateRouteLayers,
   alternateRoutesToGeoJson,
+  createHomeMarkerElement,
+  homeScaleZoom,
   loadStazaStyle,
   routeLayers,
-  routeToGeoJson
+  routeToGeoJson,
+  worldMapInitialView
 } from "./world-map.js";
 import { STAZA_DARK_PALETTE } from "./staza-map-theme.js";
 
@@ -91,5 +94,42 @@ describe("alternate exploration routes", () => {
       features: [{ type: "Feature", properties: { proposalId: "a" }, geometry }]
     });
     expect(alternateRoutesToGeoJson().features).toEqual([]);
+  });
+});
+
+describe("saved World map home", () => {
+  it("keeps the existing default view when no home location exists", () => {
+    expect(worldMapInitialView()).toEqual({
+      center: { longitude: 8.4037, latitude: 49.0069 },
+      zoom: 12
+    });
+  });
+
+  it("centers on the saved home and chooses a zoom for a 5 km scale bar", () => {
+    const home = { latitude: 49, longitude: 8.4 };
+    const view = worldMapInitialView(home);
+    const scaleDistanceMeters = Math.cos(home.latitude * Math.PI / 180)
+      * 2 * Math.PI * 6_371_008.8 * 110
+      / (512 * 2 ** view.zoom);
+
+    expect(view.center).toEqual({ longitude: home.longitude, latitude: home.latitude });
+    expect(scaleDistanceMeters).toBeGreaterThanOrEqual(5_000);
+    expect(scaleDistanceMeters).toBeLessThan(10_000);
+    expect(Number.isFinite(homeScaleZoom(90))).toBe(true);
+  });
+
+  it("builds an accessible marker using the existing home icon", () => {
+    const createElement = (tag) => ({
+      tag,
+      attributes: {},
+      setAttribute(name, value) { this.attributes[name] = value; },
+      append(child) { this.child = child; }
+    });
+    const marker = createHomeMarkerElement({ createElement });
+
+    expect(marker.className).toBe("world-home-marker");
+    expect(marker.attributes).toEqual({ role: "img", "aria-label": "Saved home location" });
+    expect(marker.child.src).toBe("/assets/nav-home.svg");
+    expect(marker.child.attributes["aria-hidden"]).toBe("true");
   });
 });

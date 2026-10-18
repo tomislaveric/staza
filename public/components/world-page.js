@@ -4,7 +4,8 @@ import { markerLabel } from "./world/world-markers.js";
 import { collectibleCategory, collectiblesToFeatureCollection } from "./world/collectible-features.js";
 import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import { fartleksToFeatureCollection } from "./world/fartlek-features.js";
-import { boundsToParameter, createWorldMap } from "./world/world-map.js";
+import { boundsToParameter, createWorldMap, homeScaleZoom } from "./world/world-map.js";
+import { readHomeLocation, saveHomeLocation } from "./world/home-location.js";
 import { boundsContain, expandBounds, isServedByLoadedArea, scaleBounds } from "./shared/map/staza-map-utils.js";
 import { QuestList } from "./world/quest-list.js";
 import { CollectibleDetail } from "./world/collectible-detail.js";
@@ -923,10 +924,18 @@ export const mountWorldPage = async (mountPoint) => {
 
   renderSidePanels();
 
+  let homePosition;
+  try {
+    homePosition = readHomeLocation();
+  } catch (error) {
+    setStatus(`Unable to load saved home location: ${error.message}`);
+  }
+
   try {
     worldMap = await createWorldMap(mapContainer, {
       styleUrl: basemap.styleUrl,
       attribution: basemap.attribution,
+      homePosition,
       onViewportChange: scheduleViewportLoad,
       onCollectibleSelect: (id) => selectCollectible(id),
       onCollectibleHover: (id) => previewExplorationTarget(id),
@@ -946,7 +955,16 @@ export const mountWorldPage = async (mountPoint) => {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (position) => worldMap.flyTo(position.coords.longitude, position.coords.latitude, 14),
+      (position) => {
+        const location = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        try {
+          saveHomeLocation(location);
+        } catch (error) {
+          setStatus(`Unable to save home location: ${error.message}`);
+        }
+        worldMap.setHomePosition(location);
+        worldMap.flyTo(location.longitude, location.latitude, homeScaleZoom(location.latitude));
+      },
       () => setStatus("Location permission was denied. Pan and zoom to explore.")
     );
   });

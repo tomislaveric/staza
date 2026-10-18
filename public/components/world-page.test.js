@@ -284,7 +284,13 @@ describe("mounted World page interactions", () => {
     plannerVersion: 2, createdAt: "2026-04-01T10:00:00.000Z"
   };
 
-  const mount = async ({ instances = [], generateError, rerouteError } = {}) => {
+  const mount = async ({ instances = [], generateError, rerouteError, savedHome } = {}) => {
+    let savedHomeValue = savedHome ? JSON.stringify(savedHome) : null;
+    const localStorage = {
+      getItem: vi.fn(() => savedHomeValue),
+      setItem: vi.fn((_key, value) => { savedHomeValue = value; })
+    };
+    vi.stubGlobal("localStorage", localStorage);
     const element = () => ({
       innerHTML: "",
       hidden: false,
@@ -392,7 +398,7 @@ describe("mounted World page interactions", () => {
       getView: () => ({ center: { lat: 50.5, lon: 9.5 }, zoom: 8 }),
       setCollectibles: vi.fn(), setFartleks: vi.fn(), setDetailPanelOpen: vi.fn(),
       setRoute: vi.fn(), setAlternateRoutes: vi.fn(), fitTo: vi.fn(), setRouteEndpoints: vi.fn(),
-      setPickHandler: vi.fn(), isPicking: vi.fn(() => false)
+      setPickHandler: vi.fn(), isPicking: vi.fn(() => false), setHomePosition: vi.fn(), flyTo: vi.fn()
     };
     const createMap = vi.spyOn(worldMap, "createWorldMap").mockResolvedValue(map);
     await mountWorldPage(mountPoint);
@@ -420,6 +426,8 @@ describe("mounted World page interactions", () => {
         calledUrl === url && (!method || options?.method === method)),
       buttons, map, fetchMock, exploreButton, questCancelButton, questSelectButton, remoteQuestSelectButton,
       callbacks: createMap.mock.calls[0][1],
+      localStorage,
+      savedHome: () => savedHomeValue ? JSON.parse(savedHomeValue) : undefined,
       detail,
       mountPoint,
       status: hosts["[data-world-status]"],
@@ -616,6 +624,46 @@ describe("mounted World page interactions", () => {
     submit(page);
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Step 2"));
     expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body).start).toEqual({ lat: 50.2, lon: 9.2 });
+  });
+
+  it("passes the last saved home into World map startup", async () => {
+    const savedHome = { latitude: 50.2, longitude: 9.2 };
+    const page = await mount({ savedHome });
+
+    expect(page.callbacks.homePosition).toEqual(savedHome);
+  });
+
+  it("replaces the saved home after a successful Locate Me and recenters the map", async () => {
+    const page = await mount({ savedHome: { latitude: 49.8, longitude: 8.8 } });
+    const location = { latitude: 50.2, longitude: 9.2 };
+    vi.stubGlobal("navigator", {
+      geolocation: {
+        getCurrentPosition: (success) => success({ coords: location })
+      }
+    });
+
+    page.mountPoint.querySelector("[data-world-locate]").handlers.click();
+
+    expect(page.savedHome()).toEqual(location);
+    expect(page.localStorage.setItem).toHaveBeenCalledTimes(1);
+    expect(page.map.setHomePosition).toHaveBeenCalledWith(location);
+    expect(page.map.flyTo).toHaveBeenCalledWith(9.2, 50.2, worldMap.homeScaleZoom(50.2));
+  });
+
+  it("keeps the saved home when location permission is denied", async () => {
+    const savedHome = { latitude: 50.2, longitude: 9.2 };
+    const page = await mount({ savedHome });
+    vi.stubGlobal("navigator", {
+      geolocation: {
+        getCurrentPosition: (_success, failure) => failure()
+      }
+    });
+
+    page.mountPoint.querySelector("[data-world-locate]").handlers.click();
+
+    expect(page.savedHome()).toEqual(savedHome);
+    expect(page.localStorage.setItem).not.toHaveBeenCalled();
+    expect(page.status.textContent).toContain("Location permission was denied");
   });
 
   it("shows only the hovered or selected proposal on the map", async () => {

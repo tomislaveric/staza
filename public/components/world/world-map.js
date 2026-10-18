@@ -17,6 +17,10 @@ import { loadStazaStyle } from "../shared/map/staza-map-style.js";
 /** Width reserved on the right for the detail panel so framing never hides the subject. */
 const DETAIL_PANEL_INSET = 368;
 const BASE_PADDING = 64;
+const SCALE_CONTROL_WIDTH = 110;
+const SCALE_BAR_TARGET_DISTANCE_METERS = 6_250;
+const EARTH_RADIUS_METERS = 6_371_008.8;
+const MAX_MERCATOR_LATITUDE = 85.051129;
 
 const ROUTE_SOURCE = "staza-quest-route";
 export const ROUTE_SOURCE_ID = ROUTE_SOURCE;
@@ -73,14 +77,44 @@ export {
   loadStazaStyle
 };
 
+/** Zoom at which the metric scale control rounds to a 5 km label. */
+export const homeScaleZoom = (latitude) => {
+  const clampedLatitude = Math.max(-MAX_MERCATOR_LATITUDE, Math.min(MAX_MERCATOR_LATITUDE, latitude));
+  const latitudeScale = Math.cos(clampedLatitude * Math.PI / 180);
+  const metersPerWorld = 2 * Math.PI * EARTH_RADIUS_METERS;
+  return Math.log2((latitudeScale * metersPerWorld * SCALE_CONTROL_WIDTH)
+    / (512 * SCALE_BAR_TARGET_DISTANCE_METERS));
+};
+
+export const worldMapInitialView = (homePosition) => homePosition
+  ? {
+    center: { longitude: homePosition.longitude, latitude: homePosition.latitude },
+    zoom: homeScaleZoom(homePosition.latitude)
+  }
+  : { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
+
+export const createHomeMarkerElement = (documentRef = globalThis.document) => {
+  const marker = documentRef.createElement("div");
+  marker.className = "world-home-marker";
+  marker.setAttribute("role", "img");
+  marker.setAttribute("aria-label", "Saved home location");
+
+  const icon = documentRef.createElement("img");
+  icon.src = "/assets/nav-home.svg";
+  icon.alt = "";
+  icon.setAttribute("aria-hidden", "true");
+  marker.append(icon);
+  return marker;
+};
+
 /**
  * Thin World map. It owns the World viewport events and quest-route plumbing only, over the
  * shared Staza map foundation; Staza gameplay rules stay in the World page.
  */
 export const createWorldMap = async (container, {
-  styleUrl, attribution, onViewportChange, onCollectibleSelect, onCollectibleHover, onFartlekSelect, onAlternateRouteSelect
+  styleUrl, attribution, homePosition, onViewportChange, onCollectibleSelect, onCollectibleHover, onFartlekSelect, onAlternateRouteSelect
 }) => {
-  const staza = await createStazaMap(container, { styleUrl, attribution });
+  const staza = await createStazaMap(container, { styleUrl, attribution, ...worldMapInitialView(homePosition) });
   const { map } = staza;
 
   let styleReady = false;
@@ -88,6 +122,7 @@ export const createWorldMap = async (container, {
   let pendingFartleks = EMPTY_FEATURE_COLLECTION;
   let panelInset = 0;
   let pickHandler;
+  let homeMarker;
 
   const framingPadding = () => ({
     top: BASE_PADDING,
@@ -112,7 +147,7 @@ export const createWorldMap = async (container, {
     for (const layer of endpointLayers()) map.addLayer(layer);
   };
 
-  map.addControl(new staza.maplibre.ScaleControl({ maxWidth: 110, unit: "metric" }), "bottom-left");
+  map.addControl(new staza.maplibre.ScaleControl({ maxWidth: SCALE_CONTROL_WIDTH, unit: "metric" }), "bottom-left");
 
   await staza.ready;
   styleReady = true;
@@ -124,6 +159,22 @@ export const createWorldMap = async (container, {
   setFartlekData(map, pendingFartleks);
   ensureCollectibleLayers(map);
   setCollectibleData(map, pendingCollectibles);
+
+  const setHomePosition = (position) => {
+    if (!position) {
+      homeMarker?.remove();
+      homeMarker = undefined;
+      return;
+    }
+    if (!homeMarker) {
+      homeMarker = new staza.maplibre.Marker({ element: createHomeMarkerElement() })
+        .setLngLat([position.longitude, position.latitude])
+        .addTo(map);
+      return;
+    }
+    homeMarker.setLngLat([position.longitude, position.latitude]);
+  };
+  setHomePosition(homePosition);
 
   if (onCollectibleSelect) bindCollectibleInteractions(map, { onSelect: onCollectibleSelect, onHover: onCollectibleHover });
   if (onFartlekSelect) bindFartlekInteractions(map, { onSelect: onFartlekSelect });
@@ -187,6 +238,7 @@ export const createWorldMap = async (container, {
       ensureEndpointLayers();
       map.getSource(ENDPOINT_SOURCE).setData(endpointsToGeoJson(endpoints));
     },
+    setHomePosition,
     /** While set, map clicks report coordinates to the handler (route planning point picking). */
     setPickHandler(handler) {
       pickHandler = handler;

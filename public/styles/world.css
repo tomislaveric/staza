@@ -48,6 +48,12 @@
   position: relative;
 }
 .world-map { background: var(--world-map-surface); height: 100%; width: 100%; }
+.world-home-marker {
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 80%));
+  height: 24px;
+  width: 24px;
+}
+.world-home-marker img { display: block; height: 100%; width: 100%; }
 .world-osm-attribution {
   background: rgb(11 12 15 / 82%);
   border-radius: 6px;

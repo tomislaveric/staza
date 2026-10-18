@@ -128,6 +128,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Route-Relevant World Query V1](features/route-relevant-world-query-v1/README.md)
   — cheaply limit the configured world to the padded geographic region around an
   activity route before existing precise collectible detection and presentation.
+- [Saved default map start point](features/saved-default-map-start-point/README.md)
+  — persist the latest successful “Locate Me” position as a home marker and use it
+  to center the World map on startup with a 5 km metric scale-bar distance.
 - [Shared Staza Map Foundation](features/shared-staza-map-foundation/README.md)
   — unify World and Activity Detail on one MapLibre Staza map foundation and
   rebuild the Ride Detail replay natively on shared basemap, theme, and layers.
