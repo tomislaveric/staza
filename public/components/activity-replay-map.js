@@ -3,6 +3,7 @@ import { stazaRouteLayers, stazaSubduedRouteLayers } from "./shared/map/staza-ro
 import { ensureFartlekLayers, fartleksToFeatureCollection, setFartlekData } from "./shared/map/staza-fartlek-layers.js";
 import {
   ensureCollectibleLayers,
+  loadCollectibleCategoryIcons,
   setCollectibleData
 } from "./shared/map/staza-collectible-layers.js";
 import { collectiblesToFeatureCollection } from "./shared/map/staza-collectible-features.js";
@@ -86,6 +87,7 @@ export const mountReplayStill = async ({ container, activity, activityResult, ba
   });
   const { map } = staza;
   await staza.ready;
+  await loadCollectibleCategoryIcons(map);
 
   map.addSource(ROUTE_BACKGROUND_SOURCE, { type: "geojson", data: lineFeature(routeCoordinates) });
   for (const layer of stazaSubduedRouteLayers(ROUTE_BACKGROUND_SOURCE)) map.addLayer(layer);
@@ -175,6 +177,7 @@ export const mountReplayMap = async ({
   });
   const { map } = staza;
   await staza.ready;
+  await loadCollectibleCategoryIcons(map);
 
   map.addSource(ROUTE_BACKGROUND_SOURCE, { type: "geojson", data: lineFeature(routeCoordinates) });
   for (const layer of stazaSubduedRouteLayers(ROUTE_BACKGROUND_SOURCE)) map.addLayer(layer);

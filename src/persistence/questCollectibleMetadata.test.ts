@@ -29,7 +29,6 @@ describe("QuestRepository semantic collectible mapping", () => {
             order_index: 0,
             name: "Sample Castle",
             collectible_type: "landmark",
-            rarity: "common",
             latitude: 48,
             longitude: 8,
             radius_meters: 75,

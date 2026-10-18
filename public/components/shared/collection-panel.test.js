@@ -24,7 +24,7 @@ describe("collection panel vocabulary", () => {
 
 describe("collection rows", () => {
   it("renders an interactive, markable row for the World map", () => {
-    const row = CollectionRow({ id: "castle-7", name: "Castle", rarity: "rare", state: "completed", interactive: true });
+    const row = CollectionRow({ id: "castle-7", name: "Castle", state: "completed", interactive: true });
     expect(row).toContain('data-world-marker="castle-7"');
     expect(row).toContain("is-found");
     expect(row).toContain("Completed");
@@ -40,7 +40,7 @@ describe("collection rows", () => {
 
 describe("collection panel", () => {
   const rows = [
-    { id: "a", name: "Alpha", rarity: "epic", state: "completed" },
+    { id: "a", name: "Alpha", state: "completed" },
     { id: "b", name: "Bravo", state: "nearby-miss" }
   ];
 

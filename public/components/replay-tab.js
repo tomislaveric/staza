@@ -73,7 +73,6 @@ export const replayPanelRows = (replay) => {
   const collected = (activityResult.events ?? []).map((event) => ({
     id: event.sourceId,
     name: event.collectible?.name || event.sourceId,
-    rarity: event.collectible?.rarity,
     kind: "collectible",
     reachMs: event.activityTimestamp
   }));
@@ -82,7 +81,6 @@ export const replayPanelRows = (replay) => {
     return {
       id: nearMiss.collectibleId,
       name: nearMiss.name,
-      rarity: nearMiss.rarity,
       kind: "near-miss",
       reachMs: collectible ? closestApproachTimestamp(activity.route, collectible) : undefined
     };
@@ -224,7 +222,7 @@ const mountReplayPanel = (host, replay) => {
     closable: true,
     ariaLabel: "Replay collection",
     emptyMessage: "No collectibles on this activity.",
-    rows: rows.map((row) => ({ id: row.id, name: row.name, rarity: row.rarity, state: "unvisited" })),
+    rows: rows.map((row) => ({ id: row.id, name: row.name, state: "unvisited" })),
     footer: FartlekCompletionsSection(replay.activityResult.fartlekCompletions)
   });
 

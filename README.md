@@ -14,6 +14,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   readable score/events, next-item context, and completion presentation.
 - [Coin collection](features/coin-collection/README.md) — animate Coin pickups
   with a 2.5D Collect effect, reward, and generated audio Chime.
+- [Collectible rarity cleanup and category icons](features/collectible-rarity-cleanup-and-category-icons/README.md) — remove Rare/Epic collectible tiers and add distinct SVG map icons for Viewpoint and Place.
 - [Coming soon](features/coming-soon/README.md) — add a reusable multi-language
   "Coming Soon" annotation and remove the unsupported Komoot external-route feature.
 - [Default quests](features/default-quests/README.md) — *superseded by Explore this
@@ -129,8 +130,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   — cheaply limit the configured world to the padded geographic region around an
   activity route before existing precise collectible detection and presentation.
 - [Saved default map start point](features/saved-default-map-start-point/README.md)
-  — persist the latest successful “Locate Me” position as a home marker and use it
-  to center the World map on startup with a 5 km metric scale-bar distance.
+  — persist the latest “Locate Me” position as a home marker, center the World map on startup,
+  and replace collectible category glyphs with matching outline icons.
 - [Shared Staza Map Foundation](features/shared-staza-map-foundation/README.md)
   — unify World and Activity Detail on one MapLibre Staza map foundation and
   rebuild the Ride Detail replay natively on shared basemap, theme, and layers.
@@ -175,9 +176,8 @@ event exists; geographic proximity to a recorded route never establishes
 discovery.
 
 The current configured catalog is the World scope. Its catalog-intersected,
-distinct player discoveries derive discovered, rare, epic, and remaining counts.
-The UI filters one loaded snapshot client-side for All, Found, Unfound, Rare,
-and Epic; rarity filters intentionally include both found and unfound items.
+distinct player discoveries derive discovered and remaining counts. The UI
+filters one loaded snapshot client-side for All, Found, Unfound, and category.
 
 World visibility is separate from discovery. Current snapshots mark all catalog
 items `visible`, but each World collectible has a presentation visibility state
@@ -288,8 +288,8 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
   nonempty list of Collectibles is also accepted. Legacy entries with `id`,
   `latitude`, `longitude`, `radius_m`, and `value` normalize to a `coin` named
   after its ID. Rich entries may additionally set a nonblank `name`, `type`
-  (`coin` or `landmark`), optional `rarity` (`common`, `rare`, or `epic`), and
-  optional nonblank `description`. Coordinates must be finite and in range,
+  (`coin` or `landmark`) and optional nonblank `description`. Coordinates must
+  be finite and in range,
   `radius_m` must be positive, `value` must be finite and nonnegative, and ids
   must be unique.
 - **quäldich pass catalog:** `npm run import:quaeldich` imports cycling mountain
@@ -304,7 +304,7 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
   creating duplicates or rotating ids. Only the licensed elementary fields are
   imported — pass name, coordinates, elevation (`elevation_m`), and TextID;
   gameplay `value` (XP) is derived from elevation via one centralized helper
-  (`mountainPassValueFromElevation`), and rarity is a neutral `common`.
+  (`mountainPassValueFromElevation`).
   Attribution to **quäldich.de** (with a per-pass deeplink
   `https://www.quaeldich.de/paesse/<TextID>/`) is persisted and shown in the
   World collectible detail. The importer reports created/updated/unchanged/
@@ -364,7 +364,7 @@ Collectible coordinates → FIT track crossing time → GPS5-clock-aligned video
 
 Each detected Collectible is represented downstream as a
 `collectible_collected` `GameEvent` containing canonical `sourceId`, compact
-event-time name/type/optional-rarity presentation metadata, value, coordinates,
+event-time name/type presentation metadata, value, coordinates,
 unrounded FIT entry-crossing `activityTimestamp`, and millisecond-rounded
 `videoSecond`. Its `id` remains a temporary compatibility alias for `sourceId`.
 The app lists the first detected passage for each configured Collectible. Select
@@ -474,6 +474,6 @@ failure does not remove its history or XP.
   curve values `level`, `currentLevelXp`, `nextLevelXp`, and
   `progressToNextLevel`.
 - `GET /api/player/progress-dashboard` returns the same canonical player
-  progress together with player-scoped lifetime distance, unique collectible and
-  rare-or-better totals, canonical nearby level thresholds, and the four newest
+  progress together with player-scoped lifetime distance and unique collectible
+  totals, canonical nearby level thresholds, and the four newest
   persisted Ride summaries for the Progress Desktop.

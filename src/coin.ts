@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { Collectible, CollectibleRarity, CollectibleType } from "./domain.js";
+import type { Collectible, CollectibleType } from "./domain.js";
 import { UserInputError } from "./errors.js";
 
 export const normalizeCollectibles = (parsed: unknown): Collectible[] => {
@@ -26,7 +26,6 @@ export const readCollectibles = async (file: string): Promise<Collectible[]> => 
 };
 
 const types: readonly CollectibleType[] = ["coin", "landmark", "mountain_pass"];
-const rarities: readonly CollectibleRarity[] = ["common", "rare", "epic"];
 const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
 const normalizeCollectible = (value: unknown, index: number): Collectible => {
@@ -56,10 +55,6 @@ const normalizeCollectible = (value: unknown, index: number): Collectible => {
   if (typeof type !== "string" || !types.includes(type as CollectibleType)) {
     throw new UserInputError(`${label} type must be one of: ${types.join(", ")}.`);
   }
-  if (candidate.rarity !== undefined &&
-    (typeof candidate.rarity !== "string" || !rarities.includes(candidate.rarity as CollectibleRarity))) {
-    throw new UserInputError(`${label} rarity must be one of: ${rarities.join(", ")}.`);
-  }
   if (candidate.description !== undefined &&
     (typeof candidate.description !== "string" || candidate.description.trim() === "")) {
     throw new UserInputError(`${label} description must be a nonblank string when provided.`);
@@ -72,7 +67,6 @@ const normalizeCollectible = (value: unknown, index: number): Collectible => {
     longitude: candidate.longitude,
     radiusMeters: candidate.radius_m,
     value: candidate.value,
-    ...(candidate.rarity === undefined ? {} : { rarity: candidate.rarity as CollectibleRarity }),
     ...(candidate.description === undefined ? {} : { description: candidate.description })
   };
 };

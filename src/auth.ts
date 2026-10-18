@@ -309,7 +309,7 @@ export class AuthService {
       ),
       this.pool.query(
         `SELECT events.id, events.activity_id, events.source_id, events.event_type, events.activity_timestamp, events.value,
-                events.latitude, events.longitude, events.collectible_name, events.collectible_rarity, events.collectible_type
+                events.latitude, events.longitude, events.collectible_name, events.collectible_type
          FROM activity_events AS events INNER JOIN activities ON activities.id = events.activity_id
          WHERE activities.player_id = $1 ORDER BY events.activity_timestamp, events.id`, [user.playerId]
       )

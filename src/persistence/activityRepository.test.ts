@@ -35,14 +35,14 @@ const result = (activityId: string, value = 25): ActivityResult => ({
   distanceXp: 0,
   distanceXpRewards: [],
   collectibles: [{
-    id: "historic-coin", name: "Historic Coin", type: "coin", rarity: "rare",
+    id: "historic-coin", name: "Historic Coin", type: "coin",
     latitude: 55.6761, longitude: 12.5683, radiusMeters: 15, value
   }],
   events: [{
     id: "historic-coin",
     sourceId: "historic-coin",
     type: "collectible_collected",
-    collectible: { name: "Historic Coin", type: "coin", rarity: "rare" },
+    collectible: { name: "Historic Coin", type: "coin" },
     value,
     latitude: 55.6761,
     longitude: 12.5683,
@@ -52,7 +52,6 @@ const result = (activityId: string, value = 25): ActivityResult => ({
     collectibleId: "historic-near-miss",
     name: "Historic Near Miss",
     value: 10,
-    rarity: "epic",
     minimumDistanceMeters: 73.25
   }],
   fartlekCompletions: []
@@ -99,7 +98,7 @@ describePersistence("ActivityRepository", () => {
       xpEarned: 25,
       events: [expect.objectContaining({
         sourceId: "historic-coin",
-        collectible: { name: "Historic Coin", type: "coin", rarity: "rare" },
+        collectible: { name: "Historic Coin", type: "coin" },
         collectibleCategory: "peak",
         value: 25,
         activityTimestamp: 1_790_090_187_586.4768
@@ -212,29 +211,29 @@ describePersistence("ActivityRepository", () => {
   });
 
   it("builds a read-only Progress dashboard from canonical persisted aggregates", async () => {
-    const rare = result("a".repeat(48), 25);
-    rare.events[0] = {
-      ...rare.events[0],
-      sourceId: "shared-rare",
-      collectible: { name: "Shared Rare", type: "coin", rarity: "rare" }
+    const first = result("a".repeat(48), 25);
+    first.events[0] = {
+      ...first.events[0],
+      sourceId: "shared-coin",
+      collectible: { name: "Shared Coin", type: "coin" }
     };
-    const duplicateRare = result("b".repeat(48), 25);
-    duplicateRare.events[0] = {
-      ...duplicateRare.events[0],
-      sourceId: "shared-rare",
-      collectible: { name: "Shared Rare", type: "coin", rarity: "rare" }
+    const duplicate = result("b".repeat(48), 25);
+    duplicate.events[0] = {
+      ...duplicate.events[0],
+      sourceId: "shared-coin",
+      collectible: { name: "Shared Coin", type: "coin" }
     };
-    const epic = result("c".repeat(48), 25);
-    epic.events[0] = {
-      ...epic.events[0],
-      sourceId: "epic-landmark",
-      collectible: { name: "Epic Landmark", type: "landmark", rarity: "epic" }
+    const distinct = result("c".repeat(48), 25);
+    distinct.events[0] = {
+      ...distinct.events[0],
+      sourceId: "historic-landmark",
+      collectible: { name: "Historic Landmark", type: "landmark" }
     };
     const common = result("d".repeat(48), 25);
     common.events[0] = {
       ...common.events[0],
       sourceId: "common-coin",
-      collectible: { name: "Common Coin", type: "coin", rarity: "common" }
+      collectible: { name: "Common Coin", type: "coin" }
     };
     const empty = result("e".repeat(48), 25);
     empty.events = [];
@@ -242,9 +241,9 @@ describePersistence("ActivityRepository", () => {
     empty.collectedCount = 0;
     const noDistance = { ...activity("e".repeat(48)), distance: undefined };
 
-    await repository!.persistCompletedActivity(playerId, activity("a".repeat(48)), rare);
-    await repository!.persistCompletedActivity(playerId, activity("b".repeat(48)), duplicateRare);
-    await repository!.persistCompletedActivity(playerId, activity("c".repeat(48)), epic);
+    await repository!.persistCompletedActivity(playerId, activity("a".repeat(48)), first);
+    await repository!.persistCompletedActivity(playerId, activity("b".repeat(48)), duplicate);
+    await repository!.persistCompletedActivity(playerId, activity("c".repeat(48)), distinct);
     await repository!.persistCompletedActivity(playerId, activity("d".repeat(48)), common);
     await repository!.persistCompletedActivity(playerId, noDistance, empty);
     const before = await repository!.getProgress(playerId);
@@ -254,8 +253,7 @@ describePersistence("ActivityRepository", () => {
     expect(dashboard.progress).toEqual(before);
     expect(dashboard.lifetime).toEqual({
       distanceMeters: 49_380,
-      totalCollectibles: 3,
-      rareOrBetterCollectibles: 2
+      totalCollectibles: 3
     });
     expect(dashboard.levels).toEqual([
       { level: 1, totalXpRequired: 0 },

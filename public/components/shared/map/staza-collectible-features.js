@@ -1,7 +1,4 @@
-import { canonicalRarity } from "../../collected-list.js";
-
 export const DEFAULT_COLLECTIBLE_CATEGORY = "coin";
-export const DEFAULT_COLLECTIBLE_RARITY = "common";
 
 export const EMPTY_FEATURE_COLLECTION = { type: "FeatureCollection", features: [] };
 
@@ -34,7 +31,6 @@ export const collectibleFeature = (collectible, selectedId, questCollectibleIds)
     sourceAttribution: collectible.source?.sourceAttribution ?? null,
     wikidataQid: collectible.wikidataQid ?? null,
     wikipediaReference: collectible.wikipediaReference ?? null,
-    rarity: canonicalRarity(collectible.rarity) ?? DEFAULT_COLLECTIBLE_RARITY,
     visited: Boolean(collectible.found),
     selected: collectible.id === selectedId,
     questTarget: Boolean(questCollectibleIds?.has(collectible.id)),

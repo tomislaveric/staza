@@ -170,7 +170,7 @@ describe("ExplorationPanel route step", () => {
     expect(along).toContain("River Line");
     expect(along).not.toContain("data-exploration-remove");
     expect(markup).toContain("Along this route");
-    expect(markup).toContain("collectible-swatch is-unvisited is-common is-castle is-icon");
+    expect(markup).toContain("collectible-swatch is-unvisited is-castle is-icon");
     expect(markup).toContain('class="fartlek-swatch" aria-hidden="true"');
     expect(markup).not.toContain("<small>Castle</small>");
     expect(markup).toMatch(/data-exploration-remove="c1"\s+aria-label="Remove Castle &lt;One&gt; from this route">/);
@@ -227,7 +227,7 @@ describe("exploration helpers", () => {
   it("finds catalog targets by id", () => {
     expect(findCatalogTarget(catalog, "f1")).toBeUndefined();
     expect(findCatalogTarget(catalog, "c2")).toEqual({
-      category: "mountain_pass", id: "c2", name: "Peak Two", rarity: undefined, visited: false
+      category: "mountain_pass", id: "c2", name: "Peak Two", visited: false
     });
     expect(findCatalogTarget(catalog, "missing")).toBeUndefined();
   });

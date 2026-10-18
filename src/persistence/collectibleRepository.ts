@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { Collectible, CollectibleCategory, CollectibleRarity, CollectibleStatus, CollectibleType, WorldStats } from "../domain.js";
+import type { Collectible, CollectibleCategory, CollectibleStatus, CollectibleType, WorldStats } from "../domain.js";
 import type { GeoBounds } from "../worldQuery.js";
 import { boundsCenter, splitBoundsAtAntimeridian } from "../worldQuery.js";
 
@@ -7,7 +7,6 @@ interface CollectibleRow {
   id: string;
   name: string;
   collectible_type: CollectibleType;
-  rarity: CollectibleRarity | null;
   latitude: number;
   longitude: number;
   radius_meters: number;
@@ -35,7 +34,6 @@ const mapCollectible = (row: CollectibleRow): Collectible => ({
   radiusMeters: row.radius_meters,
   value: row.value,
   status: row.status,
-  ...(row.rarity === null ? {} : { rarity: row.rarity }),
   ...(row.description === null ? {} : { description: row.description }),
   ...(row.elevation_m === null ? {} : { elevationMeters: row.elevation_m }),
   ...(row.source_type === null || row.source_external_id === null
@@ -56,7 +54,7 @@ const mapCollectible = (row: CollectibleRow): Collectible => ({
 });
 
 const SELECT_COLUMNS =
-  "id, name, collectible_type, rarity, latitude, longitude, radius_meters, value, description, " +
+  "id, name, collectible_type, latitude, longitude, radius_meters, value, description, " +
   "elevation_m, status, source_type, source_external_id, source_url, source_attribution, " +
   "primary_category, tags, wikidata_qid, wikipedia_reference, enrichment_metadata";
 
@@ -77,21 +75,17 @@ export class CollectibleRepository {
    */
   async worldStats(discoveredSourceIds: Iterable<string>): Promise<WorldStats> {
     const ids = [...new Set(discoveredSourceIds)];
-    const result = await this.pool.query<{ total: number; discovered: number; rare: number; epic: number }>(
+    const result = await this.pool.query<{ total: number; discovered: number }>(
       `SELECT
          COUNT(*)::int AS total,
-         COUNT(*) FILTER (WHERE id = ANY($1::text[]))::int AS discovered,
-         COUNT(*) FILTER (WHERE id = ANY($1::text[]) AND rarity = 'rare')::int AS rare,
-         COUNT(*) FILTER (WHERE id = ANY($1::text[]) AND rarity = 'epic')::int AS epic
+         COUNT(*) FILTER (WHERE id = ANY($1::text[]))::int AS discovered
        FROM collectibles`,
       [ids]
     );
-    const { total, discovered, rare, epic } = result.rows[0];
+    const { total, discovered } = result.rows[0];
     return {
       totalCollectibles: total,
       discoveredCount: discovered,
-      rareFinds: rare,
-      epicFinds: epic,
       remainingCount: total - discovered
     };
   }
@@ -143,15 +137,14 @@ export class CollectibleRepository {
       for (const collectible of collectibles) {
         await client.query(
           `INSERT INTO collectibles (
-            id, name, collectible_type, rarity, latitude, longitude, radius_meters, value, description,
+            id, name, collectible_type, latitude, longitude, radius_meters, value, description,
             elevation_m, status, source_type, source_external_id, source_url, source_attribution,
             primary_category, tags, wikidata_qid, wikipedia_reference, enrichment_metadata
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                    $16, $17, $18, $19, $20)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                    $15, $16, $17, $18, $19)
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             collectible_type = EXCLUDED.collectible_type,
-            rarity = EXCLUDED.rarity,
             latitude = EXCLUDED.latitude,
             longitude = EXCLUDED.longitude,
             radius_meters = EXCLUDED.radius_meters,
@@ -173,7 +166,6 @@ export class CollectibleRepository {
             collectible.id,
             collectible.name,
             collectible.type,
-            collectible.rarity ?? null,
             collectible.latitude,
             collectible.longitude,
             collectible.radiusMeters,

@@ -355,17 +355,7 @@ input {
     font-weight: 600;
     padding: 4px 9px;
 }
-.home-found-item.rarity-rare {
-    background: rgb(77 157 224 / 11%);
-    color: var(--accent-rare);
-}
-.home-found-item.rarity-epic {
-    background: rgb(155 109 223 / 11%);
-    color: var(--accent-epic);
-}
-.home-found-item.rarity-common,
-.home-found-item.rarity-coin,
-.home-found-item.rarity-landmark {
+.home-found-item {
     color: var(--text-muted);
 }
 .home-no-finds {
@@ -897,16 +887,6 @@ input {
     height: 8px;
     padding: 0;
     width: 8px;
-}
-.activity-collectible-dots i.rarity-rare {
-    background: var(--accent-rare);
-    border: 0;
-    padding: 0;
-}
-.activity-collectible-dots i.rarity-epic {
-    background: var(--accent-epic);
-    border: 0;
-    padding: 0;
 }
 .activity-collectible-dots small {
     color: var(--text-subtle);
@@ -1569,12 +1549,6 @@ input {
     position: relative;
     width: 40px;
 }
-.near-miss-marker.rarity-rare {
-    border-color: rgb(77 157 224 / 38%);
-}
-.near-miss-marker.rarity-epic {
-    border-color: rgb(155 109 223 / 38%);
-}
 .near-miss-marker img {
     display: block;
     position: absolute;
@@ -1626,26 +1600,6 @@ input {
     line-height: 15px;
     text-transform: uppercase;
     white-space: nowrap;
-}
-.near-miss-rarity {
-    background: rgb(115 120 128 / 10%);
-    border-radius: 4px;
-    color: var(--text-muted);
-    font-family: var(--font-display);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    line-height: 15px;
-    padding: 2px 6px;
-    text-transform: uppercase;
-}
-.near-miss-rarity.rarity-rare {
-    background: rgb(77 157 224 / 10%);
-    color: var(--accent-rare);
-}
-.near-miss-rarity.rarity-epic {
-    background: rgb(155 109 223 / 10%);
-    color: var(--accent-epic);
 }
 .near-misses-empty-state,
 .near-misses-unavailable {
@@ -1711,18 +1665,6 @@ input {
     font-size: 9px;
     text-anchor: middle;
 }
-.collected-route-marker.rarity-rare circle {
-    fill: var(--accent-rare);
-}
-.collected-route-marker.rarity-rare text {
-    fill: var(--accent-rare);
-}
-.collected-route-marker.rarity-epic circle {
-    fill: var(--accent-epic);
-}
-.collected-route-marker.rarity-epic text {
-    fill: var(--accent-epic);
-}
 .collected-list {
     display: grid;
     gap: 8px;
@@ -1767,19 +1709,12 @@ input {
     font-size: 18px;
     font-weight: 600;
 }
-.collectible-card-details span,
-.collectible-rarity {
+.collectible-card-details span {
     color: var(--text-subtle);
     font-family: var(--font-display);
     font-size: 10px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-}
-.collectible-rarity {
-    border: 1px solid currentcolor;
-    border-radius: 4px;
-    margin-left: auto;
-    padding: 4px 6px;
 }
 .collectible-value {
     color: var(--accent-yellow);
@@ -1787,31 +1722,6 @@ input {
     font-size: 16px;
     font-weight: 600;
     white-space: nowrap;
-}
-.collectible-card.rarity-rare .collectible-type-icon,
-.collectible-rarity.rarity-rare {
-    color: var(--accent-rare);
-}
-.collectible-card.rarity-epic .collectible-type-icon,
-.collectible-rarity.rarity-epic {
-    color: var(--accent-epic);
-}
-.collectible-card.rarity-common .collectible-rarity {
-    color: var(--text-muted);
-}
-.collectible-card.rarity-rare {
-    background: rgb(77 157 224 / 11%);
-    border-color: rgb(77 157 224 / 20%);
-}
-.collectible-card.rarity-epic {
-    background: rgb(155 109 223 / 11%);
-    border-color: rgb(155 109 223 / 25%);
-}
-.collectible-card.rarity-rare .collectible-type-icon {
-    background: rgb(77 157 224 / 20%);
-}
-.collectible-card.rarity-epic .collectible-type-icon {
-    background: rgb(155 109 223 / 20%);
 }
 .collected-empty-state {
     color: var(--text-muted);
@@ -2254,10 +2164,6 @@ input {
         align-items: start;
         margin-left: 56px;
         width: calc(100% - 56px);
-    }
-
-    .collectible-rarity {
-        margin-left: 52px;
     }
 
     .collectible-value {
@@ -2886,19 +2792,6 @@ h3 {
     font-size: 13px;
     padding: 8px 0;
 }
-.rarity-common {
-    border-left: 2px solid #aab6ca;
-    padding-left: 7px;
-}
-.rarity-rare {
-    border-left: 2px solid #62b6ff;
-    padding-left: 7px;
-}
-.rarity-epic {
-    border-left: 2px solid #cf8cff;
-    padding-left: 7px;
-}
-
 @media (max-width: 720px) {
     .add-activity-page {
         align-items: flex-start;

@@ -18,19 +18,9 @@ const interpolatePosition = (route, timestampMs) => {
   };
 };
 
-export const rarityPresentation = (rarity) => {
-  const presentations = {
-    common: { className: "rarity-common", label: "Common", color: "#aab6ca" },
-    rare: { className: "rarity-rare", label: "Rare", color: "#62b6ff" },
-    epic: { className: "rarity-epic", label: "Epic", color: "#cf8cff" }
-  };
-  return presentations[rarity];
-};
-
 export const collectiblePresentation = (collectible) => ({
   typeClass: collectible.type === "landmark" ? "collectible-landmark" : "collectible-coin",
-  typeLabel: collectible.type === "landmark" ? "Landmark" : "Coin",
-  rarity: rarityPresentation(collectible.rarity)
+  typeLabel: collectible.type === "landmark" ? "Landmark" : "Coin"
 });
 
 export const eventAtTimestamp = (events, timestampMs) =>
@@ -56,8 +46,7 @@ export const feedDisplayData = (events, timestampMs) =>
   eventAtTimestamp(events, timestampMs).reverse().map((event) => ({
     event,
     name: event.collectible?.name || event.sourceId,
-    value: event.value,
-    rarity: rarityPresentation(event.collectible?.rarity)
+    value: event.value
   }));
 
 const distanceMeters = (left, right) => {
@@ -92,7 +81,6 @@ export const nearMissDisplayData = (nearMisses) =>
     ? undefined
     : nearMisses.map((nearMiss) => ({
       ...nearMiss,
-      rarity: rarityPresentation(nearMiss.rarity),
       distanceLabel: `${Math.round(nearMiss.minimumDistanceMeters)} m away`
     }));
 
@@ -105,7 +93,6 @@ export const replayMarkers = (activityResult) => {
         id: event.sourceId,
         name: event.collectible?.name || event.sourceId,
         type: event.collectible?.type || "coin",
-        rarity: event.collectible?.rarity,
         latitude: event.latitude,
         longitude: event.longitude,
         event

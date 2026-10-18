@@ -10,7 +10,7 @@ describe("Profile views", () => {
       distanceMeters: 12_500,
       activityCount: 3,
       progress: { level: 4, totalXp: 650, currentLevelXp: 50, nextLevelXp: 400, progressToNextLevel: .125 },
-      collectibles: { discoveredCount: 4, totalCollectibles: 20, rareFinds: 1, epicFinds: 1 }
+      collectibles: { discoveredCount: 4, totalCollectibles: 20 }
     }, session);
     expect(view).toContain("Rider");
     expect(view).toContain("4 of 20");
@@ -40,7 +40,7 @@ describe("Profile views", () => {
       distanceMeters: 0,
       activityCount: 0,
       progress: { level: 1, totalXp: 0, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0 },
-      collectibles: { discoveredCount: 0, totalCollectibles: 0, rareFinds: 0, epicFinds: 0 }
+      collectibles: { discoveredCount: 0, totalCollectibles: 0 }
     };
     expect(profileOverviewView(profile, session, "disabled")).not.toContain("CONNECTIONS");
     expect(profileOverviewView(profile, session, "disconnected")).toContain('data-profile-action="strava-connect"');

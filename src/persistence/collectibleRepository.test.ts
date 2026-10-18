@@ -13,7 +13,6 @@ const collectible: Collectible = {
   longitude: 8,
   radiusMeters: 75,
   value: 35,
-  rarity: "common",
   status: "published",
   wikidataQid: "Q123",
   wikipediaReference: "de:Sample_Castle",
@@ -34,7 +33,6 @@ describe("CollectibleRepository OSM metadata", () => {
           id: collectible.id,
           name: collectible.name,
           collectible_type: collectible.type,
-          rarity: collectible.rarity,
           latitude: collectible.latitude,
           longitude: collectible.longitude,
           radius_meters: collectible.radiusMeters,
@@ -60,15 +58,13 @@ describe("CollectibleRepository OSM metadata", () => {
 
   it("aggregates world stats via SQL counts without loading collectible rows", async () => {
     const query = vi.fn().mockResolvedValue({
-      rows: [{ total: 20000, discovered: 12, rare: 3, epic: 1 }]
+      rows: [{ total: 20000, discovered: 12 }]
     });
     const pool = { query } as unknown as Pool;
     const stats = await new CollectibleRepository(pool).worldStats(["a", "a", "b"]);
     expect(stats).toEqual({
       totalCollectibles: 20000,
       discoveredCount: 12,
-      rareFinds: 3,
-      epicFinds: 1,
       remainingCount: 19988
     });
     const [statement, params] = query.mock.calls[0];
@@ -115,6 +111,6 @@ describe("CollectibleRepository OSM metadata", () => {
     }]);
     const insert = query.mock.calls.find(([statement]) =>
       typeof statement === "string" && statement.includes("INSERT INTO collectibles"));
-    expect(insert?.[1]?.[15]).toBe("mountain_pass");
+    expect(insert?.[1]?.[14]).toBe("mountain_pass");
   });
 });

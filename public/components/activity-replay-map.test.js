@@ -20,6 +20,7 @@ vi.mock("./shared/map/staza-fartlek-layers.js", () => ({
 }));
 vi.mock("./shared/map/staza-collectible-layers.js", () => ({
   ensureCollectibleLayers: vi.fn(),
+  loadCollectibleCategoryIcons: vi.fn(),
   setCollectibleData: vi.fn()
 }));
 vi.mock("./shared/map/staza-collectible-features.js", () => ({

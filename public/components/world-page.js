@@ -20,14 +20,12 @@ import {
   traversedFlowlines
 } from "./world/exploration-panel.js";
 
-export const worldFilters = ["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"];
+export const worldFilters = ["all", "found", "unfound", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"];
 
 const filterLabels = {
   all: "All",
   found: "Found",
   unfound: "Unfound",
-  rare: "Rare",
-  epic: "Epic",
   fartleks: "Flowlines",
   viewpoint: "Viewpoint",
   peak: "Peak",
@@ -48,8 +46,6 @@ export const availableWorldFilters = (collectibles, fartleks = []) => {
 
   if (visibleCollectibles.some((collectible) => collectible.found)) filters.add("found");
   if (visibleCollectibles.some((collectible) => !collectible.found)) filters.add("unfound");
-  if (visibleCollectibles.some((collectible) => collectible.rarity === "rare")) filters.add("rare");
-  if (visibleCollectibles.some((collectible) => collectible.rarity === "epic")) filters.add("epic");
   if (fartleks.length) filters.add("fartleks");
 
   for (const category of ["viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"]) {
@@ -67,11 +63,10 @@ export const filteredWorldCollectibles = (collectibles, selectedFilters) =>
       if (filter === "fartleks") return false;
       if (filter === "found") return collectible.found;
       if (filter === "unfound") return !collectible.found;
-      if (filter === "rare" || filter === "epic") return collectible.rarity === filter;
       return collectibleCategory(collectible) === filter;
     }));
 
-/** Fartlek completion is independent of collectible discovery and rarity filters. */
+/** Fartlek completion is independent of collectible discovery filters. */
 export const filteredWorldFartleks = (fartleks, selectedFilters) =>
   selectedFilters.length === 0 || selectedFilters.includes("fartleks") ? fartleks : [];
 
@@ -96,7 +91,6 @@ const filterSwatch = (filter) => {
   if (filter === "all") return "";
   if (filter === "fartleks") return '<b class="fartlek-swatch" aria-hidden="true"></b>';
   if (filter === "found" || filter === "unfound") return CollectibleSwatch({ visited: filter === "found" });
-  if (filter === "rare" || filter === "epic") return CollectibleSwatch({ rarity: filter });
   return CollectibleSwatch({ category: filter });
 };
 
@@ -123,10 +117,6 @@ export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks
 export const WorldStats = (stats, truncated) => `
   <p class="world-stats">
     <span>${formatNumber(stats.discoveredCount)} visited here</span>
-    <i aria-hidden="true">\u00b7</i>
-    <strong class="rarity-rare">${formatNumber(stats.rareFinds)} rare</strong>
-    <i aria-hidden="true">\u00b7</i>
-    <strong class="rarity-epic">${formatNumber(stats.epicFinds)} epic</strong>
     <i aria-hidden="true">\u00b7</i>
     <span>${formatNumber(stats.remainingCount)} remaining</span>
     ${truncated ? '<i aria-hidden="true">\u00b7</i><span class="world-stats-truncated">Zoom in to see everything here</span>' : ""}
@@ -189,7 +179,7 @@ const loadPlannedRoute = async (instanceId) => {
   return responseJson(response);
 };
 
-const emptyStats = { totalCollectibles: 0, discoveredCount: 0, rareFinds: 0, epicFinds: 0, remainingCount: 0 };
+const emptyStats = { totalCollectibles: 0, discoveredCount: 0, remainingCount: 0 };
 
 const expiredCodes = new Set(["exploration_expired", "proposal_expired"]);
 

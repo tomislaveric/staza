@@ -70,7 +70,7 @@ describe("replayPanelRows / rowStateAt", () => {
       activity: { route: [{ latitude: 50, longitude: 8, timestampMs: 0 }] },
       activityResult: {
         collectibles: [{ id: "c1", name: "Coin" }],
-        events: [{ sourceId: "c1", collectible: { name: "Coin", rarity: "rare" }, activityTimestamp: 10 }],
+        events: [{ sourceId: "c1", collectible: { name: "Coin" }, activityTimestamp: 10 }],
         nearMisses: [],
         fartlekCompletions: []
       }

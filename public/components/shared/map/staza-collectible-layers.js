@@ -6,6 +6,20 @@ export const COLLECTIBLE_CATEGORY_ICON_LAYER = "staza-collectible-category-icons
 export const COLLECTIBLE_ACTIVITY_COLLECTED_LAYER = "staza-collectibles-activity-collected";
 export const COLLECTIBLE_SELECTED_GLOW_LAYER = "staza-collectibles-selected-glow";
 export const COLLECTIBLE_SELECTED_LAYER = "staza-collectibles-selected";
+export const COLLECTIBLE_CATEGORY_ICONS = [
+  ["collectible-castle", "/assets/collectible-castle.svg"],
+  ["collectible-castle-muted", "/assets/collectible-castle-muted.svg"],
+  ["collectible-mountain-pass", "/assets/collectible-mountain-pass.svg"],
+  ["collectible-mountain-pass-muted", "/assets/collectible-mountain-pass-muted.svg"],
+  ["collectible-peak", "/assets/collectible-peak.svg"],
+  ["collectible-peak-muted", "/assets/collectible-peak-muted.svg"],
+  ["collectible-place", "/assets/collectible-place.svg"],
+  ["collectible-place-muted", "/assets/collectible-place-muted.svg"],
+  ["collectible-viewpoint", "/assets/collectible-viewpoint.svg"],
+  ["collectible-viewpoint-muted", "/assets/collectible-viewpoint-muted.svg"],
+  ["collectible-waterfall", "/assets/collectible-waterfall.svg"],
+  ["collectible-waterfall-muted", "/assets/collectible-waterfall-muted.svg"]
+];
 
 const VISITED_FILL = "#e8b80a";
 const UNVISITED_FILL = "#171a20";
@@ -16,25 +30,28 @@ const CATEGORY_FILL = ["match", ["get", "category"],
   "place", "#b06ea8",
   UNVISITED_FILL];
 
-/** Rarity is carried by the ring so the map never becomes a field of bright tokens. */
-const RARITY_RING = ["match", ["get", "rarity"],
-  "rare", "#4d9de0",
-  "epic", "#9b6ddf",
-  NEUTRAL_RING];
-
 const SELECTED = ["==", ["get", "selected"], true];
 const QUEST_TARGET = ["==", ["get", "questTarget"], true];
 const SELECTED_OR_QUEST_TARGET = ["any", SELECTED, QUEST_TARGET];
-const IS_RARE = ["!=", ["get", "rarity"], "common"];
 const ACTIVITY_COLLECTED = ["==", ["get", "activityCollected"], true];
-/** Visited state stays gold; unvisited circle markers retain semantic category colors. */
+/** Visited state stays gold; unvisited circle markers retain neutral category fallback colors. */
 const FILLED = ["any", ["get", "visited"], ACTIVITY_COLLECTED];
 const HAS_CATEGORY_ICON = ["any",
   ["==", ["get", "category"], "castle"],
   ["==", ["get", "category"], "mountain_pass"],
   ["==", ["get", "category"], "peak"],
+  ["==", ["get", "category"], "viewpoint"],
+  ["==", ["get", "category"], "place"],
   ["==", ["get", "category"], "waterfall"]];
 const NO_CATEGORY_ICON = ["!", HAS_CATEGORY_ICON];
+const CATEGORY_ICON_IMAGE = ["match", ["get", "category"],
+  "castle", ["case", FILLED, "collectible-castle", "collectible-castle-muted"],
+  "mountain_pass", ["case", FILLED, "collectible-mountain-pass", "collectible-mountain-pass-muted"],
+  "peak", ["case", FILLED, "collectible-peak", "collectible-peak-muted"],
+  "viewpoint", ["case", FILLED, "collectible-viewpoint", "collectible-viewpoint-muted"],
+  "place", ["case", FILLED, "collectible-place", "collectible-place-muted"],
+  "waterfall", ["case", FILLED, "collectible-waterfall", "collectible-waterfall-muted"],
+  ""];
 
 /** Far out stays readable but uncluttered; close in stays crisp. */
 const zoomSize = (stops, condition, scale) => [
@@ -63,10 +80,8 @@ const collectibleLayer = () => ({
     "circle-radius": zoomSize(RADIUS_STOPS, SELECTED_OR_QUEST_TARGET, 1.25),
     "circle-color": ["case", FILLED, VISITED_FILL, CATEGORY_FILL],
     "circle-opacity": questOpacity(["case", FILLED, 1, 0.88]),
-    "circle-stroke-width": zoomSize(STROKE_STOPS, IS_RARE, 1.4),
-    "circle-stroke-color": ["case",
-      ["all", FILLED, ["!", IS_RARE]], "#0b0c0f",
-      RARITY_RING],
+    "circle-stroke-width": zoomSize(STROKE_STOPS),
+    "circle-stroke-color": ["case", FILLED, "#0b0c0f", NEUTRAL_RING],
     "circle-stroke-opacity": questOpacity(0.95)
   }
 });
@@ -77,21 +92,13 @@ const categoryIconLayer = () => ({
   source: COLLECTIBLE_SOURCE,
   filter: HAS_CATEGORY_ICON,
   layout: {
-    "text-field": ["match", ["get", "category"],
-      "castle", "\u26eb",
-      "mountain_pass", "\u26f0",
-      "peak", "\u25b2",
-      "waterfall", "💦",
-      ""],
-    "text-size": ["interpolate", ["linear"], ["zoom"], 9, 16, 12, 20, 15, 24, 17, 28],
-    "text-allow-overlap": true,
-    "text-ignore-placement": true
+    "icon-image": CATEGORY_ICON_IMAGE,
+    "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.67, 12, 0.83, 15, 1, 17, 1.17],
+    "icon-allow-overlap": true,
+    "icon-ignore-placement": true
   },
   paint: {
-    "text-color": ["case", FILLED, VISITED_FILL, NEUTRAL_RING],
-    "text-opacity": questOpacity(["case", FILLED, 1, 0.88]),
-    "text-halo-color": "#0b0c0f",
-    "text-halo-width": 1
+    "icon-opacity": questOpacity(["case", FILLED, 1, 0.88])
   }
 });
 
@@ -153,6 +160,33 @@ export const collectibleLayers = () => [
   selectedRingLayer(),
   categoryIconLayer()
 ];
+
+const loadSvgImage = (url) => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => {
+    image.onload = null;
+    image.onerror = null;
+    resolve(image);
+  };
+  image.onerror = () => {
+    image.onload = null;
+    image.onerror = null;
+    reject(new Error(`Unable to load collectible icon: ${url}`));
+  };
+  image.src = url;
+});
+
+export const loadCollectibleCategoryIcons = async (map, imageLoader = loadSvgImage) => {
+  const images = await Promise.all(COLLECTIBLE_CATEGORY_ICONS.map(async ([id, url]) => {
+    if (map.hasImage(id)) return undefined;
+    const image = await imageLoader(url);
+    return { id, image };
+  }));
+
+  for (const image of images) {
+    if (image && !map.hasImage(image.id)) map.addImage(image.id, image.image);
+  }
+};
 
 /**
  * Adds the canonical collectible source and its layers once. Layers are appended last so

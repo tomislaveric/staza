@@ -7,7 +7,9 @@ import {
   COLLECTIBLE_SELECTED_GLOW_LAYER,
   COLLECTIBLE_SELECTED_LAYER,
   COLLECTIBLE_SOURCE,
+  COLLECTIBLE_CATEGORY_ICONS,
   ensureCollectibleLayers,
+  loadCollectibleCategoryIcons,
   setCollectibleData
 } from "./collectible-layers.js";
 
@@ -16,10 +18,14 @@ const fakeMap = () => {
   const layers = [];
   const handlers = new Map();
   const canvas = { style: {} };
+  const images = new Map();
   return {
     sources,
     layers,
     canvas,
+    images,
+    hasImage: (id) => images.has(id),
+    addImage: (id, data) => images.set(id, data),
     addSource(id, source) {
       sources.set(id, { ...source, setData: vi.fn() });
     },
@@ -55,7 +61,7 @@ describe("collectible source and layers", () => {
     ]);
   });
 
-  it("renders castle, pass, peak, and waterfall categories as state-colored symbols", () => {
+  it("renders collectible categories with state-specific SVG images", () => {
     const map = fakeMap();
 
     ensureCollectibleLayers(map);
@@ -66,25 +72,37 @@ describe("collectible source and layers", () => {
       ["==", ["get", "category"], "castle"],
       ["==", ["get", "category"], "mountain_pass"],
       ["==", ["get", "category"], "peak"],
+      ["==", ["get", "category"], "viewpoint"],
+      ["==", ["get", "category"], "place"],
       ["==", ["get", "category"], "waterfall"]]]);
     expect(icons.type).toBe("symbol");
     expect(icons.filter).toEqual(["any",
       ["==", ["get", "category"], "castle"],
       ["==", ["get", "category"], "mountain_pass"],
       ["==", ["get", "category"], "peak"],
+      ["==", ["get", "category"], "viewpoint"],
+      ["==", ["get", "category"], "place"],
       ["==", ["get", "category"], "waterfall"]]);
-    expect(icons.layout["text-field"]).toEqual(["match", ["get", "category"],
-      "castle", "\u26eb",
-      "mountain_pass", "\u26f0",
-      "peak", "\u25b2",
-      "waterfall", "💦",
+    expect(icons.layout["icon-image"]).toEqual(["match", ["get", "category"],
+      "castle", ["case", ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]], "collectible-castle", "collectible-castle-muted"],
+      "mountain_pass", ["case", ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]], "collectible-mountain-pass", "collectible-mountain-pass-muted"],
+      "peak", ["case", ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]], "collectible-peak", "collectible-peak-muted"],
+      "viewpoint", ["case", ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]], "collectible-viewpoint", "collectible-viewpoint-muted"],
+      "place", ["case", ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]], "collectible-place", "collectible-place-muted"],
+      "waterfall", ["case", ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]], "collectible-waterfall", "collectible-waterfall-muted"],
       ""]);
-    expect(icons.paint["text-color"]).toEqual([
-      "case",
-      ["any", ["get", "visited"], ["==", ["get", "activityCollected"], true]],
-      "#e8b80a",
-      "#7c828c"
-    ]);
+    expect(JSON.stringify(icons.paint["icon-opacity"])).toContain("questRelated");
+  });
+
+  it("loads each category SVG only once", async () => {
+    const map = fakeMap();
+    const imageLoader = vi.fn(async (url) => ({ src: url }));
+
+    await loadCollectibleCategoryIcons(map, imageLoader);
+    await loadCollectibleCategoryIcons(map, imageLoader);
+
+    expect(imageLoader).toHaveBeenCalledTimes(COLLECTIBLE_CATEGORY_ICONS.length);
+    expect([...map.images.keys()]).toEqual(COLLECTIBLE_CATEGORY_ICONS.map(([id]) => id));
   });
 
   it("draws the selection emphasis from the same source instead of a separate dataset", () => {
@@ -108,7 +126,7 @@ describe("collectible source and layers", () => {
     ]);
   });
 
-  it("encodes discovery and category in the fill and rarity in the ring", () => {
+  it("uses neutral discovery markers for categories without SVG icons", () => {
     const map = fakeMap();
 
     ensureCollectibleLayers(map);
@@ -124,8 +142,9 @@ describe("collectible source and layers", () => {
         "#171a20"]
     ]);
     const stroke = JSON.stringify(paint["circle-stroke-color"]);
-    expect(stroke).toContain("#4d9de0");
-    expect(stroke).toContain("#9b6ddf");
+    expect(stroke).toContain("#7c828c");
+    expect(stroke).not.toContain("#4d9de0");
+    expect(stroke).not.toContain("#9b6ddf");
   });
 
   it("scales markers with zoom instead of a fixed pixel radius", () => {

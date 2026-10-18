@@ -19,7 +19,6 @@ const dateLabel = (startedAt) => new Intl.DateTimeFormat(getAppLocale(), {
   day: "2-digit", month: "short", weekday: "short"
 }).format(new Date(startedAt)).toUpperCase();
 
-const eventsForActivities = (activities) => activities.flatMap((activity) => activity.events ?? []);
 const replayForHome = (activity) => {
   const replay = activity?.replay;
   if (
@@ -32,7 +31,6 @@ const replayForHome = (activity) => {
 };
 
 export const homeViewModel = (progress, activities) => {
-  const events = eventsForActivities(activities);
   const latest = activities[0];
   const totalDistanceMeters = activities.reduce((total, activity) => total + (activity.distanceMeters ?? 0), 0);
   return {
@@ -43,7 +41,6 @@ export const homeViewModel = (progress, activities) => {
     stats: {
       totalXp: progress.totalXp,
       distanceMeters: totalDistanceMeters,
-      rareFinds: events.filter((event) => event.collectible?.rarity === "rare").length,
       totalCollected: activities.reduce((total, activity) => total + activity.collectedCount, 0)
     },
     latest
@@ -71,15 +68,13 @@ export const HomeStats = (stats) => `
   <dl class="home-stats">
     <div><dt>TOTAL XP</dt><dd>${formatNumber(stats.totalXp)}</dd></div>
     <div><dt>DISTANCE</dt><dd>${formatNumber(stats.distanceMeters / 1000, 1)} km</dd></div>
-    <div><dt>RARE FINDS</dt><dd>${formatNumber(stats.rareFinds)}</dd></div>
     <div><dt>COLLECTED</dt><dd>${formatNumber(stats.totalCollected)}</dd></div>
   </dl>
 `;
 
-const foundItems = (events) => events.slice(0, 4).map((event) => {
-  const rarity = event.collectible?.rarity ?? event.collectible?.type ?? "common";
-  return `<li class="home-found-item rarity-${escapeHtml(rarity)}" data-user-content>${escapeHtml(event.collectible?.name ?? event.sourceId)}</li>`;
-}).join("");
+const foundItems = (events) => events.slice(0, 4).map((event) =>
+  `<li class="home-found-item" data-user-content>${escapeHtml(event.collectible?.name ?? event.sourceId)}</li>`
+).join("");
 
 export const HomeRecentActivity = (activity) => {
   if (!activity) {

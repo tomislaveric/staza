@@ -106,8 +106,7 @@ const drawFeed = (width: number, height: number, timeline: HudTimeline, time: nu
     const alpha = Math.round(220 * (1 - age / settings.eventFeedDurationSeconds));
     const y = 8 + index * 30;
     fillRect(canvas, 0, y, width, 25, [10, 18, 30, Math.max(0, alpha)]);
-    const rarity = event.collectible.rarity ? ` ${event.collectible.rarity}` : "";
-    text(canvas, `${event.collectible.name}${rarity} +${event.value}`, 8, y + 6, 2, [255, 230, 120, Math.max(0, alpha)]);
+    text(canvas, `${event.collectible.name} +${event.value}`, 8, y + 6, 2, [255, 230, 120, Math.max(0, alpha)]);
   }
   return canvas;
 };

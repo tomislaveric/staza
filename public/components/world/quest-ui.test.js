@@ -194,7 +194,7 @@ describe("Started explorations", () => {
     expect(markup).toContain("mountain passes");
     expect(markup).toContain("Pass One");
     expect(markup).toContain("Pass Two");
-    expect(markup).toContain('<b class="collectible-swatch is-visited is-common is-mountain_pass is-icon" aria-hidden="true">\u26f0</b>');
+    expect(markup).toContain('<b class="collectible-swatch is-visited is-mountain_pass is-icon" aria-hidden="true">\u26f0</b>');
   });
 
   it("lists named Mountain Pass and peak targets that are not complete yet", () => {
@@ -227,8 +227,8 @@ describe("Started explorations", () => {
     expect(markup).toContain("peaks");
     expect(markup).toContain("Pass One");
     expect(markup).toContain("Peak One");
-    expect(markup).toContain('<b class="collectible-swatch is-unvisited is-common is-mountain_pass is-icon" aria-hidden="true">\u26f0</b>');
-    expect(markup).toContain('<b class="collectible-swatch is-unvisited is-common is-peak is-icon" aria-hidden="true">\u25b2</b>');
+    expect(markup).toContain('<b class="collectible-swatch is-unvisited is-mountain_pass is-icon" aria-hidden="true">\u26f0</b>');
+    expect(markup).toContain('<b class="collectible-swatch is-unvisited is-peak is-icon" aria-hidden="true">\u25b2</b>');
   });
 
   it("shows every mixed objective target and marks completed Flowlines with speed", () => {
@@ -278,16 +278,14 @@ describe("Started explorations", () => {
 
 describe("world marker vocabulary", () => {
   it("labels collectibles with visited state for assistive technology", () => {
-    expect(markerLabel({ name: "Turmberg", found: true, rarity: "epic" })).toBe("Turmberg, visited, epic");
+    expect(markerLabel({ name: "Turmberg", found: true })).toBe("Turmberg, visited");
     expect(markerLabel({ name: "Turmberg", found: false })).toBe("Turmberg, unvisited");
   });
 
-  it("encodes discovery and rarity in one swatch", () => {
+  it("encodes discovery and category in one swatch", () => {
     expect(CollectibleSwatch({ visited: true })).toContain("is-visited");
     expect(CollectibleSwatch({ visited: false })).toContain("is-unvisited");
-    expect(CollectibleSwatch({ rarity: "epic" })).toContain("is-epic");
-    expect(CollectibleSwatch({ rarity: "rare" })).toContain("is-rare");
     expect(CollectibleSwatch({ category: "castle" })).toContain("is-castle");
-    expect(CollectibleSwatch()).toContain("is-common");
+    expect(CollectibleSwatch()).not.toContain("is-common");
   });
 });

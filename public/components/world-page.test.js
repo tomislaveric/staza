@@ -6,9 +6,9 @@ import * as worldMarkers from "./world/world-markers.js";
 import * as worldMap from "./world/world-map.js";
 
 const collectibles = [
-  { id: "common-found", name: "Common", type: "landmark", primaryCategory: "viewpoint", found: true, rarity: "common", latitude: 49, longitude: 8 },
-  { id: "rare-unfound", name: "Rare", type: "landmark", primaryCategory: "peak", found: false, rarity: "rare", latitude: 50, longitude: 9 },
-  { id: "epic-found", name: "Epic", type: "landmark", primaryCategory: "castle", found: true, rarity: "epic", latitude: 51, longitude: 10 }
+  { id: "viewpoint-found", name: "Viewpoint", type: "landmark", primaryCategory: "viewpoint", found: true, latitude: 49, longitude: 8 },
+  { id: "peak-unfound", name: "Peak", type: "landmark", primaryCategory: "peak", found: false, latitude: 50, longitude: 9 },
+  { id: "castle-found", name: "Castle", type: "landmark", primaryCategory: "castle", found: true, latitude: 51, longitude: 10 }
 ];
 
 const fartleks = [
@@ -20,7 +20,7 @@ describe("World page data transformations", () => {
   it("offers only matching filters while always retaining All", () => {
     expect([...availableWorldFilters([], [])]).toEqual(["all"]);
     expect([...availableWorldFilters(collectibles, [])]).toEqual([
-      "all", "found", "unfound", "rare", "epic", "viewpoint", "peak", "castle"
+      "all", "found", "unfound", "viewpoint", "peak", "castle"
     ]);
     expect([...availableWorldFilters([], fartleks)]).toEqual(["all", "fartleks"]);
     expect([...availableWorldFilters([{ ...collectibles[0], visibility: "hidden" }], [])]).toEqual(["all"]);
@@ -32,18 +32,17 @@ describe("World page data transformations", () => {
     expect(availableWorldFilters([{ ...pass, visibility: "hidden" }], []).has("mountain_pass")).toBe(false);
   });
 
-  it("keeps rarity filters independent from player discovery state", () => {
-    expect(filteredWorldCollectibles(collectibles, ["found"]).map((item) => item.id)).toEqual(["common-found", "epic-found"]);
-    expect(filteredWorldCollectibles(collectibles, ["unfound"]).map((item) => item.id)).toEqual(["rare-unfound"]);
-    expect(filteredWorldCollectibles(collectibles, ["rare"]).map((item) => item.id)).toEqual(["rare-unfound"]);
-    expect(filteredWorldCollectibles(collectibles, ["epic"]).map((item) => item.id)).toEqual(["epic-found"]);
+  it("filters collectibles by discovery state and category", () => {
+    expect(filteredWorldCollectibles(collectibles, ["found"]).map((item) => item.id)).toEqual(["viewpoint-found", "castle-found"]);
+    expect(filteredWorldCollectibles(collectibles, ["unfound"]).map((item) => item.id)).toEqual(["peak-unfound"]);
+    expect(filteredWorldCollectibles(collectibles, ["peak"]).map((item) => item.id)).toEqual(["peak-unfound"]);
+    expect(filteredWorldCollectibles(collectibles, ["castle"]).map((item) => item.id)).toEqual(["castle-found"]);
   });
 
   it("keeps future hidden markers out of all filter states without changing discovery filters", () => {
     const hidden = {
-      id: "epic-hidden",
+      id: "hidden-collectible",
       found: false,
-      rarity: "epic",
       latitude: 52,
       longitude: 11,
       visibility: "hidden"
@@ -51,21 +50,19 @@ describe("World page data transformations", () => {
     const withHidden = [...collectibles, hidden];
 
     expect(visibleWorldCollectibles(withHidden).map((item) => item.id)).toEqual([
-      "common-found", "rare-unfound", "epic-found"
+      "viewpoint-found", "peak-unfound", "castle-found"
     ]);
-    for (const filters of [[], ["epic"], ["unfound", "epic"], ["fartleks", "epic"]]) {
+    for (const filters of [[], ["castle"], ["unfound", "castle"], ["fartleks", "castle"]]) {
       expect(filteredWorldCollectibles(withHidden, filters)).not.toContain(hidden);
     }
   });
 
-  it("shows the union of discovery, rarity, and category matches without duplicates", () => {
-    expect(filteredWorldCollectibles(collectibles, ["found", "rare"]).map((item) => item.id))
-      .toEqual(["common-found", "rare-unfound", "epic-found"]);
-    expect(filteredWorldCollectibles(collectibles, ["unfound", "castle", "epic"]).map((item) => item.id))
-      .toEqual(["rare-unfound", "epic-found"]);
+  it("shows the union of discovery and category matches without duplicates", () => {
+    expect(filteredWorldCollectibles(collectibles, ["found", "peak"]).map((item) => item.id))
+      .toEqual(["viewpoint-found", "peak-unfound", "castle-found"]);
+    expect(filteredWorldCollectibles(collectibles, ["unfound", "castle"]).map((item) => item.id))
+      .toEqual(["peak-unfound", "castle-found"]);
     expect(filteredWorldCollectibles(collectibles, ["found", "unfound"])).toEqual(collectibles);
-    expect(filteredWorldCollectibles(collectibles, ["rare", "epic"]).map((item) => item.id))
-      .toEqual(["rare-unfound", "epic-found"]);
   });
 
   it.each(["viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"])("matches the map category for %s", (category) => {
@@ -106,7 +103,7 @@ describe("Fartlek filtering", () => {
   it("combines both Fartlek completion states with matching collectibles", () => {
     expect(filteredWorldFartleks(fartleks, ["fartleks", "unfound", "castle"])).toEqual(fartleks);
     expect(filteredWorldCollectibles(collectibles, ["fartleks", "unfound", "castle"]).map((item) => item.id))
-      .toEqual(["rare-unfound", "epic-found"]);
+      .toEqual(["peak-unfound", "castle-found"]);
   });
 
   it("keeps selected quest Flowlines on the map regardless of the active filters", () => {
@@ -124,10 +121,10 @@ describe("World map rendering is MapLibre native", () => {
   });
 
   it("hidden collectibles never reach the map source", () => {
-    const hidden = { id: "hidden", found: false, rarity: "epic", latitude: 52, longitude: 11, visibility: "hidden" };
+    const hidden = { id: "hidden", found: false, latitude: 52, longitude: 11, visibility: "hidden" };
 
     expect(mappedWorldCollectibles([...collectibles, hidden], []).map((item) => item.id))
-      .toEqual(["common-found", "rare-unfound", "epic-found"]);
+      .toEqual(["viewpoint-found", "peak-unfound", "castle-found"]);
   });
 });
 
@@ -142,13 +139,13 @@ describe("World filter controls", () => {
       { ...collectibles[0], id: "place", primaryCategory: "place" },
       { ...collectibles[0], id: "mountain-pass", primaryCategory: "mountain_pass" }
     ];
-    const markup = WorldFilterControls(["rare", "castle"], allCategories, fartleks);
-    expect(worldFilters).toEqual(["all", "found", "unfound", "rare", "epic", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"]);
+    const markup = WorldFilterControls(["peak", "castle"], allCategories, fartleks);
+    expect(worldFilters).toEqual(["all", "found", "unfound", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"]);
     expect(markup).toContain('role="group" aria-label="World collectibles and Flowlines"');
     expect(markup).not.toContain('role="tab');
     expect(markup).not.toContain("aria-selected");
     for (const filter of worldFilters) {
-      expect(buttonMarkup(markup, filter)).toContain(`aria-pressed="${filter === "rare" || filter === "castle"}"`);
+      expect(buttonMarkup(markup, filter)).toContain(`aria-pressed="${filter === "peak" || filter === "castle"}"`);
       expect(buttonMarkup(markup, filter)).toContain('type="button"');
     }
   });
@@ -159,7 +156,7 @@ describe("World filter controls", () => {
     expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
   });
 
-  it("reuses the marker swatches for discovery, rarity, categories, and Fartleks", () => {
+  it("reuses the marker swatches for discovery, categories, and Fartleks", () => {
     const markup = WorldFilterControls([], [
       ...collectibles,
       { ...collectibles[0], id: "waterfall", primaryCategory: "waterfall" },
@@ -168,9 +165,6 @@ describe("World filter controls", () => {
     ], fartleks);
     expect(buttonMarkup(markup, "found")).toContain(CollectibleSwatch({ visited: true }));
     expect(buttonMarkup(markup, "unfound")).toContain(CollectibleSwatch({ visited: false }));
-    for (const rarity of ["rare", "epic"]) {
-      expect(buttonMarkup(markup, rarity)).toContain(CollectibleSwatch({ rarity }));
-    }
     for (const category of ["viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"]) {
       expect(buttonMarkup(markup, category)).toContain(CollectibleSwatch({ category }));
     }
@@ -186,6 +180,8 @@ describe("World filter controls", () => {
     }
     expect(buttonMarkup(markup, "fartleks")).toContain('<b class="fartlek-swatch" aria-hidden="true"></b>');
     expect(markup).not.toContain("is-completed");
+    expect(buttonMarkup(markup, "viewpoint")).toContain("collectible-viewpoint-muted.svg");
+    expect(buttonMarkup(markup, "place")).toContain("collectible-place-muted.svg");
   });
 
   it("renders one filter group without a map-overlay legend", () => {
@@ -219,7 +215,7 @@ describe("World filter controls", () => {
     expect(css).toContain("height: 100%;");
     expect(css).not.toContain("quest-suggestion");
     expect(css).toContain(".world-explore:focus-visible");
-    expect(css).toMatch(/\.world-explore\s*\{[^}]*font-size:\s*20px;[^}]*min-height:\s*52px;[^}]*padding:\s*16px 20px;/s);
+    expect(css).toMatch(/\.world-locate, \.world-explore\s*\{[^}]*font-size:\s*10px;[^}]*padding:\s*8px 10px;/s);
     expect(css).toMatch(/\.world-explore\s*\{[^}]*bottom:\s*16px;[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*transform:\s*translateX\(-50%\)/s);
     expect(css).toContain(".quest-card-select:focus-visible");
     expect(css).toMatch(/\.quest-objective-groups\s*\{[^}]*display:\s*grid/s);
@@ -236,7 +232,7 @@ describe("mounted World page interactions", () => {
   });
 
   const flowlineObjective = { id: "flowlines", type: "flowline_rule", requiredCount: 1, targets: [{ id: "fartlek-1", name: "Harbour Straight" }] };
-  const collectibleObjective = { id: "collectibles-viewpoint", type: "collectible_targets", requiredCount: 1, category: "viewpoint", targets: [{ id: "common-found", name: "Common" }] };
+  const collectibleObjective = { id: "collectibles-viewpoint", type: "collectible_targets", requiredCount: 1, category: "viewpoint", targets: [{ id: "viewpoint-found", name: "Common" }] };
   const activeInstance = {
     id: "instance-1",
     suggestionId: "proposal-full",
@@ -269,7 +265,7 @@ describe("mounted World page interactions", () => {
   const routeGeometry = { type: "LineString", coordinates: [[9, 50], [9.1, 50.1], [9, 50]] };
   const quickGeometry = { type: "LineString", coordinates: [[9, 50], [9.05, 50.02], [9, 50]] };
   const customGeometry = { type: "LineString", coordinates: [[9, 50], [9.2, 50.2], [9, 50]] };
-  const routeProposal = (id, label, includedTargetIds = ["common-found"], overrides = {}) => ({
+  const routeProposal = (id, label, includedTargetIds = ["viewpoint-found"], overrides = {}) => ({
     id, label, distanceM: 42_000, durationS: 6_000, geometry: routeGeometry,
     routeType: "round_trip", start: { lat: 50, lon: 9 }, end: { lat: 50, lon: 9 },
     includedTargetIds, nearbyTargetIds: [], recommended: false, constraintFit: "within",
@@ -316,8 +312,8 @@ describe("mounted World page interactions", () => {
     /** Dataset values the fake panel controls report when "clicked". */
     detail.datasets = {
       "[data-exploration-proposal]": { explorationProposal: "proposal-quick" },
-      "[data-exploration-target]": { explorationTarget: "common-found" },
-      "[data-exploration-remove]": { explorationRemove: "common-found" },
+      "[data-exploration-target]": { explorationTarget: "viewpoint-found" },
+      "[data-exploration-remove]": { explorationRemove: "viewpoint-found" },
       "[data-exploration-pick]": { explorationPick: "start" }
     };
     detail.bound = {};
@@ -339,7 +335,7 @@ describe("mounted World page interactions", () => {
       querySelector: (selector) => hosts[selector],
       querySelectorAll: () => Object.values(buttons)
     };
-    const stats = { totalCollectibles: 3, discoveredCount: 2, rareFinds: 0, epicFinds: 1, remainingCount: 1 };
+    const stats = { totalCollectibles: 3, discoveredCount: 2, remainingCount: 1 };
     let viewportSnapshot = { collectibles, fartleks, stats, truncated: false };
     let activeInstances = instances;
     let customized = 0;
@@ -359,8 +355,8 @@ describe("mounted World page interactions", () => {
         body = {
           explorationId: "exp-1",
           proposals: [
-            routeProposal("proposal-quick", "quick", ["common-found"], { geometry: quickGeometry }),
-            routeProposal("proposal-balanced", "balanced", ["common-found"], { recommended: true })
+            routeProposal("proposal-quick", "quick", ["viewpoint-found"], { geometry: quickGeometry }),
+            routeProposal("proposal-balanced", "balanced", ["viewpoint-found"], { recommended: true })
           ],
           catalog: { collectibles: [collectibles[0], collectibles[1]], flowlines: [fartleks[0]] },
           truncated: false,
@@ -455,18 +451,18 @@ describe("mounted World page interactions", () => {
     expect(page.buttons.all.hidden).toBe(false);
     expect(page.buttons.waterfall.hidden).toBe(true);
     expect(page.buttons.place.hidden).toBe(true);
-    page.click("rare");
-    expect(page.collectibleIds()).toEqual(["rare-unfound"]);
+    page.click("peak");
+    expect(page.collectibleIds()).toEqual(["peak-unfound"]);
     expect(page.fartlekIds()).toEqual([]);
     page.click("found");
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
-    expect(page.buttons.rare.attributes["aria-pressed"]).toBe("true");
+    expect(page.buttons.peak.attributes["aria-pressed"]).toBe("true");
     expect(page.buttons.found.attributes["aria-pressed"]).toBe("true");
     expect(page.buttons.all.attributes["aria-pressed"]).toBe("false");
     page.click("fartleks");
     expect(page.fartlekIds()).toEqual(fartleks.map((item) => item.id));
     page.click("found");
-    expect(page.collectibleIds()).toEqual(["rare-unfound"]);
+    expect(page.collectibleIds()).toEqual(["peak-unfound"]);
     page.click("all");
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
     expect(page.fartlekIds()).toEqual(fartleks.map((item) => item.id));
@@ -488,7 +484,7 @@ describe("mounted World page interactions", () => {
     expect(page.buttons.peak.attributes["aria-pressed"]).toBe("true");
 
     const waterfall = { ...collectibles[0], id: "waterfall", primaryCategory: "waterfall" };
-    const viewportStats = { totalCollectibles: 1, discoveredCount: 0, rareFinds: 0, epicFinds: 0, remainingCount: 1 };
+    const viewportStats = { totalCollectibles: 1, discoveredCount: 0, remainingCount: 1 };
     page.changeViewport({ collectibles: [waterfall], fartleks: [], stats: viewportStats, truncated: false });
     await vi.waitFor(() => expect(page.buttons.waterfall.hidden).toBe(false));
     expect(page.buttons.peak.hidden).toBe(true);
@@ -503,19 +499,19 @@ describe("mounted World page interactions", () => {
 
   it("retains matching collectible details and clears selections excluded by the union", async () => {
     const page = await mount();
-    page.callbacks.onCollectibleSelect("epic-found");
+    page.callbacks.onCollectibleSelect("castle-found");
     expect(page.detail.hidden).toBe(false);
     page.click("found");
-    page.click("rare");
-    expect(page.detail.innerHTML).toContain("Epic");
-    expect(page.collectibleFeature("epic-found").properties.selected).toBe(true);
+    page.click("peak");
+    expect(page.detail.innerHTML).toContain("Castle");
+    expect(page.collectibleFeature("castle-found").properties.selected).toBe(true);
     page.click("found");
     expect(page.detail.hidden).toBe(true);
     expect(page.detail.innerHTML).toBe("");
     page.click("fartleks");
     page.callbacks.onFartlekSelect("fartlek-1");
     expect(page.detail.innerHTML).toContain("Harbour Straight");
-    page.click("rare");
+    page.click("peak");
     expect(page.detail.hidden).toBe(false);
     page.click("fartleks");
     expect(page.detail.hidden).toBe(false);
@@ -525,13 +521,13 @@ describe("mounted World page interactions", () => {
 
   it("highlights a started exploration's targets, includes filtered targets, and frames them with its route", async () => {
     const page = await mount({ instances: [activeInstance] });
-    page.click("rare");
+    page.click("peak");
     page.questSelectButton.handlers.click();
 
     await vi.waitFor(() => expect(page.map.fitTo).toHaveBeenCalled());
-    expect(page.calls("/api/world/quest-targets?collectibleId=common-found&flowlineId=fartlek-1")).toHaveLength(1);
-    expect(page.collectibleFeature("common-found").properties).toMatchObject({ questTarget: true, questRelated: true });
-    expect(page.collectibleFeature("rare-unfound").properties.questRelated).toBe(false);
+    expect(page.calls("/api/world/quest-targets?collectibleId=viewpoint-found&flowlineId=fartlek-1")).toHaveLength(1);
+    expect(page.collectibleFeature("viewpoint-found").properties).toMatchObject({ questTarget: true, questRelated: true });
+    expect(page.collectibleFeature("peak-unfound").properties.questRelated).toBe(false);
     expect(page.map.setFartleks.mock.lastCall[0].features
       .find((feature) => feature.id === "fartlek-1").properties).toMatchObject({ questTarget: true, questRelated: true });
     expect(page.map.fitTo.mock.lastCall[0]).toEqual(expect.arrayContaining([
@@ -543,7 +539,7 @@ describe("mounted World page interactions", () => {
     expect(page.quests.innerHTML).toContain("Planned route");
 
     page.questSelectButton.handlers.click();
-    expect(page.collectibleIds()).toEqual(["rare-unfound"]);
+    expect(page.collectibleIds()).toEqual(["peak-unfound"]);
     expect(page.map.setFartleks.mock.lastCall[0].features).toEqual([]);
     expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
   });
@@ -607,9 +603,9 @@ describe("mounted World page interactions", () => {
     expect(page.map.fitTo).toHaveBeenCalled();
     expect(page.detail.innerHTML).toContain("Included destinations");
     expect(page.detail.innerHTML).toContain("Harbour Straight");
-    expect(page.collectibleIds()).toEqual(["common-found", "rare-unfound"]);
-    expect(page.collectibleFeature("common-found").properties.questTarget).toBe(true);
-    expect(page.collectibleFeature("rare-unfound").properties.questRelated).toBe(false);
+    expect(page.collectibleIds()).toEqual(["viewpoint-found", "peak-unfound"]);
+    expect(page.collectibleFeature("viewpoint-found").properties.questTarget).toBe(true);
+    expect(page.collectibleFeature("peak-unfound").properties.questRelated).toBe(false);
     expect(page.detail.innerHTML).toMatch(/data-exploration-confirm>Start Exploration/);
   });
 
@@ -680,7 +676,7 @@ describe("mounted World page interactions", () => {
     expect(pressed(page, "proposal-quick")).toBe(true);
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: quickGeometry });
     expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
-    expect(page.collectibleFeature("common-found").properties.questTarget).toBe(true);
+    expect(page.collectibleFeature("viewpoint-found").properties.questTarget).toBe(true);
     expect(page.map.setFartleks.mock.lastCall[0].features.find((feature) => feature.id === "fartlek-1").properties.questRelated).toBe(true);
     expect(page.calls("/api/explorations/generate")).toHaveLength(1);
   });
@@ -688,40 +684,40 @@ describe("mounted World page interactions", () => {
   it("highlights an included target on the map while its list row is hovered", async () => {
     const page = await mount();
     await page.generate();
-    expect(page.collectibleFeature("common-found").properties.selected).toBe(false);
+    expect(page.collectibleFeature("viewpoint-found").properties.selected).toBe(false);
     page.bound("[data-exploration-target]:mouseenter")();
-    expect(page.collectibleFeature("common-found").properties.selected).toBe(true);
+    expect(page.collectibleFeature("viewpoint-found").properties.selected).toBe(true);
     page.bound("[data-exploration-target]:mouseleave")();
-    expect(page.collectibleFeature("common-found").properties.selected).toBe(false);
+    expect(page.collectibleFeature("viewpoint-found").properties.selected).toBe(false);
   });
 
   it("customizes only the selected route: add and remove re-plan it, Reset restores it", async () => {
     const page = await mount();
     await page.generate();
-    page.callbacks.onCollectibleSelect("rare-unfound");
+    page.callbacks.onCollectibleSelect("peak-unfound");
     expect(page.calls("/api/explorations/exp-1/reroute")).toHaveLength(0);
 
     page.bound("[data-exploration-add]:click")();
-    expect(page.collectibleFeature("rare-unfound").properties.questRelated).toBe(true);
-    page.callbacks.onCollectibleHover("rare-unfound");
-    expect(page.collectibleFeature("rare-unfound").properties.selected).toBe(true);
+    expect(page.collectibleFeature("peak-unfound").properties.questRelated).toBe(true);
+    page.callbacks.onCollectibleHover("peak-unfound");
+    expect(page.collectibleFeature("peak-unfound").properties.selected).toBe(true);
     page.callbacks.onCollectibleHover(undefined);
-    page.callbacks.onCollectibleSelect("rare-unfound");
+    page.callbacks.onCollectibleSelect("peak-unfound");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Customized"));
     expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[0][1].body))
-      .toEqual({ proposalId: "proposal-balanced", targetIds: ["common-found", "rare-unfound"] });
+      .toEqual({ proposalId: "proposal-balanced", targetIds: ["viewpoint-found", "peak-unfound"] });
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: customGeometry });
     expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
-    expect(page.collectibleFeature("rare-unfound").properties.questTarget).toBe(true);
+    expect(page.collectibleFeature("peak-unfound").properties.questTarget).toBe(true);
     expect(page.detail.innerHTML).toContain("This route is longer than your planned ride.");
     expect(page.detail.innerHTML).toContain("data-exploration-reset");
 
     page.bound("[data-exploration-remove]:click")();
     await vi.waitFor(() => expect(page.calls("/api/explorations/exp-1/reroute", "POST")).toHaveLength(2));
     expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[1][1].body))
-      .toEqual({ proposalId: "proposal-custom-1", targetIds: ["rare-unfound"] });
+      .toEqual({ proposalId: "proposal-custom-1", targetIds: ["peak-unfound"] });
     await vi.waitFor(() => expect(page.detail.innerHTML).not.toContain("Updating route"));
-    expect(page.collectibleFeature("common-found").properties.questRelated).toBe(false);
+    expect(page.collectibleFeature("viewpoint-found").properties.questRelated).toBe(false);
 
     page.bound("[data-exploration-reset]:click")();
     expect(page.detail.innerHTML).not.toContain("Customized");
@@ -734,16 +730,16 @@ describe("mounted World page interactions", () => {
     const page = await mount({ rerouteError: { error: "No suitable route was found.", code: "no_route" } });
     await page.generate();
     page.bound("[data-exploration-add]:click")();
-    page.callbacks.onCollectibleSelect("rare-unfound");
+    page.callbacks.onCollectibleSelect("peak-unfound");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("No suitable route was found."));
     expect(page.detail.innerHTML).toContain("Step 2");
-    expect(page.detail.innerHTML).toContain('data-exploration-remove="common-found"');
+    expect(page.detail.innerHTML).toContain('data-exploration-remove="viewpoint-found"');
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
 
     const expired = await mount({ rerouteError: { error: "Expired.", code: "exploration_expired", status: 409 } });
     await expired.generate();
     expired.bound("[data-exploration-add]:click")();
-    expired.callbacks.onCollectibleSelect("rare-unfound");
+    expired.callbacks.onCollectibleSelect("peak-unfound");
     await vi.waitFor(() => expect(expired.detail.innerHTML).toContain("These routes expired."));
     expect(expired.detail.innerHTML).toContain("Step 1");
     expect(expired.map.setRoute).toHaveBeenLastCalledWith(undefined);
@@ -753,7 +749,7 @@ describe("mounted World page interactions", () => {
     const page = await mount();
     await page.generate();
     page.bound("[data-exploration-add]:click")();
-    page.callbacks.onCollectibleSelect("rare-unfound");
+    page.callbacks.onCollectibleSelect("peak-unfound");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Customized"));
     page.bound("[data-exploration-confirm]:click")();
     await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-cancel="instance-1"'));
@@ -792,7 +788,7 @@ describe("mounted World page interactions", () => {
     page.bound("[data-exploration-cancel]:click")();
     expect(page.fetchMock.mock.calls.length).toBe(callsBefore);
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
-    expect(page.collectibleFeature("common-found").properties.questRelated).toBe(true);
+    expect(page.collectibleFeature("viewpoint-found").properties.questRelated).toBe(true);
     expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
     expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
     expect(page.map.setRouteEndpoints).toHaveBeenLastCalledWith({});

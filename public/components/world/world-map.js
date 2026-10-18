@@ -2,6 +2,7 @@ import { EMPTY_FEATURE_COLLECTION } from "../shared/map/staza-collectible-featur
 import {
   bindCollectibleInteractions,
   ensureCollectibleLayers,
+  loadCollectibleCategoryIcons,
   setCollectibleData
 } from "../shared/map/staza-collectible-layers.js";
 import {
@@ -151,6 +152,7 @@ export const createWorldMap = async (container, {
 
   await staza.ready;
   styleReady = true;
+  await loadCollectibleCategoryIcons(map);
   ensureAlternateLayers();
   ensureRouteLayers();
   ensureEndpointLayers();

@@ -6,7 +6,6 @@ const collectible = (overrides = {}) => ({
   id: "viewpoint-1",
   name: "Turmberg",
   type: "landmark",
-  rarity: "rare",
   found: false,
   latitude: 49.0069,
   longitude: 8.4037,
@@ -41,10 +40,8 @@ describe("collectible GeoJSON conversion", () => {
     expect(collectibleFeature(collectible({ found: false })).properties.visited).toBe(false);
   });
 
-  it("preserves rarity and falls back to common for unknown rarities", () => {
-    expect(collectibleFeature(collectible({ rarity: "epic" })).properties.rarity).toBe("epic");
-    expect(collectibleFeature(collectible({ rarity: "legendary" })).properties.rarity).toBe("common");
-    expect(collectibleFeature(collectible({ rarity: undefined })).properties.rarity).toBe("common");
+  it("does not add obsolete metadata to map features", () => {
+    expect(collectibleFeature(collectible()).properties).not.toHaveProperty("rarity");
   });
 
   it("carries category and name so future icons need no data model change", () => {
@@ -100,9 +97,9 @@ describe("collectible GeoJSON conversion", () => {
 
 describe("collectible source data respects World filters", () => {
   const collectibles = [
-    { id: "common-found", name: "Common", found: true, rarity: "common", latitude: 49, longitude: 8 },
-    { id: "rare-unfound", name: "Rare", found: false, rarity: "rare", latitude: 50, longitude: 9 },
-    { id: "epic-found", name: "Epic", found: true, rarity: "epic", latitude: 51, longitude: 10 }
+    { id: "viewpoint-found", name: "Viewpoint", found: true, primaryCategory: "viewpoint", latitude: 49, longitude: 8 },
+    { id: "peak-unfound", name: "Peak", found: false, primaryCategory: "peak", latitude: 50, longitude: 9 },
+    { id: "castle-found", name: "Castle", found: true, primaryCategory: "castle", latitude: 51, longitude: 10 }
   ];
 
   const featureIds = (selectedFilters, questCollectibles) =>
@@ -110,19 +107,19 @@ describe("collectible source data respects World filters", () => {
       .features.map((feature) => feature.properties.id);
 
   it("renders exactly the filtered collectibles", () => {
-    expect(featureIds([])).toEqual(["common-found", "rare-unfound", "epic-found"]);
-    expect(featureIds(["found"])).toEqual(["common-found", "epic-found"]);
-    expect(featureIds(["unfound"])).toEqual(["rare-unfound"]);
-    expect(featureIds(["rare"])).toEqual(["rare-unfound"]);
-    expect(featureIds(["epic"])).toEqual(["epic-found"]);
-    expect(featureIds(["unfound", "epic", "fartleks"])).toEqual(["rare-unfound", "epic-found"]);
+    expect(featureIds([])).toEqual(["viewpoint-found", "peak-unfound", "castle-found"]);
+    expect(featureIds(["found"])).toEqual(["viewpoint-found", "castle-found"]);
+    expect(featureIds(["unfound"])).toEqual(["peak-unfound"]);
+    expect(featureIds(["peak"])).toEqual(["peak-unfound"]);
+    expect(featureIds(["castle"])).toEqual(["castle-found"]);
+    expect(featureIds(["unfound", "castle", "fartleks"])).toEqual(["peak-unfound", "castle-found"]);
   });
 
   it("keeps the selected quest collectibles on the map without duplicating them", () => {
-    const questCollectible = { id: "quest-only", name: "Quest", found: false, rarity: "common", latitude: 52, longitude: 11 };
+    const questCollectible = { id: "quest-only", name: "Quest", found: false, latitude: 52, longitude: 11 };
 
     expect(featureIds(["found"], [questCollectible, collectibles[0]]))
-      .toEqual(["common-found", "epic-found", "quest-only"]);
+      .toEqual(["viewpoint-found", "castle-found", "quest-only"]);
   });
 
   it("marks quest collectibles as quest related while a quest is active", () => {
@@ -144,6 +141,6 @@ describe("collectible source data respects World filters", () => {
   });
 
   it("does not duplicate business filtering outside filteredWorldCollectibles", () => {
-    expect(mappedWorldCollectibles(collectibles, ["rare"])).toEqual(filteredWorldCollectibles(collectibles, ["rare"]));
+    expect(mappedWorldCollectibles(collectibles, ["peak"])).toEqual(filteredWorldCollectibles(collectibles, ["peak"]));
   });
 });

@@ -93,7 +93,6 @@ export const findCatalogTarget = (catalog, id) => {
       category: collectible.primaryCategory ?? collectible.type ?? "coin",
       id,
       name: collectible.name,
-      rarity: collectible.rarity,
       visited: Boolean(collectible.found)
     }
     : undefined;
@@ -277,7 +276,7 @@ const CustomizeSection = (state) => {
         ${ids.map((id) => {
           const target = findCatalogTarget(state.catalog, id);
           const name = target?.name ?? id;
-          const icon = CollectibleSwatch({ category: target?.category, rarity: target?.rarity, visited: target?.visited });
+          const icon = CollectibleSwatch({ category: target?.category, visited: target?.visited });
           return `
             <li data-exploration-target="${escapeHtml(id)}">
               <span class="exploration-target-name">${icon}<span data-user-content>${escapeHtml(name)}</span></span>

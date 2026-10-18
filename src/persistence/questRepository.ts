@@ -45,7 +45,6 @@ interface QuestCollectibleRow {
   order_index: number | null;
   name: string;
   collectible_type: Collectible["type"];
-  rarity: Collectible["rarity"] | null;
   latitude: number;
   longitude: number;
   radius_meters: number;
@@ -90,7 +89,6 @@ const mapCollectible = (row: QuestCollectibleRow): Collectible => ({
   longitude: row.longitude,
   radiusMeters: row.radius_meters,
   value: row.value,
-  ...(row.rarity === null || row.rarity === undefined ? {} : { rarity: row.rarity }),
   ...(row.description === null ? {} : { description: row.description }),
   ...(row.elevation_m == null ? {} : { elevationMeters: row.elevation_m }),
   ...(row.status == null ? {} : { status: row.status }),
@@ -302,7 +300,7 @@ export class QuestRepository {
     const [collectibleRows, routeResult] = await Promise.all([
       this.pool.query<QuestCollectibleRow>(
         `SELECT quest_collectibles.quest_id, quest_collectibles.collectible_id, quest_collectibles.order_index,
-                collectibles.name, collectibles.collectible_type, collectibles.rarity, collectibles.latitude,
+                collectibles.name, collectibles.collectible_type, collectibles.latitude,
                 collectibles.longitude, collectibles.radius_meters, collectibles.value, collectibles.description,
                 collectibles.elevation_m, collectibles.status, collectibles.source_type, collectibles.source_external_id,
                 collectibles.source_url, collectibles.source_attribution, collectibles.primary_category, collectibles.tags,
@@ -385,7 +383,7 @@ export class QuestRepository {
   private async loadCollectibles(client: PoolClient, ids: string[]): Promise<Collectible[]> {
     if (ids.length === 0) return [];
     const result = await client.query<QuestCollectibleRow>(
-      `SELECT id AS collectible_id, name, collectible_type, rarity, latitude, longitude,
+      `SELECT id AS collectible_id, name, collectible_type, latitude, longitude,
               radius_meters, value, description, elevation_m, status, source_type, source_external_id,
               source_url, source_attribution, primary_category, tags, wikidata_qid,
               wikipedia_reference, enrichment_metadata, NULL::integer AS order_index, NULL::uuid AS quest_id

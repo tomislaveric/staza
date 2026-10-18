@@ -60,8 +60,6 @@ export const ProgressSummary = ({ progress, lifetime }) => `
     <span>${formatNumber(lifetime.distanceMeters / 1000, 1)} km covered</span>
     <i aria-hidden="true">·</i>
     <span>${formatNumber(lifetime.totalCollectibles)} collectibles</span>
-    <i aria-hidden="true">·</i>
-    <span>${formatNumber(lifetime.rareOrBetterCollectibles)} rare or better</span>
   </p>
 `;
 

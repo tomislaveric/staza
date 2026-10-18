@@ -1,4 +1,4 @@
-import { CollectibleIcon, canonicalRarity, escapeHtml } from "../collected-list.js";
+import { CollectibleIcon, escapeHtml } from "../collected-list.js";
 
 export const relatedQuestsFor = (collectibleId, quests) =>
   quests.filter((quest) => (quest.collectibleIds ?? []).includes(collectibleId));
@@ -18,15 +18,13 @@ export const CollectibleSource = (source) => {
 };
 
 export const CollectibleDetail = (collectible, relatedQuests = []) => {
-  const rarity = canonicalRarity(collectible.rarity);
   return `
     <section class="world-detail collectible-detail" aria-label="Collectible detail">
       <header>
         <div>
-          <h2>${CollectibleIcon(collectible.type, rarity === "common" ? undefined : rarity)}<span data-user-content>${escapeHtml(collectible.name)}</span></h2>
+          <h2>${CollectibleIcon(collectible.type)}<span data-user-content>${escapeHtml(collectible.name)}</span></h2>
           <p class="world-detail-meta" data-user-content>
             <small>${escapeHtml(collectible.primaryCategory ?? collectible.type)}</small>
-            ${rarity ? `<span class="collectible-rarity rarity-${rarity}" data-user-content>${escapeHtml(rarity)}</span>` : ""}
             <small>${escapeHtml(collectible.value)} XP</small>
           </p>
         </div>

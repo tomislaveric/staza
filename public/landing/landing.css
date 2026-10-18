@@ -16,12 +16,6 @@
   --landing-border: rgba(67, 80, 107, 0.28);
   --landing-border-strong: rgba(67, 80, 107, 0.55);
 
-  --rarity-common: #7ee787;
-  --rarity-uncommon: #7bb8ff;
-  --rarity-rare: #62b6ff;
-  --rarity-epic: #cf8cff;
-  --rarity-legendary: #ffd83d;
-
   --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
   --font-body: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "DM Mono", "SFMono-Regular", Consolas, monospace;
@@ -433,28 +427,8 @@ p {
 .collect-card {
   padding: 28px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--rarity) 16%, transparent);
-  background: color-mix(in srgb, var(--rarity) 10%, var(--landing-card));
-}
-
-[data-rarity="common"] {
-  --rarity: var(--rarity-common);
-}
-
-[data-rarity="uncommon"] {
-  --rarity: var(--rarity-uncommon);
-}
-
-[data-rarity="rare"] {
-  --rarity: var(--rarity-rare);
-}
-
-[data-rarity="epic"] {
-  --rarity: var(--rarity-epic);
-}
-
-[data-rarity="legendary"] {
-  --rarity: var(--rarity-legendary);
+  border: 1px solid color-mix(in srgb, var(--landing-accent) 16%, transparent);
+  background: color-mix(in srgb, var(--landing-accent) 10%, var(--landing-card));
 }
 
 .collect-card__head {
@@ -473,8 +447,8 @@ p {
 .badge {
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--rarity) 40%, transparent);
-  color: var(--rarity);
+  border: 1px solid color-mix(in srgb, var(--landing-accent) 40%, transparent);
+  color: var(--landing-accent);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.5px;
@@ -488,7 +462,7 @@ p {
 
 .collect-card__meta {
   margin-top: 10px;
-  color: var(--rarity);
+  color: var(--landing-accent);
   font-family: var(--font-mono);
   font-size: 13px;
 }
@@ -612,12 +586,12 @@ p {
 .quest {
   padding: 24px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--rarity) 16%, transparent);
-  background: color-mix(in srgb, var(--rarity) 7%, var(--landing-card));
+  border: 1px solid color-mix(in srgb, var(--landing-accent) 16%, transparent);
+  background: color-mix(in srgb, var(--landing-accent) 7%, var(--landing-card));
 }
 
 .quest__label {
-  color: var(--rarity);
+  color: var(--landing-accent);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 1.4px;
@@ -664,7 +638,7 @@ p {
   height: 100%;
   width: var(--progress, 0%);
   border-radius: 999px;
-  background: var(--rarity);
+  background: var(--landing-accent);
 }
 
 .quest__count {
@@ -705,20 +679,8 @@ p {
 }
 
 .quest__items li[data-done="true"]::before {
-  border-color: color-mix(in srgb, var(--rarity) 45%, transparent);
-  background-color: color-mix(in srgb, var(--rarity) 15%, transparent);
-}
-
-.quest[data-rarity="rare"] .quest__items li[data-done="true"]::before {
-  background-image: url("/landing/assets/quest-check-rare.svg");
-}
-
-.quest[data-rarity="epic"] .quest__items li[data-done="true"]::before {
-  background-image: url("/landing/assets/quest-check-epic.svg");
-}
-
-.quest[data-rarity="common"] .quest__items li[data-done="true"]::before {
-  background-image: url("/landing/assets/quest-check-common.svg");
+  border-color: color-mix(in srgb, var(--landing-accent) 45%, transparent);
+  background-color: color-mix(in srgb, var(--landing-accent) 15%, transparent);
 }
 
 /* ---------------------------------------------------------- activity log */
@@ -820,8 +782,8 @@ p {
   min-height: 61px;
   padding: 12px 16px;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--rarity) 20%, transparent);
-  background: color-mix(in srgb, var(--rarity) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--landing-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--landing-accent) 7%, transparent);
 }
 
 .find__icon {
@@ -837,7 +799,7 @@ p {
 
 .find__xp {
   grid-row: span 2;
-  color: var(--rarity);
+  color: var(--landing-accent);
   font-family: var(--font-mono);
   font-size: 13px;
   white-space: nowrap;
@@ -889,9 +851,9 @@ p {
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--rarity) 31%, transparent);
+  border: 2px solid color-mix(in srgb, var(--landing-accent) 31%, transparent);
   background: var(--landing-bg);
-  color: var(--rarity);
+  color: var(--landing-accent);
   font-family: var(--font-mono);
   font-size: 13px;
 }
@@ -925,7 +887,7 @@ p {
 }
 
 .place__category {
-  color: var(--rarity);
+  color: var(--landing-accent);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 1.54px;

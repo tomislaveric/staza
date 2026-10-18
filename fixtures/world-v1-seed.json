@@ -41,7 +41,6 @@
       "longitude": 8.406321918591857,
       "radius_m": 100,
       "value": 15,
-      "rarity": "common",
       "description": "Placed directly on the early riverside portion of raw-data/straede.fit."
     },
     {
@@ -52,7 +51,6 @@
       "longitude": 8.406321918591857,
       "radius_m": 100,
       "value": 35,
-      "rarity": "rare",
       "description": "Placed near an early route segment; the return route collects it."
     },
     {
@@ -63,7 +61,6 @@
       "longitude": 8.46102791838348,
       "radius_m": 100,
       "value": 25,
-      "rarity": "common",
       "description": "Placed about 30 m from raw-data/straede.fit for near-miss testing."
     },
     {
@@ -74,7 +71,6 @@
       "longitude": 8.586468966677785,
       "radius_m": 100,
       "value": 50,
-      "rarity": "epic",
       "description": "Placed about 48 m from raw-data/straede.fit for near-miss testing."
     },
     {
@@ -85,7 +81,6 @@
       "longitude": 8.63273799419403,
       "radius_m": 100,
       "value": 20,
-      "rarity": "rare",
       "description": "Placed directly on the eastern portion of raw-data/straede.fit."
     },
     {
@@ -96,7 +91,6 @@
       "longitude": 8.516044970601797,
       "radius_m": 100,
       "value": 40,
-      "rarity": "rare",
       "description": "Placed about 55 m from raw-data/straede.fit for near-miss testing."
     },
     {
@@ -107,7 +101,6 @@
       "longitude": 8.430359959602356,
       "radius_m": 100,
       "value": 60,
-      "rarity": "epic",
       "description": "Placed about 73 m from raw-data/straede.fit for near-miss testing."
     },
     {
@@ -118,7 +111,6 @@
       "longitude": 8.40444,
       "radius_m": 100,
       "value": 50,
-      "rarity": "epic",
       "description": "The palace at the centre of the fan-shaped city."
     },
     {
@@ -139,7 +131,6 @@
       "longitude": 8.40372,
       "radius_m": 100,
       "value": 35,
-      "rarity": "rare",
       "description": "The red sandstone pyramid on Marktplatz."
     },
     {
@@ -150,7 +141,6 @@
       "longitude": 8.40245,
       "radius_m": 100,
       "value": 25,
-      "rarity": "rare",
       "description": "West side of Marktplatz."
     },
     {
@@ -171,7 +161,6 @@
       "longitude": 8.38385,
       "radius_m": 100,
       "value": 30,
-      "rarity": "rare",
       "description": "Centre for art and media in the Hallenbau."
     },
     {
@@ -192,7 +181,6 @@
       "longitude": 8.49051,
       "radius_m": 100,
       "value": 60,
-      "rarity": "epic",
       "description": "Durlach viewpoint above the Rhine plain."
     },
     {
@@ -203,7 +191,6 @@
       "longitude": 8.48575,
       "radius_m": 100,
       "value": 30,
-      "rarity": "rare",
       "description": "Germany's oldest funicular still running."
     },
     {
@@ -234,7 +221,6 @@
       "longitude": 8.33052,
       "radius_m": 100,
       "value": 30,
-      "rarity": "rare",
       "description": "Working inland harbour on the Rhine."
     },
     {
@@ -245,7 +231,6 @@
       "longitude": 8.30503,
       "radius_m": 100,
       "value": 40,
-      "rarity": "epic",
       "description": "The Rhine crossing to the Palatinate."
     },
     {
@@ -326,7 +311,6 @@
       "longitude": 8.43128,
       "radius_m": 100,
       "value": 35,
-      "rarity": "rare",
       "description": "Research campus at the north edge."
     },
     {
@@ -377,7 +361,6 @@
       "longitude": 8.40663,
       "radius_m": 100,
       "value": 30,
-      "rarity": "rare",
       "description": "South of Karlsruhe on the Alb."
     },
     {
@@ -398,7 +381,6 @@
       "longitude": 8.42558,
       "radius_m": 100,
       "value": 45,
-      "rarity": "epic",
       "description": "First real climb in the Black Forest foothills."
     },
     {
@@ -449,7 +431,6 @@
       "longitude": 8.48486,
       "radius_m": 100,
       "value": 40,
-      "rarity": "rare",
       "description": "High point east of the city."
     },
     {
@@ -490,7 +471,6 @@
       "longitude": 8.32895,
       "radius_m": 100,
       "value": 35,
-      "rarity": "rare",
       "description": "Rhine meander at the northern edge."
     },
     {
@@ -511,7 +491,6 @@
       "longitude": 8.59262,
       "radius_m": 100,
       "value": 45,
-      "rarity": "epic",
       "description": "Baroque palace at the far north-east."
     },
     {

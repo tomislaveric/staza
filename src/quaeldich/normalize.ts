@@ -85,7 +85,6 @@ export const normalizeQuaeldichFeature = (
     longitude,
     radiusMeters,
     value: mountainPassValueFromElevation(elevationMeters),
-    rarity: "common",
     status: "published",
     primaryCategory: MOUNTAIN_PASS_CATEGORY,
     ...(elevationMeters === undefined ? {} : { elevationMeters }),

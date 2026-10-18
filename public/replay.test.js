@@ -7,7 +7,6 @@ import {
   markerState,
   nearMissDisplayData,
   nextCollectibleData,
-  rarityPresentation,
   replayCollectibles,
   replayCompletion,
   replayDurationSeconds,
@@ -19,7 +18,7 @@ const coin = { id: "coin-1", name: "Park Coin", type: "coin", latitude: 0, longi
 const landmark = { id: "landmark-1", name: "Town Hall", type: "landmark", latitude: 0.01, longitude: 0.01 };
 const coinEvent = {
   sourceId: coin.id,
-  collectible: { name: coin.name, type: coin.type, rarity: "rare" },
+  collectible: { name: coin.name, type: coin.type },
   value: 25,
   latitude: coin.latitude,
   longitude: coin.longitude,
@@ -63,11 +62,6 @@ describe("activity replay", () => {
     expect(markerState(coin.id, [coinEvent], 999)).toBe("available");
     expect(markerState(coin.id, [coinEvent], 1_000)).toBe("collecting");
     expect(markerState(coin.id, [coinEvent], 2_500)).toBe("collected");
-  });
-
-  it("presents rarity only when supplied", () => {
-    expect(rarityPresentation("rare")).toMatchObject({ className: "rarity-rare", label: "Rare" });
-    expect(rarityPresentation()).toBeUndefined();
   });
 
   it("distinguishes coin and landmark presentation without changing event behavior", () => {

@@ -1,8 +1,5 @@
 import type { Collectible, WorldCollectibleVisibility, WorldSnapshot } from "./domain.js";
 
-const hasRarity = (collectible: Collectible, rarity: "rare" | "epic"): boolean =>
-  collectible.rarity === rarity;
-
 export const createWorldSnapshot = (
   collectibles: Collectible[],
   discoveredSourceIds: Iterable<string>,
@@ -21,8 +18,6 @@ export const createWorldSnapshot = (
     stats: {
       totalCollectibles: worldCollectibles.length,
       discoveredCount: discovered.length,
-      rareFinds: discovered.filter((collectible) => hasRarity(collectible, "rare")).length,
-      epicFinds: discovered.filter((collectible) => hasRarity(collectible, "epic")).length,
       remainingCount: worldCollectibles.length - discovered.length
     }
   };

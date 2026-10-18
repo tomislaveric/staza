@@ -47,16 +47,12 @@ const replayForActivity = (activity) => {
   return replay;
 };
 
-const collectibleRarity = (event) => ["rare", "epic"].includes(event.collectible?.rarity)
-  ? event.collectible.rarity
-  : "common";
-
 export const ActivityCollectibleDots = (activity) => {
   const events = activity.events ?? [];
   if (!events.length) return "";
   return `
     <span class="activity-collectible-dots" aria-label="${activity.collectedCount} collectibles found">
-      ${events.slice(0, 5).map((event) => `<i class="rarity-${collectibleRarity(event)}"></i>`).join("")}
+      ${events.slice(0, 5).map(() => "<i></i>").join("")}
       <small>${formatNumber(activity.collectedCount)}</small>
     </span>
   `;

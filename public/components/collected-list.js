@@ -2,38 +2,24 @@ export const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (characte
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
 
-const canonicalRarities = new Set(["common", "rare", "epic"]);
-
-export const canonicalRarity = (rarity) => canonicalRarities.has(rarity) ? rarity : undefined;
-
 export const collectedEvents = (activity) => Array.isArray(activity.events)
   ? activity.events.filter((event) => event.type === "collectible_collected")
   : [];
 
-export const collectibleRarity = (event) => canonicalRarity(event.collectible?.rarity);
-
-export const CollectibleIcon = (type, rarity) => {
-  const asset = type === "landmark"
-    ? (rarity === "epic" ? "collectible-landmark-epic.svg" : "collectible-landmark.svg")
-    : "collectible-coin.svg";
+export const CollectibleIcon = (type) => {
+  const asset = type === "landmark" ? "collectible-landmark.svg" : "collectible-coin.svg";
   return `<span class="collectible-type-icon collectible-type-${escapeHtml(type)}" aria-hidden="true"><img src="/assets/${asset}" width="16" height="16" alt=""></span>`;
 };
 
-export const RarityBadge = (rarity) => rarity
-  ? `<span class="collectible-rarity rarity-${rarity}">${escapeHtml(rarity)}</span>`
-  : "";
-
 export const CollectibleCard = (event) => {
-  const rarity = collectibleRarity(event);
   const collectible = event.collectible ?? {};
   return `
-    <li class="collectible-card${rarity ? ` rarity-${rarity}` : ""}">
-      ${CollectibleIcon(collectible.type, rarity)}
+    <li class="collectible-card">
+      ${CollectibleIcon(collectible.type)}
       <div class="collectible-card-details">
         <strong data-user-content>${escapeHtml(collectible.name ?? event.sourceId)}</strong>
         <span data-user-content>${escapeHtml(collectible.type ?? "collectible")}</span>
       </div>
-      ${rarity ? `<span class="collectible-rarity rarity-${rarity}" data-user-content>${escapeHtml(rarity)}</span>` : ""}
       <strong class="collectible-value">+${escapeHtml(event.value)} XP</strong>
     </li>
   `;

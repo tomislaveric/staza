@@ -17,8 +17,8 @@ const quests = pool ? new QuestRepository(pool) : undefined;
 const activities = pool ? new ActivityRepository(pool) : undefined;
 
 const catalog: Collectible[] = [
-  { id: "turmberg", name: "Turmberg", type: "landmark", rarity: "epic", latitude: 48.9995, longitude: 8.4905, radiusMeters: 40, value: 50 },
-  { id: "schloss", name: "Schloss", type: "landmark", rarity: "rare", latitude: 49.0134, longitude: 8.4044, radiusMeters: 30, value: 25 },
+  { id: "turmberg", name: "Turmberg", type: "landmark", latitude: 48.9995, longitude: 8.4905, radiusMeters: 40, value: 50 },
+  { id: "schloss", name: "Schloss", type: "landmark", latitude: 49.0134, longitude: 8.4044, radiusMeters: 30, value: 25 },
   { id: "rheinhafen", name: "Rheinhafen", type: "coin", latitude: 49.0169, longitude: 8.3305, radiusMeters: 20, value: 10 },
   { id: "freiburg-muenster", name: "Freiburg Münster", type: "landmark", latitude: 47.9955, longitude: 7.8522, radiusMeters: 30, value: 20 }
 ];
@@ -53,7 +53,7 @@ const result = (activityId: string): ActivityResult => ({
     id: "schloss",
     sourceId: "schloss",
     type: "collectible_collected",
-    collectible: { name: "Schloss", type: "landmark", rarity: "rare" },
+    collectible: { name: "Schloss", type: "landmark" },
     value: 25,
     latitude: 49.0134,
     longitude: 8.4044,

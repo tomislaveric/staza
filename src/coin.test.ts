@@ -13,17 +13,17 @@ const writeConfig = async (contents: unknown): Promise<string> => {
 };
 
 describe("readCollectibles", () => {
-  it("normalizes legacy entries and preserves rich collectible metadata", async () => {
+  it("normalizes legacy entries", async () => {
     const collectibles = await readCollectibles(
       await writeConfig([
         { id: "one", latitude: 48, longitude: 11, radius_m: 5, value: 100 },
-        { id: "two", name: "Turmberg", type: "landmark", latitude: 49, longitude: 12, radius_m: 10, value: 200, rarity: "rare", description: "Viewpoint" }
+        { id: "two", name: "Turmberg", type: "landmark", latitude: 49, longitude: 12, radius_m: 10, value: 200, description: "Viewpoint" }
       ])
     );
 
     expect(collectibles).toEqual([
       { id: "one", name: "one", type: "coin", latitude: 48, longitude: 11, radiusMeters: 5, value: 100 },
-      { id: "two", name: "Turmberg", type: "landmark", latitude: 49, longitude: 12, radiusMeters: 10, value: 200, rarity: "rare", description: "Viewpoint" }
+      { id: "two", name: "Turmberg", type: "landmark", latitude: 49, longitude: 12, radiusMeters: 10, value: 200, description: "Viewpoint" }
     ]);
   });
 

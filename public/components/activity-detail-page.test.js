@@ -18,7 +18,9 @@ describe("Activity detail data transformation", () => {
     const strava = { ...snapshot, activity: { source: "strava", route: [{}, {}] } };
     expect(replayInputs({ replay: strava })).toBe(strava);
     expect(replayInputs({ replay: { ...snapshot, activity: { source: "gpx", route: [{}, {}] } } })).toBeUndefined();
-    const invalidNearMiss = replay([{ collectibleId: "bad", name: "Bad", value: 1, rarity: "invalid", minimumDistanceMeters: 10 }]);
+    const invalidNearMiss = replay([{
+      collectibleId: "bad", name: "Bad", value: 1, minimumDistanceMeters: Number.POSITIVE_INFINITY
+    }]);
     expect(replayInputs({ replay: invalidNearMiss })).toBe(invalidNearMiss);
     expect(nearMissInputs({ replay: invalidNearMiss })).toBeUndefined();
   });
@@ -32,7 +34,7 @@ describe("Activity detail data transformation", () => {
 
   it("keeps the collected events and near misses available for the replay overlay snapshot", () => {
     const snapshot = replay([
-      { collectibleId: "historic-target", name: "Historic Target", value: 100, rarity: "rare", minimumDistanceMeters: 42.4 }
+      { collectibleId: "historic-target", name: "Historic Target", value: 100, minimumDistanceMeters: 42.4 }
     ]);
     expect(replayInputs({ replay: snapshot })).toBe(snapshot);
     expect(nearMissInputs({ replay: snapshot })).toBe(snapshot);
@@ -88,7 +90,7 @@ describe("Activity detail data transformation", () => {
       ...base,
       video: {
         state: "awaiting_selection",
-        events: [{ sourceId: "coin-a", collectible: { name: "Coin A", rarity: "rare", type: "coin" }, value: 100 }]
+        events: [{ sourceId: "coin-a", collectible: { name: "Coin A", type: "coin" }, value: 100 }]
       }
     }, progress, "video");
     const noHighlights = ActivityDetailPage({ ...base, video: { state: "no_highlights" } }, progress, "video");

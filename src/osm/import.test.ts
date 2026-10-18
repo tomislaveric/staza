@@ -65,7 +65,7 @@ describe("OSM import planning", () => {
       source: { sourceType: "osm", sourceExternalId: "way:3001" },
       wikidataQid: "Q1003",
       wikipediaReference: "de:Schloss_Beispiel",
-      rarity: "common",
+
       value: 35,
       radiusMeters: 100
     });

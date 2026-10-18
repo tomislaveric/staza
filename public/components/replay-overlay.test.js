@@ -19,8 +19,8 @@ describe("replayPanelRows", () => {
     activity: { route },
     activityResult: {
       collectibles: [{ id: "near-1", latitude: 0, longitude: 2 }],
-      events: [{ sourceId: "coin-1", collectible: { name: "Coin", rarity: "rare" }, activityTimestamp: 1_500 }],
-      nearMisses: [{ collectibleId: "near-1", name: "Peak", rarity: "epic", minimumDistanceMeters: 20 }]
+      events: [{ sourceId: "coin-1", collectible: { name: "Coin" }, activityTimestamp: 1_500 }],
+      nearMisses: [{ collectibleId: "near-1", name: "Peak", minimumDistanceMeters: 20 }]
     }
   };
 

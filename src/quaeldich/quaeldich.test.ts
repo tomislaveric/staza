@@ -53,7 +53,6 @@ describe("normalizeQuaeldichFeature", () => {
     expect(c.radiusMeters).toBe(100);
     expect(c.elevationMeters).toBe(2744);
     expect(c.value).toBe(600);
-    expect(c.rarity).toBe("common");
     expect(c.status).toBe("published");
     expect(c.primaryCategory).toBe("mountain_pass");
     expect(c.source).toEqual({
@@ -129,7 +128,6 @@ const sourced = (id: string, name: string, over: Partial<Collectible> = {}): Col
   longitude: 8,
   radiusMeters: 100,
   value: 250,
-  rarity: "common",
   status: "published",
   elevationMeters: 1200,
   source: {

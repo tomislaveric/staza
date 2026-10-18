@@ -5,7 +5,6 @@ import { UserInputError } from "../errors.js";
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
-const isRarity = (value: unknown): boolean => value === "common" || value === "rare" || value === "epic";
 const isCollectibleType = (value: unknown): boolean => value === "coin" || value === "landmark";
 
 const isCollectible = (value: unknown): boolean =>
@@ -17,7 +16,6 @@ const isCollectible = (value: unknown): boolean =>
   isFiniteNumber(value.longitude) && value.longitude >= -180 && value.longitude <= 180 &&
   isFiniteNumber(value.radiusMeters) && value.radiusMeters > 0 &&
   isFiniteNumber(value.value) && value.value >= 0 &&
-  (value.rarity === undefined || isRarity(value.rarity)) &&
   (value.description === undefined || (typeof value.description === "string" && value.description.trim() !== ""));
 
 const isEvent = (value: unknown): boolean =>
@@ -28,7 +26,6 @@ const isEvent = (value: unknown): boolean =>
   isRecord(value.collectible) &&
   typeof value.collectible.name === "string" && value.collectible.name.trim() !== "" &&
   isCollectibleType(value.collectible.type) &&
-  (value.collectible.rarity === undefined || isRarity(value.collectible.rarity)) &&
   isFiniteNumber(value.value) &&
   isFiniteNumber(value.latitude) &&
   isFiniteNumber(value.longitude) &&

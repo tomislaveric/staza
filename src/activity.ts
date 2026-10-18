@@ -108,7 +108,6 @@ export const deriveNearMisses = (
       collectibleId: collectible.id,
       name: collectible.name,
       value: collectible.value,
-      ...(collectible.rarity === undefined ? {} : { rarity: collectible.rarity }),
       minimumDistanceMeters: minimumRouteDistanceMeters(activity.route, collectible)
     }))
     .filter((collectible) => collectible.minimumDistanceMeters <= NEAR_MISS_THRESHOLD_METERS)
@@ -128,8 +127,7 @@ export const deriveActivityResult = (
     type: "collectible_collected",
     collectible: {
       name: passage.collectible.name,
-      type: passage.collectible.type,
-      ...(passage.collectible.rarity === undefined ? {} : { rarity: passage.collectible.rarity })
+      type: passage.collectible.type
     },
     value: passage.collectible.value,
     latitude: passage.collectible.latitude,

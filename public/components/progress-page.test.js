@@ -16,8 +16,7 @@ const dashboard = {
   },
   lifetime: {
     distanceMeters: 1_247_800,
-    totalCollectibles: 34,
-    rareOrBetterCollectibles: 11
+    totalCollectibles: 34
   },
   levels: [
     { level: 5, totalXpRequired: 1_000 },

@@ -48,7 +48,6 @@ interface EventRow {
   latitude: number;
   longitude: number;
   collectible_name: string;
-  collectible_rarity: PersistedActivityEvent["collectible"]["rarity"] | null;
   collectible_type: PersistedActivityEvent["collectible"]["type"];
   collectible_category: CollectibleCategory | null;
 }
@@ -69,7 +68,6 @@ interface VideoRow {
 interface ProgressLifetimeRow {
   distance_meters: number;
   total_collectibles: string;
-  rare_or_better_collectibles: string;
 }
 
 const mapActivity = (row: ActivityRow): ActivityHistoryItem => ({
@@ -95,8 +93,7 @@ const mapEvent = (row: EventRow): PersistedActivityEvent => ({
   type: row.event_type,
   collectible: {
     name: row.collectible_name,
-    type: row.collectible_type,
-    ...(row.collectible_rarity === null ? {} : { rarity: row.collectible_rarity })
+    type: row.collectible_type
   },
   ...(row.collectible_category === null ? {} : { collectibleCategory: row.collectible_category }),
   value: row.value,
@@ -221,8 +218,8 @@ export class ActivityRepository {
         await client.query(
           `INSERT INTO activity_events (
             id, activity_id, source_id, event_type, activity_timestamp, value, latitude, longitude,
-            collectible_name, collectible_rarity, collectible_type, collectible_category
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            collectible_name, collectible_type, collectible_category
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
             randomUUID(),
             activity.id,
@@ -233,7 +230,6 @@ export class ActivityRepository {
             event.latitude,
             event.longitude,
             event.collectible.name,
-            event.collectible.rarity ?? null,
             event.collectible.type,
             categoriesBySourceId.get(event.sourceId) ?? null
           ]
@@ -383,10 +379,7 @@ export class ActivityRepository {
              FROM activities
              WHERE player_id = $1
            ), 0) AS distance_meters,
-           COUNT(DISTINCT events.source_id) AS total_collectibles,
-           COUNT(DISTINCT events.source_id) FILTER (
-             WHERE events.collectible_rarity IN ('rare', 'epic')
-           ) AS rare_or_better_collectibles
+           COUNT(DISTINCT events.source_id) AS total_collectibles
          FROM activity_events AS events
          INNER JOIN activities ON activities.id = events.activity_id
          WHERE activities.player_id = $1`,
@@ -409,8 +402,7 @@ export class ActivityRepository {
         progress,
         lifetime: {
           distanceMeters: Number(lifetime.distance_meters),
-          totalCollectibles: Number(lifetime.total_collectibles),
-          rareOrBetterCollectibles: Number(lifetime.rare_or_better_collectibles)
+          totalCollectibles: Number(lifetime.total_collectibles)
         },
         levels: Array.from({ length: lastLevel - firstLevel + 1 }, (_, index) => {
           const level = firstLevel + index;
@@ -569,7 +561,7 @@ export class ActivityRepository {
     if (activityResult.rowCount !== 1) throw new Error("Activity not found.");
     const events = await client.query<EventRow>(
       `SELECT id, source_id, event_type, activity_timestamp, value, latitude, longitude,
-              collectible_name, collectible_rarity, collectible_type, collectible_category
+              collectible_name, collectible_type, collectible_category
        FROM activity_events WHERE activity_id = $1 ORDER BY activity_timestamp, id`,
       [id]
     );

@@ -83,7 +83,6 @@ export const collectibleFromCandidate = (
     longitude: candidate.longitude,
     radiusMeters: COLLECTIBLE_RADII[candidate.primaryCategory],
     value: COLLECTIBLE_VALUES[candidate.primaryCategory],
-    rarity: "common",
     status: "published",
     ...(candidate.elevationMeters === undefined ? {} : { elevationMeters: candidate.elevationMeters }),
     ...(candidate.wikidataQid === undefined ? {} : { wikidataQid: candidate.wikidataQid }),

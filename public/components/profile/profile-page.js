@@ -53,7 +53,6 @@ export const profileOverviewView = (profile, session, stravaStatus) => {
       <div><dt>Distance</dt><dd>${formatNumber(profile.distanceMeters / 1000, 1)} km</dd></div>
       <div><dt>Activities completed</dt><dd>${formatNumber(profile.activityCount)}</dd></div>
       <div><dt>Collectibles found</dt><dd>${formatNumber(collectibles.discoveredCount)} of ${formatNumber(collectibles.totalCollectibles)}</dd></div>
-      <div><dt>Rare &amp; epic</dt><dd>${formatNumber(collectibles.rareFinds)} rare · ${formatNumber(collectibles.epicFinds)} epic</dd></div>
     </dl></section>
     <section class="profile-section"><h2>ACCOUNT &amp; SECURITY</h2><div class="profile-card">
       ${row("Account email", { email: session.user.email, verified: session.user.emailVerified ? "Verified" : "" }, "account")}

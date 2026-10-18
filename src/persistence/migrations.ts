@@ -682,6 +682,57 @@ export const migrations: Migration[] = [{
         WHERE status = 'published';
     `);
   }
+}, {
+  id: "030_remove_collectible_rarity",
+  async up(client) {
+    await client.query(`
+      CREATE FUNCTION pg_temp.strip_collectible_rarity(value JSONB, parent_key TEXT DEFAULT NULL)
+      RETURNS JSONB
+      LANGUAGE plpgsql
+      IMMUTABLE
+      AS $$
+      DECLARE
+        result JSONB;
+      BEGIN
+        CASE jsonb_typeof(value)
+          WHEN 'object' THEN
+            SELECT COALESCE(
+              jsonb_object_agg(key, pg_temp.strip_collectible_rarity(item, key)),
+              '{}'::jsonb
+            )
+            INTO result
+            FROM jsonb_each(value) AS members(key, item)
+            WHERE NOT (
+              key = 'rarity'
+              AND parent_key IN ('collectibles', 'nearMisses', 'collectible')
+            );
+            RETURN result;
+          WHEN 'array' THEN
+            SELECT COALESCE(
+              jsonb_agg(pg_temp.strip_collectible_rarity(item, parent_key) ORDER BY ordinal),
+              '[]'::jsonb
+            )
+            INTO result
+            FROM jsonb_array_elements(value) WITH ORDINALITY AS elements(item, ordinal);
+            RETURN result;
+          ELSE
+            RETURN value;
+        END CASE;
+      END;
+      $$;
+
+      UPDATE activities
+      SET replay_snapshot = pg_temp.strip_collectible_rarity(replay_snapshot)
+      WHERE replay_snapshot IS NOT NULL;
+
+      UPDATE activity_videos
+      SET mapped_events = pg_temp.strip_collectible_rarity(mapped_events)
+      WHERE mapped_events IS NOT NULL;
+
+      ALTER TABLE activity_events DROP COLUMN collectible_rarity;
+      ALTER TABLE collectibles DROP COLUMN rarity;
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

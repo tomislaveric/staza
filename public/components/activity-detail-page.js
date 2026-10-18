@@ -1,4 +1,3 @@
-import { canonicalRarity } from "./collected-list.js";
 import { ActivityProgress } from "./activity-progress.js";
 import { ReplayTab, mountReplayTab } from "./replay-tab.js";
 import { ActivitySummary } from "./activity-summary.js";
@@ -36,7 +35,6 @@ export const nearMissInputs = (activity) => {
     && typeof nearMiss.name === "string"
     && Number.isFinite(nearMiss.value)
     && Number.isFinite(nearMiss.minimumDistanceMeters)
-    && (nearMiss.rarity === undefined || canonicalRarity(nearMiss.rarity) !== undefined)
   ))) return undefined;
   return replay;
 };

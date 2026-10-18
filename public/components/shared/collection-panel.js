@@ -1,4 +1,4 @@
-import { canonicalRarity, escapeHtml } from "../collected-list.js";
+import { escapeHtml } from "../collected-list.js";
 import { CollectibleSwatch } from "../world/collectible-swatch.js";
 
 /** Per-row collection state shared by the World quest panel and the ActivityDetail overlay. */
@@ -19,11 +19,10 @@ export const collectionProgressLabel = ({ collected = 0, total = 0 } = {}) =>
  * can focus the marker; non-interactive rows (the replay overlay) render static content that is
  * updated in place by `data-collection-row` id as the replay plays.
  */
-export const CollectionRow = ({ id, name, rarity, state = "unvisited", interactive = false }) => {
-  const tier = canonicalRarity(rarity);
+export const CollectionRow = ({ id, name, state = "unvisited", interactive = false }) => {
   const completed = state === "completed";
   const inner = `
-    ${CollectibleSwatch({ visited: completed, rarity: tier })}
+    ${CollectibleSwatch({ visited: completed })}
     <span class="quest-collectible-name" data-user-content>${escapeHtml(name)}</span>
     <span class="quest-collectible-state">${collectionStateLabel(state)}</span>
   `;

@@ -33,7 +33,6 @@ const unchanged = (incoming: Collectible, existing: Collectible): boolean =>
   incoming.longitude === existing.longitude &&
   incoming.radiusMeters === existing.radiusMeters &&
   incoming.value === existing.value &&
-  (incoming.rarity ?? null) === (existing.rarity ?? null) &&
   (incoming.status ?? "published") === (existing.status ?? "published") &&
   (incoming.elevationMeters ?? null) === (existing.elevationMeters ?? null) &&
   (incoming.wikidataQid ?? null) === (existing.wikidataQid ?? null) &&

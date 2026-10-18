@@ -48,7 +48,7 @@ const VideoSelection = (video) => `
   <section class="video-selection" aria-label="Highlight selection">
     <div class="video-selection-heading"><div><h2>${video.events?.length ?? 0} Collectibles Found</h2><span>Select which moments to include in your highlight video</span></div><button type="button" data-select-all>Select All</button></div>
     <form data-video-selection>
-      <ul>${(video.events ?? []).map((event) => `<li><label><input type="checkbox" name="sourceId" value="${escapeHtml(event.sourceId)}"><i></i><span><b data-user-content>${escapeHtml(event.collectible.name)}</b><small data-user-content>${escapeHtml(event.collectible.rarity ?? "common")} · ${escapeHtml(event.collectible.type)}</small></span><em>+${escapeHtml(event.value)} XP</em></label></li>`).join("")}</ul>
+      <ul>${(video.events ?? []).map((event) => `<li><label><input type="checkbox" name="sourceId" value="${escapeHtml(event.sourceId)}"><i></i><span><b data-user-content>${escapeHtml(event.collectible.name)}</b><small data-user-content>${escapeHtml(event.collectible.type)}</small></span><em>+${escapeHtml(event.value)} XP</em></label></li>`).join("")}</ul>
       <button class="video-attach-button" type="submit" disabled>GENERATE HIGHLIGHTS</button>
     </form>
   </section>

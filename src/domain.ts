@@ -1,5 +1,4 @@
 export type CollectibleType = "coin" | "landmark" | "mountain_pass";
-export type CollectibleRarity = "common" | "rare" | "epic";
 export type CollectibleStatus = "published" | "archived";
 export type CollectibleCategory = "viewpoint" | "peak" | "castle" | "waterfall" | "place" | "mountain_pass";
 
@@ -18,7 +17,6 @@ export interface Collectible {
   longitude: number;
   radiusMeters: number;
   value: number;
-  rarity?: CollectibleRarity;
   description?: string;
   elevationMeters?: number;
   status?: CollectibleStatus;
@@ -40,8 +38,6 @@ export interface WorldCollectible extends Collectible {
 export interface WorldStats {
   totalCollectibles: number;
   discoveredCount: number;
-  rareFinds: number;
-  epicFinds: number;
   remainingCount: number;
 }
 
@@ -69,7 +65,6 @@ export interface GameEvent {
   collectible: {
     name: string;
     type: CollectibleType;
-    rarity?: CollectibleRarity;
   };
   value: number;
   latitude: number;
@@ -82,7 +77,6 @@ export interface NearMissCollectible {
   collectibleId: string;
   name: string;
   value: number;
-  rarity?: CollectibleRarity;
   minimumDistanceMeters: number;
 }
 
@@ -249,7 +243,6 @@ export interface ProgressLevel {
 export interface ProgressLifetimeStats {
   distanceMeters: number;
   totalCollectibles: number;
-  rareOrBetterCollectibles: number;
 }
 
 export interface ProgressDashboard {

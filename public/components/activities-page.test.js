@@ -29,7 +29,7 @@ describe("Activities data transformation", () => {
   it("shows the static route preview and collectible dots for a detailed activity", () => {
     const activity = {
       ...activities[0],
-      events: [{ sourceId: "castle", collectible: { name: "Castle Gate", rarity: "rare" } }],
+      events: [{ sourceId: "castle", collectible: { name: "Castle Gate" } }],
       replay: {
         activity: {
           route: [{ latitude: 48, longitude: 11, timestampMs: 0 }, { latitude: 48.1, longitude: 11.1, timestampMs: 1_000 }]
@@ -40,7 +40,7 @@ describe("Activities data transformation", () => {
 
     expect(ActivityCard(activity)).toContain('class="activity-replay-still activity-card-replay"');
     expect(ActivityCard(activity)).toContain('data-replay-still');
-    expect(ActivityCard(activity)).toContain('class="rarity-rare"');
+    expect(ActivityCard(activity)).not.toContain("rarity");
     expect(ActivityCard(activity)).not.toContain("Castle Gate");
     expect(ActivityCard(activity)).not.toContain("activity-found");
   });
