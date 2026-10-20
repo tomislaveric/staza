@@ -5,6 +5,7 @@ import { mountProgressPage } from "./components/progress-page.js";
 import { mountActivityDetailPage } from "./components/activity-detail-page.js";
 import { mountActivitiesPage } from "./components/activities-page.js";
 import { mountWorldPage } from "./components/world-page.js";
+import { mountSkillTreePage } from "./components/skill-tree-page.js";
 import { mountProfilePage } from "./components/profile/profile-page.js";
 import { startAuthentication, startRegistration } from "/shared/webauthn/index.js";
 import { mountAuthFlow, mountAuthSessionLoading } from "./components/auth/auth-flow.js";
@@ -70,6 +71,7 @@ const mountPrivateApp = () => {
     else if (screen === "activities") mountActivitiesPage(shell.content, selectActivity);
     else if (screen === "activity-detail") mountActivityDetailPage(shell.content, selectedActivityId, () => navigateScreen("activities"));
     else if (screen === "world") mountWorldPage(shell.content);
+    else if (screen === "skill-tree") mountSkillTreePage(shell.content);
     else if (screen === "progress") mountProgressPage(shell.content);
     else if (screen === "profile") mountProfilePage(shell.content, {
       fetch: authenticateFetch,

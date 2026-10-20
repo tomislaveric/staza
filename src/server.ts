@@ -28,6 +28,8 @@ import {
   QuestInstanceNotFoundError,
   QuestInstanceStateError
 } from "./persistence/questInstanceRepository.js";
+import { SkillTreeRepository, SkillTreeUnlockError } from "./persistence/skillTreeRepository.js";
+import { validateSkillTreeCatalog } from "./skillTree/catalog.js";
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
@@ -65,6 +67,8 @@ const collectibleRepository = new CollectibleRepository(databasePool);
 const fartlekRepository = new FartlekRepository(databasePool);
 const fartlekCompletionRepository = new FartlekCompletionRepository(databasePool);
 const questInstanceRepository = new QuestInstanceRepository(databasePool);
+const skillTreeRepository = new SkillTreeRepository(databasePool);
+validateSkillTreeCatalog();
 const smtpConfig = config.smtpHost && config.smtpUser && config.smtpPassword && config.mailFrom
   ? {
       host: config.smtpHost,
@@ -1165,6 +1169,33 @@ app.get("/api/player/progress-dashboard", requirePlayer, async (request: UploadR
   try {
     response.json(await activityRepository.getProgressDashboard(request.user!.playerId));
   } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/skill-tree", requirePlayer, async (request: UploadRequest, response, next) => {
+  try {
+    response.json(await skillTreeRepository.getView(request.user!.playerId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/skill-tree/unlock", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  const nodeId = request.body?.nodeId;
+  if (typeof nodeId !== "string" || nodeId.length === 0) {
+    response.status(400).json({ error: "A nodeId is required." });
+    return;
+  }
+  try {
+    const outcome = await skillTreeRepository.unlockNode(request.user!.playerId, nodeId);
+    response.status(outcome.created ? 201 : 200).json(outcome.view);
+  } catch (error) {
+    if (error instanceof SkillTreeUnlockError) {
+      const status = error.code === "unknown_node" ? 404 : 409;
+      response.status(status).json({ error: error.message, code: error.code });
+      return;
+    }
     next(error);
   }
 });

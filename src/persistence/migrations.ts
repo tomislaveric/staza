@@ -733,6 +733,28 @@ export const migrations: Migration[] = [{
       ALTER TABLE collectibles DROP COLUMN rarity;
     `);
   }
+}, {
+  id: "031_skill_tree",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE players
+        ADD COLUMN is_premium BOOLEAN NOT NULL DEFAULT false;
+
+      CREATE TABLE skill_tree_unlocks (
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        node_id TEXT NOT NULL,
+        cost INTEGER NOT NULL CHECK (cost >= 0),
+        unlocked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (player_id, node_id)
+      );
+      CREATE INDEX skill_tree_unlocks_player_index
+        ON skill_tree_unlocks (player_id, unlocked_at DESC);
+
+      UPDATE players
+      SET is_premium = true
+      WHERE id = '00000000-0000-4000-8000-000000000001';
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

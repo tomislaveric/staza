@@ -26,6 +26,8 @@ import {
 import { ActivityImportRejectedError } from "../errors.js";
 import { getLevelProgress, getTotalXpRequiredForLevel } from "../progression.js";
 import { FartlekCompletionRepository } from "./fartlekCompletionRepository.js";
+import type { SkillTreeStats } from "../skillTree/types.js";
+import { aggregateSkillTreeStats } from "../skillTree/statsQuery.js";
 
 interface ActivityRow {
   id: string;
@@ -410,6 +412,21 @@ export class ActivityRepository {
         }),
         recentActivities: recentActivitiesResult.rows.map(mapActivity)
       };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getSkillTreeStats(playerId: string): Promise<SkillTreeStats> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const stats = await aggregateSkillTreeStats(client, playerId);
+      await client.query("COMMIT");
+      return stats;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

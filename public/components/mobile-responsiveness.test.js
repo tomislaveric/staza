@@ -6,17 +6,18 @@ import { MobileNavigation, navItems } from "./sidebar.js";
 const appShellCss = readFileSync(new URL("../styles/app-shell.css", import.meta.url), "utf8");
 
 describe("mobile app navigation", () => {
-  it("renders the five primary destinations in a dedicated mobile navigation", () => {
+  it("renders the six primary destinations in a dedicated mobile navigation", () => {
     const navigation = MobileNavigation();
 
     expect(navItems.map(([screen]) => screen)).toEqual([
       "home",
       "activities",
       "world",
+      "skill-tree",
       "progress",
       "profile"
     ]);
-    expect(navigation.match(/class="mobile-nav-item/g)).toHaveLength(5);
+    expect(navigation.match(/class="mobile-nav-item/g)).toHaveLength(6);
     expect(navigation).toContain('aria-label="Primary navigation"');
     expect(navigation).toContain('aria-current="page"');
   });
