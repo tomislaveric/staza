@@ -1,112 +1,169 @@
 import { describe, expect, it } from "vitest";
-import {
-  SkillNodeDetail,
-  SkillTreeGraph,
-  SkillTreeHeader,
-  skillTreeViewModel,
-  svgDimensions
-} from "./skill-tree-page.js";
+import { SkillNodeDetail, SkillTreeHeader } from "./skill-tree-page.js";
+import { atlasLayout } from "./skill-atlas-layout.js";
+import { atlasScene, nodeGlyph } from "./skill-atlas-render.js";
+import { tooltipHtml } from "./skill-atlas-tooltip.js";
+import { SYNTHETIC_ROOT_ID } from "./skill-atlas-visual-config.js";
+
+const node = (overrides) => ({
+  sport: "cycling",
+  cost: 2,
+  premium: false,
+  prerequisites: [],
+  prerequisitesMet: true,
+  requirements: [],
+  grant: { type: "quest_unlock", label: "Grant" },
+  ...overrides
+});
 
 const view = {
   earnedPoints: 5,
   spentPoints: 2,
   balance: 3,
   nodes: [
-    {
+    node({
       id: "cyclist",
       name: "Cyclist",
       description: "Begin your journey.",
-      tier: 1,
       branch: "root",
-      cost: 0,
-      premium: false,
+      tier: 1,
+      cost: 1,
       state: "unlocked",
-      prerequisites: [],
-      prerequisitesMet: true,
-      requirements: [],
-      grant: { type: "tree_access", label: "Unlocks the cycling branches" },
-      layout: { col: 1, row: 0 }
-    },
-    {
+      grant: { type: "tree_access", label: "Unlocks the cycling branches" }
+    }),
+    node({
       id: "rush-1",
       name: "Rusher I",
       description: "Reward fast riding.",
-      tier: 1,
       branch: "rush",
-      cost: 2,
-      premium: false,
+      tier: 1,
       state: "unlockable",
       prerequisites: ["cyclist"],
-      prerequisitesMet: true,
       requirements: [{ label: "Flowlines", current: 5, target: 3, met: true }],
-      grant: { type: "quest_unlock", label: "Unlocks Flow quests" },
-      layout: { col: 0, row: 1 }
-    },
-    {
+      grant: { type: "quest_unlock", label: "Unlocks Flow quests" }
+    }),
+    node({
       id: "flow-hunter",
       name: "Flow Hunter",
       description: "Sharpen your flow.",
-      tier: 2,
       branch: "rush",
-      cost: 3,
+      tier: 2,
       premium: true,
       state: "locked",
       prerequisites: ["rush-1"],
       prerequisitesMet: false,
       requirements: [{ label: "Flowlines", current: 2, target: 10, met: false }],
-      grant: { type: "world_filter", label: "Unlocks the High Flow map filter" },
-      layout: { col: 0, row: 2 }
-    }
+      grant: { type: "world_filter", label: "Unlocks the High Flow map filter" }
+    })
   ]
 };
 
-describe("Skill tree view model", () => {
-  it("builds connectors from prerequisites and marks active edges", () => {
-    const model = skillTreeViewModel(view);
-    expect(model.connectors).toHaveLength(2);
-    const [rushEdge, flowEdge] = model.connectors;
-    expect(rushEdge.active).toBe(false);
-    expect(flowEdge.active).toBe(false);
+describe("Skill atlas layout", () => {
+  it("injects a neutral synthetic root at ring 0", () => {
+    const layout = atlasLayout(view);
+    const root = layout.nodes.find((entry) => entry.id === SYNTHETIC_ROOT_ID);
+    expect(root).toBeTruthy();
+    expect(root.ring).toBe(0);
+    expect(root.role).toBe("root");
+    expect(root.name).toBe("Athlete");
+  });
+
+  it("places the sport root on ring 1 and branch tiers further out", () => {
+    const layout = atlasLayout(view);
+    const byId = new Map(layout.nodes.map((entry) => [entry.id, entry]));
+    expect(byId.get("cyclist").ring).toBe(1);
+    expect(byId.get("cyclist").role).toBe("sport");
+    expect(byId.get("rush-1").ring).toBe(2);
+    expect(byId.get("flow-hunter").ring).toBe(3);
+  });
+
+  it("connects the synthetic root to each sport node", () => {
+    const layout = atlasLayout(view);
+    const rootEdge = layout.connectors.find(
+      (edge) => edge.fromId === SYNTHETIC_ROOT_ID && edge.toId === "cyclist"
+    );
+    expect(rootEdge).toBeTruthy();
   });
 
   it("marks an edge active only when both endpoints are unlocked", () => {
+    const edge = atlasLayout(view).connectors.find((entry) => entry.toId === "rush-1");
+    expect(edge.active).toBe(false);
+    expect(edge.reachable).toBe(true); // prerequisite (cyclist) is unlocked
+
     const unlocked = {
       ...view,
-      nodes: view.nodes.map((node) =>
-        node.id === "rush-1" ? { ...node, state: "unlocked" } : node)
+      nodes: view.nodes.map((entry) =>
+        entry.id === "rush-1" ? { ...entry, state: "unlocked" } : entry)
     };
-    const model = skillTreeViewModel(unlocked);
-    expect(model.connectors[0].active).toBe(true);
+    const activeEdge = atlasLayout(unlocked).connectors.find((entry) => entry.toId === "rush-1");
+    expect(activeEdge.active).toBe(true);
   });
 
-  it("sizes the svg to contain every node", () => {
-    const { width, height } = svgDimensions(view.nodes);
-    expect(width).toBeGreaterThan(0);
-    expect(height).toBeGreaterThan(0);
+  it("is deterministic across runs", () => {
+    const first = atlasLayout(view).nodes.map(({ id, x, y, ring }) => ({ id, x, y, ring }));
+    const second = atlasLayout(view).nodes.map(({ id, x, y, ring }) => ({ id, x, y, ring }));
+    expect(first).toEqual(second);
   });
 });
 
-describe("Skill tree rendering", () => {
+describe("Skill atlas rendering", () => {
+  it("renders a node glyph per node with its state class and a PRO badge for premium", () => {
+    const scene = atlasScene(atlasLayout(view));
+    expect(scene).toContain('data-node-id="cyclist"');
+    expect(scene).toContain("is-unlockable");
+    expect(scene).toContain("skill-node-pro");
+    expect(scene).toContain("skill-node-icon");
+    expect(scene).toContain('data-tier="1"');
+  });
+
+  it("labels specialization branches on the map", () => {
+    const scene = atlasScene(atlasLayout(view));
+    expect(scene).toContain("FLOW");
+  });
+
+  it("renders every node, including the synthetic root, as selectable with a hit target", () => {
+    const layout = atlasLayout(view);
+    const root = layout.nodes.find((entry) => entry.id === SYNTHETIC_ROOT_ID);
+    const glyph = nodeGlyph(root);
+    expect(glyph).toContain("is-root");
+    expect(glyph).toContain('role="button"');
+    expect(glyph).toContain('tabindex="0"');
+    expect(glyph).toContain("skill-node-hit");
+  });
+});
+
+describe("Skill atlas tooltip", () => {
+  it("summarizes state, requirement progress, cost and reward", () => {
+    const premium = view.nodes.find((entry) => entry.id === "flow-hunter");
+    const html = tooltipHtml(premium);
+    expect(html).toContain("Flow Hunter");
+    expect(html).toContain("PRO");
+    expect(html).toContain("2 / 10");
+    expect(html).toContain("\u25CB"); // unmet marker
+    expect(html).toContain("Cost:");
+    expect(html).toContain("2 SP");
+    expect(html).toContain("Reward:");
+    expect(html).toContain("High Flow map filter");
+  });
+
+  it("marks met requirements and available state", () => {
+    const available = view.nodes.find((entry) => entry.id === "rush-1");
+    const html = tooltipHtml(available);
+    expect(html).toContain("Available");
+    expect(html).toContain("is-met");
+    expect(html).toContain("\u2713"); // met marker
+  });
+});
+
+describe("Skill tree header", () => {
   it("renders the balance and point breakdown in the header", () => {
     const header = SkillTreeHeader(view);
     expect(header).toContain("Skill Points");
     expect(header).toContain("2 spent · 5 earned");
   });
+});
 
-  it("renders a node glyph per node with its state class and a PRO badge for premium", () => {
-    const graph = SkillTreeGraph(skillTreeViewModel(view));
-    expect(graph).toContain('data-node-id="cyclist"');
-    expect(graph).toContain("is-unlockable");
-    expect(graph).toContain("skill-node-pro");
-    expect(graph).toContain("skill-node-icon");
-    expect(graph).toContain('data-tier="1"');
-  });
-
-  it("labels specialization branches on the map", () => {
-    const graph = SkillTreeGraph(skillTreeViewModel(view));
-    expect(graph).toContain("FLOW");
-  });
-
+describe("Skill node detail", () => {
   it("shows an unlock button and the grant type for an unlockable node", () => {
     const detail = SkillNodeDetail(view.nodes[1]);
     expect(detail).toContain('data-skill-unlock="rush-1"');

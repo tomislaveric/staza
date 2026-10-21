@@ -1,5 +1,5 @@
 .skill-tree-page {
-  padding: 28px 32px 64px;
+  padding: 28px 32px 48px;
   max-width: 1160px;
   margin: 0 auto;
   color: var(--text-primary);
@@ -72,32 +72,129 @@
   gap: 24px;
   align-items: start;
 }
+
+/* Atlas viewport ------------------------------------------------------ */
 .skill-tree-canvas {
   position: relative;
+  height: clamp(520px, calc(100vh - 220px), 860px);
   background:
-    radial-gradient(90% 60% at 50% 0%, rgb(232 184 10 / 9%), transparent 62%),
-    radial-gradient(70% 50% at 50% 100%, rgb(255 255 255 / 3%), transparent 60%),
-    linear-gradient(180deg, #121419, #0c0d10);
+    radial-gradient(60% 55% at 50% 48%, rgb(232 184 10 / 10%), transparent 60%),
+    radial-gradient(120% 120% at 50% 120%, rgb(255 255 255 / 3%), transparent 55%),
+    radial-gradient(90% 90% at 50% 50%, #14171d, #0b0c0f 78%);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-panel);
-  padding: 20px 16px;
-  max-height: calc(100vh - 150px);
-  overflow: auto;
+  overflow: hidden;
 }
-.skill-tree-graph {
+.atlas-viewport { position: absolute; inset: 0; }
+.skill-atlas-svg {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
-  margin: 0 auto;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.atlas-viewport.is-panning .skill-atlas-svg { cursor: grabbing; }
+
+/* Viewport controls (small, unobtrusive) */
+.atlas-controls {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: grid;
+  gap: 6px;
+  z-index: 2;
+}
+.atlas-control {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: rgb(18 20 25 / 82%);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.atlas-control:hover {
+  color: var(--text-primary);
+  border-color: rgb(232 184 10 / 55%);
+  background: rgb(24 26 32 / 92%);
+}
+.atlas-control:focus-visible {
+  outline: 2px solid var(--accent-yellow-bright);
+  outline-offset: 2px;
 }
 
-/* Branch headers ------------------------------------------------------ */
+/* Node hover/focus preview tooltip (compact; never captures pointer) --- */
+.atlas-tooltip {
+  position: absolute;
+  z-index: 3;
+  width: max-content;
+  max-width: 240px;
+  padding: 10px 12px;
+  pointer-events: none;
+  color: var(--text-primary);
+  background: rgb(16 18 23 / 96%);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.atlas-tooltip[hidden] { display: none; }
+.atlas-tip-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.atlas-tip-state {
+  margin: 1px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.atlas-tip-state.is-unlocked { color: var(--accent-yellow); }
+.atlas-tip-state.is-unlockable { color: var(--accent-yellow-bright); }
+.atlas-tip-reqs {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+.atlas-tip-req {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: 6px;
+  align-items: baseline;
+  color: var(--text-muted);
+}
+.atlas-tip-req.is-met { color: var(--text-subtle); }
+.atlas-tip-mark { color: var(--text-subtle); }
+.atlas-tip-req.is-met .atlas-tip-mark { color: var(--accent-yellow); }
+.atlas-tip-req-value { font-variant-numeric: tabular-nums; }
+.atlas-tip-cost { margin: 8px 0 0; }
+.atlas-tip-cost strong { color: var(--accent-yellow); }
+.atlas-tip-reward { margin: 4px 0 0; color: var(--text-muted); }
+
+/* Branch sector labels ------------------------------------------------ */
 .skill-branch-label {
   fill: var(--text-subtle);
   font-family: var(--font-display);
   font-size: 15px;
   letter-spacing: 0.22em;
   text-anchor: middle;
+  dominant-baseline: middle;
   text-transform: uppercase;
 }
 
@@ -105,12 +202,12 @@
 .skill-connector {
   stroke: var(--text-subtle);
   stroke-width: 2;
-  opacity: 0.28;
+  opacity: 0.26;
   transition: stroke 0.3s ease, opacity 0.3s ease;
 }
 .skill-connector.is-reachable {
   stroke: var(--accent-yellow);
-  opacity: 0.4;
+  opacity: 0.42;
 }
 .skill-connector.is-active {
   stroke: var(--accent-yellow);
@@ -124,9 +221,9 @@
   to { stroke-dashoffset: -28; }
 }
 .skill-connector.just-connected {
-  stroke-dasharray: 600;
-  stroke-dashoffset: 600;
-  animation: skill-draw 0.75s ease-out forwards;
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: skill-draw 0.8s ease-out forwards;
 }
 @keyframes skill-draw {
   to { stroke-dashoffset: 0; }
@@ -134,6 +231,9 @@
 
 /* Nodes --------------------------------------------------------------- */
 .skill-node { cursor: pointer; outline: none; }
+
+/* Invisible, generous hit target keeps nodes easy to select when zoomed out. */
+.skill-node-hit { fill: transparent; pointer-events: all; }
 
 .skill-node-halo { fill: transparent; opacity: 0; transition: opacity 0.25s ease; }
 .skill-node-ring {
@@ -179,7 +279,7 @@
   dominant-baseline: middle;
 }
 
-/* PRO badge */
+/* PRO badge (small, refined) */
 .skill-node-pro rect {
   fill: var(--accent-yellow-bright);
   stroke: none;
@@ -251,6 +351,22 @@
 .skill-node.is-unlocked .skill-node-tier circle { fill: #1a1600; stroke: var(--accent-yellow-bright); }
 .skill-node.is-unlocked .skill-node-tier text { fill: var(--accent-yellow-bright); }
 
+/* Sport-identity accent (secondary only; gold stays the progression color). */
+.skill-node.is-sport .skill-node-ring { stroke: color-mix(in srgb, var(--sport-accent) 55%, transparent); }
+.skill-node.is-sport .skill-node-label { font-size: 16px; letter-spacing: 0.04em; fill: var(--text-primary); }
+.skill-node.is-sport .skill-node-circle { stroke-width: 2.5; }
+
+/* Synthetic root: the strongest landmark on the map. */
+.skill-node.is-root .skill-node-circle {
+  fill: #1b1d24;
+  stroke: var(--accent-yellow-bright);
+  stroke-width: 3;
+}
+.skill-node.is-root .skill-node-ring { stroke: rgb(245 200 35 / 45%); stroke-width: 2; }
+.skill-node.is-root .skill-node-icon { stroke: var(--accent-yellow-bright); stroke-width: 1.6; }
+.skill-node.is-root .skill-node-label { font-size: 17px; letter-spacing: 0.06em; fill: var(--text-primary); }
+.skill-node.is-root .skill-node-halo { fill: var(--accent-yellow); opacity: 0.1; }
+
 /* Tier hierarchy: higher tiers carry a stronger aura ring. */
 .skill-node[data-tier="3"] .skill-node-ring,
 .skill-node[data-tier="prestige"] .skill-node-ring { stroke-dasharray: 2 4; }
@@ -264,6 +380,14 @@
 .skill-node.is-unlockable:hover .skill-node-icon,
 .skill-node.is-unlocked:hover .skill-node-icon { stroke: #1a1600; }
 .skill-node:focus-visible .skill-node-halo { fill: var(--text-primary); opacity: 0.12; }
+
+/* Selected node: a clear, state-neutral emphasis ring. */
+.skill-node.is-selected .skill-node-ring {
+  stroke: var(--text-primary);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+.skill-node.is-selected .skill-node-halo { fill: var(--text-primary); opacity: 0.1; }
 
 .skill-node.just-unlocked .skill-node-halo {
   fill: var(--accent-success);
@@ -415,7 +539,7 @@
 @media (max-width: 860px) {
   .skill-tree-page { padding: 20px 16px 96px; }
   .skill-tree-body { grid-template-columns: 1fr; }
-  .skill-tree-canvas { max-height: none; }
+  .skill-tree-canvas { height: clamp(380px, 60vh, 560px); }
   .skill-detail { position: static; }
 }
 

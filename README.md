@@ -135,6 +135,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Shared Staza Map Foundation](features/shared-staza-map-foundation/README.md)
   — unify World and Activity Detail on one MapLibre Staza map foundation and
   rebuild the Ride Detail replay natively on shared basemap, theme, and layers.
+- [Skill Atlas](features/skill-atlas/README.md) — refactor the Skill Tree into a
+  pannable, zoomable, radial constellation map (client-only visual/layout/
+  interaction refactor) while preserving all gameplay, persistence, and APIs.
 - [Skill Tree](features/skill-tree/README.md) — interactive, animated progression
   tree where players spend Skill Points to unlock requirement-gated nodes that
   grant bounded capability access (badges/titles, quest and filter unlocks).

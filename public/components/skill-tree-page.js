@@ -1,4 +1,9 @@
 import { getAppLocale } from "../app-locales.js";
+import { atlasLayout } from "./skill-atlas-layout.js";
+import { atlasScene } from "./skill-atlas-render.js";
+import { createAtlasViewport } from "./skill-atlas-viewport.js";
+import { tooltipHtml } from "./skill-atlas-tooltip.js";
+import { SYNTHETIC_ROOT_ID } from "./skill-atlas-visual-config.js";
 
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -8,145 +13,11 @@ const formatNumber = (value, maximumFractionDigits = 0) => new Intl.NumberFormat
   maximumFractionDigits
 }).format(value);
 
-// Layout geometry for the SVG tree. Columns may be fractional (cross-branch
-// nodes sit between branches); rows increase downward. Generous spacing gives
-// the tree a designed progression-map feel rather than a dense graph.
-const COL_GAP = 216;
-const ROW_GAP = 146;
-const MARGIN_X = 84;
-const MARGIN_Y = 92;
-const NODE_RADIUS = 36;
-
-export const nodePosition = (node) => ({
-  x: MARGIN_X + node.layout.col * COL_GAP,
-  y: MARGIN_Y + node.layout.row * ROW_GAP
-});
-
-export const svgDimensions = (nodes) => {
-  const positions = nodes.map(nodePosition);
-  const maxX = Math.max(0, ...positions.map((position) => position.x)) + MARGIN_X + NODE_RADIUS;
-  const maxY = Math.max(0, ...positions.map((position) => position.y)) + MARGIN_Y + NODE_RADIUS;
-  return { width: maxX, height: maxY };
-};
-
-export const skillTreeViewModel = (view) => {
-  const byId = new Map(view.nodes.map((node) => [node.id, node]));
-  const connectors = [];
-  for (const node of view.nodes) {
-    for (const prerequisiteId of node.prerequisites) {
-      const prerequisite = byId.get(prerequisiteId);
-      if (!prerequisite) continue;
-      connectors.push({
-        from: nodePosition(prerequisite),
-        to: nodePosition(node),
-        toId: node.id,
-        active: node.state === "unlocked" && prerequisite.state === "unlocked",
-        reachable: prerequisite.state === "unlocked"
-      });
-    }
-  }
-  return { ...view, connectors, dimensions: svgDimensions(view.nodes) };
-};
-
-const Connector = (connector) => {
-  const midY = (connector.from.y + connector.to.y) / 2;
-  const d = `M ${connector.from.x.toFixed(1)} ${connector.from.y.toFixed(1)}`
-    + ` C ${connector.from.x.toFixed(1)} ${midY.toFixed(1)}`
-    + ` ${connector.to.x.toFixed(1)} ${midY.toFixed(1)}`
-    + ` ${connector.to.x.toFixed(1)} ${connector.to.y.toFixed(1)}`;
-  const classes = ["skill-connector"];
-  if (connector.active) classes.push("is-active");
-  else if (connector.reachable) classes.push("is-reachable");
-  return `<path class="${classes.join(" ")}" data-to="${escapeHtml(connector.toId)}" d="${d}" fill="none" />`;
-};
-
-// Grant-type iconography drawn in a 24x24 space, centered in each node so the
-// tree reads as meaningful capabilities rather than bare numbers.
-const NODE_ICONS = {
-  tree_access: '<circle cx="12" cy="12" r="8.5" /><path d="M12 5.5 L14.5 12 L12 18.5 L9.5 12 Z" />',
-  quest_unlock: '<path d="M6 3.5 V20.5" /><path d="M6 4.5 H17 L14 7.6 L17 10.7 H6" />',
-  world_filter: '<circle cx="12" cy="12" r="8.5" /><path d="M3.5 12 H20.5" /><path d="M12 3.5 C8.5 7 8.5 17 12 20.5 C15.5 17 15.5 7 12 3.5" />',
-  segment_filter: '<circle cx="6" cy="18" r="2.2" /><circle cx="18" cy="6" r="2.2" /><path d="M7.4 16.6 C9 12 15 12 16.6 7.4" />',
-  title: '<circle cx="12" cy="9" r="4.6" /><path d="M9 13.6 L7.2 21 L12 18 L16.8 21 L15 13.6" />',
-  badge: '<path d="M12 3.4 L18.8 6 V12 C18.8 16.6 12 20.6 12 20.6 C12 20.6 5.2 16.6 5.2 12 V6 Z" /><path d="M9.3 12 L11.3 14 L15 9.6" />'
-};
-
-const TIER_GLYPH = { 1: "I", 2: "II", 3: "III", prestige: "★" };
-
-const NodeGlyph = (node) => {
-  const position = nodePosition(node);
-  const iconScale = (NODE_RADIUS * 1.08) / 24;
-  const iconOffset = (24 * iconScale) / 2;
-  const icon = node.state === "unlocked" && node.grant.type !== "badge"
-    ? '<path d="M5.5 12.5 L10 17 L18.5 7.5" />'
-    : (NODE_ICONS[node.grant.type] ?? '<circle cx="12" cy="12" r="6" />');
-
-  const tierBadge = `
-    <g class="skill-node-tier" transform="translate(${(position.x - NODE_RADIUS * 0.72).toFixed(1)} ${(position.y - NODE_RADIUS * 0.72).toFixed(1)})">
-      <circle r="11" />
-      <text y="0.5">${TIER_GLYPH[node.tier] ?? node.tier}</text>
-    </g>`;
-
-  const proBadge = node.premium
-    ? `<g class="skill-node-pro" transform="translate(${(position.x + NODE_RADIUS * 0.46).toFixed(1)} ${(position.y - NODE_RADIUS * 0.92).toFixed(1)})">
-        <rect x="-15" y="-9" width="30" height="18" rx="9" />
-        <text y="0.5">PRO</text>
-      </g>`
-    : "";
-
-  const costChip = node.state === "unlockable"
-    ? `<g class="skill-node-cost-chip" transform="translate(${position.x.toFixed(1)} ${(position.y + NODE_RADIUS + 30).toFixed(1)})">
-        <rect x="-26" y="-10" width="52" height="20" rx="10" />
-        <text y="0.5">${escapeHtml(formatNumber(node.cost))} SP</text>
-      </g>`
-    : "";
-
-  return `
-    <g class="skill-node is-${node.state}" data-node-id="${escapeHtml(node.id)}" data-tier="${escapeHtml(String(node.tier))}" tabindex="0" role="button"
-      aria-label="${escapeHtml(node.name)}">
-      <circle class="skill-node-halo" cx="${position.x.toFixed(1)}" cy="${position.y.toFixed(1)}" r="${NODE_RADIUS + 10}" />
-      <circle class="skill-node-ring" cx="${position.x.toFixed(1)}" cy="${position.y.toFixed(1)}" r="${(NODE_RADIUS + 4).toFixed(1)}" />
-      <circle class="skill-node-circle" cx="${position.x.toFixed(1)}" cy="${position.y.toFixed(1)}" r="${NODE_RADIUS}" />
-      <g class="skill-node-icon" transform="translate(${(position.x - iconOffset).toFixed(1)} ${(position.y - iconOffset).toFixed(1)}) scale(${iconScale.toFixed(3)})">${icon}</g>
-      ${tierBadge}
-      ${proBadge}
-      ${costChip}
-      <text class="skill-node-label" x="${position.x.toFixed(1)}" y="${(position.y + NODE_RADIUS + 16).toFixed(1)}">${escapeHtml(node.name)}</text>
-    </g>
-  `;
-};
-
-// Branch column headers give the map a sense of place. Positioned above the
-// first node of each specialization branch.
-const BRANCH_LABELS = { rush: "FLOW", adventure: "EXPLORE", endurance: "DISTANCE" };
-
-const BranchHeaders = (nodes) => {
-  const firstByBranch = new Map();
-  for (const node of nodes) {
-    if (!BRANCH_LABELS[node.branch]) continue;
-    const existing = firstByBranch.get(node.branch);
-    if (!existing || node.layout.row < existing.layout.row) firstByBranch.set(node.branch, node);
-  }
-  return [...firstByBranch.values()].map((node) => {
-    const position = nodePosition(node);
-    return `<text class="skill-branch-label" x="${position.x.toFixed(1)}" y="${(position.y - NODE_RADIUS - 28).toFixed(1)}">${BRANCH_LABELS[node.branch]}</text>`;
-  }).join("");
-};
-
-export const SkillTreeGraph = (model) => `
-  <svg class="skill-tree-graph" viewBox="0 0 ${model.dimensions.width.toFixed(0)} ${model.dimensions.height.toFixed(0)}"
-    role="group" aria-label="Skill tree" preserveAspectRatio="xMidYMin meet">
-    <g class="skill-connectors">${model.connectors.map(Connector).join("")}</g>
-    <g class="skill-branch-headers">${BranchHeaders(model.nodes)}</g>
-    <g class="skill-nodes">${model.nodes.map(NodeGlyph).join("")}</g>
-  </svg>
-`;
-
 export const SkillTreeHeader = (model) => `
   <header class="skill-tree-header">
     <div>
       <h1 id="skill-tree-title">Skill Tree</h1>
-      <p>Spend Skill Points to shape your rider</p>
+      <p>Spend Skill Points to shape your athlete</p>
     </div>
     <div class="skill-points" role="status">
       <strong>${formatNumber(model.balance)}</strong>
@@ -225,18 +96,15 @@ export const SkillNodeDetail = (node) => {
   `;
 };
 
-export const SkillTreePage = (model, selectedNodeId) => {
-  const selected = model.nodes.find((node) => node.id === selectedNodeId);
-  return `
-    <section class="skill-tree-page" aria-labelledby="skill-tree-title">
-      ${SkillTreeHeader(model)}
-      <div class="skill-tree-body">
-        <div class="skill-tree-canvas">${SkillTreeGraph(model)}</div>
-        ${SkillNodeDetail(selected)}
-      </div>
-    </section>
-  `;
-};
+export const SkillTreePage = () => `
+  <section class="skill-tree-page" aria-labelledby="skill-tree-title">
+    <div class="skill-tree-header-slot"></div>
+    <div class="skill-tree-body">
+      <div class="skill-tree-canvas"></div>
+      <div class="skill-detail-slot"></div>
+    </div>
+  </section>
+`;
 
 const responseJson = async (response) => {
   const body = await response.json().catch(() => ({}));
@@ -250,80 +118,194 @@ const responseJson = async (response) => {
 
 export const mountSkillTreePage = async (mountPoint) => {
   mountPoint.innerHTML = '<section class="skill-tree-page"><p class="skill-tree-loading" role="status">Loading Skill Tree...</p></section>';
-  let selectedNodeId;
-  let justUnlockedId;
 
-  const render = (view) => {
-    const model = skillTreeViewModel(view);
-    if (!selectedNodeId && model.nodes.length) {
-      const firstUnlockable = model.nodes.find((node) => node.state === "unlockable");
-      selectedNodeId = (firstUnlockable ?? model.nodes[0]).id;
-    }
-    mountPoint.innerHTML = SkillTreePage(model, selectedNodeId);
-    if (justUnlockedId) {
-      const unlocked = mountPoint.querySelector(`.skill-node[data-node-id="${CSS.escape(justUnlockedId)}"]`);
-      unlocked?.classList.add("just-unlocked");
-      mountPoint
-        .querySelectorAll(`.skill-connector[data-to="${CSS.escape(justUnlockedId)}"]`)
-        .forEach((connector) => connector.classList.add("just-connected"));
-      justUnlockedId = undefined;
-    }
+  let view;
+  let layout;
+  let selectedNodeId;
+  let viewport;
+  let canvasHost;
+  let detailSlot;
+  let headerSlot;
+  let tooltipEl;
+
+  const canHover = globalThis.matchMedia?.("(hover: hover)").matches ?? false;
+
+  const detailNodeById = (id) => layout?.byId.get(id);
+
+  const hideTooltip = () => {
+    if (tooltipEl) tooltipEl.hidden = true;
+  };
+
+  const positionTooltip = (node) => {
+    if (!tooltipEl || !viewport) return;
+    const center = viewport.worldToScreen(node.x, node.y);
+    const nodeScreenRadius = node.radius * viewport.state.k;
+    const vpWidth = viewport.element.clientWidth;
+    const vpHeight = viewport.element.clientHeight;
+    const width = tooltipEl.offsetWidth;
+    const height = tooltipEl.offsetHeight;
+    const margin = 8;
+
+    let left = center.x - width / 2;
+    let top = center.y - nodeScreenRadius - 12 - height;
+    if (top < margin) top = center.y + nodeScreenRadius + 12; // flip below near the top edge
+    left = Math.min(Math.max(margin, left), Math.max(margin, vpWidth - width - margin));
+    top = Math.min(Math.max(margin, top), Math.max(margin, vpHeight - height - margin));
+    tooltipEl.style.left = `${left}px`;
+    tooltipEl.style.top = `${top}px`;
+  };
+
+  const showTooltip = (nodeId) => {
+    const node = detailNodeById(nodeId);
+    if (!node || !tooltipEl) return;
+    tooltipEl.innerHTML = tooltipHtml(node);
+    tooltipEl.hidden = false;
+    positionTooltip(node);
+  };
+
+  const renderDetail = () => {
+    if (!detailSlot) return;
+    detailSlot.innerHTML = SkillNodeDetail(detailNodeById(selectedNodeId));
+  };
+
+  const highlightSelection = () => {
+    canvasHost?.querySelectorAll(".skill-node.is-selected")
+      .forEach((node) => node.classList.remove("is-selected"));
+    if (!selectedNodeId) return;
+    canvasHost
+      ?.querySelector(`.skill-node[data-node-id="${CSS.escape(selectedNodeId)}"]`)
+      ?.classList.add("is-selected");
   };
 
   const selectNode = (nodeId) => {
     selectedNodeId = nodeId;
-    const current = JSON.parse(mountPoint.dataset.view ?? "null");
-    if (current) render(current);
+    renderDetail();
+    highlightSelection();
   };
 
-  const store = (view) => {
-    mountPoint.dataset.view = JSON.stringify(view);
-    render(view);
+  const focusNode = (nodeId) => {
+    const node = detailNodeById(nodeId);
+    if (node && viewport) viewport.focusNode(node.x, node.y);
   };
 
-  mountPoint.addEventListener("click", async (event) => {
-    const unlockButton = event.target.closest("[data-skill-unlock]");
-    if (unlockButton) {
-      const nodeId = unlockButton.dataset.skillUnlock;
-      unlockButton.disabled = true;
-      unlockButton.textContent = "Unlocking...";
-      try {
-        const view = await fetch("/api/skill-tree/unlock", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ nodeId })
-        }).then(responseJson);
-        justUnlockedId = nodeId;
-        selectedNodeId = nodeId;
-        store(view);
-      } catch (error) {
-        const detail = mountPoint.querySelector(".skill-detail");
-        if (detail) {
-          const notice = document.createElement("p");
-          notice.className = "skill-detail-error";
-          notice.setAttribute("role", "alert");
-          notice.textContent = `Unable to unlock: ${error.message}`;
-          detail.appendChild(notice);
-        }
+  const renderScene = ({ keepView = false } = {}) => {
+    hideTooltip();
+    layout = atlasLayout(view);
+    viewport.setScene(atlasScene(layout), layout.bounds, { keepView });
+    highlightSelection();
+  };
+
+  const defaultSelection = () => {
+    const firstUnlockable = view.nodes.find((node) => node.state === "unlockable");
+    return (firstUnlockable ?? view.nodes[0])?.id;
+  };
+
+  const flashUnlock = (nodeId) => {
+    const unlocked = canvasHost?.querySelector(`.skill-node[data-node-id="${CSS.escape(nodeId)}"]`);
+    unlocked?.classList.add("just-unlocked");
+    canvasHost
+      ?.querySelectorAll(`.skill-connector[data-to="${CSS.escape(nodeId)}"]`)
+      .forEach((connector) => connector.classList.add("just-connected"));
+  };
+
+  const unlock = async (nodeId, button) => {
+    button.disabled = true;
+    button.textContent = "Unlocking...";
+    try {
+      view = await fetch("/api/skill-tree/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodeId })
+      }).then(responseJson);
+      selectedNodeId = nodeId;
+      renderScene({ keepView: true });
+      renderDetail();
+      flashUnlock(nodeId);
+    } catch (error) {
+      const notice = document.createElement("p");
+      notice.className = "skill-detail-error";
+      notice.setAttribute("role", "alert");
+      notice.textContent = `Unable to unlock: ${error.message}`;
+      detailSlot?.querySelector(".skill-detail")?.appendChild(notice);
+      button.disabled = false;
+      button.textContent = `Unlock · ${formatNumber(detailNodeById(nodeId)?.cost ?? 0)} SP`;
+    }
+  };
+
+  const build = () => {
+    mountPoint.innerHTML = SkillTreePage();
+    headerSlot = mountPoint.querySelector(".skill-tree-header-slot");
+    canvasHost = mountPoint.querySelector(".skill-tree-canvas");
+    detailSlot = mountPoint.querySelector(".skill-detail-slot");
+    headerSlot.innerHTML = SkillTreeHeader(view);
+    viewport = createAtlasViewport(canvasHost);
+
+    tooltipEl = document.createElement("div");
+    tooltipEl.className = "atlas-tooltip";
+    tooltipEl.setAttribute("role", "tooltip");
+    tooltipEl.hidden = true;
+    viewport.element.appendChild(tooltipEl);
+
+    canvasHost.addEventListener("click", (event) => {
+      const nodeGroup = event.target.closest(".skill-node");
+      if (nodeGroup?.dataset.nodeId) selectNode(nodeGroup.dataset.nodeId);
+    });
+
+    canvasHost.addEventListener("dblclick", (event) => {
+      const nodeGroup = event.target.closest(".skill-node");
+      if (nodeGroup?.dataset.nodeId) focusNode(nodeGroup.dataset.nodeId);
+    });
+
+    canvasHost.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const nodeGroup = event.target.closest(".skill-node");
+      if (nodeGroup?.dataset.nodeId) {
+        event.preventDefault();
+        selectNode(nodeGroup.dataset.nodeId);
+        focusNode(nodeGroup.dataset.nodeId);
       }
-      return;
-    }
-    const nodeGroup = event.target.closest(".skill-node");
-    if (nodeGroup?.dataset.nodeId) selectNode(nodeGroup.dataset.nodeId);
-  });
+    });
 
-  mountPoint.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    const nodeGroup = event.target.closest(".skill-node");
-    if (nodeGroup?.dataset.nodeId) {
-      event.preventDefault();
-      selectNode(nodeGroup.dataset.nodeId);
+    // Keyboard focus mirrors the hover preview; pointer hover only where supported.
+    canvasHost.addEventListener("focusin", (event) => {
+      const nodeGroup = event.target.closest(".skill-node");
+      if (nodeGroup?.dataset.nodeId) showTooltip(nodeGroup.dataset.nodeId);
+    });
+    canvasHost.addEventListener("focusout", (event) => {
+      const nodeGroup = event.target.closest(".skill-node");
+      const next = event.relatedTarget?.closest?.(".skill-node");
+      if (nodeGroup && next !== nodeGroup) hideTooltip();
+    });
+
+    if (canHover) {
+      canvasHost.addEventListener("pointerover", (event) => {
+        if (event.pointerType && event.pointerType !== "mouse") return;
+        const nodeGroup = event.target.closest(".skill-node");
+        if (nodeGroup?.dataset.nodeId) showTooltip(nodeGroup.dataset.nodeId);
+      });
+      canvasHost.addEventListener("pointerout", (event) => {
+        const nodeGroup = event.target.closest(".skill-node");
+        const next = event.relatedTarget?.closest?.(".skill-node");
+        if (nodeGroup && next !== nodeGroup) hideTooltip();
+      });
     }
-  });
+
+    // Any pan/zoom gesture dismisses the preview so it never fights the viewport.
+    canvasHost.addEventListener("pointerdown", hideTooltip);
+    canvasHost.addEventListener("wheel", hideTooltip, { passive: true });
+
+    detailSlot.addEventListener("click", (event) => {
+      const unlockButton = event.target.closest("[data-skill-unlock]");
+      if (unlockButton) unlock(unlockButton.dataset.skillUnlock, unlockButton);
+    });
+  };
 
   try {
-    const view = await fetch("/api/skill-tree").then(responseJson);
-    store(view);
+    view = await fetch("/api/skill-tree").then(responseJson);
+    build();
+    selectedNodeId = defaultSelection();
+    renderScene();
+    renderDetail();
   } catch (error) {
     mountPoint.innerHTML = `<section class="skill-tree-page"><p class="skill-tree-load-error" role="alert">Unable to load Skill Tree: ${escapeHtml(error.message)}</p></section>`;
   }
