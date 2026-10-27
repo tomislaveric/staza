@@ -16,12 +16,24 @@ const baseStats: SkillTreeStats = {
   totalDistanceM: 0,
   cyclingDistanceM: 0,
   runningDistanceM: 0,
+  hikingDistanceM: 0,
   longestRideM: 0,
   longestRunM: 0,
+  longestHikeM: 0,
   activityCount: 0,
+  cyclingActivityCount: 0,
+  runningActivityCount: 0,
+  hikingActivityCount: 0,
+  distinctSportCount: 0,
+  totalElevationGainM: 0,
+  hikingElevationGainM: 0,
   uniqueFlowlines: 0,
   categoryCounts: { viewpoint: 0, peak: 0, castle: 0, waterfall: 0, place: 0, mountain_pass: 0 },
-  uniqueCollectibles: 0
+  runningCategoryCounts: { viewpoint: 0, peak: 0, castle: 0, waterfall: 0, place: 0, mountain_pass: 0 },
+  hikingCategoryCounts: { viewpoint: 0, peak: 0, castle: 0, waterfall: 0, place: 0, mountain_pass: 0 },
+  uniqueCollectibles: 0,
+  runningUniqueCollectibles: 0,
+  hikingUniqueCollectibles: 0
 };
 
 const node = (overrides: Partial<SkillTreeNode> = {}): SkillTreeNode => ({

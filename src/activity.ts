@@ -92,7 +92,8 @@ export const deriveActivity = (
     endedAt,
     route,
     distance,
-    duration: Math.max(0, (endedAt - startedAt) / 1000)
+    duration: Math.max(0, (endedAt - startedAt) / 1000),
+    ...(metadata.elevationGainM === undefined ? {} : { elevationGainM: metadata.elevationGainM })
   };
 };
 

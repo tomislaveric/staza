@@ -53,7 +53,43 @@ describe("skill tree catalog", () => {
   });
 
   it("finds nodes by id", () => {
-    expect(findSkillTreeNode("cyclist")?.name).toBe("Cyclist");
+    expect(findSkillTreeNode("cyclist")?.name).toBe("Cycling");
     expect(findSkillTreeNode("missing")).toBeUndefined();
+  });
+
+  it("includes equal first-class Cycling, Running, and Hiking sport hubs", () => {
+    const hubs = SKILL_TREE_NODES.filter((node) => node.branch === "root");
+    expect(hubs.map((node) => node.id).sort()).toEqual(["cyclist", "hiker", "runner"]);
+    for (const hub of hubs) {
+      expect(hub.tier).toBe(1);
+      expect(hub.premium).toBe(false);
+      expect(hub.prerequisites).toEqual([]);
+    }
+    expect(new Set(SKILL_TREE_NODES.map((node) => node.sport))).toEqual(
+      new Set(["cycling", "running", "hiking"])
+    );
+  });
+
+  it("preserves every pre-existing Cycling node id for unlock compatibility", () => {
+    const legacyIds = [
+      "cyclist", "rusher-i", "rusher-ii", "flow-hunter", "flow-specialist",
+      "adventurer-i", "pathfinder", "explorer", "world-seeker",
+      "endurance-i", "distance-rider", "fondo", "ultra-rider",
+      "breakaway-specialist", "grand-explorer", "all-rounder"
+    ];
+    for (const id of legacyIds) expect(findSkillTreeNode(id)).toBeDefined();
+  });
+
+  it("gives cross-sport nodes prerequisites spanning more than one sport", () => {
+    const crossSport = SKILL_TREE_NODES.filter((node) => node.branch === "cross_sport");
+    expect(crossSport.length).toBeGreaterThan(0);
+    for (const node of crossSport) {
+      const parents = node.prerequisites.map((id) => findSkillTreeNode(id)).filter(Boolean);
+      const sports = new Set(parents.map((parent) => parent!.sport));
+      // Either the node directly joins two sports, or it builds on a cross-sport
+      // capstone that already does (transitive multi-sport coverage).
+      const buildsOnCrossSport = parents.some((parent) => parent!.branch === "cross_sport");
+      expect(sports.size >= 2 || buildsOnCrossSport).toBe(true);
+    }
   });
 });

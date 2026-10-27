@@ -19,31 +19,40 @@ export const RING_RADII = {
 export const NODE_SIZES = {
   root: 46,
   sport: 40,
+  crossSport: 34,
+  prestige: 36,
+  crossBranch: 32,
   skill: 30
 };
 
-// Secondary sport accents. Only Cycling has gameplay data today; Running and
-// Hiking are placeholders so the layout/visual system is ready without
-// inventing nodes. Accents are intentionally subtle and never override gold.
+// Secondary sport accents. Accents are intentionally subtle and never override
+// the universal gold progression color. Each GPS sport owns one radial sector.
 export const SPORT_VISUALS = {
   cycling: { accent: "#53c7d6", label: "Cycling" },
   running: { accent: "#e58a6b", label: "Running" },
   hiking: { accent: "#6fb98a", label: "Hiking" }
 };
 
-// Fixed angular order of sports around the circle. Cycling fills the circle
-// while it is the only sport; adding a sport here reserves it an adjacent
-// sector without any renderer change.
+// Fixed angular order of sports around the circle. Adding a sport here reserves
+// it an adjacent sector without any renderer change.
 export const SPORT_ORDER = ["cycling", "running", "hiking"];
 
 // Branch sub-sector order within a sport sector. The angle a node receives is
-// its sport sector plus its branch offset inside that sector.
-export const BRANCH_ORDER = ["rush", "adventure", "endurance"];
+// its sport sector plus its branch offset inside that sector. Sports only use a
+// subset of these keys (e.g. cycling has no `speed`/`summit`), and the layout
+// only reserves sub-sectors for the branches actually present in each sport.
+export const BRANCH_ORDER = ["rush", "speed", "summit", "adventure", "endurance"];
+
+// Branches that do not form their own angular sub-sector: they are placed by the
+// circular mean of their prerequisites so they sit between the sectors they join.
+export const CROSS_BRANCHES = new Set(["cross", "cross_sport"]);
 
 export const BRANCH_LABELS = {
   rush: "FLOW",
+  speed: "SPEED",
+  summit: "SUMMIT",
   adventure: "EXPLORE",
-  endurance: "DISTANCE"
+  endurance: "ENDURANCE"
 };
 
 export const sportVisual = (sport) =>

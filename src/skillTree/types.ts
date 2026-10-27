@@ -1,11 +1,14 @@
-export type SkillTreeSport = "cycling" | "running";
+export type SkillTreeSport = "cycling" | "running" | "hiking";
 
 export type SkillTreeBranch =
   | "root"
   | "rush"
+  | "speed"
+  | "summit"
   | "adventure"
   | "endurance"
-  | "cross";
+  | "cross"
+  | "cross_sport";
 
 export type SkillTreeTier = 1 | 2 | 3 | "prestige";
 
@@ -59,19 +62,38 @@ export interface SkillTreeStats {
   totalDistanceM: number;
   cyclingDistanceM: number;
   runningDistanceM: number;
+  hikingDistanceM: number;
   longestRideM: number;
   longestRunM: number;
+  longestHikeM: number;
   activityCount: number;
+  cyclingActivityCount: number;
+  runningActivityCount: number;
+  hikingActivityCount: number;
+  /** Count of distinct activity types with at least one activity (cumulative). */
+  distinctSportCount: number;
+  totalElevationGainM: number;
+  hikingElevationGainM: number;
   uniqueFlowlines: number;
-  categoryCounts: {
-    viewpoint: number;
-    peak: number;
-    castle: number;
-    waterfall: number;
-    place: number;
-    mountain_pass: number;
-  };
+  categoryCounts: SkillTreeCategoryCounts;
+  /** Unique collectibles discovered on runs, by category. */
+  runningCategoryCounts: SkillTreeCategoryCounts;
+  /** Unique collectibles discovered on hikes, by category. */
+  hikingCategoryCounts: SkillTreeCategoryCounts;
   uniqueCollectibles: number;
+  /** Unique collectibles discovered while running (any category). */
+  runningUniqueCollectibles: number;
+  /** Unique collectibles discovered while hiking (any category). */
+  hikingUniqueCollectibles: number;
+}
+
+export interface SkillTreeCategoryCounts {
+  viewpoint: number;
+  peak: number;
+  castle: number;
+  waterfall: number;
+  place: number;
+  mountain_pass: number;
 }
 
 export type SkillTreeNodeState =

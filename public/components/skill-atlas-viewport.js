@@ -129,6 +129,22 @@ export const createAtlasViewport = (host) => {
       : setView(width / 2, height / 2, k);
   };
 
+  // Frame the core of the atlas (Athlete + sport hubs + first progression rings)
+  // at a comfortable, readable zoom instead of fitting the entire tree. Used on
+  // initial load so nodes never start out tiny; users can zoom out or Fit for all.
+  const fitCore = (animate = false) => {
+    size();
+    // Core spans roughly rings 0–2 (center, sport hubs, first two skill rings)
+    // plus label padding, in virtual-world units mirroring RING_RADII geometry.
+    const coreRadius = 200 + 190 * 1.6;
+    const span = coreRadius * 2;
+    const padding = 0.92;
+    const k = clampZoom(Math.min(width, height) / span * padding);
+    const target = { tx: width / 2, ty: height / 2, k };
+    if (animate) animateTo(target);
+    else setView(target.tx, target.ty, target.k);
+  };
+
   const focusNode = (worldX, worldY, animate = true) => {
     const target = { tx: width / 2 - worldX * state.k, ty: height / 2 - worldY * state.k, k: state.k };
     animate ? animateTo(target) : setView(target.tx, target.ty, target.k);
@@ -264,11 +280,12 @@ export const createAtlasViewport = (host) => {
   });
   resizeObserver.observe(svg);
 
-  const setScene = (sceneMarkup, nextBounds, { keepView = false } = {}) => {
+  const setScene = (sceneMarkup, nextBounds, { keepView = false, initial = false } = {}) => {
     world.innerHTML = sceneMarkup;
     if (nextBounds) bounds = nextBounds;
     size();
     if (keepView) apply();
+    else if (initial) fitCore(false);
     else fit(false);
   };
 
@@ -285,5 +302,5 @@ export const createAtlasViewport = (host) => {
 
   size();
 
-  return { svg, world, element: viewport, setScene, fit, reset, focusNode, worldToScreen, zoomAt, destroy, state };
+  return { svg, world, element: viewport, setScene, fit, fitCore, reset, focusNode, worldToScreen, zoomAt, destroy, state };
 };

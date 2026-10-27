@@ -6,6 +6,7 @@
 
 import {
   BRANCH_ORDER,
+  CROSS_BRANCHES,
   NODE_SIZES,
   RING_RADII,
   SPORT_ORDER,
@@ -16,9 +17,15 @@ import {
 // than the right, giving a more intentional constellation.
 const ANGLE_OFFSET = -Math.PI / 2;
 
+// Visual role drives node sizing and styling. Cross-branch, cross-sport, and
+// prestige nodes read distinctly from ordinary branch nodes while staying within
+// one coherent system.
 const roleForNode = (node) => {
   if (node.id === SYNTHETIC_ROOT_ID) return "root";
   if (node.branch === "root") return "sport";
+  if (node.branch === "cross_sport") return "crossSport";
+  if (node.tier === "prestige") return "prestige";
+  if (node.branch === "cross") return "crossBranch";
   return "skill";
 };
 
@@ -84,7 +91,7 @@ const computeAngles = (nodes) => {
 
   for (const sport of sports) {
     const branches = orderedPresent(
-      realNodes.filter((node) => node.sport === sport && node.branch !== "root" && node.branch !== "cross")
+      realNodes.filter((node) => node.sport === sport && node.branch !== "root" && !CROSS_BRANCHES.has(node.branch))
         .map((node) => node.branch),
       BRANCH_ORDER
     );
@@ -105,7 +112,7 @@ const computeAngles = (nodes) => {
     let angle;
     if (node.branch === "root") {
       angle = sportStart.get(node.sport) ?? ANGLE_OFFSET;
-    } else if (node.branch === "cross") {
+    } else if (CROSS_BRANCHES.has(node.branch)) {
       const parentAngles = (node.prerequisites ?? [])
         .map((id) => byId.get(id))
         .filter(Boolean)
@@ -122,6 +129,70 @@ const computeAngles = (nodes) => {
   const result = new Map();
   for (const node of realNodes) result.set(node.id, angleFor(node));
   return result;
+};
+
+// Minimum arc (in world units) kept between two node centers on the same ring so
+// their labels never stack. Converted to an angle per-ring from the ring radius.
+const MIN_LABEL_ARC = 150;
+
+/**
+ * Deterministic declutter: nodes that resolve to (almost) the same angle on the
+ * same ring — common for cross-sport / prestige nodes placed by the circular
+ * mean of their parents — are fanned apart so their titles never overlap. Uses a
+ * symmetric circular relaxation (wrap-around aware) that preserves the ring's
+ * overall balance. Deterministic: identical angles break ties by node id.
+ */
+const TWO_PI = Math.PI * 2;
+// Signed shortest angular distance from a to b, in (-π, π].
+const circularDelta = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+
+const declutterAngles = (nodes, rings, angles) => {
+  const byRing = new Map();
+  for (const node of nodes) {
+    if (node.id === SYNTHETIC_ROOT_ID) continue;
+    const ring = rings.get(node.id);
+    if (!ring) continue; // skip ring 0 / unresolved
+    if (!byRing.has(ring)) byRing.set(ring, []);
+    byRing.get(ring).push(node.id);
+  }
+
+  for (const [ring, ids] of byRing) {
+    if (ids.length < 2) continue;
+    const radius = ringRadius(ring);
+    if (radius <= 0) continue;
+    // Target separation: the arc a label needs, capped at an even spread so a
+    // full ring can always fit (n * minGap <= 2π).
+    const minGap = Math.min(TWO_PI / ids.length, MIN_LABEL_ARC / radius);
+
+    // Stable order so tie-breaks (identical angles) are deterministic.
+    const ordered = [...ids].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const current = new Map(ordered.map((id) => [id, angles.get(id) ?? 0]));
+
+    for (let pass = 0; pass < 60; pass += 1) {
+      let moved = false;
+      for (let i = 0; i < ordered.length; i += 1) {
+        for (let j = i + 1; j < ordered.length; j += 1) {
+          const a = ordered[i];
+          const b = ordered[j];
+          let delta = circularDelta(current.get(a), current.get(b));
+          // Identical angles: nudge in a fixed direction (ids are sorted, so i<j).
+          if (Math.abs(delta) < 1e-6) delta = minGap * 0.5;
+          const gap = Math.abs(delta);
+          if (gap >= minGap) continue;
+          const push = (minGap - gap) / 2 + 1e-4;
+          const dir = delta >= 0 ? 1 : -1;
+          current.set(b, current.get(b) + dir * push);
+          current.set(a, current.get(a) - dir * push);
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+
+    for (const id of ordered) angles.set(id, current.get(id));
+  }
+
+  return angles;
 };
 
 const syntheticRoot = () => ({
@@ -155,6 +226,7 @@ export const atlasLayout = (view) => {
   rings.set(SYNTHETIC_ROOT_ID, 0);
   const angles = computeAngles(nodes);
   angles.set(SYNTHETIC_ROOT_ID, 0);
+  declutterAngles(nodes, rings, angles);
 
   const positioned = nodes.map((node) => {
     const ring = rings.get(node.id) ?? 1;

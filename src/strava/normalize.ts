@@ -61,11 +61,19 @@ export const normalizeStravaActivity = (
 ): Activity => {
   const route = normalizeStravaTrack(summary.start_date, streams);
   const title = typeof summary.name === "string" && summary.name.trim() ? summary.name.trim().slice(0, 200) : undefined;
+  const elevationGainM = typeof summary.total_elevation_gain === "number"
+    && Number.isFinite(summary.total_elevation_gain)
+    && summary.total_elevation_gain >= 0
+    ? summary.total_elevation_gain
+    : undefined;
   return deriveActivity(
     id,
     route,
     mapStravaSportType(summary.sport_type, summary.type),
-    title === undefined ? {} : { title },
+    {
+      ...(title === undefined ? {} : { title }),
+      ...(elevationGainM === undefined ? {} : { elevationGainM })
+    },
     "strava"
   );
 };

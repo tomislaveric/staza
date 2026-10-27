@@ -16,8 +16,8 @@ const formatNumber = (value, maximumFractionDigits = 0) => new Intl.NumberFormat
 export const SkillTreeHeader = (model) => `
   <header class="skill-tree-header">
     <div>
-      <h1 id="skill-tree-title">Skill Tree</h1>
-      <p>Spend Skill Points to shape your athlete</p>
+      <h1 id="skill-tree-title">Skill Atlas</h1>
+      <p>Spend Skill Points to shape your athlete across every sport</p>
     </div>
     <div class="skill-points" role="status">
       <strong>${formatNumber(model.balance)}</strong>
@@ -188,10 +188,13 @@ export const mountSkillTreePage = async (mountPoint) => {
     if (node && viewport) viewport.focusNode(node.x, node.y);
   };
 
+  let hasRenderedScene = false;
   const renderScene = ({ keepView = false } = {}) => {
     hideTooltip();
     layout = atlasLayout(view);
-    viewport.setScene(atlasScene(layout), layout.bounds, { keepView });
+    const initial = !hasRenderedScene && !keepView;
+    viewport.setScene(atlasScene(layout), layout.bounds, { keepView, initial });
+    hasRenderedScene = true;
     highlightSelection();
   };
 

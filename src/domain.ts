@@ -101,6 +101,7 @@ export interface Activity {
   route: TrackPoint[];
   distance?: number;
   duration?: number;
+  elevationGainM?: number;
 }
 
 export type FartlekStatus = "published" | "archived";

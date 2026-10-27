@@ -26,6 +26,7 @@ interface FitMetadataSource {
 export interface FitMetadata {
   title?: string;
   description?: string;
+  elevationGainM?: number;
 }
 
 /** A trimmed, non-empty string candidate, or undefined when blank/unreliable. */
@@ -34,6 +35,10 @@ const usableText = (value: unknown): string | undefined => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
+
+/** A finite, non-negative elevation-gain candidate in metres, or undefined. */
+const usableElevation = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 
 const firstMessage = (
   single: FitMessage | undefined,
@@ -52,9 +57,11 @@ export const extractFitMetadata = (data: FitMetadataSource): FitMetadata => {
     ?? usableText(session?.sport_profile_name)
     ?? usableText(session?.name);
   const description = usableText(workout?.notes) ?? usableText(session?.notes);
+  const elevationGainM = usableElevation(session?.total_ascent);
   return {
     ...(title === undefined ? {} : { title }),
-    ...(description === undefined ? {} : { description })
+    ...(description === undefined ? {} : { description }),
+    ...(elevationGainM === undefined ? {} : { elevationGainM })
   };
 };
 

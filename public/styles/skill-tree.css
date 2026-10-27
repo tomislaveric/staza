@@ -279,7 +279,22 @@
   dominant-baseline: middle;
 }
 
-/* PRO badge (small, refined) */
+/* PRO badge (small, refined). Hidden by default so premium gating never makes a
+   node more prominent — it only surfaces on hover, keyboard focus, or selection.
+   The atlas therefore reads identically for free and PRO users. */
+.skill-node-pro {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skill-node-pro { transition: none; }
+}
+.skill-node:hover .skill-node-pro,
+.skill-node:focus-visible .skill-node-pro,
+.skill-node.is-selected .skill-node-pro {
+  opacity: 1;
+}
 .skill-node-pro rect {
   fill: var(--accent-yellow-bright);
   stroke: none;
@@ -312,13 +327,12 @@
 .skill-node.is-locked .skill-node-label { fill: var(--text-subtle); }
 .skill-node.is-locked .skill-node-icon { stroke: var(--text-subtle); }
 
-/* Premium-locked: clearly a PRO-gated node, not just locked. */
-.skill-node.is-premium_locked .skill-node-circle {
-  stroke: rgb(232 184 10 / 45%);
-  stroke-dasharray: 4 5;
-}
-.skill-node.is-premium_locked .skill-node-icon { stroke: rgb(232 184 10 / 55%); }
-.skill-node.is-premium_locked .skill-node-label { fill: var(--text-muted); }
+/* Premium-locked renders exactly like a plain locked node: premium gating must
+   not add visual prominence, so no yellow accent here. The PRO badge (revealed
+   on hover/focus/selection) is the only premium affordance. */
+.skill-node.is-premium_locked .skill-node-circle { opacity: 0.72; }
+.skill-node.is-premium_locked .skill-node-label { fill: var(--text-subtle); }
+.skill-node.is-premium_locked .skill-node-icon { stroke: var(--text-subtle); }
 
 /* Unlockable: the actionable, most prominent state. */
 .skill-node.is-unlockable .skill-node-circle {
@@ -355,6 +369,35 @@
 .skill-node.is-sport .skill-node-ring { stroke: color-mix(in srgb, var(--sport-accent) 55%, transparent); }
 .skill-node.is-sport .skill-node-label { font-size: 16px; letter-spacing: 0.04em; fill: var(--text-primary); }
 .skill-node.is-sport .skill-node-circle { stroke-width: 2.5; }
+
+/* Cross-branch nodes: a doubled ring hints they join two branch paths. */
+.skill-node.is-crossBranch .skill-node-ring {
+  stroke: rgb(245 200 35 / 40%);
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+}
+.skill-node.is-crossBranch .skill-node-circle { stroke-width: 2; }
+
+/* Cross-sport nodes: sit between sectors and read as neutral junctions, not
+   owned by a single sport accent. */
+.skill-node.is-crossSport .skill-node-circle {
+  stroke-width: 2.2;
+  stroke: color-mix(in srgb, var(--accent-yellow-bright) 70%, #d7dae2);
+}
+.skill-node.is-crossSport .skill-node-ring {
+  stroke: rgb(215 218 226 / 32%);
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+}
+.skill-node.is-crossSport .skill-node-label { letter-spacing: 0.03em; fill: var(--text-primary); }
+
+/* Prestige / late-game nodes: outer-ring landmarks with a stronger aura. */
+.skill-node.is-prestige .skill-node-circle { stroke-width: 2.5; }
+.skill-node.is-prestige .skill-node-ring {
+  stroke: color-mix(in srgb, var(--sport-accent, var(--accent-yellow-bright)) 45%, var(--accent-yellow));
+  stroke-width: 2.5;
+}
+.skill-node.is-prestige .skill-node-halo { fill: var(--accent-yellow); opacity: 0.08; }
 
 /* Synthetic root: the strongest landmark on the map. */
 .skill-node.is-root .skill-node-circle {

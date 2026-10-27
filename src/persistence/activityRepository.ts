@@ -184,8 +184,8 @@ export class ActivityRepository {
       const inserted = await client.query<ActivityRow>(
         `INSERT INTO activities (
           id, player_id, source_type, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count,
-          replay_snapshot, source_external_id, fingerprint_version, fingerprint_started_at, fingerprint
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          replay_snapshot, source_external_id, fingerprint_version, fingerprint_started_at, fingerprint, elevation_gain_m
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ON CONFLICT DO NOTHING
         RETURNING id, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video, replay_snapshot`,
         [
@@ -202,7 +202,8 @@ export class ActivityRepository {
           importKey ?? null,
           fingerprint?.version ?? null,
           fingerprint ? new Date(fingerprint.startedAtMs) : null,
-          fingerprint ? JSON.stringify(fingerprint) : null
+          fingerprint ? JSON.stringify(fingerprint) : null,
+          activity.elevationGainM ?? null
         ]
       );
       if (inserted.rowCount === 0) throw new Error("Activity identity conflict.");

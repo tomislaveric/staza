@@ -100,6 +100,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   navigation and focused responsive layouts.
 - [Multi Clip creation](features/multi-clip-creation/README.md) — select detected
   Coin passages and combine them into one chronological highlight video.
+- [Multi-Sport Skill Atlas](features/multi-sport-skill-atlas/README.md) — extend the
+  cycling Skill Tree into a radial multi-sport atlas with Athlete at the center and
+  Cycling, Running, and Hiking as equal sport sectors plus cross-sport and prestige nodes.
 - [Persistent activities player state v1](features/persistent-activities-player-state-v1/README.md)
   — persist compact activity/event history and single-player XP in PostgreSQL
   with transaction-safe exactly-once progression.

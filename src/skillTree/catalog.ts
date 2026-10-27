@@ -1,4 +1,11 @@
-import type { SkillTreeNode } from "./types.js";
+import type {
+  SkillTreeBranch,
+  SkillTreeGrant,
+  SkillTreeGrantType,
+  SkillTreeNode,
+  SkillTreeSport,
+  SkillTreeTier
+} from "./types.js";
 
 /**
  * Player levels that grant one Skill Point each. Early points arrive quickly so
@@ -26,43 +33,81 @@ export const earnedSkillPointsForLevel = (level: number): number => {
   return earned;
 };
 
-const node = (definition: SkillTreeNode): SkillTreeNode => definition;
+type RequirementSpec = [metric: string, target: number, label: string];
+type GrantSpec = [type: SkillTreeGrantType, value: string, label: string];
+
+interface NodeSpec {
+  id: string;
+  name: string;
+  description: string;
+  sport: SkillTreeSport;
+  branch: SkillTreeBranch;
+  tier: SkillTreeTier;
+  cost: number;
+  grant: GrantSpec;
+  req?: RequirementSpec[];
+  pre?: string[];
+  /** Legacy catalog position, retained for backwards compatibility; never drives the radial renderer. */
+  layout?: { col: number; row: number };
+}
 
 /**
- * Versioned static Skill Tree catalog. The database stores only the player's
- * chosen unlocks; the node definitions live here like the collectible and quest
- * templates. v1 ships the full Cycling tree; Running and cross-sport nodes are
- * introduced later.
+ * Expand a terse spec into a full node. Premium gating is derived from tier so
+ * the catalog can never drift from the rule that only Tier 1 is free. A node's
+ * on-screen position is computed client-side from structure, so `layout`
+ * defaults harmlessly when a node has no legacy coordinate.
+ */
+const node = (spec: NodeSpec): SkillTreeNode => ({
+  id: spec.id,
+  name: spec.name,
+  description: spec.description,
+  sport: spec.sport,
+  branch: spec.branch,
+  tier: spec.tier,
+  cost: spec.cost,
+  premium: spec.tier !== 1,
+  requirements: (spec.req ?? []).map(([metric, target, label]) => ({ metric, target, label })),
+  prerequisites: spec.pre ?? [],
+  grant: { type: spec.grant[0], value: spec.grant[1], label: spec.grant[2] } satisfies SkillTreeGrant,
+  layout: spec.layout ?? { col: 0, row: 0 }
+});
+
+/**
+ * Versioned static multi-sport Skill Atlas catalog. The database stores only the
+ * player's chosen unlocks (node id + cost); definitions live here like collectible
+ * and quest templates. Athlete is a client-side synthetic root; Cycling, Running,
+ * and Hiking are equal sport hubs branching from it. Existing Cycling node ids and
+ * costs are preserved so historical unlocks and balances stay valid.
  */
 export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
+  // ===================================================================
+  // CYCLING
+  // ===================================================================
   node({
     id: "cyclist",
-    name: "Cyclist",
-    description: "Begin your cycling journey and open the three specializations.",
+    name: "Cycling",
+    description: "Your cycling hub. Open the Flow, Explore, and Endurance specializations.",
     sport: "cycling",
     branch: "root",
     tier: 1,
     cost: 1,
-    premium: false,
-    requirements: [{ metric: "activityCount", target: 1, label: "Activities completed" }],
-    prerequisites: [],
-    grant: { type: "tree_access", value: "cycling-branches", label: "Unlocks the cycling branches" },
+    req: [["activityCount", 1, "Activities completed"]],
+    grant: ["tree_access", "cycling-branches", "Unlocks the cycling branches"],
     layout: { col: 1, row: 0 }
   }),
 
-  // Rush branch
+  // Cycling · FLOW
   node({
     id: "rusher-i",
     name: "Rusher I",
-    description: "Reward fast, flowing riding and open the Rush path.",
+    description: "Reward fast, flowing riding and open the Flow path.",
     sport: "cycling",
     branch: "rush",
     tier: 1,
     cost: 1,
-    premium: false,
-    requirements: [{ metric: "flowlines", target: 3, label: "Flowlines" }],
-    prerequisites: ["cyclist"],
-    grant: { type: "quest_unlock", value: "flow-quests", label: "Unlocks Flow quests" },
+    req: [["flowlines", 3, "Flowlines"]],
+    pre: ["cyclist"],
+    grant: ["quest_unlock", "flow-quests", "Unlocks Flow quests"],
     layout: { col: 0, row: 1 }
   }),
   node({
@@ -73,10 +118,9 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "rush",
     tier: 2,
     cost: 2,
-    premium: true,
-    requirements: [{ metric: "flowlines", target: 10, label: "Flowlines" }],
-    prerequisites: ["rusher-i"],
-    grant: { type: "world_filter", value: "high-flow", label: "Unlocks the High Flow map filter" },
+    req: [["flowlines", 10, "Flowlines"]],
+    pre: ["rusher-i"],
+    grant: ["world_filter", "high-flow", "Unlocks the High Flow map filter"],
     layout: { col: 0, row: 2 }
   }),
   node({
@@ -87,10 +131,9 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "rush",
     tier: 2,
     cost: 2,
-    premium: true,
-    requirements: [{ metric: "flowlines", target: 20, label: "Flowlines" }],
-    prerequisites: ["rusher-ii"],
-    grant: { type: "quest_unlock", value: "flow-hunter-quests", label: "Unlocks Flow Hunter quests" },
+    req: [["flowlines", 20, "Flowlines"]],
+    pre: ["rusher-ii"],
+    grant: ["quest_unlock", "flow-hunter-quests", "Unlocks Flow Hunter quests"],
     layout: { col: 0, row: 3 }
   }),
   node({
@@ -101,26 +144,36 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "rush",
     tier: 3,
     cost: 2,
-    premium: true,
-    requirements: [{ metric: "flowlines", target: 35, label: "Flowlines" }],
-    prerequisites: ["flow-hunter"],
-    grant: { type: "title", value: "flow-specialist", label: "Earns the Flow Specialist title" },
+    req: [["flowlines", 35, "Flowlines"]],
+    pre: ["flow-hunter"],
+    grant: ["title", "flow-specialist", "Earns the Flow Specialist title"],
     layout: { col: 0, row: 4 }
   }),
+  node({
+    id: "cycling-breakaway-rider",
+    name: "Breakaway Rider",
+    description: "Turn raw flow into decisive, race-winning efforts.",
+    sport: "cycling",
+    branch: "rush",
+    tier: "prestige",
+    cost: 3,
+    req: [["flowlines", 50, "Flowlines"], ["longestRideKm", 60, "km longest ride"]],
+    pre: ["flow-specialist"],
+    grant: ["quest_unlock", "breakaway-quests", "Unlocks Breakaway quests"]
+  }),
 
-  // Adventure branch
+  // Cycling · EXPLORE
   node({
     id: "adventurer-i",
     name: "Adventurer I",
-    description: "Reward discovery and open the Adventure path.",
+    description: "Reward discovery and open the Explore path.",
     sport: "cycling",
     branch: "adventure",
     tier: 1,
     cost: 1,
-    premium: false,
-    requirements: [{ metric: "places", target: 3, label: "Places" }],
-    prerequisites: ["cyclist"],
-    grant: { type: "quest_unlock", value: "explore-quests", label: "Unlocks Explore quests" },
+    req: [["places", 3, "Places"]],
+    pre: ["cyclist"],
+    grant: ["quest_unlock", "explore-quests", "Unlocks Explore quests"],
     layout: { col: 1, row: 1 }
   }),
   node({
@@ -131,10 +184,9 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "adventure",
     tier: 2,
     cost: 2,
-    premium: true,
-    requirements: [{ metric: "places", target: 8, label: "Places" }],
-    prerequisites: ["adventurer-i"],
-    grant: { type: "world_filter", value: "undiscovered-only", label: "Unlocks the Undiscovered Only filter" },
+    req: [["places", 8, "Places"]],
+    pre: ["adventurer-i"],
+    grant: ["world_filter", "undiscovered-only", "Unlocks the Undiscovered Only filter"],
     layout: { col: 1, row: 2 }
   }),
   node({
@@ -145,10 +197,9 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "adventure",
     tier: 2,
     cost: 2,
-    premium: true,
-    requirements: [{ metric: "uniqueCollectibles", target: 20, label: "Unique discoveries" }],
-    prerequisites: ["pathfinder"],
-    grant: { type: "quest_unlock", value: "explorer-quests", label: "Unlocks Explorer quests" },
+    req: [["uniqueCollectibles", 20, "Unique discoveries"]],
+    pre: ["pathfinder"],
+    grant: ["quest_unlock", "explorer-quests", "Unlocks Explorer quests"],
     layout: { col: 1, row: 3 }
   }),
   node({
@@ -159,14 +210,26 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "adventure",
     tier: 3,
     cost: 2,
-    premium: true,
-    requirements: [{ metric: "viewpoints", target: 10, label: "Viewpoints" }],
-    prerequisites: ["explorer"],
-    grant: { type: "title", value: "world-seeker", label: "Earns the World Seeker title" },
+    req: [["viewpoints", 10, "Viewpoints"]],
+    pre: ["explorer"],
+    grant: ["title", "world-seeker", "Earns the World Seeker title"],
     layout: { col: 1, row: 4 }
   }),
+  node({
+    id: "grand-explorer",
+    name: "Grand Explorer",
+    description: "Relentless discovery across every corner of the map.",
+    sport: "cycling",
+    branch: "adventure",
+    tier: "prestige",
+    cost: 3,
+    req: [["places", 25, "Places"], ["uniqueCollectibles", 40, "Unique discoveries"]],
+    pre: ["world-seeker"],
+    grant: ["quest_unlock", "grand-explorer-challenges", "Unlocks Grand Explorer challenges"],
+    layout: { col: 1.5, row: 5 }
+  }),
 
-  // Endurance branch
+  // Cycling · ENDURANCE
   node({
     id: "endurance-i",
     name: "Endurance I",
@@ -175,10 +238,9 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "endurance",
     tier: 1,
     cost: 1,
-    premium: false,
-    requirements: [{ metric: "cyclingDistanceKm", target: 100, label: "km cycled" }],
-    prerequisites: ["cyclist"],
-    grant: { type: "quest_unlock", value: "distance-quests", label: "Unlocks Distance quests" },
+    req: [["cyclingDistanceKm", 100, "km cycled"]],
+    pre: ["cyclist"],
+    grant: ["quest_unlock", "distance-quests", "Unlocks Distance quests"],
     layout: { col: 2, row: 1 }
   }),
   node({
@@ -189,28 +251,38 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "endurance",
     tier: 2,
     cost: 2,
-    premium: true,
-    requirements: [
-      { metric: "cyclingDistanceKm", target: 500, label: "km cycled" },
-      { metric: "longestRideKm", target: 40, label: "km longest ride" }
+    req: [
+      ["cyclingDistanceKm", 500, "km cycled"],
+      ["longestRideKm", 40, "km longest ride"]
     ],
-    prerequisites: ["endurance-i"],
-    grant: { type: "segment_filter", value: "long-endurance", label: "Unlocks the Long Endurance segment filter" },
+    pre: ["endurance-i"],
+    grant: ["segment_filter", "long-endurance", "Unlocks the Long Endurance segment filter"],
     layout: { col: 2, row: 2 }
   }),
   node({
     id: "fondo",
-    name: "Fondo",
+    name: "Fondo Rider",
     description: "Go the distance in a single ride.",
     sport: "cycling",
     branch: "endurance",
     tier: 3,
     cost: 2,
-    premium: true,
-    requirements: [{ metric: "longestRideKm", target: 80, label: "km longest ride" }],
-    prerequisites: ["distance-rider"],
-    grant: { type: "quest_unlock", value: "fondo-quest-chain", label: "Unlocks the Fondo quest chain" },
+    req: [["longestRideKm", 80, "km longest ride"]],
+    pre: ["distance-rider"],
+    grant: ["quest_unlock", "fondo-quest-chain", "Unlocks the Fondo quest chain"],
     layout: { col: 2, row: 3 }
+  }),
+  node({
+    id: "cycling-climber",
+    name: "Climber",
+    description: "Chase elevation and conquer mountain passes.",
+    sport: "cycling",
+    branch: "endurance",
+    tier: 3,
+    cost: 2,
+    req: [["totalElevationGainM", 8000, "m climbed"], ["mountainPasses", 3, "Mountain passes"]],
+    pre: ["fondo"],
+    grant: ["quest_unlock", "climbing-quests", "Unlocks Climbing quests"]
   }),
   node({
     id: "ultra-rider",
@@ -220,17 +292,38 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "endurance",
     tier: "prestige",
     cost: 3,
-    premium: true,
-    requirements: [
-      { metric: "cyclingDistanceKm", target: 1500, label: "km cycled" },
-      { metric: "longestRideKm", target: 120, label: "km longest ride" }
+    req: [
+      ["cyclingDistanceKm", 1500, "km cycled"],
+      ["longestRideKm", 120, "km longest ride"]
     ],
-    prerequisites: ["fondo"],
-    grant: { type: "title", value: "ultra-rider", label: "Earns the Ultra Rider title" },
+    pre: ["cycling-climber"],
+    grant: ["title", "ultra-rider", "Earns the Ultra Rider title"],
     layout: { col: 2, row: 4 }
   }),
 
-  // Cross-branch nodes
+  // Cycling · cross-branch
+  node({
+    id: "cycling-fast-explorer",
+    name: "Fast Explorer",
+    description: "Blend high flow with relentless discovery.",
+    sport: "cycling",
+    branch: "cross",
+    tier: 3,
+    cost: 3,
+    pre: ["rusher-ii", "pathfinder"],
+    grant: ["quest_unlock", "flow-explore-challenges", "Unlocks Flow + Explore challenges"]
+  }),
+  node({
+    id: "cycling-adventure-endurance",
+    name: "Adventure Endurance",
+    description: "Pair relentless discovery with long distances.",
+    sport: "cycling",
+    branch: "cross",
+    tier: 3,
+    cost: 3,
+    pre: ["pathfinder", "distance-rider"],
+    grant: ["quest_unlock", "explore-distance-challenges", "Unlocks Explore + Distance challenges"]
+  }),
   node({
     id: "breakaway-specialist",
     name: "Breakaway Specialist",
@@ -239,39 +332,744 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "cross",
     tier: 3,
     cost: 3,
-    premium: true,
-    requirements: [],
-    prerequisites: ["rusher-ii", "distance-rider"],
-    grant: { type: "quest_unlock", value: "flow-distance-challenges", label: "Unlocks Flow + Distance challenges" },
+    pre: ["rusher-ii", "distance-rider"],
+    grant: ["quest_unlock", "flow-distance-challenges", "Unlocks Flow + Distance challenges"],
     layout: { col: 0.5, row: 5 }
   }),
   node({
-    id: "grand-explorer",
-    name: "Grand Explorer",
-    description: "Pair relentless discovery with long distances.",
-    sport: "cycling",
-    branch: "cross",
-    tier: 3,
-    cost: 3,
-    premium: true,
-    requirements: [],
-    prerequisites: ["pathfinder", "distance-rider"],
-    grant: { type: "quest_unlock", value: "grand-explorer-challenges", label: "Unlocks Grand Explorer challenges" },
-    layout: { col: 1.5, row: 5 }
-  }),
-  node({
     id: "all-rounder",
-    name: "All-Rounder",
-    description: "Prove mastery across flow, adventure, and endurance.",
+    name: "All-Round Cyclist",
+    description: "Prove mastery across flow, exploration, and endurance.",
     sport: "cycling",
     branch: "cross",
     tier: "prestige",
     cost: 3,
-    premium: true,
-    requirements: [],
-    prerequisites: ["flow-hunter", "explorer", "fondo"],
-    grant: { type: "badge", value: "all-rounder", label: "Earns the All-Rounder badge" },
+    pre: ["flow-hunter", "explorer", "fondo"],
+    grant: ["badge", "all-rounder", "Earns the All-Round Cyclist badge"],
     layout: { col: 1, row: 6 }
+  }),
+
+  // Cycling · prestige
+  node({
+    id: "cycling-flow-master",
+    name: "Flow Master",
+    description: "The definitive master of flowing, flat-out riding.",
+    sport: "cycling",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["cycling-breakaway-rider"],
+    grant: ["title", "flow-master", "Earns the Flow Master title"]
+  }),
+  node({
+    id: "cycling-legendary-explorer",
+    name: "Legendary Explorer",
+    description: "A legend of cycling discovery.",
+    sport: "cycling",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["grand-explorer"],
+    grant: ["title", "legendary-explorer", "Earns the Legendary Explorer title"]
+  }),
+  node({
+    id: "cycling-ultra-cyclist",
+    name: "Ultra Cyclist",
+    description: "Endurance cycling taken to its limit.",
+    sport: "cycling",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["ultra-rider"],
+    grant: ["badge", "ultra-cyclist", "Earns the Ultra Cyclist badge"]
+  }),
+
+  // ===================================================================
+  // RUNNING
+  // ===================================================================
+  node({
+    id: "runner",
+    name: "Running",
+    description: "Your running hub. Open the Speed, Explore, and Endurance specializations.",
+    sport: "running",
+    branch: "root",
+    tier: 1,
+    cost: 1,
+    req: [["runningActivityCount", 1, "Runs completed"]],
+    grant: ["tree_access", "running-branches", "Unlocks the running branches"]
+  }),
+
+  // Running · SPEED
+  node({
+    id: "run-speed-1",
+    name: "Speed I",
+    description: "Reward quick efforts and open the Speed path.",
+    sport: "running",
+    branch: "speed",
+    tier: 1,
+    cost: 1,
+    req: [["longestRunKm", 3, "km longest run"]],
+    pre: ["runner"],
+    grant: ["quest_unlock", "speed-quests", "Unlocks Speed quests"]
+  }),
+  node({
+    id: "run-speed-2",
+    name: "Tempo Runner",
+    description: "Hold a strong tempo over longer efforts.",
+    sport: "running",
+    branch: "speed",
+    tier: 2,
+    cost: 2,
+    req: [["longestRunKm", 5, "km longest run"], ["runningActivityCount", 5, "Runs completed"]],
+    pre: ["run-speed-1"],
+    grant: ["quest_unlock", "tempo-quests", "Unlocks Tempo quests"]
+  }),
+  node({
+    id: "run-speed-3",
+    name: "Fast Finisher",
+    description: "Close out runs with pace to spare.",
+    sport: "running",
+    branch: "speed",
+    tier: 2,
+    cost: 2,
+    req: [["longestRunKm", 8, "km longest run"]],
+    pre: ["run-speed-2"],
+    grant: ["segment_filter", "fast-segments", "Unlocks the Fast Segments filter"]
+  }),
+  node({
+    id: "run-speed-4",
+    name: "Pace Hunter",
+    description: "Rack up fast kilometres across many runs.",
+    sport: "running",
+    branch: "speed",
+    tier: 3,
+    cost: 2,
+    req: [["runningDistanceKm", 150, "km run"]],
+    pre: ["run-speed-3"],
+    grant: ["quest_unlock", "pace-quests", "Unlocks Pace quests"]
+  }),
+  node({
+    id: "run-speed-5",
+    name: "Speed Specialist",
+    description: "Master the speed discipline.",
+    sport: "running",
+    branch: "speed",
+    tier: "prestige",
+    cost: 3,
+    req: [["longestRunKm", 12, "km longest run"], ["runningDistanceKm", 300, "km run"]],
+    pre: ["run-speed-4"],
+    grant: ["title", "speed-specialist", "Earns the Speed Specialist title"]
+  }),
+
+  // Running · EXPLORE
+  node({
+    id: "run-explore-1",
+    name: "Runner Explorer I",
+    description: "Reward discovery on foot and open the Explore path.",
+    sport: "running",
+    branch: "adventure",
+    tier: 1,
+    cost: 1,
+    req: [["runningUniqueCollectibles", 3, "Discoveries while running"]],
+    pre: ["runner"],
+    grant: ["quest_unlock", "run-explore-quests", "Unlocks Run Explore quests"]
+  }),
+  node({
+    id: "run-explore-2",
+    name: "Route Explorer",
+    description: "Find new routes wherever you run.",
+    sport: "running",
+    branch: "adventure",
+    tier: 2,
+    cost: 2,
+    req: [["runningUniqueCollectibles", 10, "Discoveries while running"]],
+    pre: ["run-explore-1"],
+    grant: ["world_filter", "run-routes", "Unlocks the Run Routes map filter"]
+  }),
+  node({
+    id: "run-explore-3",
+    name: "Trail Seeker",
+    description: "Leave the pavement behind for the trails.",
+    sport: "running",
+    branch: "adventure",
+    tier: 2,
+    cost: 2,
+    req: [["runningViewpoints", 5, "Viewpoints while running"]],
+    pre: ["run-explore-2"],
+    grant: ["quest_unlock", "trail-running-quests", "Unlocks Trail Running quests"]
+  }),
+  node({
+    id: "run-explore-4",
+    name: "Nature Runner",
+    description: "Seek out the natural world on every run.",
+    sport: "running",
+    branch: "adventure",
+    tier: 3,
+    cost: 2,
+    req: [["runningUniqueCollectibles", 25, "Discoveries while running"]],
+    pre: ["run-explore-3"],
+    grant: ["quest_unlock", "nature-run-quests", "Unlocks Nature Run quests"]
+  }),
+  node({
+    id: "run-explore-5",
+    name: "Running Explorer",
+    description: "Master exploration on foot.",
+    sport: "running",
+    branch: "adventure",
+    tier: "prestige",
+    cost: 3,
+    req: [["runningPlaces", 15, "Places while running"], ["runningUniqueCollectibles", 40, "Discoveries while running"]],
+    pre: ["run-explore-4"],
+    grant: ["title", "running-explorer", "Earns the Running Explorer title"]
+  }),
+
+  // Running · ENDURANCE
+  node({
+    id: "run-endurance-1",
+    name: "Runner Endurance I",
+    description: "Reward distance on foot and open the Endurance path.",
+    sport: "running",
+    branch: "endurance",
+    tier: 1,
+    cost: 1,
+    req: [["runningDistanceKm", 20, "km run"]],
+    pre: ["runner"],
+    grant: ["quest_unlock", "run-distance-quests", "Unlocks Run Distance quests"]
+  }),
+  node({
+    id: "run-endurance-2",
+    name: "10K Runner",
+    description: "Cover ten kilometres in a single run.",
+    sport: "running",
+    branch: "endurance",
+    tier: 2,
+    cost: 2,
+    req: [["longestRunKm", 10, "km longest run"]],
+    pre: ["run-endurance-1"],
+    grant: ["quest_unlock", "ten-k-quests", "Unlocks 10K quests"]
+  }),
+  node({
+    id: "run-endurance-3",
+    name: "Half Distance",
+    description: "Reach half-marathon distance.",
+    sport: "running",
+    branch: "endurance",
+    tier: 2,
+    cost: 2,
+    req: [["longestRunKm", 21, "km longest run"]],
+    pre: ["run-endurance-2"],
+    grant: ["quest_unlock", "half-distance-quests", "Unlocks Half Distance quests"]
+  }),
+  node({
+    id: "run-endurance-4",
+    name: "Long Run Specialist",
+    description: "Make the long run your strength.",
+    sport: "running",
+    branch: "endurance",
+    tier: 3,
+    cost: 2,
+    req: [["longestRunKm", 30, "km longest run"], ["runningDistanceKm", 400, "km run"]],
+    pre: ["run-endurance-3"],
+    grant: ["segment_filter", "long-run", "Unlocks the Long Run segment filter"]
+  }),
+  node({
+    id: "run-endurance-5",
+    name: "Ultra Runner",
+    description: "Master long-distance running.",
+    sport: "running",
+    branch: "endurance",
+    tier: "prestige",
+    cost: 3,
+    req: [["longestRunKm", 50, "km longest run"], ["runningDistanceKm", 800, "km run"]],
+    pre: ["run-endurance-4"],
+    grant: ["title", "ultra-runner", "Earns the Ultra Runner title"]
+  }),
+
+  // Running · cross-branch
+  node({
+    id: "run-fast-explorer",
+    name: "Fast Explorer",
+    description: "Blend pace with relentless route discovery.",
+    sport: "running",
+    branch: "cross",
+    tier: 3,
+    cost: 3,
+    pre: ["run-speed-2", "run-explore-2"],
+    grant: ["quest_unlock", "run-fast-explore-challenges", "Unlocks Speed + Explore challenges"]
+  }),
+  node({
+    id: "run-trail-endurance",
+    name: "Trail Endurance",
+    description: "Combine trail exploration with long-run endurance.",
+    sport: "running",
+    branch: "cross",
+    tier: 3,
+    cost: 3,
+    pre: ["run-explore-3", "run-endurance-3"],
+    grant: ["quest_unlock", "trail-endurance-challenges", "Unlocks Trail + Endurance challenges"]
+  }),
+  node({
+    id: "run-strong-finisher",
+    name: "Strong Finisher",
+    description: "Hold speed deep into long efforts.",
+    sport: "running",
+    branch: "cross",
+    tier: 3,
+    cost: 3,
+    pre: ["run-speed-3", "run-endurance-3"],
+    grant: ["quest_unlock", "strong-finisher-challenges", "Unlocks Speed + Endurance challenges"]
+  }),
+  node({
+    id: "run-all-round",
+    name: "All-Round Runner",
+    description: "Prove mastery across speed, exploration, and endurance.",
+    sport: "running",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["run-speed-3", "run-explore-3", "run-endurance-3"],
+    grant: ["badge", "all-round-runner", "Earns the All-Round Runner badge"]
+  }),
+
+  // Running · prestige
+  node({
+    id: "run-pace-master",
+    name: "Pace Master",
+    description: "The definitive master of running speed.",
+    sport: "running",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["run-speed-5"],
+    grant: ["title", "pace-master", "Earns the Pace Master title"]
+  }),
+  node({
+    id: "run-trail-master",
+    name: "Trail Master",
+    description: "A legend of trail and nature running.",
+    sport: "running",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["run-explore-5"],
+    grant: ["title", "trail-master", "Earns the Trail Master title"]
+  }),
+  node({
+    id: "run-endurance-legend",
+    name: "Endurance Legend",
+    description: "Running endurance taken to its limit.",
+    sport: "running",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["run-endurance-5"],
+    grant: ["badge", "endurance-legend", "Earns the Endurance Legend badge"]
+  }),
+
+  // ===================================================================
+  // HIKING
+  // ===================================================================
+  node({
+    id: "hiker",
+    name: "Hiking",
+    description: "Your hiking hub. Open the Summit, Explore, and Endurance specializations.",
+    sport: "hiking",
+    branch: "root",
+    tier: 1,
+    cost: 1,
+    req: [["hikingActivityCount", 1, "Hikes completed"]],
+    grant: ["tree_access", "hiking-branches", "Unlocks the hiking branches"]
+  }),
+
+  // Hiking · SUMMIT
+  node({
+    id: "hike-summit-1",
+    name: "Summit I",
+    description: "Reward reaching high places and open the Summit path.",
+    sport: "hiking",
+    branch: "summit",
+    tier: 1,
+    cost: 1,
+    req: [["hikingPeaks", 1, "Peaks while hiking"]],
+    pre: ["hiker"],
+    grant: ["quest_unlock", "summit-quests", "Unlocks Summit quests"]
+  }),
+  node({
+    id: "hike-summit-2",
+    name: "Peak Seeker",
+    description: "Seek out the peaks around you.",
+    sport: "hiking",
+    branch: "summit",
+    tier: 2,
+    cost: 2,
+    req: [["hikingPeaks", 3, "Peaks while hiking"]],
+    pre: ["hike-summit-1"],
+    grant: ["world_filter", "peaks-only", "Unlocks the Peaks Only map filter"]
+  }),
+  node({
+    id: "hike-summit-3",
+    name: "Mountain Hunter",
+    description: "Make summiting mountains a habit.",
+    sport: "hiking",
+    branch: "summit",
+    tier: 2,
+    cost: 2,
+    req: [["hikingPeaks", 6, "Peaks while hiking"]],
+    pre: ["hike-summit-2"],
+    grant: ["quest_unlock", "mountain-hunter-quests", "Unlocks Mountain Hunter quests"]
+  }),
+  node({
+    id: "hike-summit-4",
+    name: "Pass Collector",
+    description: "Collect the great mountain passes on foot.",
+    sport: "hiking",
+    branch: "summit",
+    tier: 3,
+    cost: 2,
+    req: [["hikingMountainPasses", 3, "Mountain passes while hiking"]],
+    pre: ["hike-summit-3"],
+    grant: ["quest_unlock", "pass-collector-quests", "Unlocks Pass Collector quests"]
+  }),
+  node({
+    id: "hike-summit-5",
+    name: "Summit Master",
+    description: "Master the summit discipline.",
+    sport: "hiking",
+    branch: "summit",
+    tier: "prestige",
+    cost: 3,
+    req: [["hikingPeaks", 12, "Peaks while hiking"], ["hikingMountainPasses", 5, "Mountain passes while hiking"]],
+    pre: ["hike-summit-4"],
+    grant: ["quest_unlock", "advanced-summit-quests", "Unlocks advanced Summit quests"]
+  }),
+
+  // Hiking · EXPLORE
+  node({
+    id: "hike-explore-1",
+    name: "Hiker Explorer I",
+    description: "Reward discovery on the trail and open the Explore path.",
+    sport: "hiking",
+    branch: "adventure",
+    tier: 1,
+    cost: 1,
+    req: [["hikingUniqueCollectibles", 3, "Discoveries while hiking"]],
+    pre: ["hiker"],
+    grant: ["quest_unlock", "hike-explore-quests", "Unlocks Hike Explore quests"]
+  }),
+  node({
+    id: "hike-pathfinder",
+    name: "Pathfinder",
+    description: "Find the trails and places others miss.",
+    sport: "hiking",
+    branch: "adventure",
+    tier: 2,
+    cost: 2,
+    req: [["hikingUniqueCollectibles", 10, "Discoveries while hiking"]],
+    pre: ["hike-explore-1"],
+    grant: ["world_filter", "hike-routes", "Unlocks the Hike Routes map filter"]
+  }),
+  node({
+    id: "hike-landmark-seeker",
+    name: "Landmark Seeker",
+    description: "Seek out landmarks and places on foot.",
+    sport: "hiking",
+    branch: "adventure",
+    tier: 2,
+    cost: 2,
+    req: [["hikingPlaces", 8, "Places while hiking"]],
+    pre: ["hike-pathfinder"],
+    grant: ["quest_unlock", "landmark-quests", "Unlocks Landmark quests"]
+  }),
+  node({
+    id: "hike-wilderness-explorer",
+    name: "Wilderness Explorer",
+    description: "Explore deep into the wilderness.",
+    sport: "hiking",
+    branch: "adventure",
+    tier: 3,
+    cost: 2,
+    req: [["hikingUniqueCollectibles", 25, "Discoveries while hiking"]],
+    pre: ["hike-landmark-seeker"],
+    grant: ["quest_unlock", "wilderness-quests", "Unlocks Wilderness quests"]
+  }),
+  node({
+    id: "hike-world-walker",
+    name: "World Walker",
+    description: "Master exploration on foot.",
+    sport: "hiking",
+    branch: "adventure",
+    tier: "prestige",
+    cost: 3,
+    req: [["hikingPlaces", 20, "Places while hiking"], ["hikingUniqueCollectibles", 40, "Discoveries while hiking"]],
+    pre: ["hike-wilderness-explorer"],
+    grant: ["title", "world-walker", "Earns the World Walker title"]
+  }),
+
+  // Hiking · ENDURANCE
+  node({
+    id: "hike-endurance-1",
+    name: "Hiking Endurance I",
+    description: "Reward distance on foot and open the Endurance path.",
+    sport: "hiking",
+    branch: "endurance",
+    tier: 1,
+    cost: 1,
+    req: [["hikingDistanceKm", 15, "km hiked"]],
+    pre: ["hiker"],
+    grant: ["quest_unlock", "hike-distance-quests", "Unlocks Hike Distance quests"]
+  }),
+  node({
+    id: "hike-distance-hiker",
+    name: "Distance Hiker",
+    description: "Cover serious ground on the trail.",
+    sport: "hiking",
+    branch: "endurance",
+    tier: 2,
+    cost: 2,
+    req: [["hikingDistanceKm", 80, "km hiked"], ["longestHikeKm", 12, "km longest hike"]],
+    pre: ["hike-endurance-1"],
+    grant: ["segment_filter", "long-trail", "Unlocks the Long Trail segment filter"]
+  }),
+  node({
+    id: "hike-long-trail",
+    name: "Long Trail",
+    description: "Take on a long trail in a single hike.",
+    sport: "hiking",
+    branch: "endurance",
+    tier: 2,
+    cost: 2,
+    req: [["longestHikeKm", 20, "km longest hike"]],
+    pre: ["hike-distance-hiker"],
+    grant: ["quest_unlock", "long-trail-quests", "Unlocks Long Trail quests"]
+  }),
+  node({
+    id: "hike-elevation-hunter",
+    name: "Elevation Hunter",
+    description: "Chase vertical metres across your hikes.",
+    sport: "hiking",
+    branch: "endurance",
+    tier: 3,
+    cost: 2,
+    req: [["hikingElevationGainM", 5000, "m climbed hiking"]],
+    pre: ["hike-long-trail"],
+    grant: ["quest_unlock", "elevation-quests", "Unlocks Elevation quests"]
+  }),
+  node({
+    id: "hike-ultra-hiker",
+    name: "Ultra Hiker",
+    description: "Master long-distance, high-elevation hiking.",
+    sport: "hiking",
+    branch: "endurance",
+    tier: "prestige",
+    cost: 3,
+    req: [
+      ["hikingDistanceKm", 300, "km hiked"],
+      ["longestHikeKm", 35, "km longest hike"],
+      ["hikingElevationGainM", 12000, "m climbed hiking"]
+    ],
+    pre: ["hike-elevation-hunter"],
+    grant: ["title", "ultra-hiker", "Earns the Ultra Hiker title"]
+  }),
+
+  // Hiking · cross-branch
+  node({
+    id: "hike-mountain-explorer",
+    name: "Mountain Explorer",
+    description: "Combine summiting with deep exploration.",
+    sport: "hiking",
+    branch: "cross",
+    tier: 3,
+    cost: 3,
+    pre: ["hike-summit-2", "hike-pathfinder"],
+    grant: ["quest_unlock", "mountain-explore-challenges", "Unlocks Summit + Explore challenges"]
+  }),
+  node({
+    id: "hike-alpine-endurance",
+    name: "Alpine Endurance",
+    description: "Pair high summits with long-trail endurance.",
+    sport: "hiking",
+    branch: "cross",
+    tier: 3,
+    cost: 3,
+    pre: ["hike-summit-2", "hike-long-trail"],
+    grant: ["quest_unlock", "alpine-endurance-challenges", "Unlocks Summit + Endurance challenges"]
+  }),
+  node({
+    id: "hike-long-distance-explorer",
+    name: "Long-Distance Explorer",
+    description: "Explore far and wide across long trails.",
+    sport: "hiking",
+    branch: "cross",
+    tier: 3,
+    cost: 3,
+    pre: ["hike-landmark-seeker", "hike-long-trail"],
+    grant: ["quest_unlock", "long-distance-explore-challenges", "Unlocks Explore + Endurance challenges"]
+  }),
+  node({
+    id: "hike-all-round",
+    name: "All-Round Hiker",
+    description: "Prove mastery across summit, exploration, and endurance.",
+    sport: "hiking",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["hike-summit-3", "hike-landmark-seeker", "hike-long-trail"],
+    grant: ["badge", "all-round-hiker", "Earns the All-Round Hiker badge"]
+  }),
+
+  // Hiking · prestige
+  node({
+    id: "hike-summit-legend",
+    name: "Summit Legend",
+    description: "A legend of the high summits.",
+    sport: "hiking",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["hike-summit-5"],
+    grant: ["title", "summit-legend", "Earns the Summit Legend title"]
+  }),
+  node({
+    id: "hike-wilderness-legend",
+    name: "Wilderness Legend",
+    description: "A legend of wild, remote exploration.",
+    sport: "hiking",
+    branch: "cross",
+    tier: "prestige",
+    cost: 3,
+    pre: ["hike-world-walker"],
+    grant: ["badge", "wilderness-legend", "Earns the Wilderness Legend badge"]
+  }),
+
+  // ===================================================================
+  // CROSS-SPORT (sit between sport sectors)
+  // ===================================================================
+  node({
+    id: "xs-weekend-warrior",
+    name: "Weekend Warrior",
+    description: "Stay active across more than one sport.",
+    sport: "cycling",
+    branch: "cross_sport",
+    tier: 2,
+    cost: 2,
+    req: [["distinctSportCount", 2, "Sports with activity"]],
+    pre: ["cyclist", "runner"],
+    grant: ["quest_unlock", "weekend-warrior-quests", "Unlocks Weekend Warrior quests"]
+  }),
+  node({
+    id: "xs-dual-athlete",
+    name: "Dual Athlete",
+    description: "Build real endurance across cycling and running.",
+    sport: "cycling",
+    branch: "cross_sport",
+    tier: 3,
+    cost: 3,
+    pre: ["endurance-i", "run-endurance-1"],
+    grant: ["quest_unlock", "dual-athlete-quests", "Unlocks Dual Athlete quests"]
+  }),
+  node({
+    id: "xs-bike-hike-explorer",
+    name: "Bike & Hike Explorer",
+    description: "Explore the world by bike and on foot.",
+    sport: "hiking",
+    branch: "cross_sport",
+    tier: 3,
+    cost: 3,
+    pre: ["pathfinder", "hike-pathfinder"],
+    grant: ["quest_unlock", "bike-hike-explore-quests", "Unlocks Bike & Hike Explore quests"]
+  }),
+  node({
+    id: "xs-run-hike-explorer",
+    name: "Run & Hike Explorer",
+    description: "Explore on foot, running and hiking alike.",
+    sport: "running",
+    branch: "cross_sport",
+    tier: 3,
+    cost: 3,
+    pre: ["run-explore-2", "hike-pathfinder"],
+    grant: ["quest_unlock", "run-hike-explore-quests", "Unlocks Run & Hike Explore quests"]
+  }),
+  node({
+    id: "xs-endurance-hybrid",
+    name: "Endurance Hybrid",
+    description: "Deep endurance across cycling and running.",
+    sport: "running",
+    branch: "cross_sport",
+    tier: 3,
+    cost: 3,
+    pre: ["distance-rider", "run-endurance-3"],
+    grant: ["quest_unlock", "endurance-hybrid-quests", "Unlocks Endurance Hybrid quests"]
+  }),
+  node({
+    id: "xs-mountain-athlete",
+    name: "Mountain Athlete",
+    description: "Conquer mountains by bike, on the run, and on foot.",
+    sport: "hiking",
+    branch: "cross_sport",
+    tier: "prestige",
+    cost: 4,
+    pre: ["cycling-climber", "run-endurance-4", "hike-summit-3"],
+    grant: ["title", "mountain-athlete", "Earns the Mountain Athlete title"]
+  }),
+  node({
+    id: "xs-multi-sport-explorer",
+    name: "Multi-Sport Explorer",
+    description: "Explore meaningfully across all three sports.",
+    sport: "running",
+    branch: "cross_sport",
+    tier: "prestige",
+    cost: 4,
+    pre: ["explorer", "run-explore-3", "hike-landmark-seeker"],
+    grant: ["quest_unlock", "cross-sport-quests", "Unlocks Cross-Sport quests"]
+  }),
+  node({
+    id: "xs-triple-discipline",
+    name: "Triple Discipline",
+    description: "Make real progress in cycling, running, and hiking.",
+    sport: "cycling",
+    branch: "cross_sport",
+    tier: "prestige",
+    cost: 4,
+    pre: ["endurance-i", "run-endurance-1", "hike-endurance-1"],
+    grant: ["badge", "triple-discipline", "Earns the Triple Discipline badge"]
+  }),
+  node({
+    id: "xs-complete-athlete",
+    name: "Complete Athlete",
+    description: "Advanced, all-round mastery across every sport.",
+    sport: "cycling",
+    branch: "cross_sport",
+    tier: "prestige",
+    cost: 5,
+    pre: ["all-rounder", "run-all-round", "hike-all-round"],
+    grant: ["badge", "complete-athlete", "Earns the Complete Athlete badge"]
+  }),
+
+  // ===================================================================
+  // GLOBAL PRESTIGE
+  // ===================================================================
+  node({
+    id: "global-multi-sport-legend",
+    name: "Multi-Sport Legend",
+    description: "A legend across every discipline you train.",
+    sport: "running",
+    branch: "cross_sport",
+    tier: "prestige",
+    cost: 4,
+    pre: ["xs-multi-sport-explorer"],
+    grant: ["title", "multi-sport-legend", "Earns the Multi-Sport Legend title"]
+  }),
+  node({
+    id: "global-world-mover",
+    name: "World Mover",
+    description: "Move across the world under your own power.",
+    sport: "hiking",
+    branch: "cross_sport",
+    tier: "prestige",
+    cost: 4,
+    req: [["totalDistanceKm", 3000, "km travelled"]],
+    pre: ["xs-triple-discipline"],
+    grant: ["badge", "world-mover", "Earns the World Mover badge"]
   })
 ];
 

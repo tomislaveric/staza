@@ -34,6 +34,7 @@ export interface StravaActivitySummary {
   distance?: number;
   moving_time?: number;
   elapsed_time?: number;
+  total_elevation_gain?: number;
   manual?: boolean;
   start_latlng?: number[] | null;
   map?: { summary_polyline?: string | null } | null;

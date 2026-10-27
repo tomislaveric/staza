@@ -755,6 +755,18 @@ export const migrations: Migration[] = [{
       WHERE id = '00000000-0000-4000-8000-000000000001';
     `);
   }
+}, {
+  id: "032_activity_elevation_gain",
+  async up(client) {
+    // Nullable, additive elevation-gain column so multi-sport Skill Atlas requirements
+    // (notably Hiking) can read real elevation. Historical activities stay NULL and are
+    // treated as zero by aggregation; new imports populate it when the source provides it.
+    await client.query(`
+      ALTER TABLE activities
+        ADD COLUMN elevation_gain_m DOUBLE PRECISION
+          CHECK (elevation_gain_m IS NULL OR elevation_gain_m >= 0);
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */
