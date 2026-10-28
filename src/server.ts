@@ -32,7 +32,7 @@ import { AuthoredQuestRepository } from "./persistence/authoredQuestRepository.j
 import { SkillTreeRepository, SkillTreeUnlockError } from "./persistence/skillTreeRepository.js";
 import { validateSkillTreeCatalog } from "./skillTree/catalog.js";
 import { withQuestChains } from "./authoredQuests/skillTreeView.js";
-import { capabilitiesFromGrants } from "./skillTree/capabilities.js";
+import { capabilitiesFromGrants, lockedWorldFilters } from "./skillTree/capabilities.js";
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
@@ -1238,8 +1238,12 @@ app.get("/api/authored-quests", requirePlayer, async (request: UploadRequest, re
 // What the player's unlocked Atlas nodes switch on across the app.
 app.get("/api/player/capabilities", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
-    const grants = await skillTreeRepository.getUnlockedCapabilities(request.user!.playerId);
-    response.json(capabilitiesFromGrants(grants));
+    const playerId = request.user!.playerId;
+    const [grants, unlockedIds] = await Promise.all([
+      skillTreeRepository.getUnlockedCapabilities(playerId),
+      skillTreeRepository.getUnlockedNodeIds(playerId)
+    ]);
+    response.json({ ...capabilitiesFromGrants(grants), lockedWorldFilters: lockedWorldFilters(new Set(unlockedIds)) });
   } catch (error) {
     next(error);
   }
@@ -1247,15 +1251,13 @@ app.get("/api/player/capabilities", requirePlayer, async (request: UploadRequest
 
 app.get("/api/player/profile", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
-    const [profile, collectibles, discoveredSourceIds, grants] = await Promise.all([
+    const [profile, collectibles, discoveredSourceIds] = await Promise.all([
       activityRepository.getProfileOverview(request.user!.playerId),
       collectibleRepository.listAll(),
-      activityRepository.listDiscoveredCollectibleSourceIds(request.user!.playerId),
-      skillTreeRepository.getUnlockedCapabilities(request.user!.playerId)
+      activityRepository.listDiscoveredCollectibleSourceIds(request.user!.playerId)
     ]);
     const world = createWorldSnapshot(collectibles, discoveredSourceIds);
-    const { titles, badges } = capabilitiesFromGrants(grants);
-    response.json({ ...profile, collectibles: world.stats, titles, badges });
+    response.json({ ...profile, collectibles: world.stats });
   } catch (error) {
     next(error);
   }

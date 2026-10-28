@@ -121,7 +121,7 @@ const filterSwatch = (filter) => {
 const isFilterSelected = (filter, selectedFilters) =>
   filter === "all" ? selectedFilters.length === 0 : selectedFilters.includes(filter);
 
-export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks = [], grantedFilters = []) => {
+export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks = [], grantedFilters = [], lockedFilters = []) => {
   const availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
   return `
   <div class="world-filter-controls" data-world-filter-controls role="group" aria-label="World collectibles and Flowlines">
@@ -134,6 +134,10 @@ export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks
         </button>
       `;
     }).join("")}
+    ${lockedFilters.filter((filter) => filter.id in grantedFilterRules && !grantedFilters.includes(filter.id)).map((filter) => `
+      <span class="world-filter-locked" data-world-filter-locked="${escapeHtml(filter.id)}">
+        <span>${filterLabels[filter.id]}</span><small>Unlock ${escapeHtml(filter.nodeName)} in the Skill Tree</small>
+      </span>`).join("")}
   </div>
 `;
 };
@@ -147,7 +151,7 @@ export const WorldStats = (stats, truncated) => `
   </p>
 `;
 
-export const WorldPage = ({ lifetime, selectedFilters }) => `
+export const WorldPage = ({ lifetime, selectedFilters, lockedFilters = [] }) => `
   <section class="world-page" aria-labelledby="world-title">
     <header class="world-header">
       <div>
@@ -159,7 +163,7 @@ export const WorldPage = ({ lifetime, selectedFilters }) => `
         <strong>${formatNumber(lifetime.discoveredCount)} <i>/ ${formatNumber(lifetime.totalCollectibles)}</i></strong>
       </div>
     </header>
-    ${WorldFilterControls(selectedFilters)}
+    ${WorldFilterControls(selectedFilters, [], [], [], lockedFilters)}
     <div class="world-map-shell">
       <div class="world-map staza-map" data-world-map></div>
       <ul class="world-collectible-list" aria-label="Collectibles on the map" data-world-collectible-list></ul>
@@ -219,6 +223,7 @@ export const mountWorldPage = async (mountPoint) => {
   let lifetime = emptyStats;
   let questInstances = [];
   let grantedFilters = [];
+  let lockedFilters = [];
   try {
     const [loadedBasemap, globalSnapshot, activeQuests] = await Promise.all([
       fetch("/api/world/basemap").then(responseJson),
@@ -229,7 +234,9 @@ export const mountWorldPage = async (mountPoint) => {
     lifetime = globalSnapshot.stats;
     questInstances = activeQuests.instances;
     // Filters are an enhancement; the World stays usable if capabilities cannot load.
-    grantedFilters = await fetch("/api/player/capabilities").then(responseJson).then((body) => body.worldFilters ?? []).catch(() => []);
+    const capabilities = await fetch("/api/player/capabilities").then(responseJson).catch(() => ({}));
+    grantedFilters = capabilities.worldFilters ?? [];
+    lockedFilters = capabilities.lockedWorldFilters ?? [];
   } catch (error) {
     mountPoint.innerHTML = `<section class="world-page"><p class="world-load-error" role="alert">Unable to load World: ${escapeHtml(error.message)}</p></section>`;
     return;
@@ -255,7 +262,7 @@ export const mountWorldPage = async (mountPoint) => {
   let explorationToken = 0;
   const plannedRoutes = new Map();
 
-  mountPoint.innerHTML = WorldPage({ lifetime, selectedFilters });
+  mountPoint.innerHTML = WorldPage({ lifetime, selectedFilters, lockedFilters });
   const mapContainer = mountPoint.querySelector("[data-world-map]");
   const statusHost = mountPoint.querySelector("[data-world-status]");
   const statsHost = mountPoint.querySelector("[data-world-stats]");

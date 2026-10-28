@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HomeActiveQuests, HomeActiveQuestCard, HomeRecentActivity, activeQuestInstances, homeViewModel } from "./home-page.js";
+import { HomeAchievements, HomeActiveQuests, HomeActiveQuestCard, HomeRecentActivity, activeQuestInstances, homeViewModel } from "./home-page.js";
 
 describe("Home data transformation", () => {
   const progress = { totalXp: 700, level: 4, currentLevelXp: 100, nextLevelXp: 400, progressToNextLevel: .25 };
@@ -61,5 +61,25 @@ describe("Home active quests", () => {
     const html = HomeActiveQuests([]);
     expect(html).toContain("You don't have any quests active, find some in");
     expect(html).toContain("data-home-find-quests");
+  });
+});
+
+describe("Home achievements", () => {
+  it("shows unlocked skills, badges and the next authored quest", () => {
+    const html = HomeAchievements({
+      skillPoints: 2, totalNodes: 79, unlocked: [{ id: "endurance-i", name: "Endurance I" }],
+      badges: [{ id: "b", label: "Trailblazer" }],
+      nextQuest: { chainTitle: "Distance", step: 1, totalSteps: 3, title: "Ride 30 km", description: "One ride.", xp: 90 }
+    });
+    expect(html).toContain("<em> / 79</em>");
+    expect(html).toContain("Trailblazer");
+    expect(html).toContain("Ride 30 km");
+  });
+
+  it("shows Skill Points only when there are some to spend, plus the summary", () => {
+    expect(HomeAchievements({ skillPoints: 0 })).not.toContain("SP to spend");
+    const html = HomeAchievements({ skillPoints: 2, stats: { totalXp: 700, distanceMeters: 6_000, totalCollected: 3 } });
+    expect(html).toContain("2 SP to spend");
+    expect(html).toContain("Total XP");
   });
 });

@@ -154,7 +154,6 @@ input {
 
 .home-hero {
     border-radius: var(--radius-panel);
-    min-height: 255px;
     overflow: hidden;
     padding: 32px 24px 0;
 }
@@ -216,31 +215,9 @@ input {
     letter-spacing: 0.025em;
     margin: 8px 0 0;
 }
-.home-stats {
-    border-top: 1px solid var(--border-faint);
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    margin: 24px 0 0;
-    padding-top: 16px;
-}
-.home-stats div {
-    text-align: center;
-}
-.home-stats dt {
-    color: var(--text-subtle);
-    font-family: var(--font-display);
-    font-size: 9px;
-    letter-spacing: 0.18em;
-}
-.home-stats dd {
-    color: var(--text-primary);
-    font-family: var(--font-display);
-    font-size: 14px;
-    font-weight: 600;
-    margin: 3px 0 0;
-}
 .home-recent-activity {
     padding-bottom: 24px;
+    padding-top: 32px;
 }
 .home-section-heading {
     align-items: center;
@@ -630,6 +607,139 @@ input {
 }
 .is-future .progress-level-details {
     padding-top: 8px;
+}
+.home-achievements {
+    margin-top: 24px;
+}
+.home-tiles {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(3, 1fr);
+}
+.home-tile,
+.home-next-quest {
+    background: var(--surface-background);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-card);
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    text-align: left;
+}
+.home-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 104px;
+    padding: 14px;
+}
+button.home-tile,
+.home-next-quest {
+    cursor: pointer;
+}
+.home-tile:focus-visible,
+.home-next-quest:focus-visible {
+    outline: 2px solid var(--accent-yellow);
+    outline-offset: 2px;
+}
+.home-tile small,
+.home-next-quest small {
+    color: var(--text-subtle);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+}
+.home-tile strong {
+    color: var(--text-primary);
+    font-size: 28px;
+    line-height: 1;
+}
+.home-tile strong em {
+    color: var(--text-subtle);
+    font-size: 14px;
+    font-style: normal;
+}
+.home-tile > span:not(.quest-progress-track) {
+    font-size: 11px;
+    margin-top: auto;
+}
+.home-tile .quest-progress-track {
+    margin-top: auto;
+}
+.home-tile-flag {
+    background: rgb(232 184 10 / 15%);
+    border-radius: 999px;
+    color: var(--accent-yellow);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    width: fit-content;
+}
+.home-summary {
+    gap: 4px;
+    margin: 0;
+}
+.home-summary div {
+    align-items: baseline;
+    display: flex;
+    justify-content: space-between;
+}
+.home-summary dt {
+    font-size: 11px;
+}
+.home-summary dd {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+}
+.home-next-quest {
+    background: linear-gradient(135deg, rgb(232 184 10 / 10%), var(--surface-background) 60%);
+    border-color: rgb(232 184 10 / 30%);
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 18px;
+    width: 100%;
+}
+.home-next-quest-head {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+}
+.home-next-quest-head small {
+    color: var(--accent-yellow);
+}
+.home-next-quest-head b {
+    background: rgb(232 184 10 / 15%);
+    border-radius: 999px;
+    color: var(--accent-yellow);
+    font-size: 11px;
+    padding: 4px 10px;
+}
+.home-next-quest > strong {
+    color: var(--text-primary);
+    font-size: 18px;
+}
+.home-next-quest-desc {
+    font-size: 13px;
+    line-height: 1.4;
+}
+.home-next-quest-foot {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+}
+.home-next-quest-foot small {
+    white-space: nowrap;
+}
+@media (max-width: 480px) {
+    .home-tiles {
+        grid-template-columns: 1fr 1fr;
+    }
+    .home-summary {
+        grid-column: 1 / -1;
+        min-height: 0;
+    }
 }
 .authored-quests {
     margin-top: 32px;
@@ -1959,10 +2069,6 @@ input {
     }
     .home-progress {
         gap: 20px;
-    }
-    .home-stats {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 16px;
     }
     .activity-detail-summary h1 {
         font-size: 48px;

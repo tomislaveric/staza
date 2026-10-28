@@ -17,6 +17,8 @@
 .world-discovered strong i { color: var(--text-muted); font-size: 16px; font-style: normal; font-weight: 400; }
 
 .world-filter-controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 20px 0 4px; }
+.world-filter-locked { align-items: baseline; border: 1px dashed var(--border-faint); border-radius: 999px; color: var(--text-subtle); display: inline-flex; font-family: var(--font-display); font-size: 12px; gap: 8px; opacity: .75; padding: 6px 12px; }
+.world-filter-locked small { color: var(--accent-yellow); font-size: 11px; }
 .world-filter-controls button[hidden] { display: none; }
 .world-filter-controls button {
   align-items: center;

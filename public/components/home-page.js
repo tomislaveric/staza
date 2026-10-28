@@ -60,16 +60,7 @@ export const HomePlayerProgress = ({ progress, stats }) => `
         <p class="home-progress-caption">${formatNumber(progress.remainingXp)} XP to Level ${formatNumber(progress.level + 1)}</p>
       </div>
     </div>
-    ${HomeStats(stats)}
   </section>
-`;
-
-export const HomeStats = (stats) => `
-  <dl class="home-stats">
-    <div><dt>TOTAL XP</dt><dd>${formatNumber(stats.totalXp)}</dd></div>
-    <div><dt>DISTANCE</dt><dd>${formatNumber(stats.distanceMeters / 1000, 1)} km</dd></div>
-    <div><dt>COLLECTED</dt><dd>${formatNumber(stats.totalCollected)}</dd></div>
-  </dl>
 `;
 
 const foundItems = (events) => events.slice(0, 4).map((event) =>
@@ -142,9 +133,49 @@ export const HomeActiveQuests = (instances = []) => `
   </section>
 `;
 
+const pct = (value, total) => (total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0);
+
+export const HomeAchievements = ({ skillPoints = 0, unlocked = [], totalNodes = 0, titles = [], badges = [], nextQuest, stats } = {}) => {
+  const earned = [...titles, ...badges];
+  return `
+  <section class="home-achievements" aria-labelledby="achievements-title">
+    <div class="home-section-heading"><h1 id="achievements-title">SKILLS &amp; ACHIEVEMENTS</h1></div>
+    <div class="home-tiles">
+      <button type="button" class="home-tile" data-home-skill-tree>
+        <small>SKILLS</small>
+        <strong data-home-unlocked-count>${unlocked.length}<em> / ${totalNodes}</em></strong>
+        <span class="quest-progress-track" aria-hidden="true"><i style="width: ${pct(unlocked.length, totalNodes)}%;"></i></span>
+        ${skillPoints > 0 ? `<b class="home-tile-flag" data-home-skill-points>${formatNumber(skillPoints)} SP to spend</b>` : ""}
+      </button>
+      <div class="home-tile" data-home-achievements>
+        <small>ACHIEVEMENTS</small>
+        <strong>${earned.length}</strong>
+        <span data-user-content>${earned.length ? escapeHtml(earned.slice(0, 2).map((item) => item.label).join(" · ")) : "Titles and badges you earn"}</span>
+      </div>
+      ${stats ? `<dl class="home-tile home-summary" data-home-summary>
+        <small>SUMMARY</small>
+        <div><dt>Total XP</dt><dd>${formatNumber(stats.totalXp)}</dd></div>
+        <div><dt>Distance</dt><dd>${formatNumber(stats.distanceMeters / 1000, 1)} km</dd></div>
+        <div><dt>Collected</dt><dd>${formatNumber(stats.totalCollected)}</dd></div>
+      </dl>` : ""}
+    </div>
+    ${nextQuest ? `<button type="button" class="home-next-quest" data-home-next-quest>
+      <span class="home-next-quest-head"><small>NEXT QUEST · ${escapeHtml(nextQuest.chainTitle).toUpperCase()}</small><b>+${formatNumber(nextQuest.xp)} XP</b></span>
+      <strong data-user-content>${escapeHtml(nextQuest.title)}</strong>
+      <span class="home-next-quest-desc" data-user-content>${escapeHtml(nextQuest.description)}</span>
+      <span class="home-next-quest-foot">
+        <span class="quest-progress-track" aria-hidden="true"><i style="width: ${pct(nextQuest.step - 1, nextQuest.totalSteps)}%;"></i></span>
+        <small>Step ${nextQuest.step} of ${nextQuest.totalSteps}</small>
+      </span>
+    </button>` : ""}
+  </section>
+`;
+};
+
 export const HomePage = (model) => `
   <section class="home-page">
     ${HomePlayerProgress(model)}
+    ${HomeAchievements({ ...model.achievements, stats: model.stats })}
     ${HomeRecentActivity(model.latest)}
     ${HomeActiveQuests(model.activeQuests)}
   </section>
@@ -156,25 +187,49 @@ const responseJson = async (response) => {
   return body;
 };
 
+// Achievements are secondary; Home must still render if they cannot load.
+const loadAchievements = async () => {
+  try {
+    const [tree, capabilities, quests] = await Promise.all([
+      fetch("/api/skill-tree").then(responseJson),
+      fetch("/api/player/capabilities").then(responseJson),
+      fetch("/api/authored-quests").then(responseJson).catch(() => ({ quests: [] }))
+    ]);
+    return {
+      skillPoints: tree.balance,
+      unlocked: tree.nodes.filter((node) => node.state === "unlocked"),
+      totalNodes: tree.nodes.length,
+      titles: capabilities.titles,
+      badges: capabilities.badges,
+      nextQuest: quests.quests.find((quest) => quest.state === "available")
+    };
+  } catch {
+    return undefined;
+  }
+};
+
 export const mountHomePage = async (mountPoint, onSelectActivity, onNavigate) => {
   mountPoint.innerHTML = '<section class="home-page"><p class="home-loading" role="status">Loading Home...</p></section>';
   try {
-    const [progress, history, questBody] = await Promise.all([
+    const [progress, history, questBody, achievements] = await Promise.all([
       fetch("/api/player/progress").then(responseJson),
       fetch("/api/activities").then(responseJson),
-      fetch("/api/quest-instances").then(responseJson)
+      fetch("/api/quest-instances").then(responseJson),
+      loadAchievements()
     ]);
     const activities = await Promise.all(history.map(async (activity) => ({
       ...activity,
       ...(await fetch(`/api/activities/${encodeURIComponent(activity.id)}`).then(responseJson))
     })));
-    const model = { ...homeViewModel(progress, activities), activeQuests: activeQuestInstances(questBody.instances) };
+    const model = { ...homeViewModel(progress, activities), activeQuests: activeQuestInstances(questBody.instances), achievements };
     mountPoint.innerHTML = HomePage(model);
     const replay = replayForHome(model.latest);
     if (replay) {
       const basemap = await fetch("/api/world/basemap").then(responseJson).catch(() => undefined);
       mountReplayStillCard(mountPoint.querySelector(".home-activity-card"), replay, basemap);
     }
+    mountPoint.querySelector("[data-home-skill-tree]")?.addEventListener("click", () => onNavigate?.("skill-tree"));
+    mountPoint.querySelector("[data-home-next-quest]")?.addEventListener("click", () => onNavigate?.("progress"));
     mountPoint.querySelector("[data-home-find-quests]")?.addEventListener("click", () => onNavigate?.("world"));
     mountPoint.querySelector("[data-activity-id]")?.addEventListener("click", () => {
       onSelectActivity?.(model.latest.id);

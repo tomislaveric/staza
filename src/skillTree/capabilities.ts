@@ -1,3 +1,4 @@
+import { SKILL_TREE_NODES } from "./catalog.js";
 import type { SkillTreeGrant } from "./types.js";
 
 export interface PlayerCapabilities {
@@ -9,6 +10,13 @@ export interface PlayerCapabilities {
 
 /** "Earns the Flow Master title" -> "Flow Master". */
 const displayName = (label: string): string => label.replace(/^Earns the\s+/i, "").replace(/\s+(title|badge)$/i, "");
+
+/** World filters whose granting Atlas node is still locked, so the UI can say what unlocks them. */
+export const lockedWorldFilters = (
+  unlockedNodeIds: ReadonlySet<string>
+): { id: string; nodeId: string; nodeName: string }[] => SKILL_TREE_NODES
+  .filter((node) => (node.grant.type === "world_filter" || node.grant.type === "segment_filter") && !unlockedNodeIds.has(node.id))
+  .map((node) => ({ id: node.grant.value, nodeId: node.id, nodeName: node.name }));
 
 export const capabilitiesFromGrants = (grants: readonly SkillTreeGrant[]): PlayerCapabilities => {
   const pick = (type: SkillTreeGrant["type"]) => grants
