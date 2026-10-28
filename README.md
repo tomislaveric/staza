@@ -141,6 +141,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Skill Atlas](features/skill-atlas/README.md) — refactor the Skill Tree into a
   pannable, zoomable, radial constellation map (client-only visual/layout/
   interaction refactor) while preserving all gameplay, persistence, and APIs.
+- [Skill Points Reflection](features/skill-points-reflection/README.md) — explain
+  level-based Skill Point rewards and mark awarding levels in the Progress journey.
 - [Skill Tree](features/skill-tree/README.md) — interactive, animated progression
   tree where players spend Skill Points to unlock requirement-gated nodes that
   grant bounded capability access (badges/titles, quest and filter unlocks).

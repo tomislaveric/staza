@@ -102,6 +102,8 @@ export const parseAppPath = (pathname, languages = []) => {
 };
 
 const germanCopy = {
+  "Reach certain levels to earn Skill Points you can spend in the Skill Tree.": "Erreiche bestimmte Level, um Skillpunkte zu verdienen, die du im Skillbaum ausgeben kannst.",
+  "+1 Skill Point": "+1 Skillpunkt",
   "Skill Tree": "Skillbaum",
   "Spend Skill Points to shape your rider": "Gib Skillpunkte aus, um deinen Fahrer zu formen",
   "Skill Points": "Skillpunkte",

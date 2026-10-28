@@ -27,6 +27,7 @@ import { ActivityImportRejectedError } from "../errors.js";
 import { getLevelProgress, getTotalXpRequiredForLevel } from "../progression.js";
 import { FartlekCompletionRepository } from "./fartlekCompletionRepository.js";
 import type { SkillTreeStats } from "../skillTree/types.js";
+import { earnedSkillPointsForLevel } from "../skillTree/catalog.js";
 import { aggregateSkillTreeStats } from "../skillTree/statsQuery.js";
 
 interface ActivityRow {
@@ -409,7 +410,11 @@ export class ActivityRepository {
         },
         levels: Array.from({ length: lastLevel - firstLevel + 1 }, (_, index) => {
           const level = firstLevel + index;
-          return { level, totalXpRequired: getTotalXpRequiredForLevel(level) };
+          return {
+            level,
+            totalXpRequired: getTotalXpRequiredForLevel(level),
+            skillPointsAwarded: earnedSkillPointsForLevel(level) - earnedSkillPointsForLevel(level - 1)
+          };
         }),
         recentActivities: recentActivitiesResult.rows.map(mapActivity)
       };

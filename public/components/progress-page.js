@@ -63,6 +63,10 @@ export const ProgressSummary = ({ progress, lifetime }) => `
   </p>
 `;
 
+const SkillPointAward = (level) => level.skillPointsAwarded > 0
+  ? `<span class="progress-skill-point-award">+${formatNumber(level.skillPointsAwarded)} ${level.skillPointsAwarded === 1 ? "Skill Point" : "Skill Points"}</span>`
+  : "";
+
 export const LevelStep = (level) => {
   if (level.state === "completed") {
     return `
@@ -71,6 +75,7 @@ export const LevelStep = (level) => {
         <div class="progress-level-details">
           <div><strong>${escapeHtml(level.name)}</strong><em>COMPLETE</em><span>${formatNumber(level.totalXpRequired)} XP</span></div>
           <small>LEVEL ${formatNumber(level.level)}</small>
+          ${SkillPointAward(level)}
           <div class="progress-level-complete-bar" aria-hidden="true"><span></span></div>
         </div>
       </li>
@@ -82,6 +87,7 @@ export const LevelStep = (level) => {
       <div class="progress-level-details">
         <div><strong>${escapeHtml(level.name)}</strong><span>${formatNumber(level.totalXpRequired)} XP needed</span></div>
         <small>LEVEL ${formatNumber(level.level)}</small>
+        ${SkillPointAward(level)}
       </div>
     </li>
   `;
@@ -95,6 +101,7 @@ export const CurrentLevel = (level, progress) => `
         <strong>${formatNumber(level.level)}</strong>
         <div><span>CURRENT</span><h2>${escapeHtml(level.name)}</h2></div>
       </div>
+      ${SkillPointAward(level)}
       <div class="progress-current-track" role="progressbar" aria-valuemin="0" aria-valuemax="${progress.nextLevelXp}" aria-valuenow="${progress.currentLevelXp}">
         <span style="width: ${progress.percentage}%"></span>
       </div>
@@ -143,6 +150,7 @@ export const ProgressPage = (model) => `
       <p>Your exploration journey</p>
     </header>
     ${ProgressSummary(model)}
+    <p class="progress-skill-point-note">Reach certain levels to earn Skill Points you can spend in the Skill Tree.</p>
     ${ProgressJourney(model)}
     ${RecentActivities(model.recentActivities)}
   </section>

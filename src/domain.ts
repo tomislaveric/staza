@@ -239,6 +239,7 @@ export interface PlayerProfileOverview {
 export interface ProgressLevel {
   level: number;
   totalXpRequired: number;
+  skillPointsAwarded: number;
 }
 
 export interface ProgressLifetimeStats {

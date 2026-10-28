@@ -256,11 +256,11 @@ describePersistence("ActivityRepository", () => {
       totalCollectibles: 3
     });
     expect(dashboard.levels).toEqual([
-      { level: 1, totalXpRequired: 0 },
-      { level: 2, totalXpRequired: 100 },
-      { level: 3, totalXpRequired: 300 },
-      { level: 4, totalXpRequired: 600 },
-      { level: 5, totalXpRequired: 1_000 }
+      { level: 1, totalXpRequired: 0, skillPointsAwarded: 1 },
+      { level: 2, totalXpRequired: 100, skillPointsAwarded: 0 },
+      { level: 3, totalXpRequired: 300, skillPointsAwarded: 1 },
+      { level: 4, totalXpRequired: 600, skillPointsAwarded: 0 },
+      { level: 5, totalXpRequired: 1_000, skillPointsAwarded: 1 }
     ]);
     expect(dashboard.recentActivities.map((item) => item.id)).toEqual([
       "e".repeat(48), "d".repeat(48), "c".repeat(48), "b".repeat(48)

@@ -19,12 +19,12 @@ const dashboard = {
     totalCollectibles: 34
   },
   levels: [
-    { level: 5, totalXpRequired: 1_000 },
-    { level: 6, totalXpRequired: 1_500 },
-    { level: 7, totalXpRequired: 2_100 },
-    { level: 8, totalXpRequired: 2_800 },
-    { level: 9, totalXpRequired: 3_600 },
-    { level: 10, totalXpRequired: 4_500 }
+    { level: 5, skillPointsAwarded: 1, totalXpRequired: 1_000 },
+    { level: 6, skillPointsAwarded: 0, totalXpRequired: 1_500 },
+    { level: 7, skillPointsAwarded: 0, totalXpRequired: 2_100 },
+    { level: 8, skillPointsAwarded: 1, totalXpRequired: 2_800 },
+    { level: 9, skillPointsAwarded: 0, totalXpRequired: 3_600 },
+    { level: 10, skillPointsAwarded: 0, totalXpRequired: 4_500 }
   ],
   recentActivities: [{
     id: "latest",
@@ -92,6 +92,13 @@ describe("Progress page", () => {
     expect(model.levels.map((level) => level.state)).toEqual(["current", "future", "future", "future"]);
     expect(ProgressPage(model)).toContain("NO COMPLETED ACTIVITIES YET");
     expect(ProgressPage(model)).not.toContain("is-completed");
+  });
+
+  it("explains Skill Points and marks only awarding levels", () => {
+    const page = ProgressPage(progressViewModel(dashboard));
+
+    expect(page).toContain("earn Skill Points you can spend in the Skill Tree");
+    expect(page.match(/\+1 Skill Point/g)).toHaveLength(2);
   });
 
   it("renders no activity history safely", () => {
