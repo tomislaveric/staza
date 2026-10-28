@@ -1,6 +1,7 @@
+import { buildActivityQuestMetrics, completeAuthoredQuestsWithClient } from "./authoredQuestRepository.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { STRAVA_ONBOARDING_IMPORT_LIMIT } from "../domain.js";
+import { activityTypeLabel } from "../activity.js";
 import type {
   Activity,
   ActivitySource,
@@ -135,15 +136,11 @@ export class ActivityRepository {
       await client.query("BEGIN");
       // The player row lock serializes every acceptance decision for this player: exact identity,
       // cross-source duplicates, and the journey boundary are evaluated against committed state.
-      const player = await client.query<{ journey_started_at: Date | null }>(
-        "SELECT journey_started_at FROM players WHERE id = $1 FOR UPDATE",
+      const player = await client.query<{ created_at: Date }>(
+        "SELECT created_at FROM players WHERE id = $1 FOR UPDATE",
         [playerId]
       );
       if (player.rowCount !== 1) throw new Error("Default player does not exist.");
-      const activityCount = await client.query<{ activity_count: number }>(
-        "SELECT count(*)::int AS activity_count FROM activities WHERE player_id = $1",
-        [playerId]
-      );
 
       const existingId = importKey
         ? await this.findActivityIdByImportKeyWithClient(client, playerId, activity.source, importKey)
@@ -167,17 +164,12 @@ export class ActivityRepository {
         }
       }
 
-      const journeyStartedAt = player.rows[0].journey_started_at;
-      const isStravaOnboardingImport = activity.source === "strava"
-        && activityCount.rows[0].activity_count < STRAVA_ONBOARDING_IMPORT_LIMIT;
-      if (
-        journeyStartedAt
-        && activity.startedAt < journeyStartedAt.getTime()
-        && !isStravaOnboardingImport
-      ) {
+      // The journey starts at account creation, for every import source.
+      const journeyStartedAt = player.rows[0].created_at;
+      if (activity.startedAt < journeyStartedAt.getTime()) {
         throw new ActivityImportRejectedError(
           "before_journey_start",
-          "This activity happened before your Staza journey started.",
+          "This activity happened before your Staza account was created.",
           { journeyStartedAt: journeyStartedAt.toISOString() }
         );
       }
@@ -244,15 +236,14 @@ export class ActivityRepository {
           client, playerId, activity.id, result.fartlekCompletions
         );
       }
+      const questXp = await completeAuthoredQuestsWithClient(
+        client, playerId, activity.id, buildActivityQuestMetrics(activity, result, categoriesBySourceId)
+      );
       const updatedPlayer = await client.query<{ total_xp: number }>(
         `UPDATE players
-         SET total_xp = total_xp + $1,
-             journey_started_at = CASE WHEN $4
-               THEN LEAST(COALESCE(journey_started_at, $3), $3)
-               ELSE COALESCE(journey_started_at, $3)
-             END
+         SET total_xp = total_xp + $1
          WHERE id = $2 RETURNING total_xp`,
-        [result.totalPoints, playerId, new Date(activity.startedAt), isStravaOnboardingImport]
+        [result.totalPoints + questXp, playerId]
       );
       if (updatedPlayer.rowCount !== 1) throw new Error("Default player does not exist.");
       const persisted = await this.getActivityWithClient(client, playerId, activity.id);
@@ -295,21 +286,14 @@ export class ActivityRepository {
     return new Map(result.rows.map((row) => [row.source_external_id, row.id]));
   }
 
-  async getJourneyStartedAt(playerId: string): Promise<Date | undefined> {
-    const result = await this.pool.query<{ journey_started_at: Date | null }>(
-      "SELECT journey_started_at FROM players WHERE id = $1",
+  /** The journey starts at account creation; earlier activities are never importable. */
+  async getJourneyStartedAt(playerId: string): Promise<Date> {
+    const result = await this.pool.query<{ created_at: Date }>(
+      "SELECT created_at FROM players WHERE id = $1",
       [playerId]
     );
     if (result.rowCount !== 1) throw new Error("Player does not exist.");
-    return result.rows[0].journey_started_at ?? undefined;
-  }
-
-  async getActivityCount(playerId: string): Promise<number> {
-    const result = await this.pool.query<{ activity_count: number }>(
-      "SELECT count(*)::int AS activity_count FROM activities WHERE player_id = $1",
-      [playerId]
-    );
-    return result.rows[0].activity_count;
+    return result.rows[0].created_at;
   }
 
   async listActivities(playerId: string): Promise<ActivityHistoryItem[]> {
@@ -327,6 +311,52 @@ export class ActivityRepository {
       return await this.getActivityWithClient(client, playerId, id);
     } catch (error) {
       if (error instanceof Error && error.message === "Activity not found.") return undefined;
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Corrects the sport of an owned activity, keeping the replay snapshot, fallback title and fingerprint in step. */
+  async updateActivityType(
+    playerId: string,
+    id: string,
+    type: ActivityType
+  ): Promise<PersistedActivity | undefined> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query<{ activity_type: ActivityType; replay_snapshot: ReplaySnapshot | null }>(
+        "SELECT activity_type, replay_snapshot FROM activities WHERE id = $1 AND player_id = $2 FOR UPDATE",
+        [id, playerId]
+      );
+      if (current.rowCount !== 1) {
+        await client.query("ROLLBACK");
+        return undefined;
+      }
+      const previousType = current.rows[0].activity_type;
+      const snapshot = current.rows[0].replay_snapshot;
+      if (snapshot?.activity) {
+        // Only generated fallback titles follow the sport; a title from the device or provider is kept.
+        if (snapshot.activity.title === activityTypeLabel(previousType)) {
+          snapshot.activity.title = activityTypeLabel(type);
+        }
+        snapshot.activity.type = type;
+      }
+      await client.query(
+        `UPDATE activities
+         SET activity_type = $3,
+             replay_snapshot = $4,
+             fingerprint = CASE WHEN fingerprint IS NULL THEN NULL
+               ELSE jsonb_set(fingerprint, '{activityType}', to_jsonb($3::text)) END
+         WHERE id = $1 AND player_id = $2`,
+        [id, playerId, type, snapshot === null ? null : JSON.stringify(snapshot)]
+      );
+      const persisted = await this.getActivityWithClient(client, playerId, id);
+      await client.query("COMMIT");
+      return persisted;
+    } catch (error) {
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();

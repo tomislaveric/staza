@@ -124,6 +124,8 @@ export interface SkillTreeNodeView {
   requirementsMet: boolean;
   prerequisitesMet: boolean;
   affordable: boolean;
+  /** Authored quest chain this node unlocks; present only for `quest_unlock` nodes. */
+  questChain?: { title: string; quests: { title: string; description: string; xp: number }[] };
 }
 
 export interface SkillTreeView {

@@ -17,6 +17,24 @@ const fartleks = [
 ];
 
 describe("World page data transformations", () => {
+  it("offers advanced filters only when granted and applies them to collectibles and Flowlines", () => {
+    expect(availableWorldFilters(collectibles, fartleks).has("high-flow")).toBe(false);
+    const granted = availableWorldFilters(collectibles, fartleks, ["high-flow", "peaks-only", "not-a-filter"]);
+    expect(granted.has("high-flow")).toBe(true);
+    expect(granted.has("peaks-only")).toBe(true);
+    expect(granted.has("not-a-filter")).toBe(false);
+
+    const flowlines = [
+      { ...fartleks[0], flowScore: 80, lengthMeters: 6000 },
+      { ...fartleks[1], flowScore: 40, lengthMeters: 1000 }
+    ];
+    expect(filteredWorldFartleks(flowlines, ["high-flow"]).map((item) => item.id)).toEqual(["fartlek-1"]);
+    expect(filteredWorldFartleks(flowlines, ["long-endurance"]).map((item) => item.id)).toEqual(["fartlek-1"]);
+    expect(filteredWorldFartleks(flowlines, ["undiscovered-only"]).map((item) => item.id)).toEqual(["fartlek-1"]);
+    expect(filteredWorldCollectibles(collectibles, ["peaks-only"]).map((item) => item.id)).toEqual(["peak-unfound"]);
+    expect(filteredWorldCollectibles(collectibles, ["high-flow"])).toEqual([]);
+  });
+
   it("offers only matching filters while always retaining All", () => {
     expect([...availableWorldFilters([], [])]).toEqual(["all"]);
     expect([...availableWorldFilters(collectibles, [])]).toEqual([
@@ -478,7 +496,7 @@ describe("mounted World page interactions", () => {
     expect(page.buttons.all.attributes["aria-pressed"]).toBe("true");
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
     expect(page.fartlekIds()).toEqual(fartleks.map((item) => item.id));
-    expect(page.fetchMock).toHaveBeenCalledTimes(4);
+    expect(page.fetchMock).toHaveBeenCalledTimes(5);
     expect(page.fetchMock.mock.calls.some(([url]) => url.includes("includeQuestSuggestions"))).toBe(false);
   });
 

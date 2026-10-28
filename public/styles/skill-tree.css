@@ -515,6 +515,10 @@
   color: var(--text-subtle);
   margin: 0 0 10px;
 }
+.skill-quest-chain { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+.skill-quest-chain li { color: var(--text-muted); font-family: var(--font-display); font-size: 12px; }
+.skill-quest-chain strong { color: var(--text-primary); display: block; }
+.skill-quest-chain em { color: var(--accent-yellow); font-style: normal; }
 .skill-requirements { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 12px; }
 .skill-requirement-label {
   display: flex;

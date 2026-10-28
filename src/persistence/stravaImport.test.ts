@@ -50,7 +50,7 @@ if (pool) {
     await migrate(pool!);
     await pool!.query("TRUNCATE strava_oauth_states, strava_connections, activity_events, activities, sessions, players, users CASCADE");
     await pool!.query("INSERT INTO users (id, email) VALUES ($1, 'strava@example.com')", [userId]);
-    await pool!.query("INSERT INTO players (id, display_name, user_id) VALUES ($1, 'Strava player', $2)", [playerId, userId]);
+    await pool!.query("INSERT INTO players (id, display_name, user_id, created_at) VALUES ($1, 'Strava player', $2, '2026-05-08T00:00:00Z')", [playerId, userId]);
     await pool!.query(
       `INSERT INTO sessions (id, user_id, token_hash, csrf_token, expires_at, absolute_expires_at)
        VALUES ($1, $2, 'hash', 'csrf', now() + interval '1 day', now() + interval '1 day')`,
@@ -64,21 +64,16 @@ if (pool) {
 }
 
 describePersistence("Strava import persistence", () => {
-  it("allows earlier Strava activities among the first three imports, then preserves the journey boundary", async () => {
-    await persist(activity("2026-05-10T08:00:00Z"));
-    expect((await playerState()).journey_started_at?.toISOString()).toBe("2026-05-10T08:00:00.000Z");
-
-    await persist(activity("2026-05-09T08:00:00Z", "strava"), "2001");
-    expect((await playerState()).journey_started_at?.toISOString()).toBe("2026-05-09T08:00:00.000Z");
-
-    await persist(activity("2026-05-08T08:00:00Z", "strava", 0.05), "2002");
+  it("uses account creation as the journey start for every source", async () => {
+    await expect(persist(activity("2026-05-07T08:00:00Z")))
+      .rejects.toMatchObject({ code: "before_journey_start", details: { journeyStartedAt: "2026-05-08T00:00:00.000Z" } });
     await expect(persist(activity("2026-05-07T08:00:00Z", "strava"), "2003"))
-      .rejects.toMatchObject({ code: "before_journey_start", details: { journeyStartedAt: "2026-05-08T08:00:00.000Z" } });
-    expect(await playerState()).toMatchObject({ total_xp: 30, count: "3" });
-    expect((await playerState()).journey_started_at?.toISOString()).toBe("2026-05-08T08:00:00.000Z");
+      .rejects.toMatchObject({ code: "before_journey_start" });
+    expect(await playerState()).toMatchObject({ total_xp: 0, count: "0" });
 
-    await persist(activity("2026-05-10T08:00:00Z", "strava"), "2004");
-    expect(await playerState()).toMatchObject({ total_xp: 40, count: "4" });
+    await persist(activity("2026-05-10T08:00:00Z"));
+    await persist(activity("2026-05-09T08:00:00Z", "strava"), "2001");
+    expect(await playerState()).toMatchObject({ total_xp: 20, count: "2" });
   });
 
   it("backfills fingerprints for existing activities so they participate in duplicate checks", async () => {
@@ -108,22 +103,6 @@ describePersistence("Strava import persistence", () => {
     expect(await playerState()).toMatchObject({ total_xp: 10, count: "1" });
     expect((await activities!.getActivityByImportKey(playerId, "4001", "strava"))?.id).toBe(results[0].activity.id);
     expect(await activities!.getActivityByImportKey(playerId, "4001", "fit")).toBeUndefined();
-  });
-
-  it("establishes exactly one journey boundary for concurrent first imports", async () => {
-    const outcomes = await Promise.allSettled([
-      persist(activity("2026-05-12T08:00:00Z")),
-      persist(activity("2026-05-11T08:00:00Z", "strava", 0.05), "5001")
-    ]);
-    const state = await playerState();
-    const accepted = outcomes.filter((outcome) => outcome.status === "fulfilled");
-    expect(accepted.length).toBeGreaterThanOrEqual(1);
-    for (const outcome of outcomes) {
-      if (outcome.status === "rejected") expect(outcome.reason).toMatchObject({ code: "before_journey_start" });
-    }
-    const starts = (await pool!.query<{ started_at: Date }>("SELECT started_at FROM activities WHERE player_id = $1", [playerId])).rows;
-    expect(starts.every((row) => row.started_at.getTime() >= state.journey_started_at!.getTime())).toBe(true);
-    expect(state.total_xp).toBe(accepted.length * 10);
   });
 });
 

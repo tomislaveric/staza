@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SKILL_TREE_NODES,
   earnedSkillPointsForLevel,
+  isPremiumNode,
   validateSkillTreeCatalog,
   findSkillTreeNode
 } from "./catalog.js";
@@ -19,9 +20,22 @@ describe("skill tree catalog", () => {
       for (const prerequisite of node.prerequisites) {
         expect(ids.has(prerequisite)).toBe(true);
       }
-      if (node.tier === 1) expect(node.premium).toBe(false);
-      else expect(node.premium).toBe(true);
+      expect(node.premium).toBe(isPremiumNode(node));
     }
+  });
+
+  it("keeps core sport branches free and gates breadth and late-game nodes", () => {
+    const tier2Free = SKILL_TREE_NODES.filter((node) => node.tier === 2 && !node.premium);
+    expect(tier2Free.length).toBeGreaterThan(0);
+    for (const node of SKILL_TREE_NODES) {
+      if (node.branch === "cross" || node.branch === "cross_sport" || node.tier === "prestige") expect(node.premium).toBe(true);
+    }
+  });
+
+  it("lets a free player afford the whole free tier-1 set at level 12", () => {
+    const freeTier1Cost = SKILL_TREE_NODES.filter((node) => !node.premium && node.tier === 1)
+      .reduce((sum, node) => sum + node.cost, 0);
+    expect(freeTier1Cost).toBeLessThanOrEqual(earnedSkillPointsForLevel(12));
   });
 
   it("rejects a dangling prerequisite", () => {
@@ -45,11 +59,12 @@ describe("skill tree catalog", () => {
   it("awards skill points on the defined level curve", () => {
     expect(earnedSkillPointsForLevel(0)).toBe(0);
     expect(earnedSkillPointsForLevel(1)).toBe(1);
-    expect(earnedSkillPointsForLevel(2)).toBe(1);
-    expect(earnedSkillPointsForLevel(3)).toBe(2);
-    expect(earnedSkillPointsForLevel(30)).toBe(10);
-    expect(earnedSkillPointsForLevel(34)).toBe(11);
-    expect(earnedSkillPointsForLevel(38)).toBe(12);
+    expect(earnedSkillPointsForLevel(2)).toBe(2);
+    expect(earnedSkillPointsForLevel(12)).toBe(12);
+    expect(earnedSkillPointsForLevel(13)).toBe(12);
+    expect(earnedSkillPointsForLevel(14)).toBe(13);
+    expect(earnedSkillPointsForLevel(30)).toBe(21);
+    expect(earnedSkillPointsForLevel(33)).toBe(22);
   });
 
   it("finds nodes by id", () => {

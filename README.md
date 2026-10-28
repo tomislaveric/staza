@@ -103,6 +103,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Multi-Sport Skill Atlas](features/multi-sport-skill-atlas/README.md) — extend the
   cycling Skill Tree into a radial multi-sport atlas with Athlete at the center and
   Cycling, Running, and Hiking as equal sport sectors plus cross-sport and prestige nodes.
+- [P0 audit remediation](features/p0-audit/README.md) — plan and resolve the four
+  P0 UX-audit findings across FIT sports, Skill Atlas rewards, journey start, and
+  the Skill Point economy.
 - [Persistent activities player state v1](features/persistent-activities-player-state-v1/README.md)
   — persist compact activity/event history and single-player XP in PostgreSQL
   with transaction-safe exactly-once progression.

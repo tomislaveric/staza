@@ -85,6 +85,24 @@ export const mountActivityDetailPage = async (mountPoint, activityId, onBack) =>
       mountPoint.querySelectorAll("[data-activity-tab]").forEach((tab) => {
         tab.addEventListener("click", () => render(tab.dataset.activityTab));
       });
+      const sportSelect = mountPoint.querySelector("[data-activity-sport]");
+      sportSelect?.addEventListener("change", async () => {
+        const errorHost = mountPoint.querySelector(".activity-detail-sport-error");
+        sportSelect.disabled = true;
+        try {
+          activity = await fetch(`/api/activities/${encodeURIComponent(activityId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: sportSelect.value })
+          }).then(responseJson);
+          render(selectedTab);
+        } catch (error) {
+          sportSelect.disabled = false;
+          sportSelect.value = activity.type ?? "unknown";
+          errorHost.textContent = error instanceof Error ? error.message : "Unable to update the sport.";
+          errorHost.hidden = false;
+        }
+      });
       const replay = replayInputs(activity);
       if (selectedTab === "replay" && replay) {
         void loadBasemap().then((config) => {

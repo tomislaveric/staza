@@ -61,7 +61,7 @@ describePersistence("ActivityRepository", () => {
   beforeEach(async () => {
     await migrate(pool!);
     await pool!.query("TRUNCATE activity_events, activities, players CASCADE");
-    await pool!.query("INSERT INTO players (id, display_name) VALUES ($1, $2)", [playerId, "Persistence test player"]);
+    await pool!.query("INSERT INTO players (id, display_name, created_at) VALUES ($1, $2, '2020-01-01')", [playerId, "Persistence test player"]);
     await collectibles!.upsertMany([{
       id: "historic-coin",
       name: "Historic Coin",
@@ -204,7 +204,7 @@ describePersistence("ActivityRepository", () => {
     await repository!.persistCompletedActivity(playerId, activity("f".repeat(48)), result("f".repeat(48)));
     const otherPlayerId = "00000000-0000-4000-8000-000000000098";
     const otherRepository = new ActivityRepository(pool!);
-    await pool!.query("INSERT INTO players (id, display_name) VALUES ($1, $2)", [otherPlayerId, "Other player"]);
+    await pool!.query("INSERT INTO players (id, display_name, created_at) VALUES ($1, $2, '2020-01-01')", [otherPlayerId, "Other player"]);
     await otherRepository.persistCompletedActivity(otherPlayerId, activity("g".repeat(48)), result("g".repeat(48)));
 
     expect(await repository!.listDiscoveredCollectibleSourceIds(playerId)).toEqual(["historic-coin"]);
@@ -257,9 +257,9 @@ describePersistence("ActivityRepository", () => {
     });
     expect(dashboard.levels).toEqual([
       { level: 1, totalXpRequired: 0, skillPointsAwarded: 1 },
-      { level: 2, totalXpRequired: 100, skillPointsAwarded: 0 },
+      { level: 2, totalXpRequired: 100, skillPointsAwarded: 1 },
       { level: 3, totalXpRequired: 300, skillPointsAwarded: 1 },
-      { level: 4, totalXpRequired: 600, skillPointsAwarded: 0 },
+      { level: 4, totalXpRequired: 600, skillPointsAwarded: 1 },
       { level: 5, totalXpRequired: 1_000, skillPointsAwarded: 1 }
     ]);
     expect(dashboard.recentActivities.map((item) => item.id)).toEqual([

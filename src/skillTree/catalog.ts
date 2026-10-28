@@ -8,15 +8,16 @@ import type {
 } from "./types.js";
 
 /**
- * Player levels that grant one Skill Point each. Early points arrive quickly so
- * players make decisions soon; later points become scarcer and more valuable.
- * Roughly ten Skill Points are earned by level 30, then one every four levels.
+ * Player levels that grant one Skill Point each. Every level up to 12 awards a
+ * point so a free player finishes the 12-point free core tier (hubs plus
+ * tier-1 specializations) at level 12 (6,600 XP). After that points arrive every
+ * second level through level 30 (21 points), then every third level.
  */
 export const SKILL_POINT_AWARD_LEVELS: readonly number[] = [
-  1, 3, 5, 8, 11, 14, 18, 22, 26, 30
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
 ];
 
-const SKILL_POINT_INTERVAL_AFTER_30 = 4;
+const SKILL_POINT_INTERVAL_AFTER_30 = 3;
 
 /**
  * Deterministic Skill Points earned for a reached player level. Earned points
@@ -52,8 +53,16 @@ interface NodeSpec {
 }
 
 /**
- * Expand a terse spec into a full node. Premium gating is derived from tier so
- * the catalog can never drift from the rule that only Tier 1 is free. A node's
+ * PRO gates breadth and late-game content, not tier depth: cross-sport and hybrid
+ * nodes plus prestige progression. The athlete root, sport hubs and the core
+ * Cycling/Running/Hiking branches through tier III stay free.
+ */
+export const isPremiumNode = (spec: Pick<NodeSpec, "branch" | "tier">): boolean =>
+  spec.branch === "cross" || spec.branch === "cross_sport" || spec.tier === "prestige";
+
+/**
+ * Expand a terse spec into a full node. Premium gating is derived from the
+ * branch and tier so the catalog can never drift from the PRO boundary. A node's
  * on-screen position is computed client-side from structure, so `layout`
  * defaults harmlessly when a node has no legacy coordinate.
  */
@@ -65,7 +74,7 @@ const node = (spec: NodeSpec): SkillTreeNode => ({
   branch: spec.branch,
   tier: spec.tier,
   cost: spec.cost,
-  premium: spec.tier !== 1,
+  premium: isPremiumNode(spec),
   requirements: (spec.req ?? []).map(([metric, target, label]) => ({ metric, target, label })),
   prerequisites: spec.pre ?? [],
   grant: { type: spec.grant[0], value: spec.grant[1], label: spec.grant[2] } satisfies SkillTreeGrant,
@@ -91,8 +100,8 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     branch: "root",
     tier: 1,
     cost: 1,
-    req: [["activityCount", 1, "Activities completed"]],
-    grant: ["tree_access", "cycling-branches", "Unlocks the cycling branches"],
+    req: [["cyclingActivityCount", 1, "Rides completed"]],
+    grant: ["tree_access", "cycling-branches", "Opens the cycling branches"],
     layout: { col: 1, row: 0 }
   }),
 
@@ -120,7 +129,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 2,
     req: [["flowlines", 10, "Flowlines"]],
     pre: ["rusher-i"],
-    grant: ["world_filter", "high-flow", "Unlocks the High Flow map filter"],
+    grant: ["world_filter", "high-flow", "Adds the High Flow filter for Flowlines to World"],
     layout: { col: 0, row: 2 }
   }),
   node({
@@ -186,7 +195,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 2,
     req: [["places", 8, "Places"]],
     pre: ["adventurer-i"],
-    grant: ["world_filter", "undiscovered-only", "Unlocks the Undiscovered Only filter"],
+    grant: ["world_filter", "undiscovered-only", "Adds the Undiscovered filter to World"],
     layout: { col: 1, row: 2 }
   }),
   node({
@@ -256,7 +265,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
       ["longestRideKm", 40, "km longest ride"]
     ],
     pre: ["endurance-i"],
-    grant: ["segment_filter", "long-endurance", "Unlocks the Long Endurance segment filter"],
+    grant: ["segment_filter", "long-endurance", "Adds the Long Flowlines filter to World"],
     layout: { col: 2, row: 2 }
   }),
   node({
@@ -396,7 +405,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     tier: 1,
     cost: 1,
     req: [["runningActivityCount", 1, "Runs completed"]],
-    grant: ["tree_access", "running-branches", "Unlocks the running branches"]
+    grant: ["tree_access", "running-branches", "Opens the running branches"]
   }),
 
   // Running · SPEED
@@ -434,7 +443,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 2,
     req: [["longestRunKm", 8, "km longest run"]],
     pre: ["run-speed-2"],
-    grant: ["segment_filter", "fast-segments", "Unlocks the Fast Segments filter"]
+    grant: ["quest_unlock", "fast-segment-quests", "Unlocks Fast Segment quests"]
   }),
   node({
     id: "run-speed-4",
@@ -484,7 +493,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 2,
     req: [["runningUniqueCollectibles", 10, "Discoveries while running"]],
     pre: ["run-explore-1"],
-    grant: ["world_filter", "run-routes", "Unlocks the Run Routes map filter"]
+    grant: ["quest_unlock", "run-route-quests", "Unlocks Run Route quests"]
   }),
   node({
     id: "run-explore-3",
@@ -570,7 +579,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 2,
     req: [["longestRunKm", 30, "km longest run"], ["runningDistanceKm", 400, "km run"]],
     pre: ["run-endurance-3"],
-    grant: ["segment_filter", "long-run", "Unlocks the Long Run segment filter"]
+    grant: ["quest_unlock", "long-run-quests", "Unlocks Long Run quests"]
   }),
   node({
     id: "run-endurance-5",
@@ -678,7 +687,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     tier: 1,
     cost: 1,
     req: [["hikingActivityCount", 1, "Hikes completed"]],
-    grant: ["tree_access", "hiking-branches", "Unlocks the hiking branches"]
+    grant: ["tree_access", "hiking-branches", "Opens the hiking branches"]
   }),
 
   // Hiking · SUMMIT
@@ -704,7 +713,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 2,
     req: [["hikingPeaks", 3, "Peaks while hiking"]],
     pre: ["hike-summit-1"],
-    grant: ["world_filter", "peaks-only", "Unlocks the Peaks Only map filter"]
+    grant: ["world_filter", "peaks-only", "Adds the Peaks filter to World"]
   }),
   node({
     id: "hike-summit-3",
@@ -766,7 +775,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 2,
     req: [["hikingUniqueCollectibles", 10, "Discoveries while hiking"]],
     pre: ["hike-explore-1"],
-    grant: ["world_filter", "hike-routes", "Unlocks the Hike Routes map filter"]
+    grant: ["quest_unlock", "hike-route-quests", "Unlocks Hike Route quests"]
   }),
   node({
     id: "hike-landmark-seeker",
@@ -828,7 +837,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 2,
     req: [["hikingDistanceKm", 80, "km hiked"], ["longestHikeKm", 12, "km longest hike"]],
     pre: ["hike-endurance-1"],
-    grant: ["segment_filter", "long-trail", "Unlocks the Long Trail segment filter"]
+    grant: ["quest_unlock", "trail-distance-quests", "Unlocks Trail Distance quests"]
   }),
   node({
     id: "hike-long-trail",
@@ -1101,11 +1110,8 @@ export const validateSkillTreeCatalog = (nodes: readonly SkillTreeNode[] = SKILL
         throw new Error(`Node ${candidate.id} cannot require itself.`);
       }
     }
-    if (candidate.tier !== 1 && !candidate.premium) {
-      throw new Error(`Node ${candidate.id} above tier 1 must be premium-gated.`);
-    }
-    if (candidate.tier === 1 && candidate.premium) {
-      throw new Error(`Tier 1 node ${candidate.id} must remain free.`);
+    if (candidate.premium !== isPremiumNode(candidate)) {
+      throw new Error(`Node ${candidate.id} premium flag disagrees with the PRO boundary.`);
     }
   }
   // Detect prerequisite cycles with depth-first search.

@@ -631,6 +631,67 @@ input {
 .is-future .progress-level-details {
     padding-top: 8px;
 }
+.authored-quests {
+    margin-top: 32px;
+}
+.authored-quests h2 {
+    color: var(--text-subtle);
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.24em;
+    line-height: 15px;
+    margin: 0;
+}
+.authored-quests ol {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+}
+.authored-quest {
+    align-items: center;
+    border-bottom: 1px solid var(--border-faint);
+    display: flex;
+    gap: 16px;
+    padding: 12px 0;
+}
+.authored-quest div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+.authored-quest strong {
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-size: 14px;
+}
+.authored-quest span,
+.authored-quest-lock,
+.authored-quests-empty,
+.authored-quests-done,
+.authored-quests-locked summary {
+    color: var(--text-subtle);
+    font-family: var(--font-display);
+    font-size: 12px;
+}
+.authored-quest-lock {
+    color: var(--accent-yellow);
+}
+.authored-quest em {
+    color: var(--accent-yellow);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-style: normal;
+    margin-left: auto;
+    white-space: nowrap;
+}
+.authored-quest.is-locked {
+    opacity: 0.6;
+}
+.authored-quests-locked summary {
+    cursor: pointer;
+    margin-top: 12px;
+}
 .recent-activities {
     margin-top: 32px;
 }
@@ -979,6 +1040,30 @@ input {
     font-family: var(--font-mono);
     font-size: 16px;
     margin: 12px 0 0;
+}
+.activity-detail-sport {
+    align-items: center;
+    color: var(--text-muted);
+    display: inline-flex;
+    font-family: var(--font-display);
+    font-size: 12px;
+    gap: 8px;
+    margin-top: 12px;
+}
+.activity-detail-sport select {
+    background: #181b22;
+    border: 1px solid var(--border-faint);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font: inherit;
+    min-height: 32px;
+    padding: 4px 8px;
+}
+.activity-detail-sport-error {
+    color: #ff9a9a;
+    font-family: var(--font-display);
+    font-size: 12px;
+    margin: 8px 0 0;
 }
 .activity-progress-card {
     background: linear-gradient(164deg, rgb(232 184 10 / 4%), transparent 60%);

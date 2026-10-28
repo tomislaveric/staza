@@ -86,7 +86,7 @@ describePersistence("QuestInstanceRepository", () => {
   beforeEach(async () => {
     await migrate(pool!);
     await pool!.query("TRUNCATE quest_instances, activity_events, activities, players CASCADE");
-    await pool!.query("INSERT INTO players (id, display_name) VALUES ($1, 'Quest test player')", [playerId]);
+    await pool!.query("INSERT INTO players (id, display_name, created_at) VALUES ($1, 'Quest test player', '2020-01-01')", [playerId]);
   });
 
   afterAll(async () => {

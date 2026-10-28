@@ -18,6 +18,22 @@ describe("Profile views", () => {
     expect(view).not.toContain("@alexrides");
   });
 
+  it("presents earned Atlas titles and badges, with an empty hint otherwise", () => {
+    const base = {
+      displayName: "Rider", distanceMeters: 0, activityCount: 0,
+      progress: { level: 1, totalXp: 0, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0 },
+      collectibles: { discoveredCount: 0, totalCollectibles: 0 }
+    };
+    const earned = profileOverviewView({
+      ...base,
+      titles: [{ id: "flow-master", label: "Flow Master" }],
+      badges: [{ id: "all-rounder", label: "All-Round Cyclist" }]
+    }, session);
+    expect(earned).toContain('class="profile-title">Flow Master');
+    expect(earned).toContain('data-profile-badge="all-rounder"');
+    expect(profileOverviewView(base, session)).toContain("Unlock Skill Atlas nodes to earn titles and badges.");
+  });
+
   it("renders verified email and canonical account actions", () => {
     const view = profileAccountView(session, 2);
     expect(view).toContain("rider@example.com");

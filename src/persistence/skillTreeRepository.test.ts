@@ -13,7 +13,7 @@ const repository = pool ? new SkillTreeRepository(pool) : undefined;
 // so Tier-1 requirements are reachable.
 const seedPlayer = async (totalXp: number, isPremium: boolean): Promise<void> => {
   await pool!.query(
-    "INSERT INTO players (id, display_name, total_xp, is_premium) VALUES ($1, $2, $3, $4)",
+    "INSERT INTO players (id, display_name, total_xp, is_premium, created_at) VALUES ($1, $2, $3, $4, '2020-01-01')",
     [playerId, "Skill tree test player", totalXp, isPremium]
   );
 };
@@ -37,13 +37,13 @@ describePersistence("SkillTreeRepository", () => {
   });
 
   it("unlocks an eligible tier-1 node once and is idempotent", async () => {
-    await seedPlayer(800, false); // level 8 => 3 SP
+    await seedPlayer(100, false); // level 2 => 2 SP
     await seedActivity("a1", "cycling", 1000);
 
     const first = await repository!.unlockNode(playerId, "cyclist");
     expect(first.created).toBe(true);
     expect(first.view.spentPoints).toBe(1);
-    expect(first.view.balance).toBe(2);
+    expect(first.view.balance).toBe(1);
 
     const second = await repository!.unlockNode(playerId, "cyclist");
     expect(second.created).toBe(false);
@@ -54,12 +54,12 @@ describePersistence("SkillTreeRepository", () => {
   });
 
   it("rejects unlocking without enough skill points", async () => {
-    await seedPlayer(100, false); // level 2 => 1 SP
+    await seedPlayer(0, false); // level 1 => 1 SP
     await seedActivity("a1", "cycling", 1000);
     await repository!.unlockNode(playerId, "cyclist"); // spends the only point
 
-    // adventurer-i is eligible by requirement path only after cyclist, but no points remain
-    await expect(repository!.unlockNode(playerId, "adventurer-i")).rejects.toMatchObject({
+    await seedActivity("a2", "running", 1000);
+    await expect(repository!.unlockNode(playerId, "runner")).rejects.toMatchObject({
       code: "insufficient_points"
     });
   });
@@ -69,14 +69,14 @@ describePersistence("SkillTreeRepository", () => {
     await seedActivity("a1", "cycling", 1000);
     await repository!.unlockNode(playerId, "cyclist");
 
-    // rusher-ii is premium (tier 2); free players are blocked by the premium gate first.
-    const freeRejection = await repository!.unlockNode(playerId, "rusher-ii").catch((error) => error);
+    // cycling-fast-explorer is premium (cross branch); free players are blocked by the premium gate first.
+    const freeRejection = await repository!.unlockNode(playerId, "cycling-fast-explorer").catch((error) => error);
     expect(freeRejection).toBeInstanceOf(SkillTreeUnlockError);
     expect((freeRejection as SkillTreeUnlockError).code).toBe("premium_required");
 
     // Premium players pass the premium gate; the next unmet gate is the missing prerequisite.
     await pool!.query("UPDATE players SET is_premium = true WHERE id = $1", [playerId]);
-    const premiumRejection = await repository!.unlockNode(playerId, "rusher-ii").catch((error) => error);
+    const premiumRejection = await repository!.unlockNode(playerId, "cycling-fast-explorer").catch((error) => error);
     expect(premiumRejection).toBeInstanceOf(SkillTreeUnlockError);
     expect((premiumRejection as SkillTreeUnlockError).code).toBe("prerequisite_locked");
   });

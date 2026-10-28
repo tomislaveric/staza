@@ -71,7 +71,7 @@ export const deriveActivity = (
   id: string,
   route: TrackPoint[],
   type: ActivityType = "unknown",
-  metadata: FitMetadata = {},
+  metadata: Partial<FitMetadata> = {},
   source: ActivitySource = "fit"
 ): Activity => {
   const distance = route.slice(1).reduce(

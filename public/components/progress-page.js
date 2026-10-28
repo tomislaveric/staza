@@ -143,6 +143,37 @@ export const RecentActivities = (activities) => `
   </section>
 `;
 
+const questRequirement = (quest) => quest.requiredNode
+  ? `Unlock ${quest.requiredNode.name} in the Skill Tree${quest.requiredNode.premium ? " (PRO)" : ""}`
+  : `Complete ${quest.requiredQuestTitle} first`;
+
+const AuthoredQuest = (quest) => `
+  <li class="authored-quest is-${quest.state}" data-authored-quest="${escapeHtml(quest.id)}">
+    <div>
+      <strong>${escapeHtml(quest.title)}</strong>
+      <span>${escapeHtml(quest.description)}</span>
+      ${quest.state === "locked" ? `<small class="authored-quest-lock">${escapeHtml(questRequirement(quest))}</small>` : ""}
+    </div>
+    <em>${quest.state === "completed" ? "Done" : `+${formatNumber(quest.xp)} XP`}</em>
+  </li>
+`;
+
+export const AuthoredQuests = (quests = []) => {
+  const available = quests.filter((quest) => quest.state === "available");
+  const locked = quests.filter((quest) => quest.state === "locked");
+  const completed = quests.filter((quest) => quest.state === "completed");
+  return `
+  <section class="authored-quests" aria-labelledby="authored-quests-title">
+    <h2 id="authored-quests-title">QUESTS</h2>
+    ${available.length
+    ? `<ol>${available.map(AuthoredQuest).join("")}</ol>`
+    : '<p class="authored-quests-empty">Unlock quest nodes in the Skill Tree to start quest chains.</p>'}
+    ${completed.length ? `<p class="authored-quests-done">${formatNumber(completed.length)} completed</p>` : ""}
+    ${locked.length ? `<details class="authored-quests-locked"><summary>Locked quests (${formatNumber(locked.length)})</summary><ol>${locked.map(AuthoredQuest).join("")}</ol></details>` : ""}
+  </section>
+`;
+};
+
 export const ProgressPage = (model) => `
   <section class="progress-page" aria-labelledby="progress-title">
     <header class="progress-header">
@@ -151,6 +182,7 @@ export const ProgressPage = (model) => `
     </header>
     ${ProgressSummary(model)}
     <p class="progress-skill-point-note">Reach certain levels to earn Skill Points you can spend in the Skill Tree.</p>
+    ${AuthoredQuests(model.authoredQuests)}
     ${ProgressJourney(model)}
     ${RecentActivities(model.recentActivities)}
   </section>
@@ -165,8 +197,11 @@ const responseJson = async (response) => {
 export const mountProgressPage = async (mountPoint) => {
   mountPoint.innerHTML = '<section class="progress-page"><p class="progress-loading" role="status">Loading Progress...</p></section>';
   try {
-    const dashboard = await fetch("/api/player/progress-dashboard").then(responseJson);
-    mountPoint.innerHTML = ProgressPage(progressViewModel(dashboard));
+    const [dashboard, authored] = await Promise.all([
+      fetch("/api/player/progress-dashboard").then(responseJson),
+      fetch("/api/authored-quests").then(responseJson).catch(() => ({ quests: [] }))
+    ]);
+    mountPoint.innerHTML = ProgressPage({ ...progressViewModel(dashboard), authoredQuests: authored.quests });
   } catch (error) {
     mountPoint.innerHTML = `<section class="progress-page"><p class="progress-load-error" role="alert">Unable to load Progress: ${escapeHtml(error.message)}</p></section>`;
   }

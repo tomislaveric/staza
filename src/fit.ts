@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import FitParser from "fit-file-parser";
-import type { TrackPoint } from "./domain.js";
+import type { ActivityType, TrackPoint } from "./domain.js";
 import { UserInputError } from "./errors.js";
 import { synchronizationFailure } from "./synchronization.js";
 
@@ -21,13 +21,30 @@ interface FitMetadataSource {
   workouts?: FitMessage[];
   session?: FitMessage;
   sessions?: FitMessage[];
+  sport?: FitMessage;
+  sports?: FitMessage[];
 }
 
 export interface FitMetadata {
   title?: string;
   description?: string;
   elevationGainM?: number;
+  activityType: ActivityType;
 }
+
+const FIT_SPORTS: Record<string, ActivityType> = {
+  cycling: "cycling",
+  e_biking: "cycling",
+  running: "running",
+  hiking: "hiking"
+};
+
+const normalizeFitName = (value: unknown): string =>
+  typeof value === "string" ? value.trim().toLowerCase().replace(/[\s-]+/g, "_") : "";
+
+/** Maps FIT sport/sub-sport names to a supported activity type; anything else stays unknown. */
+export const mapFitSport = (sport: unknown, subSport?: unknown): ActivityType =>
+  FIT_SPORTS[normalizeFitName(sport)] ?? FIT_SPORTS[normalizeFitName(subSport)] ?? "unknown";
 
 /** A trimmed, non-empty string candidate, or undefined when blank/unreliable. */
 const usableText = (value: unknown): string | undefined => {
@@ -58,7 +75,13 @@ export const extractFitMetadata = (data: FitMetadataSource): FitMetadata => {
     ?? usableText(session?.name);
   const description = usableText(workout?.notes) ?? usableText(session?.notes);
   const elevationGainM = usableElevation(session?.total_ascent);
+  const sportMessage = firstMessage(data.sport, data.sports);
+  const activityType = mapFitSport(
+    session?.sport ?? sportMessage?.sport,
+    session?.sub_sport ?? sportMessage?.sub_sport
+  );
   return {
+    activityType,
     ...(title === undefined ? {} : { title }),
     ...(description === undefined ? {} : { description }),
     ...(elevationGainM === undefined ? {} : { elevationGainM })
@@ -111,7 +134,7 @@ export const parseFitMetadata = async (file: string): Promise<FitMetadata> => {
   try {
     data = (await parser.parseAsync(source)) as FitMetadataSource;
   } catch {
-    return {};
+    return { activityType: "unknown" };
   }
   return extractFitMetadata(data);
 };

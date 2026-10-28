@@ -767,6 +767,22 @@ export const migrations: Migration[] = [{
           CHECK (elevation_gain_m IS NULL OR elevation_gain_m >= 0);
     `);
   }
+}, {
+  id: "033_authored_quest_completions",
+  async up(client) {
+    // One row per completed authored quest step. The activity link is informational only, so
+    // deleting an activity never revokes a completion (its XP stays awarded).
+    await client.query(`
+      CREATE TABLE authored_quest_completions (
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        quest_id TEXT NOT NULL,
+        activity_id TEXT REFERENCES activities(id) ON DELETE SET NULL,
+        xp INTEGER NOT NULL CHECK (xp >= 0),
+        completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (player_id, quest_id)
+      );
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

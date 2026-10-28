@@ -63,9 +63,9 @@ describe("skill tree eligibility", () => {
   it("derives earned, spent, and balance", () => {
     const nodes = [node({ id: "a", cost: 1 }), node({ id: "b", cost: 2 })];
     const stats = { ...baseStats, level: 3 };
-    expect(earnedPoints(stats)).toBe(2);
+    expect(earnedPoints(stats)).toBe(3);
     expect(spentPoints(["a", "b"], nodes)).toBe(3);
-    expect(balance(stats, ["a"], nodes)).toBe(1);
+    expect(balance(stats, ["a"], nodes)).toBe(2);
   });
 
   it("marks a node unlockable only when eligible and affordable", () => {

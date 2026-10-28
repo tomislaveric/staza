@@ -88,7 +88,6 @@ export type ActivityType = "cycling" | "running" | "hiking" | "walking" | "unkno
 
 export type ActivitySource = "fit" | "strava";
 
-export const STRAVA_ONBOARDING_IMPORT_LIMIT = 3;
 
 export interface Activity {
   id: string;
@@ -165,6 +164,8 @@ export interface WorldFartlek {
   name: string;
   geometry: FartlekGeometry;
   lengthMeters: number;
+  /** Flow score (0..100); lets the World "high flow" filter work client-side. */
+  flowScore?: number;
   status: FartlekStatus;
   source: FartlekSource;
   completed: boolean;

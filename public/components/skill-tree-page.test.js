@@ -195,6 +195,16 @@ describe("Skill node detail", () => {
     expect(detail).toContain("Unlock the connected node first.");
   });
 
+  it("lists the quest chain a quest_unlock node opens", () => {
+    const detail = SkillNodeDetail({
+      ...view.nodes[1],
+      questChain: { title: "Flow quests", quests: [{ title: "Flow quests I", description: "In a single ride: complete 1 Flowline.", xp: 60 }] }
+    });
+    expect(detail).toContain("QUESTS YOU UNLOCK");
+    expect(detail).toContain("Flow quests I");
+    expect(detail).toContain("+60 XP");
+  });
+
   it("prompts for a selection when no node is given", () => {
     expect(SkillNodeDetail(null)).toContain("Select a node");
   });

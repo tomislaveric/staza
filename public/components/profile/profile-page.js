@@ -34,6 +34,13 @@ const stravaConnection = (status) => {
   return row("Connect Strava", "Import recent activities from Strava", "strava-connect");
 };
 
+const chips = (items, kind) => items.map((item) => `<li class="profile-chip profile-chip-${kind}" data-profile-${kind}="${escapeHtml(item.id)}">${escapeHtml(item.label)}</li>`).join("");
+
+const earnedSection = ({ titles = [], badges = [] }) => `<section class="profile-section" data-profile-earned><h2>TITLES &amp; BADGES</h2>${
+  titles.length + badges.length === 0
+    ? '<p class="profile-help">Unlock Skill Atlas nodes to earn titles and badges.</p>'
+    : `<ul class="profile-chips" aria-label="Earned titles and badges">${chips(titles, "title")}${chips(badges, "badge")}</ul>`}</section>`;
+
 export const profileOverviewView = (profile, session, stravaStatus) => {
   const { progress, collectibles } = profile;
   const initial = profile.displayName.trim().slice(0, 1).toUpperCase() || "?";
@@ -41,13 +48,15 @@ export const profileOverviewView = (profile, session, stravaStatus) => {
     <header class="profile-heading"><h1>Profile</h1></header>
     <section class="profile-identity">
       <span class="profile-avatar" aria-hidden="true">${escapeHtml(initial)}</span>
-      <div><strong data-user-content>${escapeHtml(profile.displayName)}</strong></div>
+      <div><strong data-user-content>${escapeHtml(profile.displayName)}</strong>${profile.titles?.length
+        ? `<small class="profile-title">${escapeHtml(profile.titles[0].label)}</small>` : ""}</div>
       <b>LVL ${formatNumber(progress.level)}</b>
     </section>
     <section class="profile-progress" aria-label="Level progress">
       <p><span>Level ${formatNumber(progress.level)}</span><span>${formatNumber(progress.currentLevelXp)} / ${formatNumber(progress.nextLevelXp)} XP</span></p>
       <div role="progressbar" aria-valuemin="0" aria-valuemax="${progress.nextLevelXp}" aria-valuenow="${progress.currentLevelXp}"><i style="width:${Math.max(0, Math.min(100, progress.progressToNextLevel * 100))}%"></i></div>
     </section>
+    ${earnedSection(profile)}
     <section class="profile-section"><h2>EXPLORER RECORD</h2><dl class="profile-stats">
       <div><dt>Total XP earned</dt><dd>${formatNumber(progress.totalXp)} XP</dd></div>
       <div><dt>Distance</dt><dd>${formatNumber(profile.distanceMeters / 1000, 1)} km</dd></div>

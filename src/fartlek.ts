@@ -56,6 +56,7 @@ export const toWorldFartlek = (fartlek: Fartlek, stats: FartlekCompletionStats =
   name: fartlek.name,
   geometry: fartlek.geometry,
   lengthMeters: fartlek.lengthMeters,
+  ...(fartlek.flowScore === undefined ? {} : { flowScore: fartlek.flowScore }),
   status: fartlek.status,
   source: fartlek.source,
   completed: stats.completed,

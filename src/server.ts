@@ -9,7 +9,7 @@ import multer from "multer";
 import { deriveActivity } from "./activity.js";
 import { createCanonicalActivityProcessor } from "./activityProcessing.js";
 import { config } from "./config.js";
-import type { ActivityImportResult, ActivityVideo, Fartlek, HudTimeline, Job, MappedGameEvent, PersistedActivity, WorldFartlek } from "./domain.js";
+import type { ActivityImportResult, ActivityType, ActivityVideo, Fartlek, HudTimeline, Job, MappedGameEvent, PersistedActivity, WorldFartlek } from "./domain.js";
 import { ActivityImportRejectedError, UserInputError } from "./errors.js";
 import { parseFitTrack, parseFitMetadata } from "./fit.js";
 import { extractGps5Times, mapToVideoSecond } from "./gpmf.js";
@@ -28,8 +28,11 @@ import {
   QuestInstanceNotFoundError,
   QuestInstanceStateError
 } from "./persistence/questInstanceRepository.js";
+import { AuthoredQuestRepository } from "./persistence/authoredQuestRepository.js";
 import { SkillTreeRepository, SkillTreeUnlockError } from "./persistence/skillTreeRepository.js";
 import { validateSkillTreeCatalog } from "./skillTree/catalog.js";
+import { withQuestChains } from "./authoredQuests/skillTreeView.js";
+import { capabilitiesFromGrants } from "./skillTree/capabilities.js";
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
@@ -68,6 +71,7 @@ const fartlekRepository = new FartlekRepository(databasePool);
 const fartlekCompletionRepository = new FartlekCompletionRepository(databasePool);
 const questInstanceRepository = new QuestInstanceRepository(databasePool);
 const skillTreeRepository = new SkillTreeRepository(databasePool);
+const authoredQuestRepository = new AuthoredQuestRepository(databasePool);
 validateSkillTreeCatalog();
 const smtpConfig = config.smtpHost && config.smtpUser && config.smtpPassword && config.mailFrom
   ? {
@@ -195,7 +199,7 @@ const processDetection = async (
   try {
     const fit = path.join(directory, "track.fit");
     const [track, metadata] = await Promise.all([parseFitTrack(fit), parseFitMetadata(fit)]);
-    const activity = deriveActivity(job.token, track, "unknown", metadata);
+    const activity = deriveActivity(job.token, track, metadata.activityType, metadata);
     const { result: activityResult, totalCollectibles, relevantCollectibles } = await processActivity(activity);
     job.activity = activity;
     job.activityResult = activityResult;
@@ -442,7 +446,7 @@ const importActivity = async (
 
   try {
     const [track, metadata] = await Promise.all([parseFitTrack(fit.path), parseFitMetadata(fit.path)]);
-    const activity = deriveActivity(randomUUID(), track, "unknown", metadata);
+    const activity = deriveActivity(randomUUID(), track, metadata.activityType, metadata);
     const { result: activityResult } = await processActivity(activity);
     const persisted = await activityRepository.persistCompletedActivity(playerId, activity, activityResult, importKey);
     let importedActivity = persisted.activity;
@@ -1081,6 +1085,29 @@ app.get("/api/activities/:id", requirePlayer, async (request: UploadRequest, res
   }
 });
 
+const CORRECTABLE_ACTIVITY_TYPES: readonly ActivityType[] = ["cycling", "running", "hiking", "unknown"];
+
+app.patch("/api/activities/:id", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  try {
+    const type: unknown = request.body?.type;
+    if (typeof type !== "string" || !CORRECTABLE_ACTIVITY_TYPES.includes(type as ActivityType)) {
+      throw new UserInputError("Choose cycling, running, hiking, or unknown.");
+    }
+    const activity = await activityRepository.updateActivityType(
+      request.user!.playerId,
+      String(request.params.id),
+      type as ActivityType
+    );
+    if (!activity) {
+      response.status(404).json({ error: "Activity not found." });
+      return;
+    }
+    response.json(attachVideoUrls(activity));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/activities/:id/video/render", requirePlayer, requireCsrf, async (request: UploadRequest, response) => {
   try {
     const activity = await activityRepository.getActivity(request.user!.playerId, String(request.params.id));
@@ -1175,7 +1202,7 @@ app.get("/api/player/progress-dashboard", requirePlayer, async (request: UploadR
 
 app.get("/api/skill-tree", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
-    response.json(await skillTreeRepository.getView(request.user!.playerId));
+    response.json(withQuestChains(await skillTreeRepository.getView(request.user!.playerId)));
   } catch (error) {
     next(error);
   }
@@ -1189,7 +1216,7 @@ app.post("/api/skill-tree/unlock", requirePlayer, requireCsrf, async (request: U
   }
   try {
     const outcome = await skillTreeRepository.unlockNode(request.user!.playerId, nodeId);
-    response.status(outcome.created ? 201 : 200).json(outcome.view);
+    response.status(outcome.created ? 201 : 200).json(withQuestChains(outcome.view));
   } catch (error) {
     if (error instanceof SkillTreeUnlockError) {
       const status = error.code === "unknown_node" ? 404 : 409;
@@ -1200,15 +1227,35 @@ app.post("/api/skill-tree/unlock", requirePlayer, requireCsrf, async (request: U
   }
 });
 
+app.get("/api/authored-quests", requirePlayer, async (request: UploadRequest, response, next) => {
+  try {
+    response.json({ quests: await authoredQuestRepository.list(request.user!.playerId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// What the player's unlocked Atlas nodes switch on across the app.
+app.get("/api/player/capabilities", requirePlayer, async (request: UploadRequest, response, next) => {
+  try {
+    const grants = await skillTreeRepository.getUnlockedCapabilities(request.user!.playerId);
+    response.json(capabilitiesFromGrants(grants));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/player/profile", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
-    const [profile, collectibles, discoveredSourceIds] = await Promise.all([
+    const [profile, collectibles, discoveredSourceIds, grants] = await Promise.all([
       activityRepository.getProfileOverview(request.user!.playerId),
       collectibleRepository.listAll(),
-      activityRepository.listDiscoveredCollectibleSourceIds(request.user!.playerId)
+      activityRepository.listDiscoveredCollectibleSourceIds(request.user!.playerId),
+      skillTreeRepository.getUnlockedCapabilities(request.user!.playerId)
     ]);
     const world = createWorldSnapshot(collectibles, discoveredSourceIds);
-    response.json({ ...profile, collectibles: world.stats });
+    const { titles, badges } = capabilitiesFromGrants(grants);
+    response.json({ ...profile, collectibles: world.stats, titles, badges });
   } catch (error) {
     next(error);
   }

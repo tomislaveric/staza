@@ -99,15 +99,12 @@ describe("StravaService activities", () => {
     expect(client.listRecentActivities).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps pre-journey Strava activities selectable during the first three imports", async () => {
+  it("marks activities before account creation as not importable, regardless of earlier imports", async () => {
     const { service, activities } = setup();
-    activities.getActivityCount.mockResolvedValueOnce(2).mockResolvedValueOnce(3);
     activities.getJourneyStartedAt.mockResolvedValueOnce(new Date("2026-05-15T00:00:00Z"));
-    activities.getJourneyStartedAt.mockResolvedValueOnce(new Date("2026-05-15T00:00:00Z"));
-    const onboardingList = await service.listRecent("player");
-    const establishedList = await service.listRecent("player");
-    expect(onboardingList.activities[0].beforeJourneyStart).toBe(false);
-    expect(establishedList.activities[0].beforeJourneyStart).toBe(true);
+    const list = await service.listRecent("player");
+    expect(list.journeyStartedAt).toBe("2026-05-15T00:00:00.000Z");
+    expect(list.activities[0].beforeJourneyStart).toBe(true);
   });
 
   it("returns an existing import without calling Strava", async () => {

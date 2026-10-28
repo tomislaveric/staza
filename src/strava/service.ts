@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { STRAVA_ONBOARDING_IMPORT_LIMIT, type ActivityImportResult, type ActivityType, type PersistedActivity } from "../domain.js";
+import { type ActivityImportResult, type ActivityType, type PersistedActivity } from "../domain.js";
 import type { CanonicalActivityProcessor } from "../activityProcessing.js";
 import type { ActivityRepository } from "../persistence/activityRepository.js";
 import type {
@@ -37,7 +37,7 @@ export interface StravaRecentActivity {
 export interface StravaRecentActivities {
   activities: StravaRecentActivity[];
   limit: number;
-  journeyStartedAt?: string;
+  journeyStartedAt: string;
 }
 
 const STRAVA_ACTIVITY_ID = /^[1-9][0-9]{0,19}$/;
@@ -102,15 +102,13 @@ export class StravaService {
   async listRecent(playerId: string): Promise<StravaRecentActivities> {
     const summaries = await this.withAccessToken(playerId, (token) => this.recentWithRoute(token));
     const ids = summaries.map((summary) => String(summary.id));
-    const [imported, journeyStartedAt, activityCount] = await Promise.all([
+    const [imported, journeyStartedAt] = await Promise.all([
       this.activities.listActivityIdsByImportKeys(playerId, "strava", ids),
-      this.activities.getJourneyStartedAt(playerId),
-      this.activities.getActivityCount(playerId)
+      this.activities.getJourneyStartedAt(playerId)
     ]);
-    const isStravaOnboarding = activityCount < STRAVA_ONBOARDING_IMPORT_LIMIT;
     return {
       limit: this.recentLimit,
-      ...(journeyStartedAt ? { journeyStartedAt: journeyStartedAt.toISOString() } : {}),
+      journeyStartedAt: journeyStartedAt.toISOString(),
       activities: summaries.map((summary) => {
         const id = String(summary.id);
         const startMs = typeof summary.start_date === "string" ? Date.parse(summary.start_date) : Number.NaN;
@@ -127,9 +125,7 @@ export class StravaService {
           ...(movingTimeSeconds === undefined ? {} : { movingTimeSeconds }),
           hasRoute: hasRoute(summary),
           beforeJourneyStart: Boolean(
-            !isStravaOnboarding
-            && journeyStartedAt
-            && Number.isFinite(startMs)
+            Number.isFinite(startMs)
             && startMs < journeyStartedAt.getTime()
           ),
           ...(importedActivityId ? { importedActivityId } : {})

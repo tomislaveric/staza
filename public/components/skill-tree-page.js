@@ -70,7 +70,11 @@ export const SkillNodeDetail = (node) => {
     ? '<p class="skill-detail-hint">Unlock the connected node first.</p>'
     : "";
   const premiumNote = node.state === "premium_locked"
-    ? '<p class="skill-detail-hint">This node is part of Premium. Tier 1 stays free.</p>'
+    ? '<p class="skill-detail-hint">This node is part of Premium (cross-sport and late-game progression).</p>'
+    : "";
+  const questChain = node.questChain
+    ? `<p class="skill-detail-subhead">QUESTS YOU UNLOCK</p><ul class="skill-quest-chain">${node.questChain.quests.map((quest) =>
+      `<li><strong>${escapeHtml(quest.title)}</strong> <span>${escapeHtml(quest.description)}</span> <em>+${formatNumber(quest.xp)} XP</em></li>`).join("")}</ul>`
     : "";
   const footer = node.state === "unlockable"
     ? `<button class="skill-unlock-button" type="button" data-skill-unlock="${escapeHtml(node.id)}">Unlock · ${formatNumber(node.cost)} SP</button>`
@@ -89,6 +93,7 @@ export const SkillNodeDetail = (node) => {
       ${node.requirements.length
         ? `<p class="skill-detail-subhead">REQUIREMENTS</p><ul class="skill-requirements">${node.requirements.map(RequirementRow).join("")}</ul>`
         : '<p class="skill-detail-hint">No progress requirements.</p>'}
+      ${questChain}
       ${prerequisiteNote}
       ${premiumNote}
       <div class="skill-detail-footer">${footer}</div>

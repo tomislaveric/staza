@@ -22,6 +22,19 @@ import {
 
 export const worldFilters = ["all", "found", "unfound", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"];
 
+export const advancedWorldFilters = ["undiscovered-only", "peaks-only", "high-flow", "long-endurance"];
+
+const HIGH_FLOW_SCORE = 70;
+const LONG_FLOWLINE_METERS = 5000;
+
+/** Advanced filters granted by Skill Atlas nodes; each narrows collectibles and Flowlines. */
+const grantedFilterRules = {
+  "undiscovered-only": { collectible: (item) => !item.found, fartlek: (item) => !item.completed },
+  "peaks-only": { collectible: (item) => collectibleCategory(item) === "peak", fartlek: () => false },
+  "high-flow": { collectible: () => false, fartlek: (item) => (item.flowScore ?? 0) >= HIGH_FLOW_SCORE },
+  "long-endurance": { collectible: () => false, fartlek: (item) => item.lengthMeters >= LONG_FLOWLINE_METERS }
+};
+
 const filterLabels = {
   all: "All",
   found: "Found",
@@ -32,7 +45,11 @@ const filterLabels = {
   castle: "Castle",
   waterfall: "Waterfall",
   place: "Place",
-  mountain_pass: "Mountain pass"
+  mountain_pass: "Mountain pass",
+  "undiscovered-only": "Undiscovered only",
+  "peaks-only": "Peaks only",
+  "high-flow": "High flow",
+  "long-endurance": "Long Flowlines"
 };
 
 const formatNumber = (value) => new Intl.NumberFormat(getAppLocale()).format(value);
@@ -40,7 +57,7 @@ const formatNumber = (value) => new Intl.NumberFormat(getAppLocale()).format(val
 export const visibleWorldCollectibles = (collectibles) =>
   collectibles.filter((collectible) => collectible.visibility !== "hidden");
 
-export const availableWorldFilters = (collectibles, fartleks = []) => {
+export const availableWorldFilters = (collectibles, fartleks = [], grantedFilters = []) => {
   const visibleCollectibles = visibleWorldCollectibles(collectibles);
   const filters = new Set(["all"]);
 
@@ -54,6 +71,10 @@ export const availableWorldFilters = (collectibles, fartleks = []) => {
     }
   }
 
+  for (const filter of grantedFilters) {
+    if (filter in grantedFilterRules) filters.add(filter);
+  }
+
   return filters;
 };
 
@@ -61,6 +82,7 @@ export const filteredWorldCollectibles = (collectibles, selectedFilters) =>
   visibleWorldCollectibles(collectibles).filter((collectible) =>
     selectedFilters.length === 0 || selectedFilters.some((filter) => {
       if (filter === "fartleks") return false;
+      if (filter in grantedFilterRules) return grantedFilterRules[filter].collectible(collectible);
       if (filter === "found") return collectible.found;
       if (filter === "unfound") return !collectible.found;
       return collectibleCategory(collectible) === filter;
@@ -68,7 +90,9 @@ export const filteredWorldCollectibles = (collectibles, selectedFilters) =>
 
 /** Fartlek completion is independent of collectible discovery filters. */
 export const filteredWorldFartleks = (fartleks, selectedFilters) =>
-  selectedFilters.length === 0 || selectedFilters.includes("fartleks") ? fartleks : [];
+  selectedFilters.length === 0 || selectedFilters.includes("fartleks")
+    ? fartleks
+    : fartleks.filter((fartlek) => selectedFilters.some((filter) => grantedFilterRules[filter]?.fartlek(fartlek)));
 
 /** Collectibles drawn on the map, respecting the active discovery filters. */
 export const mappedWorldCollectibles = (collectibles, selectedFilters, questCollectibles = []) => {
@@ -88,7 +112,7 @@ export const mappedWorldFartleks = (fartleks, selectedFilters, questFartleks = [
 };
 
 const filterSwatch = (filter) => {
-  if (filter === "all") return "";
+  if (filter === "all" || filter in grantedFilterRules) return "";
   if (filter === "fartleks") return '<b class="fartlek-swatch" aria-hidden="true"></b>';
   if (filter === "found" || filter === "unfound") return CollectibleSwatch({ visited: filter === "found" });
   return CollectibleSwatch({ category: filter });
@@ -97,11 +121,11 @@ const filterSwatch = (filter) => {
 const isFilterSelected = (filter, selectedFilters) =>
   filter === "all" ? selectedFilters.length === 0 : selectedFilters.includes(filter);
 
-export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks = []) => {
-  const availableFilters = availableWorldFilters(collectibles, fartleks);
+export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks = [], grantedFilters = []) => {
+  const availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
   return `
   <div class="world-filter-controls" data-world-filter-controls role="group" aria-label="World collectibles and Flowlines">
-    ${worldFilters.map((filter) => {
+    ${[...worldFilters, ...advancedWorldFilters].map((filter) => {
       const selected = isFilterSelected(filter, selectedFilters);
       return `
         <button class="${selected ? "is-active" : ""}" type="button"${availableFilters.has(filter) ? "" : " hidden"}
@@ -194,6 +218,7 @@ export const mountWorldPage = async (mountPoint) => {
   let basemap;
   let lifetime = emptyStats;
   let questInstances = [];
+  let grantedFilters = [];
   try {
     const [loadedBasemap, globalSnapshot, activeQuests] = await Promise.all([
       fetch("/api/world/basemap").then(responseJson),
@@ -203,6 +228,8 @@ export const mountWorldPage = async (mountPoint) => {
     basemap = loadedBasemap;
     lifetime = globalSnapshot.stats;
     questInstances = activeQuests.instances;
+    // Filters are an enhancement; the World stays usable if capabilities cannot load.
+    grantedFilters = await fetch("/api/player/capabilities").then(responseJson).then((body) => body.worldFilters ?? []).catch(() => []);
   } catch (error) {
     mountPoint.innerHTML = `<section class="world-page"><p class="world-load-error" role="alert">Unable to load World: ${escapeHtml(error.message)}</p></section>`;
     return;
@@ -214,7 +241,7 @@ export const mountWorldPage = async (mountPoint) => {
   let stats = emptyStats;
   let truncated = false;
   let fartleks = [];
-  let availableFilters = availableWorldFilters(collectibles, fartleks);
+  let availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
   let selection;
   let selectedQuestKey;
   let selectedQuestTargets = { collectibles: [], flowlines: [] };
@@ -871,7 +898,7 @@ export const mountWorldPage = async (mountPoint) => {
       stats = snapshot.stats;
       truncated = loadedArea.truncated || snapshot.fartlekTruncated === true;
       fartleks = snapshot.fartleks ?? [];
-      availableFilters = availableWorldFilters(collectibles, fartleks);
+      availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
       selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
       setStatus(collectibles.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);
       if (selection?.kind === "collectible" && !collectibleById(selection.id)) selection = undefined;

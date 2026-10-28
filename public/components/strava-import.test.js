@@ -32,7 +32,7 @@ describe("StravaImportSection", () => {
     const view = StravaImportSection({ status: "connected", list });
     expect(view.match(/type="radio" name="strava-activity"/g)).toHaveLength(4);
     expect(view.match(/ disabled/g)).toHaveLength(3);
-    expect(view).toContain("Before your journey started");
+    expect(view).toContain("Before your account was created");
     expect(view).toContain("Already imported");
     expect(view).toContain("No GPS route");
     expect(view).toContain("&lt;b&gt;Morning&lt;/b&gt; Ride");

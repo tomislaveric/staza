@@ -54,6 +54,16 @@ describe("Activity detail data transformation", () => {
     expect(page).toContain("data-replay-reward");
   });
 
+  it("offers a sport correction preselecting the stored sport", () => {
+    const page = ActivityDetailPage({
+      id: "activity-1", type: "running", distanceMeters: 1_000, durationSeconds: 600, xpEarned: 25, collectedCount: 1, replay: replay()
+    }, { level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0 }, "replay");
+    expect(page).toContain("data-activity-sport");
+    expect(page).toContain('<option value="running" selected>');
+    expect(page).toContain("RUN COMPLETE");
+    expect(page).toContain('<option value="unknown">Not set</option>');
+  });
+
   it("keeps the Video tab functional for a valid FIT-only activity", () => {
     const page = ActivityDetailPage({
       id: "activity-1", distanceMeters: 1_000, durationSeconds: 600, xpEarned: 25, collectedCount: 1

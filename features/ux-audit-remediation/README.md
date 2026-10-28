@@ -38,7 +38,7 @@ Out of scope:
 
 ### P0: breaks the core loop
 
-- [ ] **P0-1 FIT imports never get a sport.**
+- [x] **P0-1 FIT imports never get a sport.** Resolved in [p0-audit](../p0-audit/README.md): FIT sport/sub-sport maps to cycling/running/hiking (else `unknown`) on both import paths, players can correct the sport (`PATCH /api/activities/:id`, which also recomputes Atlas stats), and the Cycling hub now counts rides like the other hubs.
   - Problem:
     - `deriveActivity(..., "unknown")` is hardcoded for FIT uploads in
       `src/server.ts` (FIT import and reprocess paths).
@@ -58,7 +58,7 @@ Out of scope:
     - `src/skillTree/statsQuery.ts` excludes `unknown` from distinct sports.
     - The Cycling hub uses generic `activityCount`, while Running and Hiking use
       sport-specific counts. Make the hubs consistent.
-- [ ] **P0-2 Skill Atlas rewards are not wired to anything.**
+- [x] **P0-2 Skill Atlas rewards are not wired to anything.** Resolved in [p0-audit](../p0-audit/README.md): `quest_unlock` grants unlock server-enforced authored quest chains (Progress page, Atlas node detail, locked quests name the required node), World/segment filters appear via `/api/player/capabilities`, and titles/badges show on Profile; copy describes the real effects.
   - Problem: only the Atlas reads `skill_tree_unlocks`. The grants are:
     - `quest_unlock` ×43
     - `world_filter` ×5
@@ -77,7 +77,7 @@ Out of scope:
     Reward copy must describe the actual effect. Any reward type that won't be
     implemented is removed from the catalog.
   - Depends on: open decisions 1 and 2. Likely needs its own feature.
-- [ ] **P0-3 Import "journey start" is anchored to the first import.**
+- [x] **P0-3 Import "journey start" is anchored to the first import.** Resolved in [p0-audit](../p0-audit/README.md): the boundary is account creation for FIT and Strava alike, and the rule is explained before the first import.
   - Problem: the first import sets `players.journey_started_at`. Any older activity
     is then rejected with 409 `before_journey_start` ("This activity happened
     before your Staza journey started").
@@ -89,7 +89,7 @@ Out of scope:
     imports are allowed with defined XP/collection semantics, and the rule is
     explained before the first import. Decide in the session.
   - See `src/errors.ts` and `src/strava/service.ts`.
-- [ ] **P0-4 The Skill Point economy doesn't add up.**
+- [x] **P0-4 The Skill Point economy doesn't add up.** Resolved in [p0-audit](../p0-audit/README.md): Skill Points are awarded every level to L12 (the 12 SP free tier-1 set is affordable at L12), then more slowly; PRO now gates cross-sport and prestige breadth, not all of Tier II.
   - Problem:
     - Skill Points are awarded at levels 1, 3, 5, 8, 11, 14, 18, 22, 26 and 30,
       then one every four levels. That is 10 SP by L30, which needs 43,500 XP.

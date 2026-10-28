@@ -67,7 +67,7 @@ describePersistence("World catalog and quests", () => {
   beforeEach(async () => {
     await migrate(pool!);
     await pool!.query("TRUNCATE quest_routes, quest_collectibles, quests, collectibles, activity_events, activities, players CASCADE");
-    await pool!.query("INSERT INTO players (id, display_name) VALUES ($1, $2), ($3, $4)", [
+    await pool!.query("INSERT INTO players (id, display_name, created_at) VALUES ($1, $2, '2020-01-01'), ($3, $4, '2020-01-01')", [
       creatorId, "Creator", otherPlayerId, "Explorer"
     ]);
     await collectibles!.upsertMany(catalog);

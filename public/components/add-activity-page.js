@@ -40,7 +40,7 @@ const content = (state) => {
   if (state.processing !== undefined) return ProcessingState({ step: state.processing });
   return `
     <header class="add-activity-header">
-      <div><h1 id="add-activity-title">Add Activity</h1><p>Import a FIT file to start discovering</p></div>
+      <div><h1 id="add-activity-title">Add Activity</h1><p>Import a FIT file to start discovering</p><p class="add-activity-rule">Only activities from after you created your Staza account can be imported.</p></div>
     </header>
     <form class="add-activity-form" novalidate>
       ${selectedFiles(state)}

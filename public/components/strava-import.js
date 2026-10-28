@@ -20,7 +20,7 @@ export const stravaNotices = {
 
 const errorMessages = {
   duplicate_activity: "This activity is already in Staza.",
-  before_journey_start: "This activity happened before your Staza journey started.",
+  before_journey_start: "This activity happened before your Staza account was created.",
   reconnect_required: "Your Strava connection expired. Reconnect to continue.",
   not_connected: "Connect Strava to import an activity.",
   rate_limited: "Strava is busy right now. Try again in a few minutes.",
@@ -34,7 +34,7 @@ export const stravaErrorMessage = (code) => errorMessages[code] ?? "Strava could
 
 const unavailableReason = (activity) => {
   if (activity.importedActivityId) return "Already imported";
-  if (activity.beforeJourneyStart) return "Before your journey started";
+  if (activity.beforeJourneyStart) return "Before your account was created";
   if (!activity.hasRoute) return "No GPS route";
   return undefined;
 };
@@ -57,7 +57,7 @@ const failure = (error) => {
     ? `<button class="strava-link-button" type="button" data-strava-existing="${escapeHtml(error.existingActivityId)}">VIEW EXISTING ACTIVITY</button>`
     : "";
   const journey = error.journeyStartedAt
-    ? `<p class="strava-help"><span>Journey started</span> <span>${escapeHtml(formatDate(error.journeyStartedAt))}</span></p>`
+    ? `<p class="strava-help"><span>Account created</span> <span>${escapeHtml(formatDate(error.journeyStartedAt))}</span></p>`
     : "";
   return `${UploadError({ message: error.message })}${journey}${existing}`;
 };
@@ -73,7 +73,7 @@ const recentList = (strava) => {
       ${strava.list.activities.map((activity) => activityOption(activity, strava.selectedId)).join("")}
     </fieldset>
     <p class="strava-help"><span>Only your most recent Strava activities are shown.</span>${strava.list.journeyStartedAt
-      ? ` <span>Journey started</span> <span>${escapeHtml(formatDate(strava.list.journeyStartedAt))}</span>`
+      ? ` <span>Account created</span> <span>${escapeHtml(formatDate(strava.list.journeyStartedAt))}</span>`
       : ""}</p>
     <button class="upload-primary-button" type="submit">IMPORT SELECTED ACTIVITY</button>
   </form>`;
@@ -82,6 +82,7 @@ const recentList = (strava) => {
 const body = (strava) => {
   if (strava.status === "disconnected") {
     return `<p class="strava-help">Staza asks Strava for read access to your activities, including private ones. Only your recent activities are listed, and only the one you choose is imported.</p>
+      <p class="strava-help">Only activities from after you created your Staza account can be imported.</p>
       <button class="strava-secondary-button" type="button" data-strava-action="connect">CONNECT STRAVA</button>`;
   }
   if (strava.status === "reconnect_required") {

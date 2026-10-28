@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AuthoredQuests,
   ProgressPage,
   RecentActivities,
   levelName,
@@ -103,5 +104,28 @@ describe("Progress page", () => {
 
   it("renders no activity history safely", () => {
     expect(RecentActivities([])).toContain("NO COMPLETED ACTIVITIES YET");
+  });
+});
+
+describe("Authored quests on Progress", () => {
+  const quest = (overrides) => ({ id: "q:1", title: "Quest I", description: "Do it.", xp: 60, state: "available", ...overrides });
+
+  it("lists available quests and shows the required node for locked ones", () => {
+    const html = AuthoredQuests([
+      quest(),
+      quest({ id: "q:2", title: "Locked <b>", state: "locked", requiredNode: { id: "n", name: "Rusher I", premium: true } }),
+      quest({ id: "q:3", state: "locked", requiredQuestTitle: "Quest I" }),
+      quest({ id: "q:4", state: "completed" })
+    ]);
+    expect(html).toContain('data-authored-quest="q:1"');
+    expect(html).toContain("+60 XP");
+    expect(html).toContain("Unlock Rusher I in the Skill Tree (PRO)");
+    expect(html).toContain("Complete Quest I first");
+    expect(html).toContain("1 completed");
+    expect(html).not.toContain("<b>");
+  });
+
+  it("points to the Skill Tree when nothing is available", () => {
+    expect(AuthoredQuests([])).toContain("Unlock quest nodes in the Skill Tree");
   });
 });
