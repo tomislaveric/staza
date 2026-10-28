@@ -168,6 +168,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   activity pipeline, with an immutable journey-start boundary.
 - [Synchronization diagnostics](features/synchronization-diagnostics/README.md)
   — make FIT/GPS5 synchronization failures explicit and operationally visible.
+- [UX audit remediation](features/ux-audit-remediation/README.md) — prioritized
+  P0–P2 backlog from the product playthrough audit, fixed one finding per session
+  to close the Activity → XP → Skill Atlas → Quest game loop.
 - [World Collectible Domain Model V1](features/world-collectible-domain-model-v1/README.md)
   — normalize legacy Coin configuration into reusable world Collectibles with
   canonical event relationships and shared replay/HUD presentation metadata.
