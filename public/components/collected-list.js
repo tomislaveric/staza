@@ -20,7 +20,7 @@ export const CollectibleCard = (event) => {
         <strong data-user-content>${escapeHtml(collectible.name ?? event.sourceId)}</strong>
         <span data-user-content>${escapeHtml(collectible.type ?? "collectible")}</span>
       </div>
-      <strong class="collectible-value">+${escapeHtml(event.value)} XP</strong>
+      <strong class="collectible-value">${event.repeat ? "Revisited · no XP" : `+${escapeHtml(event.value)} XP`}</strong>
     </li>
   `;
 };

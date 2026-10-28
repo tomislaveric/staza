@@ -1,9 +1,26 @@
 import type {
   CollectibleCategory,
+  QuestDifficulty,
   QuestObjective,
   QuestObjectiveState,
   QuestObjectiveTargetProgress
 } from "./domain.js";
+
+/** Bonus XP per quest difficulty. Quests never grant Skill Points. */
+export const QUEST_XP_BY_DIFFICULTY: Record<QuestDifficulty, number> = {
+  easy: 100,
+  medium: 250,
+  hard: 500,
+  prestige: 1000
+};
+
+/** Exploration difficulty grows with how many targets one activity must reach. */
+export const explorationDifficulty = (objectives: QuestObjective[]): QuestDifficulty => {
+  const required = objectives.reduce((sum, objective) => sum + objective.requiredCount, 0);
+  if (required <= 2) return "easy";
+  if (required <= 5) return "medium";
+  return "hard";
+};
 
 export interface QuestHistory {
   collectibles: Array<{ sourceId: string; category?: CollectibleCategory }>;

@@ -1,4 +1,4 @@
-import type { CandidateStop, LatLon, RoutingPlan, RoutingWaypoint } from "./types.js";
+import type { CandidateStop, LatLon, RoutingPlan, RoutingProfile, RoutingWaypoint } from "./types.js";
 
 export const stopPosition = (stop: CandidateStop): LatLon => stop.target.coordinate;
 
@@ -9,7 +9,7 @@ const roundCoordinate = (value: number): number => Math.round(value * 1e6) / 1e6
  * `via` stop. The returned map correlates routing location indexes (0 = start) with Staza target
  * ids so snapping failures can be attributed.
  */
-export const buildRoutingPlan = (start: LatLon, end: LatLon, stops: CandidateStop[]): RoutingPlan => {
+export const buildRoutingPlan = (start: LatLon, end: LatLon, stops: CandidateStop[], profile: RoutingProfile = "bicycle"): RoutingPlan => {
   const waypoints: RoutingWaypoint[] = [];
   const waypointTargetIds = new Map<number, string>();
   for (const stop of stops) {
@@ -19,7 +19,7 @@ export const buildRoutingPlan = (start: LatLon, end: LatLon, stops: CandidateSto
   }
   return {
     request: {
-      profile: "bicycle",
+      profile,
       start: { lat: roundCoordinate(start.lat), lon: roundCoordinate(start.lon) },
       end: { lat: roundCoordinate(end.lat), lon: roundCoordinate(end.lon) },
       waypoints

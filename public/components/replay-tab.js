@@ -5,6 +5,7 @@ import { escapeHtml } from "./collected-list.js";
 import { formatDistance, formatElapsed, formatSpeed } from "./world/fartlek-detail.js";
 import { getAppLocale } from "../app-locales.js";
 import { replayDurationSeconds } from "../replay.js";
+import { levelStateAt } from "./activity-outcome.js";
 
 const REWARD_WINDOW_MS = 1_500;
 const REWARD_EXIT_MS = 160;
@@ -112,7 +113,7 @@ export const replayRewardItems = (replay, persistedXp) => {
         ? "LANDMARK"
         : event.collectible?.type === "coin" ? "COIN" : "COLLECTIBLE",
       xpGain: Number.isFinite(event.value) ? event.value : 0,
-      eventLabel: "COLLECTIBLE FOUND",
+      eventLabel: event.repeat ? "REVISITED · NO XP" : "COLLECTIBLE FOUND",
       order: index
     }));
   const collectibleXp = events.reduce((total, event) => total + event.xpGain, 0);
@@ -134,7 +135,7 @@ export const replayRewardItems = (replay, persistedXp) => {
   const totalXp = Number.isFinite(persistedXp) ? persistedXp : activityResult.totalPoints;
   // Replay snapshots persist Flowline timestamps, not per-completion XP values.
   const flowlineXp = flowlines.length > 0 && Number.isFinite(totalXp)
-    ? Math.max(0, totalXp - collectibleXp - distanceXp) / flowlines.length
+    ? Math.max(0, (replay.outcome?.xp.flowlines ?? (totalXp - collectibleXp - distanceXp))) / flowlines.length
     : 0;
   const flowlineItems = flowlines.map((completion, index) => ({
     id: `flowline:${completion.fartlekId}:${index}`,
@@ -320,9 +321,27 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
   let pendingReward;
   let rewardIsExiting = false;
   let previousProgress;
+  const levelElements = {
+    label: mountPoint.querySelector("[data-level-label]"),
+    xp: mountPoint.querySelector("[data-level-xp]"),
+    next: mountPoint.querySelector("[data-level-next]"),
+    fill: mountPoint.querySelector("[data-level-fill]"),
+    caption: mountPoint.querySelector("[data-level-caption]")
+  };
+  // Replays the level bar from the pre-activity state so level-ups happen as XP is earned.
+  const setLevelFor = (xpGained) => {
+    if (!replay.outcome || !levelElements.label) return;
+    const state = levelStateAt(replay.outcome, xpGained);
+    levelElements.label.textContent = `Level ${xpFormatter.format(state.level)}`;
+    levelElements.xp.textContent = xpFormatter.format(state.currentLevelXp);
+    levelElements.next.textContent = `/ ${xpFormatter.format(state.nextLevelXp)}`;
+    levelElements.fill.style.width = `${state.progressToNextLevel * 100}%`;
+    levelElements.caption.textContent = `${xpFormatter.format(Math.max(0, state.nextLevelXp - state.currentLevelXp))} XP to Level ${xpFormatter.format(state.level + 1)}`;
+  };
   const setXpText = (value) => {
     visibleXp = value;
     if (xpElement) xpElement.textContent = `+${xpFormatter.format(value)}`;
+    setLevelFor(value);
   };
   const setXpTarget = (target, immediate = false) => {
     if (!Number.isFinite(target) || (target === xpTarget && !immediate)) return;

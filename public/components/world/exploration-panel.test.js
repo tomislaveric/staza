@@ -7,6 +7,7 @@ import {
   findCatalogTarget,
   formatRouteDistance,
   formatRouteDuration,
+  plannedRouteGpxUrl,
   plannedRouteSummary,
   routeTargetIds,
   targetSummaryText
@@ -85,6 +86,7 @@ describe("buildGenerateRequest", () => {
     expect(buildGenerateRequest(configured({ distanceKm: 42.5 })).body).toEqual({
       area,
       routeType: "round_trip",
+      sport: "cycling",
       start: { lat: 50, lon: 9 },
       constraint: { type: "distance", value: 42_500 }
     });
@@ -93,6 +95,7 @@ describe("buildGenerateRequest", () => {
     })).body).toEqual({
       area,
       routeType: "point_to_point",
+      sport: "cycling",
       start: { lat: 50, lon: 9 },
       end: { lat: 50.2, lon: 9.3 },
       constraint: { type: "duration", value: 5_400 }
@@ -242,5 +245,29 @@ describe("endpointsToGeoJson", () => {
         { type: "Feature", properties: { kind: "start" }, geometry: { type: "Point", coordinates: [9, 50] } },
         { type: "Feature", properties: { kind: "end" }, geometry: { type: "Point", coordinates: [10, 51] } }
       ]);
+  });
+});
+
+describe("sport choice, warnings and export", () => {
+  it("lets the player choose a sport with sport-specific copy and sends it", () => {
+    const markup = ExplorationPanel(configured({ sport: "running" }));
+    expect(markup).not.toContain("Describe your ride");
+    expect(markup).toContain('data-exploration-sport="running" aria-pressed="true"');
+    expect(markup).toContain('data-exploration-sport="hiking" aria-pressed="false"');
+    expect(ExplorationPanel(configured({ sport: "hiking", phase: "generating" }))).toContain("Finding routes for your hike...");
+    expect(buildGenerateRequest(configured({ sport: "hiking" })).body.sport).toBe("hiking");
+    expect(ExplorationPanel(customizing({ sport: "running", customizedById: { p2: proposal("p2-c", "balanced", { constraintFit: "short" }) } })))
+      .toContain("shorter than your planned run.");
+  });
+
+  it("shows the insufficient-area warning from the API", () => {
+    const warnings = [{ code: "insufficient_area", message: "This area can't support a 50 km route <now>." }];
+    const markup = ExplorationPanel(customizing({ warnings }));
+    expect(markup).toContain('data-exploration-warning="insufficient_area"');
+    expect(markup).toContain("support a 50 km route &lt;now&gt;.");
+  });
+
+  it("links the GPX download for a planned route", () => {
+    expect(plannedRouteGpxUrl("0b8f1c1e")).toBe("/api/quest-instances/0b8f1c1e/planned-route.gpx");
   });
 });

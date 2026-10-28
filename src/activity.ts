@@ -135,7 +135,10 @@ export const deriveActivityResult = (
     longitude: passage.collectible.longitude,
     activityTimestamp: passage.timestampMs
   }));
-  const fartlekCompletions = deriveFartlekCompletionDrafts(activity.route, fartleks);
+  // Flowlines are road-cycling segments; runs and hikes don't complete them.
+  const fartlekCompletions = activity.type === "running" || activity.type === "hiking" || activity.type === "walking"
+    ? []
+    : deriveFartlekCompletionDrafts(activity.route, fartleks);
   const distanceXpRewards = deriveDistanceXpRewards(activity.route);
   const distanceXp = distanceXpRewards.reduce((total, reward) => total + reward.xpEarned, 0);
   return {

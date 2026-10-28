@@ -139,18 +139,14 @@ describe("landing page content accuracy", () => {
     expect(html).not.toContain("Ancient Ruin");
   });
 
-  it("uses the real rank names and XP thresholds from the progression model", () => {
-    const ranks: [number, string][] = [
-      [5, "Adventurer"],
-      [6, "Explorer"],
-      [8, "Pathfinder"],
-      [9, "Trailblazer"],
-      [10, "Waymaker"]
-    ];
-    for (const [level, name] of ranks) {
+  it("shows real level thresholds without named ranks", () => {
+    for (const level of [5, 6, 8, 9, 10]) {
       const threshold = getTotalXpRequiredForLevel(level).toLocaleString("en-US");
-      expect(html).toContain(`>${name}</span>`);
+      expect(html).toContain(`>Level ${level}</span>`);
       expect(html).toContain(`>${threshold} XP</span>`);
+    }
+    for (const rank of ["Adventurer", "Pathfinder", "Trailblazer", "Waymaker"]) {
+      expect(html).not.toContain(rank);
     }
   });
 });

@@ -6,6 +6,8 @@ import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import { ProposalStore } from "../routePlanning/proposalStore.js";
 import { buildExplorationTargets, buildFlowlineGeometries, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
 import { at, flowlineGeometry, pointTarget, straightLineRoute } from "../routePlanning/testFixtures.js";
+import { buildGpx, gpxFilename } from "./gpx.js";
+import { wideningBounds } from "./widen.js";
 import { describeExploration, explorationObjectives } from "./objectives.js";
 import { parseGenerateRequest, parseRerouteRequest } from "./request.js";
 import { ExplorationService, type NewExploration } from "./service.js";
@@ -267,5 +269,100 @@ describe("ExplorationService", () => {
     expect(created[0].exploration.objectives.some((objective) => objective.type === "flowline_rule")).toBe(false);
     expect(created[0].exploration.objectives.every((objective) => objective.requiredCount === objective.targets.length)).toBe(true);
     expect(created[0].route).toMatchObject({ proposalId: proposal.id, geometry: proposal.geometry, includedTargetIds: proposal.includedTargetIds });
+  });
+});
+
+describe("ExplorationService outings", () => {
+  const near = [collectible("n1", 3, 1), collectible("n2", -2, 2, { primaryCategory: "peak" })];
+  const ring = [collectible("r1", 24, 0), collectible("r2", 0, 24), collectible("r3", -24, 0), collectible("r4", 0, -24), collectible("r5", 17, 17), collectible("r6", -17, 17)];
+  const inBounds = (item: WorldCollectible, bounds: { minLatitude: number; maxLatitude: number; minLongitude: number; maxLongitude: number }) =>
+    item.latitude >= bounds.minLatitude && item.latitude <= bounds.maxLatitude
+    && item.longitude >= bounds.minLongitude && item.longitude <= bounds.maxLongitude;
+
+  const setup = (world: WorldCollectible[], route: RouteProvider["route"] = async (request) => straightLineRoute(request)) => {
+    const requests: unknown[] = [];
+    const created: Array<{ route: NewPlannedRoute }> = [];
+    const service = new ExplorationService({
+      loadArea: async (_playerId, bounds) => ({ collectibles: world.filter((item) => inBounds(item, bounds)), flowlines: [], truncated: false }),
+      routing: { route: async (request, options) => { requests.push(request); return route(request, options); } },
+      sessions: new ExplorationSessionStore(),
+      proposals: new ProposalStore(),
+      explorations: { createExploration: async (_playerId, _exploration, plannedRoute) => { created.push({ route: plannedRoute }); return "instance"; } },
+      log: () => undefined
+    });
+    return { service, requests, created };
+  };
+  const body = (distanceM: number, extra: Record<string, unknown> = {}) => ({
+    area: { bbox, center: area.center, zoom: 11 },
+    start: at(0, 0),
+    routeType: "round_trip",
+    constraint: { type: "distance", value: distanceM },
+    ...extra
+  });
+
+  it("widens the target search beyond the viewport so the requested distance is honoured", async () => {
+    const { service } = setup([...near, ...ring]);
+    const result = await service.generate("p1", body(100_000));
+    const longest = Math.max(...result.proposals.map((proposal) => proposal.distanceM));
+    expect(longest).toBeGreaterThan(80_000);
+    expect(result.warnings).toEqual([]);
+    expect(result.catalog.collectibles.map((item) => item.id)).toEqual(expect.arrayContaining(["r1", "n1"]));
+  });
+
+  it("reports an insufficient area instead of silently returning a much shorter route", async () => {
+    const { service } = setup(near);
+    const result = await service.generate("p1", body(100_000));
+    expect(Math.max(...result.proposals.map((proposal) => proposal.distanceM))).toBeLessThan(40_000);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatchObject({ code: "insufficient_area", requestedType: "distance", requested: 100_000 });
+    expect(result.warnings[0].message).toContain("100 km");
+  });
+
+  it("closes round trips so the route ends at its start and the distance includes the closing leg", async () => {
+    const open: RouteProvider["route"] = async (request) => {
+      const route = straightLineRoute(request);
+      const coordinates = route.geometry.coordinates.slice(0, -3);
+      return { ...route, geometry: { type: "LineString", coordinates }, distanceM: route.distanceM - 150 };
+    };
+    const { service } = setup(near, open);
+    const { proposals } = await service.generate("p1", body(20_000));
+    for (const proposal of proposals) {
+      expect(proposal.geometry.coordinates.at(-1)).toEqual([proposal.start.lon, proposal.start.lat]);
+      expect(proposal.end).toEqual(proposal.start);
+    }
+  });
+
+  it("routes running and hiking on foot, cycling by default, and persists the profile", async () => {
+    const running = setup(near);
+    const { proposals } = await running.service.generate("p1", body(20_000, { sport: "running" }));
+    expect(running.requests.every((request) => (request as { profile: string }).profile === "pedestrian")).toBe(true);
+    await running.service.confirm("p1", { proposalId: proposals[0].id });
+    expect(running.created[0].route.profile).toBe("pedestrian");
+
+    const cycling = setup(near);
+    await cycling.service.generate("p1", body(20_000));
+    expect(cycling.requests.every((request) => (request as { profile: string }).profile === "bicycle")).toBe(true);
+    expect(() => parseGenerateRequest({ ...body(20_000, { sport: "swimming" }), area: { bbox, center: area.center, zoom: 11 } })).toThrow(UserInputError);
+  });
+});
+
+describe("wideningBounds", () => {
+  it("covers the reach of the ride around the start, capped at the maximum area", () => {
+    const bounds = wideningBounds({ ...roundTripInput, constraint: { type: "distance", meters: 50_000 } });
+    expect(bounds.maxLatitude - bounds.minLatitude).toBeGreaterThan(0.3);
+    const huge = wideningBounds({ ...roundTripInput, constraint: { type: "distance", meters: 300_000 } });
+    expect(huge.maxLatitude - huge.minLatitude).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("GPX export", () => {
+  it("produces GPX 1.1 with escaped names and the full track", () => {
+    const gpx = buildGpx({ name: `Tom & "Jerry" <loop>`, description: "A\u0000B", start: { lat: 46, lon: 15 }, coordinates: [[15, 46], [15.1, 46.1], [15, 46]] });
+    expect(gpx).toContain('<gpx version="1.1" creator="Staza" xmlns="http://www.topografix.com/GPX/1/1"');
+    expect(gpx).toContain("<name>Tom &amp; &quot;Jerry&quot; &lt;loop&gt;</name>");
+    expect(gpx).toContain("<desc>AB</desc>");
+    expect(gpx.match(/<trkpt /g)).toHaveLength(3);
+    expect(gpx).toContain('<trkpt lat="46.1" lon="15.1"/>');
+    expect(gpxFilename("Exploration: Tom & Jerry")).toBe("exploration-tom-jerry.gpx");
   });
 });

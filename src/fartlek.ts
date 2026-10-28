@@ -1,4 +1,5 @@
 import type { Fartlek, FartlekCompletion, FartlekCompletionDraft, FartlekGeometry, WorldFartlek } from "./domain.js";
+import { readableFlowlineName } from "./flowlineName.js";
 import { distanceMeters } from "./geometry.js";
 import type { GeoBounds } from "./worldQuery.js";
 import { isWithinBounds } from "./worldQuery.js";
@@ -53,7 +54,7 @@ export interface FartlekCompletionStats {
 /** Builds the World-facing projection of a Fartlek: a LineString challenge, never a point collectible. */
 export const toWorldFartlek = (fartlek: Fartlek, stats: FartlekCompletionStats = { completed: false, completionCount: 0 }): WorldFartlek => ({
   id: fartlek.id,
-  name: fartlek.name,
+  name: readableFlowlineName(fartlek.name),
   geometry: fartlek.geometry,
   lengthMeters: fartlek.lengthMeters,
   ...(fartlek.flowScore === undefined ? {} : { flowScore: fartlek.flowScore }),

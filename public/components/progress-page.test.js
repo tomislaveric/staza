@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   AuthoredQuests,
   ProgressPage,
+  ProgressSummary,
+  QuestHistory,
   RecentActivities,
   levelName,
   progressViewModel
@@ -17,7 +19,8 @@ const dashboard = {
   },
   lifetime: {
     distanceMeters: 1_247_800,
-    totalCollectibles: 34
+    totalCollectibles: 34,
+    totalFlowlines: 3
   },
   levels: [
     { level: 5, skillPointsAwarded: 1, totalXpRequired: 1_000 },
@@ -66,7 +69,7 @@ describe("Progress page", () => {
     ]);
     expect(ProgressPage(model)).toContain("CURRENT");
     expect(ProgressPage(model)).toContain("COMPLETE");
-    expect(levelName(7)).toBe("Explorer");
+    expect(levelName(7)).toBe("Level 7");
     expect(levelName(15)).toBe("Level 15");
   });
 
@@ -98,7 +101,7 @@ describe("Progress page", () => {
   it("explains Skill Points and marks only awarding levels", () => {
     const page = ProgressPage(progressViewModel(dashboard));
 
-    expect(page).toContain("earn Skill Points you can spend in the Skill Tree");
+    expect(page).toContain("earn Skill Points you can spend in the Skill Atlas");
     expect(page.match(/\+1 Skill Point/g)).toHaveLength(2);
   });
 
@@ -108,7 +111,7 @@ describe("Progress page", () => {
 });
 
 describe("Authored quests on Progress", () => {
-  const quest = (overrides) => ({ id: "q:1", title: "Quest I", description: "Do it.", xp: 60, state: "available", ...overrides });
+  const quest = (overrides) => ({ id: "q:1", title: "Quest I", description: "Do it.", xp: 60, difficulty: "easy", state: "available", ...overrides });
 
   it("lists available quests and shows the required node for locked ones", () => {
     const html = AuthoredQuests([
@@ -119,13 +122,33 @@ describe("Authored quests on Progress", () => {
     ]);
     expect(html).toContain('data-authored-quest="q:1"');
     expect(html).toContain("+60 XP");
-    expect(html).toContain("Unlock Rusher I in the Skill Tree (PRO)");
+    expect(html).toContain("Unlock Rusher I in the Skill Atlas (PRO)");
     expect(html).toContain("Complete Quest I first");
     expect(html).toContain("1 completed");
     expect(html).not.toContain("<b>");
   });
 
-  it("points to the Skill Tree when nothing is available", () => {
-    expect(AuthoredQuests([])).toContain("Unlock quest nodes in the Skill Tree");
+  it("offers Start, active copy and Retry with the missed criteria", () => {
+    const html = AuthoredQuests([
+      quest(),
+      quest({ id: "q:5", state: "active", attempt: { status: "active", attemptCount: 1, startedAt: "2026-01-01T00:00:00Z" } }),
+      quest({ id: "q:6", state: "failed", attempt: { status: "failed", attemptCount: 1, startedAt: "x", criteria: [{ label: "Distance", current: 12, required: 30, met: false, unit: "km" }] } })
+    ]);
+    expect(html).toContain('data-start-quest="q:1">Start<');
+    expect(html).toContain("Active · your next activity decides");
+    expect(html).toContain('data-start-quest="q:6">Retry<');
+    expect(html).toContain("12 / 30 km");
+    expect(html).toContain("Easy</span> · +60 XP");
+  });
+
+  it("lists completed quest history and unique Flowline counts", () => {
+    expect(QuestHistory([{ id: "a:1", kind: "authored", title: "Done quest", chainTitle: "Chain", difficulty: "hard", xp: 500, completedAt: "2026-09-26T09:00:00.000Z" }]))
+      .toContain("+500 XP");
+    expect(QuestHistory([])).toBe("");
+    expect(ProgressSummary(progressViewModel(dashboard))).toContain("3 Flowlines");
+  });
+
+  it("points to the Skill Atlas when nothing is available", () => {
+    expect(AuthoredQuests([])).toContain("Unlock quest nodes in the Skill Atlas");
   });
 });

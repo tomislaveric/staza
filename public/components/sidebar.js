@@ -4,7 +4,7 @@ export const navItems = [
   ["home", "Home", "nav-home.svg"],
   ["activities", "Activities", "nav-activities.svg"],
   ["world", "World", "nav-world.svg"],
-  ["skill-tree", "Skill Tree", "nav-skill-tree.svg"],
+  ["skill-tree", "Skill Atlas", "nav-skill-tree.svg"],
   ["progress", "Progress", "nav-progress.svg"],
   ["profile", "Profile", "nav-profile.svg"],
 ];

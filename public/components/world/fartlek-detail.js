@@ -14,16 +14,8 @@ export const formatElapsed = (seconds) => {
 
 export const formatSpeed = (metersPerSecond) => `${(metersPerSecond * 3.6).toFixed(1)} km/h`;
 
-const formatCoordinate = ([longitude, latitude]) => `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
-
-/** Start/finish described by coordinates only; Fartleks have no place names of their own. */
-const startFinish = (geometry) => {
-  const { coordinates } = geometry;
-  return `${formatCoordinate(coordinates[0])} \u2192 ${formatCoordinate(coordinates[coordinates.length - 1])}`;
-};
-
 /**
- * Selecting a Fartlek shows its traversal challenge: name, start/finish, length, and
+ * Selecting a Fartlek shows its traversal challenge: name, length, and
  * completion status. Wording never implies a speed target - completion is about finishing
  * the segment, not about pace.
  */
@@ -35,7 +27,6 @@ export const FartlekDetail = (fartlek) => {
         <div>
           <h2><span data-user-content>${escapeHtml(fartlek.name)}</span></h2>
           <p class="world-detail-meta" data-user-content>
-            <small>${escapeHtml(startFinish(fartlek.geometry))}</small>
             <small>${escapeHtml(formatDistance(fartlek.lengthMeters))}</small>
           </p>
         </div>

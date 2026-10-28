@@ -28,7 +28,11 @@ import {
   QuestInstanceNotFoundError,
   QuestInstanceStateError
 } from "./persistence/questInstanceRepository.js";
-import { AuthoredQuestRepository } from "./persistence/authoredQuestRepository.js";
+import {
+  AuthoredQuestNotFoundError,
+  AuthoredQuestRepository,
+  AuthoredQuestStateError
+} from "./persistence/authoredQuestRepository.js";
 import { SkillTreeRepository, SkillTreeUnlockError } from "./persistence/skillTreeRepository.js";
 import { validateSkillTreeCatalog } from "./skillTree/catalog.js";
 import { withQuestChains } from "./authoredQuests/skillTreeView.js";
@@ -48,6 +52,7 @@ import { createWorldSnapshot } from "./world.js";
 import { getBasemapConfig, getBasemapOrigins } from "./basemap.js";
 import { ProposalStore } from "./routePlanning/proposalStore.js";
 import { RoutingClient } from "./routePlanning/routingClient.js";
+import { buildGpx, gpxFilename } from "./exploration/gpx.js";
 import { ExplorationSessionStore } from "./exploration/sessionStore.js";
 import { ExplorationError, ExplorationService } from "./exploration/service.js";
 import { AuthService, EmailSender, type SessionUser } from "./auth.js";
@@ -1053,11 +1058,55 @@ app.get("/api/quest-instances/:instanceId/planned-route", requirePlayer, async (
   }
 });
 
+app.get("/api/quest-instances/:instanceId/planned-route.gpx", requirePlayer, async (request: UploadRequest, response, next) => {
+  try {
+    const playerId = request.user!.playerId;
+    const instanceId = String(request.params.instanceId);
+    const validId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(instanceId);
+    const plannedRoute = validId ? await questInstanceRepository.getPlannedRoute(playerId, instanceId) : undefined;
+    if (!plannedRoute) {
+      response.status(404).json({ error: "This quest has no planned route." });
+      return;
+    }
+    const instance = await loadQuestInstance(playerId, instanceId);
+    const gpx = buildGpx({
+      name: instance.title,
+      description: instance.description,
+      start: plannedRoute.start,
+      coordinates: plannedRoute.geometry.coordinates,
+      createdAt: plannedRoute.createdAt
+    });
+    response
+      .type("application/gpx+xml")
+      .set("Content-Disposition", `attachment; filename="${gpxFilename(instance.title)}"`)
+      .send(gpx);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.delete("/api/quest-instances/:instanceId", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
   try {
     const playerId = request.user!.playerId;
     const instanceId = String(request.params.instanceId);
     await questInstanceRepository.cancel(playerId, instanceId);
+    response.status(204).end();
+  } catch (error) {
+    if (error instanceof QuestInstanceNotFoundError) {
+      response.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof QuestInstanceStateError) {
+      response.status(409).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.post("/api/quest-instances/:instanceId/retry", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  try {
+    await questInstanceRepository.retry(request.user!.playerId, String(request.params.instanceId));
     response.status(204).end();
   } catch (error) {
     if (error instanceof QuestInstanceNotFoundError) {
@@ -1231,6 +1280,24 @@ app.get("/api/authored-quests", requirePlayer, async (request: UploadRequest, re
   try {
     response.json({ quests: await authoredQuestRepository.list(request.user!.playerId) });
   } catch (error) {
+    next(error);
+  }
+});
+
+// Starting a quest (or retrying a failed one) opens a one-activity attempt.
+app.post("/api/authored-quests/:questId/start", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  try {
+    await authoredQuestRepository.start(request.user!.playerId, String(request.params.questId));
+    response.status(204).end();
+  } catch (error) {
+    if (error instanceof AuthoredQuestNotFoundError) {
+      response.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof AuthoredQuestStateError) {
+      response.status(409).json({ error: error.message });
+      return;
+    }
     next(error);
   }
 });

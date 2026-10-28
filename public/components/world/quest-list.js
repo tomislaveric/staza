@@ -1,6 +1,6 @@
 import { escapeHtml } from "../collected-list.js";
 import { CollectibleSwatch } from "./collectible-swatch.js";
-import { plannedRouteSummary } from "./exploration-panel.js";
+import { plannedRouteGpxUrl, plannedRouteSummary } from "./exploration-panel.js";
 
 const categoryNames = {
   peak: "peaks",
@@ -31,7 +31,9 @@ const objectiveRequirement = (objective) => {
     : objective.type === "collectible_targets" && objective.category === "place" ? "Visit"
       : "Discover";
   const targets = objectiveGroupLabel(objective);
-  const base = `${verb} ${required} of these ${targetCount} ${targets}`;
+  const base = objective.type === "collectible_targets" && required === targetCount
+    ? `${verb} all ${targetCount} ${targets}`
+    : `${verb} ${required} of these ${targetCount} ${targets}`;
   const qualifiers = objective.type === "flowline_rule" ? [
     objective.minimumLengthMeters
       ? `at least ${Math.round(objective.minimumLengthMeters / 1000 * 10) / 10} km each`
@@ -82,12 +84,21 @@ const objectiveGroup = (state, isCompletedQuest) => {
   `;
 };
 
+const difficultyName = (difficulty) => (difficulty ? difficulty.charAt(0).toUpperCase() + difficulty.slice(1) : "");
+
 const InstanceCard = (instance, pendingQuestId, selectedQuestKey, plannedRoute) => {
   const key = `instance:${instance.id}`;
   const { title, description, status } = instance;
   const objectiveStates = instance.objectives;
-  const completed = objectiveStates.filter((item) => item.progress.complete).length;
-  const ratio = objectiveStates.length ? completed / objectiveStates.length : 0;
+  // Objective copy counts targets ("Visit 2 places"), so progress counts targets too.
+  const byTarget = objectiveStates.length > 0 && objectiveStates.every((item) => item.objective.type !== "flowline_rule");
+  const completed = byTarget
+    ? objectiveStates.reduce((sum, item) => sum + Math.min(item.progress.completed, item.progress.required), 0)
+    : objectiveStates.filter((item) => item.progress.complete).length;
+  const total = byTarget
+    ? objectiveStates.reduce((sum, item) => sum + item.progress.required, 0)
+    : objectiveStates.length;
+  const ratio = total ? completed / total : 0;
   return `
     <li class="quest-instance-card quest-card is-${status}${selectedQuestKey === key ? " is-map-selected" : ""}">
       <article data-quest-card="${escapeHtml(key)}">
@@ -101,16 +112,21 @@ const InstanceCard = (instance, pendingQuestId, selectedQuestKey, plannedRoute) 
             <button type="button" class="quest-instance-cancel" data-quest-cancel="${escapeHtml(instance.id)}"
               aria-label="Cancel exploration" title="Cancel exploration"
               ${pendingQuestId === instance.id ? "disabled" : ""}>\u2715</button>
+          ` : status === "failed" ? `
+            <button type="button" class="quest-instance-retry" data-quest-retry="${escapeHtml(instance.id)}"
+              ${pendingQuestId === instance.id ? "disabled" : ""}>Retry</button>
           ` : "<small>Complete</small>"}
         </span>
         <span class="quest-card-description" data-user-content>${escapeHtml(description)}</span>
+        ${instance.rewardXp ? `<span class="quest-card-reward"><small>${difficultyName(instance.difficulty)}</small> · +${instance.rewardXp} XP${status === "active" ? " · your next activity decides" : status === "failed" ? " · not completed" : ""}</span>` : ""}
         ${plannedRoute ? `<span class="quest-card-route"><small>Planned route</small> ${escapeHtml(plannedRouteSummary(plannedRoute))}</span>` : ""}
+        ${plannedRoute ? `<a class="quest-card-gpx" href="${escapeHtml(plannedRouteGpxUrl(instance.id))}" download>Download GPX</a>` : ""}
         <ul class="quest-objective-groups">
           ${objectiveStates.map((state) => objectiveGroup(state, status === "completed")).join("")}
         </ul>
         <span class="quest-card-progress">
           <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
-          <small>${completed} / ${objectiveStates.length} objectives</small>
+          <small>${completed} / ${total} ${byTarget ? (total === 1 ? "target" : "targets") : "objectives"}</small>
         </span>
       </article>
     </li>

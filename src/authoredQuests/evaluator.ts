@@ -1,4 +1,4 @@
-import type { ActivityType, CollectibleCategory } from "../domain.js";
+import type { ActivityType, CollectibleCategory, QuestCriterionResult, QuestDifficulty } from "../domain.js";
 import { findSkillTreeNode } from "../skillTree/catalog.js";
 import {
   AUTHORED_QUEST_CHAINS,
@@ -19,36 +19,64 @@ export interface ActivityQuestMetrics {
   flowlines: number;
 }
 
-export const meetsAuthoredQuestCriteria = (criteria: AuthoredQuestCriteria, metrics: ActivityQuestMetrics): boolean =>
-  (criteria.sport === undefined || criteria.sport === metrics.sport)
-  && metrics.distanceKm >= (criteria.minDistanceKm ?? 0)
-  && metrics.averageSpeedKmh >= (criteria.minAverageSpeedKmh ?? 0)
-  && metrics.elevationGainM >= (criteria.minElevationGainM ?? 0)
-  && metrics.collectibles >= (criteria.minCollectibles ?? 0)
-  && metrics.flowlines >= (criteria.minFlowlines ?? 0)
-  && (criteria.category === undefined
-    || (metrics.categoryCounts[criteria.category] ?? 0) >= (criteria.minCategoryCollectibles ?? 0));
+const SPORT_LABEL: Record<string, string> = { cycling: "ride", running: "run", hiking: "hike" };
 
-/**
- * The quests one activity completes. Only the first incomplete step of a chain whose unlocking Atlas
- * node is unlocked is available, so one activity advances each chain by at most one step and
- * nothing in a locked chain can complete.
- */
-export const completableAuthoredQuests = (
-  unlockedNodeIds: ReadonlySet<string>,
-  completedQuestIds: ReadonlySet<string>,
+/** Per-criterion results for one activity, so a failed attempt can show exactly what fell short. */
+export const evaluateAuthoredQuestCriteria = (
+  criteria: AuthoredQuestCriteria,
   metrics: ActivityQuestMetrics
-): AuthoredQuest[] => {
-  const completable: AuthoredQuest[] = [];
-  for (const chain of AUTHORED_QUEST_CHAINS) {
-    if (!unlockedNodeIds.has(chain.nodeId)) continue;
-    const next = chain.quests.find((quest) => !completedQuestIds.has(quest.id));
-    if (next && meetsAuthoredQuestCriteria(next.criteria, metrics)) completable.push(next);
+): QuestCriterionResult[] => {
+  const results: QuestCriterionResult[] = [];
+  if (criteria.sport !== undefined) {
+    results.push({
+      label: `Activity type: ${SPORT_LABEL[criteria.sport] ?? criteria.sport}`,
+      current: metrics.sport === criteria.sport ? 1 : 0,
+      required: 1,
+      met: metrics.sport === criteria.sport
+    });
   }
-  return completable;
+  const numeric = (label: string, current: number, required: number | undefined, unit?: string): void => {
+    if (required === undefined) return;
+    const rounded = Math.round(current * 10) / 10;
+    results.push({ label, current: rounded, required, met: current >= required, ...(unit ? { unit } : {}) });
+  };
+  numeric("Distance", metrics.distanceKm, criteria.minDistanceKm, "km");
+  numeric("Average speed", metrics.averageSpeedKmh, criteria.minAverageSpeedKmh, "km/h");
+  numeric("Elevation gain", metrics.elevationGainM, criteria.minElevationGainM, "m");
+  numeric("Flowlines", metrics.flowlines, criteria.minFlowlines);
+  numeric("Collectibles", metrics.collectibles, criteria.minCollectibles);
+  if (criteria.category !== undefined) {
+    numeric(
+      `Collectibles: ${criteria.category.replace("_", " ")}`,
+      metrics.categoryCounts[criteria.category] ?? 0,
+      criteria.minCategoryCollectibles ?? 0
+    );
+  }
+  return results;
 };
 
-export type AuthoredQuestState = "completed" | "available" | "locked";
+export const meetsAuthoredQuestCriteria = (criteria: AuthoredQuestCriteria, metrics: ActivityQuestMetrics): boolean =>
+  evaluateAuthoredQuestCriteria(criteria, metrics).every((result) => result.met);
+
+/** The step after `questId` in its chain, if any. */
+export const nextAuthoredQuestAfter = (questId: string): AuthoredQuest | undefined => {
+  for (const chain of AUTHORED_QUEST_CHAINS) {
+    const index = chain.quests.findIndex((quest) => quest.id === questId);
+    if (index >= 0) return chain.quests[index + 1];
+  }
+  return undefined;
+};
+
+export type AuthoredQuestState = "completed" | "active" | "failed" | "available" | "locked";
+
+/** Open or failed attempt of an authored quest, as persisted. */
+export interface AuthoredQuestAttemptView {
+  status: "active" | "failed";
+  attemptCount: number;
+  startedAt: string;
+  failedAt?: string;
+  criteria?: QuestCriterionResult[];
+}
 
 export interface AuthoredQuestView {
   id: string;
@@ -58,8 +86,10 @@ export interface AuthoredQuestView {
   totalSteps: number;
   title: string;
   description: string;
+  difficulty: QuestDifficulty;
   xp: number;
   state: AuthoredQuestState;
+  attempt?: AuthoredQuestAttemptView;
   requiredNode?: { id: string; name: string; premium: boolean };
   requiredQuestTitle?: string;
   completedAt?: string;
@@ -67,7 +97,8 @@ export interface AuthoredQuestView {
 
 export const buildAuthoredQuestViews = (
   unlockedNodeIds: ReadonlySet<string>,
-  completedAtByQuestId: ReadonlyMap<string, string>
+  completedAtByQuestId: ReadonlyMap<string, string>,
+  attemptsByQuestId: ReadonlyMap<string, AuthoredQuestAttemptView> = new Map()
 ): AuthoredQuestView[] => AUTHORED_QUEST_CHAINS.flatMap((chain) => {
   const node = findSkillTreeNode(chain.nodeId);
   const nodeUnlocked = unlockedNodeIds.has(chain.nodeId);
@@ -82,6 +113,7 @@ export const buildAuthoredQuestViews = (
       totalSteps: chain.quests.length,
       title: quest.title,
       description: quest.description,
+      difficulty: quest.difficulty,
       xp: quest.xp
     };
     if (completedAt) return { ...base, state: "completed", completedAt };
@@ -95,6 +127,8 @@ export const buildAuthoredQuestViews = (
     if (previous && !completedAtByQuestId.has(previous.id)) {
       return { ...base, state: "locked", requiredQuestTitle: previous.title };
     }
+    const attempt = attemptsByQuestId.get(quest.id);
+    if (attempt) return { ...base, state: attempt.status, attempt };
     return { ...base, state: "available" };
   });
 });

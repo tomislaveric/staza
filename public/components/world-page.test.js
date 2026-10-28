@@ -613,6 +613,7 @@ describe("mounted World page interactions", () => {
     expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body)).toEqual({
       area: { bbox: "8.00000,49.00000,11.00000,52.00000", center: { lat: 50.5, lon: 9.5 }, zoom: 8 },
       routeType: "round_trip",
+      sport: "cycling",
       start: { lat: 50, lon: 9 },
       constraint: { type: "distance", value: 50_000 }
     });

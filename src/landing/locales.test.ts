@@ -32,7 +32,7 @@ describe("landing page localization", () => {
     expect(renderedGerman).toContain("Sammelobjekte");
     expect(renderedGerman).toContain("4 von 6 Orten gefunden");
     expect(renderedGerman).toContain("Beispiel-Quests zur Veranschaulichung.");
-    expect(renderedGerman).toContain("2.400 XP");
+    expect(renderedGerman).toContain("250 XP");
     expect(renderedGerman).toContain("94,7 km");
     expect(renderedGerman).toContain("Schwarzwald, Deutschland");
     expect(renderedGerman).not.toContain("Join Early Access — Free");

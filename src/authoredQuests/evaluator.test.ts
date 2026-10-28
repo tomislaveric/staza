@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { SKILL_TREE_NODES } from "../skillTree/catalog.js";
+import { QUEST_XP_BY_DIFFICULTY } from "../questObjectives.js";
 import { AUTHORED_QUEST_CHAINS } from "./catalog.js";
 import {
   buildAuthoredQuestViews,
-  completableAuthoredQuests,
+  evaluateAuthoredQuestCriteria,
+  nextAuthoredQuestAfter,
   meetsAuthoredQuestCriteria,
   type ActivityQuestMetrics
 } from "./evaluator.js";
@@ -20,7 +22,7 @@ describe("authored quest catalog", () => {
     expect(AUTHORED_QUEST_CHAINS.map((chain) => chain.nodeId).sort()).toEqual(grantNodes.map((node) => node.id).sort());
     for (const chain of AUTHORED_QUEST_CHAINS) {
       expect(chain.quests.length).toBeGreaterThanOrEqual(2);
-      expect(chain.quests.map((quest) => quest.xp)).toEqual([...chain.quests.map((quest) => quest.xp)].sort((a, b) => a - b));
+      for (const quest of chain.quests) expect(quest.xp).toBe(QUEST_XP_BY_DIFFICULTY[quest.difficulty]);
     }
   });
 
@@ -41,13 +43,24 @@ describe("authored quest evaluation", () => {
     expect(meetsAuthoredQuestCriteria(criteria, metrics({ sport: "running", distanceKm: 5, averageSpeedKmh: 9 }))).toBe(false);
   });
 
-  it("only completes quests of unlocked chains, one step per chain per activity", () => {
-    const big = metrics({ flowlines: 10 });
-    expect(completableAuthoredQuests(new Set(), new Set(), big)).toEqual([]);
-    const first = completableAuthoredQuests(new Set([rusher]), new Set(), big);
-    expect(first.map((quest) => quest.id)).toEqual([firstId]);
-    const second = completableAuthoredQuests(new Set([rusher]), new Set([firstId]), big);
-    expect(second.map((quest) => quest.id)).toEqual(["flow-quests:2"]);
+  it("reports exactly which criteria fell short", () => {
+    const results = evaluateAuthoredQuestCriteria(
+      { sport: "running", minDistanceKm: 5, minAverageSpeedKmh: 10 },
+      metrics({ sport: "running", distanceKm: 5.04, averageSpeedKmh: 9 })
+    );
+    expect(results.filter((result) => !result.met).map((result) => result.label)).toEqual(["Average speed"]);
+  });
+
+  it("derives the XP from difficulty and offers the next step in the chain", () => {
+    expect(nextAuthoredQuestAfter(firstId)?.id).toBe("flow-quests:2");
+    expect(nextAuthoredQuestAfter("flow-quests:2")).toBeUndefined();
+    expect(QUEST_XP_BY_DIFFICULTY).toEqual({ easy: 100, medium: 250, hard: 500, prestige: 1000 });
+  });
+
+  it("marks active and failed attempts in the quest views", () => {
+    const attempt = { status: "failed" as const, attemptCount: 2, startedAt: "2026-01-01T00:00:00.000Z" };
+    const views = buildAuthoredQuestViews(new Set([rusher]), new Map(), new Map([[firstId, attempt]]));
+    expect(views.find((quest) => quest.id === firstId)).toMatchObject({ state: "failed", attempt });
   });
 
   it("shows locked quests with the node that unlocks them and gates later steps", () => {

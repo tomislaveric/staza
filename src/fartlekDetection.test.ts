@@ -93,6 +93,12 @@ describe("detectFartlekTraversal", () => {
     expect(slow.elapsedTimeS!).toBeGreaterThan(fast.elapsedTimeS!);
   });
 
+  it("rejects implausible GPS-noise speeds instead of reporting them", () => {
+    expect(detectFartlekTraversal(straightRoute(-50, SEGMENT_LENGTH_METERS + 50, { speedMps: 30 }), fartlek).completed).toBe(false);
+    const fastButHuman = detectFartlekTraversal(straightRoute(-50, SEGMENT_LENGTH_METERS + 50, { speedMps: 15 }), fartlek);
+    expect(fastButHuman.maxSpeedMps!).toBeLessThanOrEqual(22.2);
+  });
+
   it("tolerates GPS drift within the corridor buffer", () => {
     const route = straightRoute(-50, SEGMENT_LENGTH_METERS + 50, { lateralOffsetMeters: 10 });
     const result = detectFartlekTraversal(route, fartlek);
@@ -152,7 +158,8 @@ describe("deriveFartlekCompletionDrafts", () => {
       fartlekGeometry: published.geometry,
       fartlekLengthMSnapshot: SEGMENT_LENGTH_METERS,
       fartlekGeometryVersionSnapshot: 1,
-      traversalDirection: "a_to_b"
+      traversalDirection: "a_to_b",
+      xp: 50
     });
   });
 

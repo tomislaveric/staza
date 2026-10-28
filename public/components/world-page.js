@@ -136,7 +136,7 @@ export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks
     }).join("")}
     ${lockedFilters.filter((filter) => filter.id in grantedFilterRules && !grantedFilters.includes(filter.id)).map((filter) => `
       <span class="world-filter-locked" data-world-filter-locked="${escapeHtml(filter.id)}">
-        <span>${filterLabels[filter.id]}</span><small>Unlock ${escapeHtml(filter.nodeName)} in the Skill Tree</small>
+        <span>${filterLabels[filter.id]}</span><small>Unlock ${escapeHtml(filter.nodeName)} in the Skill Atlas</small>
       </span>`).join("")}
   </div>
 `;
@@ -406,6 +406,9 @@ export const mountWorldPage = async (mountPoint) => {
   const renderSidePanels = () => {
     statsHost.innerHTML = WorldStats(stats, truncated);
     questHost.innerHTML = QuestList(questInstances, pendingQuestId, selectedQuestKey, plannedRoutes);
+    questHost.querySelectorAll("[data-quest-retry]").forEach((button) => {
+      button.addEventListener("click", () => void retryQuest(button.dataset.questRetry));
+    });
     questHost.querySelectorAll("[data-quest-cancel]").forEach((button) => {
       button.addEventListener("click", () => void cancelQuest(button.dataset.questCancel));
     });
@@ -660,6 +663,7 @@ export const mountWorldPage = async (mountPoint) => {
         customizedById: {},
         catalog: result.catalog,
         truncated: Boolean(result.truncated),
+        warnings: result.warnings ?? [],
         limits: result.limits ?? exploration.limits,
         selectedProposalId: preferred?.id,
         phase: preferred ? "customize" : "proposals"
@@ -815,6 +819,9 @@ export const mountWorldPage = async (mountPoint) => {
       exploration.picking = exploration.picking === button.dataset.explorationPick ? undefined : button.dataset.explorationPick;
     }));
     on("[data-exploration-locate]", "click", () => locateExplorationStart());
+    on("[data-exploration-sport]", "click", (button) => updateRide(() => {
+      exploration.sport = button.dataset.explorationSport;
+    }));
     on("[data-exploration-route-type]", "click", (button) => updateRide(() => {
       exploration.routeType = button.dataset.explorationRouteType;
       exploration.picking = exploration.routeType === "point_to_point" && !exploration.end ? "end" : undefined;
@@ -854,6 +861,21 @@ export const mountWorldPage = async (mountPoint) => {
     });
     on("[data-exploration-reset]", "click", () => resetSelectedRoute());
     on("[data-exploration-confirm]", "click", () => void confirmExploration());
+  }
+
+  async function retryQuest(instanceId) {
+    if (pendingQuestId) return;
+    pendingQuestId = instanceId;
+    renderSidePanels();
+    try {
+      await fetch(`/api/quest-instances/${encodeURIComponent(instanceId)}/retry`, { method: "POST" }).then(responseJson);
+      questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      pendingQuestId = undefined;
+      renderSidePanels();
+    }
   }
 
   async function cancelQuest(instanceId) {

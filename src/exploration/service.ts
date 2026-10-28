@@ -6,12 +6,15 @@ import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import type { ProposalStore } from "../routePlanning/proposalStore.js";
 import { routeTargetIds } from "../routePlanning/proposals.js";
 import { assertNearTargets, parseProposalId } from "../routePlanning/request.js";
+import { constraintActual, constraintRequested } from "../routePlanning/scoring.js";
+import { profileForSport } from "../routePlanning/sport.js";
 import { buildExplorationTargets, buildFlowlineGeometries, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
-import { PLANNER_VERSION, type QuestRouteTarget, type RouteProposal } from "../routePlanning/types.js";
+import { PLANNER_VERSION, type QuestRouteTarget, type RoutePlanningInput, type RouteProposal } from "../routePlanning/types.js";
 import type { GeoBounds } from "../worldQuery.js";
 import { describeExploration, explorationObjectives, withObjectiveIds } from "./objectives.js";
 import { parseExplorationId, parseGenerateRequest, parseRerouteRequest } from "./request.js";
 import type { ExplorationSessionStore } from "./sessionStore.js";
+import { wideningBounds } from "./widen.js";
 
 /** Exploration persisted on confirmation; its id is the confirmed proposal id (idempotency key). */
 export interface NewExploration {
@@ -75,6 +78,34 @@ export type PublicRouteProposal = Omit<RouteProposal, "score">;
 
 const toPublic = ({ score: _score, ...proposal }: RouteProposal): PublicRouteProposal => proposal;
 
+/** Reported when even a widened search cannot supply a route near the requested length. */
+export interface InsufficientAreaWarning {
+  code: "insufficient_area";
+  requestedType: "distance" | "duration";
+  /** Meters or seconds, per `requestedType`. */
+  requested: number;
+  /** Longest route found, in the same unit as `requested`. */
+  longest: number;
+  message: string;
+}
+
+export type ExplorationWarning = InsufficientAreaWarning;
+
+const insufficientAreaWarning = (input: RoutePlanningInput, proposals: RouteProposal[]): InsufficientAreaWarning => {
+  const requested = constraintRequested(input.constraint);
+  const longest = Math.round(Math.max(...proposals.map((proposal) => constraintActual(input.constraint, proposal))));
+  const format = (value: number) => input.constraint.type === "distance"
+    ? `${(value / 1000).toFixed(value >= 100_000 ? 0 : 1)} km`
+    : `${Math.floor(value / 3600)}:${String(Math.round((value % 3600) / 60)).padStart(2, "0")} h`;
+  return {
+    code: "insufficient_area",
+    requestedType: input.constraint.type,
+    requested,
+    longest,
+    message: `This area can't support a ${format(requested)} route. The longest route found is ${format(longest)}. Try a longer start-to-destination, another area or a shorter ${input.constraint.type === "distance" ? "distance" : "time"}.`
+  };
+};
+
 export interface GeneratedExploration {
   explorationId: string;
   proposals: PublicRouteProposal[];
@@ -82,6 +113,7 @@ export interface GeneratedExploration {
   catalog: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[] };
   truncated: boolean;
   limits: { maxRouteTargets: number };
+  warnings: ExplorationWarning[];
 }
 
 const planningFailure = (error: unknown): unknown => error instanceof PlanningError
@@ -101,8 +133,9 @@ export class ExplorationService {
     return this.dependencies.routing;
   }
 
-  private store(playerId: string, explorationId: string, planned: PlannedProposal, available: Map<string, QuestRouteTarget>) {
+  private store(explorationId: string, planned: PlannedProposal, available: Map<string, QuestRouteTarget>, input: RoutePlanningInput) {
     return {
+      sport: input.sport,
       explorationId,
       proposal: planned.proposal,
       stops: planned.stops,
@@ -115,43 +148,82 @@ export class ExplorationService {
   async generate(playerId: string, body: unknown, requestId: string = randomUUID()): Promise<GeneratedExploration> {
     const routing = this.requireRouting();
     const { area, input } = parseGenerateRequest(body);
-    const loaded = await this.dependencies.loadArea(playerId, area.bounds);
-    const { targets, truncated } = buildExplorationTargets(loaded.collectibles);
-    const flowlineGeometries = buildFlowlineGeometries(loaded.flowlines).slice(0, MAX_AVAILABLE_TARGETS);
-    const flowlineIds = new Set(flowlineGeometries.map((flowline) => flowline.id));
-    if (targets.length === 0) throw new ExplorationError("no_targets");
-    assertNearTargets(input, targets);
-    const ids = new Set(targets.map((target) => target.id));
-    const session = this.dependencies.sessions.create({
-      playerId,
-      area,
-      input,
-      availableTargets: targets,
-      collectibles: loaded.collectibles.filter((collectible) => ids.has(collectible.id)),
-      flowlines: loaded.flowlines.filter((flowline) => flowlineIds.has(flowline.id)),
-      flowlineGeometries,
-      truncated: truncated || loaded.truncated
-    });
+    const viewport = await this.dependencies.loadArea(playerId, area.bounds);
+    let world = { collectibles: viewport.collectibles, flowlines: viewport.flowlines, truncated: viewport.truncated };
+    let widened = false;
+    // Searches beyond the frozen viewport, around the start, for targets a ride of this length can reach.
+    const widen = async (): Promise<boolean> => {
+      if (widened) return false;
+      widened = true;
+      const wide = await this.dependencies.loadArea(playerId, wideningBounds(input));
+      const collectibleIds = new Set(world.collectibles.map((item) => item.id));
+      const flowlineIds = new Set(world.flowlines.map((item) => item.id));
+      const collectibles = wide.collectibles.filter((item) => !collectibleIds.has(item.id));
+      const flowlines = wide.flowlines.filter((item) => !flowlineIds.has(item.id));
+      if (collectibles.length === 0) return false;
+      world = {
+        collectibles: [...world.collectibles, ...collectibles],
+        flowlines: [...world.flowlines, ...flowlines],
+        truncated: world.truncated || wide.truncated
+      };
+      return true;
+    };
+    const resolve = () => {
+      const built = buildExplorationTargets(world.collectibles);
+      const flowlineGeometries = buildFlowlineGeometries(world.flowlines).slice(0, MAX_AVAILABLE_TARGETS);
+      return { ...built, flowlineGeometries };
+    };
+    let resolved = resolve();
+    if (resolved.targets.length === 0 && await widen()) resolved = resolve();
+    if (resolved.targets.length === 0) throw new ExplorationError("no_targets");
+    assertNearTargets(input, resolved.targets);
+    const sessionData = (current: typeof resolved) => {
+      const ids = new Set(current.targets.map((target) => target.id));
+      const flowlineIds = new Set(current.flowlineGeometries.map((flowline) => flowline.id));
+      return {
+        availableTargets: current.targets,
+        collectibles: world.collectibles.filter((collectible) => ids.has(collectible.id)),
+        flowlines: world.flowlines.filter((flowline) => flowlineIds.has(flowline.id)),
+        flowlineGeometries: current.flowlineGeometries,
+        truncated: current.truncated || world.truncated
+      };
+    };
+    const session = this.dependencies.sessions.create({ playerId, area, input, ...sessionData(resolved) });
 
-    let planned: PlannedProposal[];
-    try {
-      planned = await generateExplorationRoutes(
-        { requestId, playerId, scopeId: session.id, targets, flowlines: flowlineGeometries, input },
-        { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) }
-      );
-    } catch (error) {
-      throw planningFailure(error);
+    const plan = async (current: typeof resolved): Promise<{ planned?: PlannedProposal[]; failure?: unknown }> => {
+      try {
+        return {
+          planned: await generateExplorationRoutes(
+            { requestId, playerId, scopeId: session.id, targets: current.targets, flowlines: current.flowlineGeometries, input },
+            { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) }
+          )
+        };
+      } catch (failure) {
+        return { failure };
+      }
+    };
+    let { planned, failure } = await plan(resolved);
+    if ((!planned || planned.every((entry) => entry.proposal.constraintFit === "short")) && await widen()) {
+      resolved = resolve();
+      Object.assign(session, sessionData(resolved));
+      const retry = await plan(resolved);
+      if (retry.planned || !planned) ({ planned, failure } = retry);
     }
+    if (!planned) throw planningFailure(failure);
     // A newer exploration started while routing; this one's proposals are already stale.
     if (!this.dependencies.sessions.get(playerId, session.id)) throw new ExplorationError("exploration_expired");
-    const available = new Map(targets.map((target) => [target.id, target]));
-    this.dependencies.proposals.replaceForPlayer(playerId, planned.map((entry) => this.store(playerId, session.id, entry, available)));
+    const available = new Map(session.availableTargets.map((target) => [target.id, target]));
+    const warnings: ExplorationWarning[] = planned.every((entry) => entry.proposal.constraintFit === "short")
+      ? [insufficientAreaWarning(input, planned.map((entry) => entry.proposal))]
+      : [];
+    this.dependencies.proposals.replaceForPlayer(playerId, planned.map((entry) => this.store(session.id, entry, available, input)));
     return {
       explorationId: session.id,
       proposals: planned.map((entry) => toPublic(entry.proposal)),
       catalog: { collectibles: session.collectibles, flowlines: session.flowlines },
       truncated: session.truncated,
-      limits: { maxRouteTargets: PLANNING_LIMITS.maxRouteTargets }
+      limits: { maxRouteTargets: PLANNING_LIMITS.maxRouteTargets },
+      warnings
     };
   }
 
@@ -189,7 +261,7 @@ export class ExplorationService {
     } catch (error) {
       throw planningFailure(error);
     }
-    this.dependencies.proposals.addForPlayer(playerId, this.store(playerId, session.id, planned, available));
+    this.dependencies.proposals.addForPlayer(playerId, this.store(session.id, planned, available, session.input));
     return { proposal: toPublic(planned.proposal) };
   }
 
@@ -202,7 +274,7 @@ export class ExplorationService {
     const proposalId = parseProposalId(body);
     const stored = this.dependencies.proposals.get(playerId, proposalId);
     if (!stored) throw new ExplorationError("proposal_expired");
-    const { proposal, plannerVersion, targets } = stored;
+    const { proposal, plannerVersion, targets, sport } = stored;
     const { title, description } = describeExploration(targets);
     return this.dependencies.explorations.createExploration(playerId, {
       proposalId: proposal.id,
@@ -211,7 +283,7 @@ export class ExplorationService {
       objectives: explorationObjectives(targets)
     }, {
       proposalId: proposal.id,
-      profile: "bicycle",
+      profile: profileForSport(sport),
       routeType: proposal.routeType,
       start: proposal.start,
       end: proposal.end,

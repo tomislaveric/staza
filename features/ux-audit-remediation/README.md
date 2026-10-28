@@ -105,7 +105,7 @@ Out of scope:
 
 ### P1: the loop runs but the player can't see it
 
-- [ ] **P1-1 Level-ups and Skill Points are never celebrated.**
+- [x] **P1-1 Level-ups and Skill Points are never celebrated.**
   - Problem:
     - The first ride went from L1 to L3 and earned SP, but the result card shows
       only "+550 XP".
@@ -117,7 +117,7 @@ Out of scope:
       discoveries.
     - The replay animates level-ups at the right moment.
     - Home surfaces unspent SP with a link to the Atlas.
-- [ ] **P1-2 Quest completion is silent.**
+- [x] **P1-2 Quest completion is silent.**
   - Problem:
     - Completion is evaluated lazily on `GET /api/quest-instances`
       (`src/persistence/questInstanceRepository.ts`), not when the activity is
@@ -129,7 +129,7 @@ Out of scope:
       and replay.
     - Completed quests are visible in a history (Progress).
     - The quest reward (open decision 2) is granted, and a next quest is suggested.
-- [ ] **P1-3 Quest semantics are undecided.**
+- [x] **P1-3 Quest semantics are undecided.**
   - Problem:
     - The intended design is one-activity quests. The code accumulates progress
       across all activities since the quest started; only the flowline
@@ -142,7 +142,7 @@ Out of scope:
       evaluator (`src/questObjectives.ts`).
     - If quests are single-activity: an attempt that misses the objectives is
       marked failed, and the player can retry.
-- [ ] **P1-4 Terminology collisions.**
+- [x] **P1-4 Terminology collisions.**
   - Problem:
     - Home (`public/components/home-page.js`) and Activity Detail
       (`public/components/activity-progress.js`) hardcode "Explorer" for every
@@ -161,7 +161,7 @@ Out of scope:
     - A single glossary (English and German) applied everywhere.
     - One rank table from a single source, or no ranks at all (open decision 4).
     - Rank names that don't collide with node names.
-- [ ] **P1-5 Inconsistent collectible counts and repeat XP.**
+- [x] **P1-5 Inconsistent collectible counts and repeat XP.**
   - Problem:
     - Home and Activities count collection events (5), while Progress, Profile and
       World count unique collectibles (3) for the same player.
@@ -171,7 +171,7 @@ Out of scope:
     - One definition of "collected" everywhere.
     - Revisit semantics decided (open decision 3) and labelled in the result and
       replay.
-- [ ] **P1-6 Flowlines are second-class.**
+- [x] **P1-6 Flowlines are second-class.**
   - Problem:
     - The result card shows "0 collectibles found · +300 XP" with no Flowline
       attribution for the XP.
@@ -187,7 +187,7 @@ Out of scope:
     - No raw coordinates.
     - Outlier-filtered speeds.
     - Sport-appropriate Flowlines and units (depends on P0-1).
-- [ ] **P1-7 Explore this Area can't deliver a real outing.**
+- [x] **P1-7 Explore this Area can't deliver a real outing.**
   - Problem:
     - A 50 km round-trip request returned 7.4 and 9.2 km routes, because only the
       frozen viewport's 2 targets were considered.
@@ -202,7 +202,7 @@ Out of scope:
     - The player can choose a sport.
     - The route can be exported as GPX.
     - Objective copy and counts agree.
-- [ ] **P1-8 Home doesn't answer "what next?".**
+- [x] **P1-8 Home doesn't answer "what next?".**
   - Problem:
     - A new player sees a level number and empty cards, with no explanation of
       Staza and no inline import CTA.
@@ -212,7 +212,7 @@ Out of scope:
     - First-run onboarding: what Staza is and how to import the first activity.
     - A "next best action" card for returning players: SP to spend, active quest,
       nearby target or suggested exploration.
-- [ ] **P1-9 Activities are ordered by import time.**
+- [x] **P1-9 Activities are ordered by import time.**
   - Problem:
     - Lists and Home's "Recent activity" sort by import time, not activity date, so
       "recent" is not the latest activity.
@@ -272,7 +272,13 @@ it, then record the answer here.
    completed quest grants.
 3. **Collectible revisits** (P1-5): one-time claim or repeatable XP. If repeatable,
    decide the reduced reward and cooldown.
+   **Resolved (p1-audit):** one-time claim by import order; revisits give 0 XP.
 4. **Ranks** (P1-4): keep one canonical rank table, or remove ranks.
+   **Resolved (p1-audit):** ranks removed; levels only. "Skill Tree" is now "Skill Atlas".
+
+   Quest decision (p1-audit): quests are one-activity attempts, rewarded once with
+   difficulty XP (easy 100, medium 250, hard 500, prestige 1000) and no Skill Points.
+   Flowlines are cycling only, with traversals above 22.2 m/s average rejected.
 5. **Journey start** (P0-3): how backfilled history is treated.
 6. **PRO boundary** (P0-4): gate depth (tier II+) or breadth (cross-sport,
    prestige, extra filters).

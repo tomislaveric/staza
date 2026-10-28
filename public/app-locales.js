@@ -102,13 +102,13 @@ export const parseAppPath = (pathname, languages = []) => {
 };
 
 const germanCopy = {
-  "Reach certain levels to earn Skill Points you can spend in the Skill Tree.": "Erreiche bestimmte Level, um Skillpunkte zu verdienen, die du im Skillbaum ausgeben kannst.",
+  "Reach certain levels to earn Skill Points you can spend in the Skill Atlas.": "Erreiche bestimmte Level, um Skillpunkte zu verdienen, die du im Skill Atlas ausgeben kannst.",
   "+1 Skill Point": "+1 Skillpunkt",
-  "Skill Tree": "Skillbaum",
+  "Skill Atlas": "Skill Atlas",
   "Spend Skill Points to shape your rider": "Gib Skillpunkte aus, um deinen Fahrer zu formen",
   "Skill Points": "Skillpunkte",
   "Cost: ": "Kosten: ",
-  "Loading Skill Tree...": "Skillbaum wird geladen …",
+  "Loading Skill Atlas...": "Skill Atlas wird geladen …",
   "Select a node to see its requirements and reward.": "Wähle einen Node, um Anforderungen und Belohnung zu sehen.",
   REWARD: "BELOHNUNG",
   REQUIREMENTS: "ANFORDERUNGEN",
@@ -220,7 +220,7 @@ const germanCopy = {
   " found": " gefunden",
   "Your account": "Dein Konto",
   "Level progress": "Level-Fortschritt",
-  "EXPLORER RECORD": "ERKUNDER-STATISTIK",
+  "YOUR RECORD": "DEINE STATISTIK",
   "Total XP earned": "XP insgesamt",
   "Activities completed": "Abgeschlossene Aktivitäten",
   "Collectibles found": "Gefundene Sammelobjekte",
@@ -564,7 +564,7 @@ const germanCopy = {
   "TITLES & BADGES": "TITEL & ABZEICHEN",
   "Unlock Skill Atlas nodes to earn titles and badges.": "Schalte Skill-Atlas-Knoten frei, um Titel und Abzeichen zu verdienen.",
   "QUESTS": "QUESTS",
-  "Unlock quest nodes in the Skill Tree to start quest chains.": "Schalte Quest-Knoten im Skillbaum frei, um Questreihen zu starten.",
+  "Unlock quest nodes in the Skill Atlas to start quest chains.": "Schalte Quest-Knoten im Skill Atlas frei, um Questreihen zu starten.",
   "QUESTS YOU UNLOCK": "QUESTS, DIE DU FREISCHALTEST",
   "Sport": "Sportart",
   "Cycling": "Radfahren",
@@ -589,7 +589,72 @@ const germanCopy = {
   "Reconnect Strava": "Strava neu verbinden",
   "Your Strava connection expired": "Deine Strava-Verbindung ist abgelaufen",
   "Removes Staza's access to your Strava account": "Entfernt den Zugriff von Staza auf dein Strava-Konto",
-  "Import recent activities from Strava": "Aktuelle Aktivitäten von Strava importieren"
+  "Import recent activities from Strava": "Aktuelle Aktivitäten von Strava importieren",
+  "WHAT CHANGED": "WAS SICH GEÄNDERT HAT",
+  "Level up!": "Level-up!",
+  "No new XP": "Keine neuen XP",
+  "new collectibles": "neue Sammelobjekte",
+  "new collectible": "neues Sammelobjekt",
+  "Flowlines completed": "Flowlines abgeschlossen",
+  "Flowline completed": "Flowline abgeschlossen",
+  "Skill Points earned": "Skillpunkte verdient",
+  "Skill Point earned": "Skillpunkt verdient",
+  "Skill Points to spend": "Skillpunkte zum Ausgeben",
+  "Skill Point to spend": "Skillpunkt zum Ausgeben",
+  "Open Skill Atlas": "Skill Atlas öffnen",
+  "Now unlockable: ": "Jetzt freischaltbar: ",
+  "Quest completed: ": "Quest abgeschlossen: ",
+  "Quest not completed: ": "Quest nicht abgeschlossen: ",
+  "This activity decided the attempt. You can retry from Quests.": "Diese Aktivität hat den Versuch entschieden. Du kannst es unter Quests erneut versuchen.",
+  "Next: ": "Als Nächstes: ",
+  "Revisited · no XP": "Erneut besucht · keine XP",
+  "REVISITED · NO XP": "ERNEUT BESUCHT · KEINE XP",
+  "Start a quest, then your next activity decides it. Quests pay bonus XP by difficulty.": "Starte eine Quest, dann entscheidet deine nächste Aktivität darüber. Quests bringen Bonus-XP je nach Schwierigkeit.",
+  "Start": "Starten",
+  "Retry": "Erneut versuchen",
+  "Done": "Erledigt",
+  "Easy": "Einfach",
+  "Medium": "Mittel",
+  "Hard": "Schwer",
+  "Prestige": "Prestige",
+  "Active · your next activity decides": "Aktiv · deine nächste Aktivität entscheidet",
+  "Not completed · retry any time": "Nicht abgeschlossen · jederzeit erneut versuchen",
+  "Not completed · retry on Progress": "Nicht abgeschlossen · erneut versuchen unter Fortschritt",
+  "COMPLETED QUESTS": "ABGESCHLOSSENE QUESTS",
+  "Quest": "Quest",
+  "Exploration": "Erkundung",
+  "NEXT": "ALS NÄCHSTES",
+  "WELCOME TO STAZA": "WILLKOMMEN BEI STAZA",
+  "Turn real rides, runs and hikes into a game": "Mach echte Touren zu einem Spiel",
+  "Staza finds the places you pass on real routes. Collect them for XP, level up, spend Skill Points in the Skill Atlas and complete quests.": "Staza findet die Orte, an denen du auf echten Routen vorbeikommst. Sammle sie für XP, steige im Level auf, gib Skillpunkte im Skill Atlas aus und schließe Quests ab.",
+  "Add an activity from a FIT file or Strava.": "Füge eine Aktivität aus einer FIT-Datei oder von Strava hinzu.",
+  "Watch the replay and see what changed.": "Sieh dir die Wiedergabe an und erfahre, was sich geändert hat.",
+  "Pick a quest or plan an exploration for your next outing.": "Wähle eine Quest oder plane eine Erkundung für deine nächste Tour.",
+  "Add your first activity": "Erste Aktivität hinzufügen",
+  "Unlock new sports, filters and quest chains in the Skill Atlas.": "Schalte neue Sportarten, Filter und Questreihen im Skill Atlas frei.",
+  "Your last attempt didn't meet every criterion. Start it again and your next activity decides.": "Dein letzter Versuch hat nicht alle Kriterien erfüllt. Starte neu, und deine nächste Aktivität entscheidet.",
+  "Go for your next ride, run or hike. That activity decides the attempt.": "Starte deine nächste Rad-, Lauf- oder Wandertour. Diese Aktivität entscheidet über den Versuch.",
+  "Pick an area in World and turn it into a route with targets to collect.": "Wähle ein Gebiet in der Welt und mach daraus eine Route mit Zielen zum Sammeln.",
+  "Open Quests": "Quests öffnen",
+  "View Quests": "Quests ansehen",
+  "Open World": "Welt öffnen",
+  "QUESTS & EXPLORATIONS": "QUESTS & ERKUNDUNGEN",
+  "Nothing in progress. Start a quest on ": "Nichts in Arbeit. Starte eine Quest unter ",
+  " or plan an exploration in ": " oder plane eine Erkundung in ",
+  "Collected": "Gesammelt",
+  "collected": "gesammelt",
+  "collected ·": "gesammelt ·",
+  "Flowline": "Flowline",
+  "Ride": "Fahrt",
+  "Run": "Lauf",
+  "Hike": "Wanderung",
+  "Walk": "Spaziergang",
+  "Length": "Länge",
+  "Round trip": "Rundtour",
+  "A to B": "A nach B",
+  "Step 1 · Plan your outing": "Schritt 1 · Plane deine Tour",
+  "Download GPX": "GPX herunterladen",
+  "Planned route": "Geplante Route"
 };
 
 export const appCopy = {
@@ -606,7 +671,7 @@ const translatedPrefixes = [
   ["Unable to load activities: ", "Aktivitäten konnten nicht geladen werden: "],
   ["Unable to load World: ", "Welt konnte nicht geladen werden: "],
   ["Unable to load Progress: ", "Fortschritt konnte nicht geladen werden: "],
-  ["Unable to load Skill Tree: ", "Skillbaum konnte nicht geladen werden: "],
+  ["Unable to load Skill Atlas: ", "Skill Atlas konnte nicht geladen werden: "],
   ["Unable to unlock: ", "Freischalten nicht möglich: "],
   ["We sent a one-time code to ", "Wir haben einen einmaligen Code an "],
   ["We couldn't send a code. ", "Code konnte nicht gesendet werden. "],
@@ -614,6 +679,18 @@ const translatedPrefixes = [
   ["View activity from ", "Aktivität vom "],
   ["Route for activity from ", "Route der Aktivität vom "]
 ];
+
+const patternCache = new Map();
+// Whole-word matching keeps short keys such as "Start" from rewriting "Starting".
+const wordBoundedPattern = (source) => {
+  if (!patternCache.has(source)) {
+    const escaped = source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const before = /^[\p{L}\p{N}]/u.test(source) ? "(?<![\\p{L}\\p{N}])" : "";
+    const after = /[\p{L}\p{N}]$/u.test(source) ? "(?![\\p{L}\\p{N}])" : "";
+    patternCache.set(source, new RegExp(`${before}${escaped}${after}`, "gu"));
+  }
+  return patternCache.get(source);
+};
 
 export const translateAppTextNode = (text, locale) => {
   const exact = translateAppText(text, locale);
@@ -638,10 +715,29 @@ export const translateAppTextNode = (text, locale) => {
     [/^(\d+)m$/, "$1 Min."],
     [/^(\d+) XP to Level (\d+)$/, "$1 XP bis Level $2"],
     [/^(\d+) to Level (\d+)$/, "$1 bis Level $2"],
+    [/^\((\d+) revisited, no XP\)$/, "($1 erneut besucht, keine XP)"],
+    [/^(\d+) new collectibles$/, "$1 neue Sammelobjekte"],
+    [/^(\d+) Flowlines$/, "$1 Flowlines"],
+    [/^(\d+) Flowline$/, "$1 Flowline"],
+    [/^(\d+) revisited$/, "$1 erneut besucht"],
+    [/^new · (\d+) revisited$/, "neu · $1 erneut besucht"],
+    [/^Spend (\d+) Skill Points?$/, "$1 Skillpunkte ausgeben"],
+    [/^Retry (.+)$/, "$1 erneut versuchen"],
+    [/^Start (.+)$/, "$1 starten"],
+    [/^(.+) is active$/, "$1 ist aktiv"],
+    [/^(.+) · \+(\d+) XP when your next activity completes it\.$/, "$1 · +$2 XP, wenn deine nächste Aktivität sie abschließt."],
+    [/^Active · your next activity decides · \+(\d+) XP$/, "Aktiv · deine nächste Aktivität entscheidet · +$1 XP"],
+    [/^Not completed · retry on Progress · \+(\d+) XP$/, "Nicht abgeschlossen · erneut versuchen unter Fortschritt · +$1 XP"],
+    [/^Not completed · (\d+) \/ (\d+) objectives$/, "Nicht abgeschlossen · $1 / $2 Ziele"],
+    [/^(\d+) \/ (\d+) objectives · your next activity decides$/, "$1 / $2 Ziele · deine nächste Aktivität entscheidet"],
+    [/^(\d+) \/ (\d+) targets?$/, "$1 / $2 Ziele"],
+    [/^Enter a (ride|run|hike) distance or time\.$/, "Gib eine Distanz oder Zeit für deine Tour ein."],
+    [/^Finding routes for your (ride|run|hike)\.\.\.$/, "Routen für deine Tour werden gesucht …"],
+    [/^This route is longer than your planned (ride|run|hike)\.$/, "Diese Route ist länger als deine geplante Tour."],
+    [/^This route is shorter than your planned (ride|run|hike)\.$/, "Diese Route ist kürzer als deine geplante Tour."],
     [/^Level (\d+)$/, "Level $1"],
     [/^LEVEL (\d+)$/, "LEVEL $1"],
     [/^Current level (\d+)$/, "Aktuelles Level $1"],
-    [/^EXPLORER · LEVEL (\d+)$/, "ENTDECKER · LEVEL $1"],
     [/^(\d+) registered on your account$/, "$1 für dein Konto registriert"],
     [/^(\d+) moment$/, "$1 Moment"],
     [/^(\d+) moments$/, "$1 Momente"],
@@ -655,7 +751,7 @@ export const translateAppTextNode = (text, locale) => {
   }
   return appCopyKeys.reduce((localized, source) => {
     if (source.length < 4) return localized;
-    return localized.replaceAll(source, appCopy.de[source]);
+    return localized.replace(wordBoundedPattern(source), () => appCopy.de[source]);
   }, text);
 };
 

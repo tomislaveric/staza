@@ -289,3 +289,20 @@ describe("world marker vocabulary", () => {
     expect(CollectibleSwatch()).not.toContain("is-common");
   });
 });
+
+describe("exploration objective copy and counts", () => {
+  it("counts targets, matching 'Visit all N' copy, and offers the GPX download", () => {
+    const objective = { id: "o", type: "collectible_targets", requiredCount: 2, targets: [{ id: "a", name: "A" }, { id: "b", name: "B" }] };
+    const markup = QuestList([instance({
+      objectives: [{
+        objective,
+        progress: { completed: 1, required: 2, complete: false },
+        targetProgress: [{ id: "a", name: "A", complete: true }, { id: "b", name: "B", complete: false }]
+      }]
+    })], undefined, undefined, new Map([["instance-1", { distanceM: 1000, durationS: 600, routeType: "round_trip" }]]));
+    expect(markup).toContain("Discover all 2 targets");
+    expect(markup).toContain("1 / 2 targets");
+    expect(markup).not.toContain("objectives</small>");
+    expect(markup).toContain('href="/api/quest-instances/instance-1/planned-route.gpx" download');
+  });
+});

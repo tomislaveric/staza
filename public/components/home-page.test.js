@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HomeAchievements, HomeActiveQuests, HomeActiveQuestCard, HomeRecentActivity, activeQuestInstances, homeViewModel } from "./home-page.js";
+import { HomeAchievements, HomeActiveQuests, HomeActiveQuestCard, HomeNextAction, HomeOnboarding, HomePage, HomeRecentActivity, activeQuestInstances, homeNextAction, homeViewModel, openQuestInstances } from "./home-page.js";
 
 describe("Home data transformation", () => {
   const progress = { totalXp: 700, level: 4, currentLevelXp: 100, nextLevelXp: 400, progressToNextLevel: .25 };
@@ -59,8 +59,37 @@ describe("Home active quests", () => {
 
   it("renders the empty state with a World control", () => {
     const html = HomeActiveQuests([]);
-    expect(html).toContain("You don't have any quests active, find some in");
+    expect(html).toContain("Nothing in progress.");
     expect(html).toContain("data-home-find-quests");
+    expect(html).toContain("data-home-progress");
+  });
+
+  it("keeps failed explorations visible with a Retry action", () => {
+    const failed = { id: "i1", status: "failed", title: "T", description: "D", objectives: [] };
+    expect(openQuestInstances([failed, { ...failed, id: "i2", status: "completed" }])).toHaveLength(1);
+    expect(HomeActiveQuestCard(failed)).toContain('data-retry-instance="i1"');
+    expect(HomeActiveQuestCard(failed)).toContain("Not completed");
+  });
+});
+
+describe("Home next action", () => {
+  it("prioritises Skill Points, failed, active, available quests, then exploration", () => {
+    const quest = (state) => ({ title: "Q", chainTitle: "C", xp: 100, state });
+    expect(homeNextAction({ skillPoints: 2, authoredQuests: [quest("failed")] }).id).toBe("spend-skill-points");
+    expect(homeNextAction({ authoredQuests: [quest("available"), quest("failed")] }).id).toBe("retry-quest");
+    expect(homeNextAction({ authoredQuests: [quest("active")] }).id).toBe("active-quest");
+    expect(homeNextAction({ authoredQuests: [quest("available")] }).id).toBe("start-quest");
+    expect(homeNextAction({}).target).toBe("world");
+    expect(HomeNextAction(homeNextAction({ skillPoints: 1 }))).toContain('data-home-action-target="skill-tree"');
+  });
+
+  it("shows onboarding instead of a next action before the first activity", () => {
+    const model = { progress: { totalXp: 0, level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0, remainingXp: 100 }, stats: { totalXp: 0, distanceMeters: 0, totalCollected: 0 }, latest: undefined, activeQuests: [] };
+    const html = HomePage(model);
+    expect(html).toContain("data-home-onboarding");
+    expect(html).not.toContain("data-home-next-action");
+    expect(HomeOnboarding()).toContain('data-home-action-target="add-activity"');
+    expect(html).not.toContain("EXPLORER");
   });
 });
 

@@ -1,4 +1,5 @@
 import { ActivityProgress } from "./activity-progress.js";
+import { ActivityOutcome } from "./activity-outcome.js";
 import { ReplayTab, mountReplayTab } from "./replay-tab.js";
 import { ActivitySummary } from "./activity-summary.js";
 import { ActivityTabs } from "./activity-tabs.js";
@@ -53,13 +54,14 @@ export const ActivityDetailPage = (activity, progress, selectedTab = "replay") =
       </div>
       ${ActivitySummary(activity)}
       ${ActivityProgress(activity, progress)}
+      ${ActivityOutcome(activity.replay?.outcome)}
       ${ActivityTabs(activity, selectedTab)}
       <div class="activity-detail-tab-content">${tabContent}</div>
     </section>
   `;
 };
 
-export const mountActivityDetailPage = async (mountPoint, activityId, onBack) => {
+export const mountActivityDetailPage = async (mountPoint, activityId, onBack, onNavigate) => {
   mountPoint.innerHTML = '<section class="activity-detail-page"><p class="activity-detail-state" role="status">Loading activity detail...</p></section>';
   try {
     const [loadedActivity, progress] = await Promise.all([
@@ -85,6 +87,7 @@ export const mountActivityDetailPage = async (mountPoint, activityId, onBack) =>
       mountPoint.querySelectorAll("[data-activity-tab]").forEach((tab) => {
         tab.addEventListener("click", () => render(tab.dataset.activityTab));
       });
+      mountPoint.querySelector("[data-outcome-open-atlas]")?.addEventListener("click", () => onNavigate?.("skill-tree"));
       const sportSelect = mountPoint.querySelector("[data-activity-sport]");
       sportSelect?.addEventListener("change", async () => {
         const errorHost = mountPoint.querySelector(".activity-detail-sport-error");

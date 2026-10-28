@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { NewPlannedRoute, QuestObjective } from "../domain.js";
+import type { Activity, ActivityResult, NewPlannedRoute, QuestObjective } from "../domain.js";
+import { ActivityRepository } from "./activityRepository.js";
 import type { NewExploration } from "../exploration/service.js";
 import { createDatabasePool } from "./database.js";
 import { migrate } from "./migrate.js";
@@ -46,40 +47,31 @@ const route = (proposalId: string, overrides: Partial<NewPlannedRoute> = {}): Ne
   ...overrides
 });
 
-/** A quest started through the retired suggestion flow: all-time progress, curated template. */
-const insertLegacyInstance = async (): Promise<string> => {
-  await pool!.query(
-    `INSERT INTO quest_templates (id, version, title, description, recommended_level, objectives, active)
-     VALUES ('history-peak-test', 1, 'Peak collection', 'Discover three peaks.', 2, '[]', false)
-     ON CONFLICT (id, version) DO NOTHING`
-  );
-  const id = randomUUID();
-  await pool!.query(
-    `INSERT INTO quest_instances (
-      id, player_id, template_id, template_version, scope_hash, title, description, recommended_level, objectives
-    ) VALUES ($1, $2, 'history-peak-test', 1, $3, 'Peak collection', 'Discover three peaks.', 2, $4)`,
-    [id, playerId, "a".repeat(32), JSON.stringify(peakObjectives)]
-  );
+const activities = pool ? new ActivityRepository(pool) : undefined;
+const startedBefore = new Date("2026-05-01T00:00:00Z");
+
+const rideWith = async (id: string, sourceIds: string[], activityStartedAt = "2026-06-01T08:00:00Z") => {
+  const activity: Activity = {
+    id, source: "fit", type: "cycling", startedAt: Date.parse(activityStartedAt),
+    endedAt: Date.parse(activityStartedAt) + 3_600_000, route: [], distance: 20_000, duration: 3600
+  };
+  const result: ActivityResult = {
+    activityId: id, collectedCount: sourceIds.length, totalPoints: sourceIds.length * 10, distanceXp: 0,
+    distanceXpRewards: [], collectibles: [], nearMisses: [], fartlekCompletions: [],
+    events: sourceIds.map((sourceId, index) => ({
+      id: sourceId, sourceId, type: "collectible_collected" as const,
+      collectible: { name: sourceId, type: "landmark" as const },
+      value: 10, latitude: 49, longitude: 8, activityTimestamp: index + 1
+    }))
+  };
+  return activities!.persistCompletedActivity(playerId, activity, result);
+};
+const totalXp = async () => (await pool!.query("SELECT total_xp FROM players WHERE id = $1", [playerId])).rows[0].total_xp;
+const confirmExploration = async (): Promise<string> => {
+  const proposalId = randomUUID();
+  const id = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
+  await pool!.query("UPDATE quest_instances SET started_at = $2 WHERE id = $1", [id, startedBefore]);
   return id;
-};
-
-const insertActivity = async (id: string): Promise<void> => {
-  await pool!.query(
-    `INSERT INTO activities (
-      id, player_id, source_type, activity_type, started_at, xp_earned, collected_count
-    ) VALUES ($1, $2, 'fit', 'cycling', now(), 0, 0)`,
-    [id, playerId]
-  );
-};
-
-const insertDiscovery = async (activityId: string, sourceId: string, timestampMs = 1): Promise<void> => {
-  await pool!.query(
-    `INSERT INTO activity_events (
-      id, activity_id, source_id, event_type, activity_timestamp, value, latitude, longitude,
-      collectible_name, collectible_type, collectible_category
-    ) VALUES ($1, $2, $3, 'collectible_collected', $4, 10, 49, 8, $3, 'landmark', 'peak')`,
-    [randomUUID(), activityId, sourceId, timestampMs]
-  );
 };
 
 describePersistence("QuestInstanceRepository", () => {
@@ -93,29 +85,7 @@ describePersistence("QuestInstanceRepository", () => {
     await pool?.end();
   });
 
-  it("keeps historical quests readable with all-time progress", async () => {
-    await insertActivity("history-activity-1");
-    await insertDiscovery("history-activity-1", "peak-a");
-    await insertDiscovery("history-activity-1", "peak-b");
-    const instanceId = await insertLegacyInstance();
-    let instances = await repository!.listForPlayer(playerId);
-    expect(instances).toMatchObject([{
-      id: instanceId,
-      suggestionId: "a".repeat(32),
-      status: "active",
-      objectives: [{ progress: { completed: 2, required: 3, complete: false } }]
-    }]);
-
-    await insertActivity("history-activity-2");
-    await insertDiscovery("history-activity-2", "peak-c");
-    instances = await repository!.listForPlayer(playerId);
-    expect(instances[0].status).toBe("completed");
-    expect(instances[0].completedAt).toBeDefined();
-  });
-
-  it("creates an exploration with its route atomically and counts only progress after confirmation", async () => {
-    await insertActivity("before-confirmation");
-    await insertDiscovery("before-confirmation", "peak-a");
+  it("creates an exploration with its route atomically and shows no progress until an activity resolves it", async () => {
     const proposalId = randomUUID();
     const instanceId = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
 
@@ -126,6 +96,9 @@ describePersistence("QuestInstanceRepository", () => {
       suggestionId: proposalId,
       title: "Exploration: Peak A, Peak B +1",
       status: "active",
+      difficulty: "medium",
+      rewardXp: 250,
+      attemptCount: 1,
       objectives: [{ progress: { completed: 0, required: 3 } }]
     });
     expect(await repository!.getPlannedRoute(playerId, instanceId)).toMatchObject({
@@ -136,10 +109,43 @@ describePersistence("QuestInstanceRepository", () => {
       includedTargetIds: ["peak-a", "peak-b", "peak-c"]
     });
     expect(await repository!.getPlannedRoute("00000000-0000-4000-8000-0000000000e2", instanceId)).toBeUndefined();
+  });
 
-    await insertActivity("after-confirmation");
-    await insertDiscovery("after-confirmation", "peak-b", Date.now() + 1_000);
-    expect((await repository!.listForPlayer(playerId))[0].objectives[0].progress.completed).toBe(1);
+  it("completes in one activity, granting the reward exactly once", async () => {
+    const instanceId = await confirmExploration();
+    const { activity } = await rideWith("quest-pass", ["peak-a", "peak-b", "peak-c"]);
+    expect(activity.replay!.outcome!.quests).toMatchObject([{ questId: instanceId, result: "completed", xp: 250 }]);
+    expect(await totalXp()).toBe(30 + 250);
+    const [instance] = await repository!.listForPlayer(playerId);
+    expect(instance).toMatchObject({ status: "completed", resolvedActivityId: "quest-pass" });
+
+    await rideWith("quest-pass", ["peak-a", "peak-b", "peak-c"]);
+    expect(await totalXp()).toBe(30 + 250);
+  });
+
+  it("fails when targets are spread across activities and can be retried", async () => {
+    const instanceId = await confirmExploration();
+    await rideWith("quest-part-1", ["peak-a", "peak-b"]);
+    let [instance] = await repository!.listForPlayer(playerId);
+    expect(instance).toMatchObject({
+      status: "failed", resolvedActivityId: "quest-part-1",
+      objectives: [{ progress: { completed: 2, required: 3, complete: false } }]
+    });
+    expect(await totalXp()).toBe(20);
+
+    // The second half cannot complete a failed attempt.
+    await rideWith("quest-part-2", ["peak-c"], "2026-06-02T08:00:00Z");
+    expect((await repository!.listForPlayer(playerId))[0].status).toBe("failed");
+
+    await repository!.retry(playerId, instanceId, startedBefore);
+    await expect(repository!.retry(playerId, instanceId)).rejects.toThrow("failed quests");
+    [instance] = await repository!.listForPlayer(playerId);
+    expect(instance).toMatchObject({ status: "active", attemptCount: 2 });
+    const { activity } = await rideWith("quest-retry", ["peak-a", "peak-b", "peak-c"], "2026-06-03T08:00:00Z");
+    expect((await repository!.listForPlayer(playerId))[0].status).toBe("completed");
+    // Peaks claimed on the failed attempts are revisits: only the quest reward is new XP.
+    expect(activity.replay!.outcome!.collectibles).toEqual({ newCount: 0, revisitCount: 3 });
+    expect(await totalXp()).toBe(20 + 10 + 250);
   });
 
   it("returns the same exploration when a proposal is confirmed twice", async () => {

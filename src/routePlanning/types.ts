@@ -10,6 +10,11 @@ export interface LatLon {
 
 export type RouteType = "round_trip" | "point_to_point";
 
+export type Sport = "cycling" | "running" | "hiking";
+
+/** Neutral routing-service profile a sport is routed with. */
+export type RoutingProfile = "bicycle" | "pedestrian";
+
 export type RideConstraint =
   | { type: "distance"; meters: number }
   | { type: "duration"; seconds: number };
@@ -20,6 +25,8 @@ export interface RoutePlanningInput {
   end: LatLon;
   routeType: RouteType;
   constraint: RideConstraint;
+  /** Defaults to cycling. */
+  sport?: Sport;
 }
 
 /**
@@ -76,7 +83,7 @@ export interface RoutingWaypoint extends LatLon {
 
 /** Neutral request sent to the standalone routing service. Contains no Staza ids. */
 export interface RoutingRequest {
-  profile: "bicycle";
+  profile: RoutingProfile;
   start: LatLon;
   end: LatLon;
   waypoints: RoutingWaypoint[];
@@ -195,5 +202,7 @@ export interface StoredProposal {
   targets: QuestRouteTarget[];
   proposal: RouteProposal;
   plannerVersion: number;
+  /** Sport the route was planned for; persisted as the routing profile on confirmation. */
+  sport?: Sport;
   expiresAtMs: number;
 }

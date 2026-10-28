@@ -1,6 +1,7 @@
 import { UserInputError } from "../errors.js";
 import { distanceBetween } from "./geo.js";
 import { PLANNING_LIMITS } from "./policy.js";
+import { parseSport } from "./sport.js";
 import type { LatLon, QuestRouteTarget, RideConstraint, RoutePlanningInput } from "./types.js";
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -46,7 +47,7 @@ export const parseRoutePlanningInput = (body: Record<string, unknown>): RoutePla
   if (routeType === "point_to_point" && distanceBetween(start, end) < 200) {
     throw new UserInputError("Destination must differ from the start. Choose a round trip to return to the start.");
   }
-  return { start, end, routeType, constraint: parseConstraint(body.constraint) };
+  return { start, end, routeType, constraint: parseConstraint(body.constraint), sport: parseSport(body.sport) };
 };
 
 /** Prevents planning arbitrary far-away routes: start and end must be near the exploration's targets. */

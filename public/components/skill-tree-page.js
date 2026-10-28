@@ -114,7 +114,7 @@ export const SkillTreePage = () => `
 const responseJson = async (response) => {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(body.error ?? "Unable to update the Skill Tree.");
+    const error = new Error(body.error ?? "Unable to update the Skill Atlas.");
     error.code = body.code;
     throw error;
   }
@@ -122,7 +122,7 @@ const responseJson = async (response) => {
 };
 
 export const mountSkillTreePage = async (mountPoint) => {
-  mountPoint.innerHTML = '<section class="skill-tree-page"><p class="skill-tree-loading" role="status">Loading Skill Tree...</p></section>';
+  mountPoint.innerHTML = '<section class="skill-tree-page"><p class="skill-tree-loading" role="status">Loading Skill Atlas...</p></section>';
 
   let view;
   let layout;
@@ -315,6 +315,6 @@ export const mountSkillTreePage = async (mountPoint) => {
     renderScene();
     renderDetail();
   } catch (error) {
-    mountPoint.innerHTML = `<section class="skill-tree-page"><p class="skill-tree-load-error" role="alert">Unable to load Skill Tree: ${escapeHtml(error.message)}</p></section>`;
+    mountPoint.innerHTML = `<section class="skill-tree-page"><p class="skill-tree-load-error" role="alert">Unable to load Skill Atlas: ${escapeHtml(error.message)}</p></section>`;
   }
 };

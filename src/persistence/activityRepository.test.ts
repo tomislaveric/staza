@@ -253,7 +253,8 @@ describePersistence("ActivityRepository", () => {
     expect(dashboard.progress).toEqual(before);
     expect(dashboard.lifetime).toEqual({
       distanceMeters: 49_380,
-      totalCollectibles: 3
+      totalCollectibles: 3,
+      totalFlowlines: 0
     });
     expect(dashboard.levels).toEqual([
       { level: 1, totalXpRequired: 0, skillPointsAwarded: 1 },
@@ -328,5 +329,36 @@ describePersistence("ActivityRepository", () => {
       .resolves.toMatchObject({ inserted: false });
     expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 50 });
     expect((await pool!.query("SELECT 1 FROM fartlek_completions WHERE player_id = $1", [playerId])).rowCount).toBe(1);
+  });
+  it("claims each collectible once, labels revisits and reports what changed", async () => {
+    const first = await repository!.persistCompletedActivity(playerId, { ...activity("claim-first"), startedAt: Date.parse("2026-02-02T08:00:00Z") }, result("claim-first"));
+    expect(first.activity).toMatchObject({ collectedCount: 1, revisitCount: 0, xpEarned: 25, title: expect.any(String) });
+    expect(first.activity.replay!.outcome).toMatchObject({
+      xp: { collectibles: 25, total: 25 },
+      collectibles: { newCount: 1, revisitCount: 0 },
+      progression: { previousTotalXp: 0, newTotalXp: 25, previousLevel: 1, newLevel: 1, levelsGained: 0 }
+    });
+
+    const second = await repository!.persistCompletedActivity(playerId, { ...activity("claim-second"), startedAt: Date.parse("2026-01-05T08:00:00Z") }, result("claim-second"));
+    expect(second.activity).toMatchObject({ collectedCount: 0, revisitCount: 1, xpEarned: 0 });
+    expect(second.activity.events[0]).toMatchObject({ repeat: true, value: 0 });
+    expect(second.activity.replay!.outcome).toMatchObject({ xp: { collectibles: 0, total: 0 }, collectibles: { newCount: 0, revisitCount: 1 } });
+    expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 25 });
+
+    const dashboard = await repository!.getProgressDashboard(playerId);
+    expect(dashboard.lifetime.totalCollectibles).toBe(1);
+    // Newest by activity date first, not by import order.
+    expect((await repository!.listActivities(playerId)).map((item) => item.id)).toEqual(["claim-first", "claim-second"]);
+    expect(dashboard.recentActivities.map((item) => item.id)).toEqual(["claim-first", "claim-second"]);
+  });
+
+  it("reports level-ups and the Skill Points they earn", async () => {
+    const big = { ...result("level-up", 25), totalPoints: 350 };
+    const { activity: persisted } = await repository!.persistCompletedActivity(playerId, activity("level-up"), big);
+    const progression = persisted.replay!.outcome!.progression;
+    expect(progression).toMatchObject({ previousLevel: 1, newLevel: 3, levelsGained: 2 });
+    expect(progression.levels.map((level) => level.level)).toEqual([1, 2, 3, 4]);
+    expect(progression.levels[2].totalXpRequired).toBe(300);
+    expect(progression.skillPointsEarned).toBe(progression.levels.reduce((sum, level) => sum + (level.level > 1 && level.level <= 3 ? level.skillPointsAwarded : 0), 0));
   });
 });

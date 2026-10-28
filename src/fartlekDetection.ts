@@ -1,6 +1,7 @@
 import type { Fartlek, FartlekCompletionDraft, FartlekTraversalDirection, TrackPoint } from "./domain.js";
 import { distanceMeters } from "./geometry.js";
-import { lineStringLengthMeters } from "./fartlek.js";
+import { FARTLEK_COMPLETION_XP, lineStringLengthMeters } from "./fartlek.js";
+import { readableFlowlineName } from "./flowlineName.js";
 
 /** Wider than typical consumer GPS error, narrower than typical road-to-road spacing. */
 export const CORRIDOR_BUFFER_METERS = 22;
@@ -165,6 +166,9 @@ const coverageRatio = (run: CorridorSample[], totalLength: number, direction: Fa
   return covered.filter(Boolean).length / binCount;
 };
 
+/** Human-powered speeds above this (80 km/h) are GPS noise, not riding. */
+export const MAX_PLAUSIBLE_SPEED_MPS = 22.2;
+
 export interface FartlekTraversalResult {
   completed: boolean;
   direction?: FartlekTraversalDirection;
@@ -226,13 +230,17 @@ export const detectFartlekTraversal = (
 
     const elapsedTimeS = (last.timestampMs - first.timestampMs) / 1000;
     if (elapsedTimeS <= 0) continue;
-    const speeds = run.map((sample) => sample.speedMps).filter((speed): speed is number => speed !== undefined && speed > 0);
+    const averageSpeedMps = fartlek.lengthMeters / elapsedTimeS;
+    if (averageSpeedMps > MAX_PLAUSIBLE_SPEED_MPS) continue;
+    const speeds = run
+      .map((sample) => sample.speedMps)
+      .filter((speed): speed is number => speed !== undefined && speed > 0 && speed <= MAX_PLAUSIBLE_SPEED_MPS);
     return {
       completed: true,
       direction,
       completedAtTimestampMs: last.timestampMs,
       elapsedTimeS,
-      averageSpeedMps: fartlek.lengthMeters / elapsedTimeS,
+      averageSpeedMps,
       ...(speeds.length > 0 ? { maxSpeedMps: Math.max(...speeds) } : {})
     };
   }
@@ -256,7 +264,7 @@ export const deriveFartlekCompletionDrafts = (
       result.averageSpeedMps === undefined) continue;
     drafts.push({
       fartlekId: fartlek.id,
-      fartlekName: fartlek.name,
+      fartlekName: readableFlowlineName(fartlek.name),
       fartlekGeometry: fartlek.geometry,
       completedAtTimestampMs: result.completedAtTimestampMs,
       elapsedTimeS: result.elapsedTimeS,
@@ -264,7 +272,8 @@ export const deriveFartlekCompletionDrafts = (
       ...(result.maxSpeedMps === undefined ? {} : { maxSpeedMps: result.maxSpeedMps }),
       traversalDirection: result.direction,
       fartlekLengthMSnapshot: fartlek.lengthMeters,
-      fartlekGeometryVersionSnapshot: fartlek.geometryVersion
+      fartlekGeometryVersionSnapshot: fartlek.geometryVersion,
+      xp: FARTLEK_COMPLETION_XP
     });
   }
   return drafts;

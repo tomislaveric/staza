@@ -783,6 +783,78 @@ export const migrations: Migration[] = [{
       );
     `);
   }
+}, {
+  id: "034_p1_quest_attempts_and_claims",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE activity_events ADD COLUMN repeat BOOLEAN NOT NULL DEFAULT false;
+      WITH ranked AS (
+        SELECT e.id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY a.player_id, e.source_id
+                 ORDER BY a.created_at, a.started_at, e.activity_timestamp, e.id
+               ) AS claim_rank
+        FROM activity_events e
+        JOIN activities a ON a.id = e.activity_id
+      )
+      UPDATE activity_events e SET repeat = true
+      FROM ranked r
+      WHERE r.id = e.id AND r.claim_rank > 1;
+      UPDATE activities a
+      SET collected_count = COALESCE((
+        SELECT COUNT(*) FROM activity_events e WHERE e.activity_id = a.id AND NOT e.repeat
+      ), 0);
+
+      DO $$
+      DECLARE constraint_name TEXT;
+      BEGIN
+        FOR constraint_name IN
+          SELECT c.conname FROM pg_constraint c
+          WHERE c.conrelid = 'quest_instances'::regclass AND c.contype = 'c'
+            AND (pg_get_constraintdef(c.oid) ILIKE '%status%')
+        LOOP
+          EXECUTE format('ALTER TABLE quest_instances DROP CONSTRAINT %I', constraint_name);
+        END LOOP;
+      END $$;
+      ALTER TABLE quest_instances
+        ADD COLUMN difficulty TEXT NOT NULL DEFAULT 'medium'
+          CHECK (difficulty IN ('easy', 'medium', 'hard', 'prestige')),
+        ADD COLUMN reward_xp INTEGER NOT NULL DEFAULT 250 CHECK (reward_xp >= 0),
+        ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 1 CHECK (attempt_count >= 1),
+        ADD COLUMN failed_at TIMESTAMPTZ,
+        ADD COLUMN resolved_activity_id TEXT,
+        ADD COLUMN attempt_result JSONB,
+        ADD CONSTRAINT quest_instances_status_check
+          CHECK (status IN ('active', 'completed', 'failed')),
+        ADD CONSTRAINT quest_instances_resolution_check
+          CHECK ((status = 'active' AND completed_at IS NULL AND failed_at IS NULL)
+            OR (status = 'completed' AND completed_at IS NOT NULL)
+            OR (status = 'failed' AND failed_at IS NOT NULL));
+      UPDATE quest_instances SET
+        difficulty = CASE
+          WHEN jsonb_array_length(objectives) <= 2 THEN 'easy'
+          WHEN jsonb_array_length(objectives) <= 5 THEN 'medium'
+          ELSE 'hard' END,
+        reward_xp = CASE
+          WHEN jsonb_array_length(objectives) <= 2 THEN 100
+          WHEN jsonb_array_length(objectives) <= 5 THEN 250
+          ELSE 500 END;
+
+      UPDATE quest_instances SET fresh_progress = true, started_at = now() WHERE status = 'active';
+
+      CREATE TABLE authored_quest_attempts (
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        quest_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'failed')),
+        attempt_count INTEGER NOT NULL DEFAULT 1 CHECK (attempt_count >= 1),
+        started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        failed_at TIMESTAMPTZ,
+        activity_id TEXT,
+        result JSONB,
+        PRIMARY KEY (player_id, quest_id)
+      );
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

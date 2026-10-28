@@ -1,4 +1,6 @@
-import { buildActivityQuestMetrics, completeAuthoredQuestsWithClient } from "./authoredQuestRepository.js";
+import { buildActivityQuestMetrics, resolveAuthoredQuestAttemptsWithClient } from "./authoredQuestRepository.js";
+import { buildActivityOutcome, readSkillTreeView } from "./activityOutcome.js";
+import { resolveExplorationAttemptsWithClient } from "./questInstanceRepository.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { activityTypeLabel } from "../activity.js";
@@ -8,6 +10,7 @@ import type {
   ActivityType,
   CollectibleCategory,
   ActivityHistoryItem,
+  ActivityOutcome,
   ActivityResult,
   ActivityVideo,
   ActivityVideoState,
@@ -16,14 +19,18 @@ import type {
   ProgressDashboard,
   PlayerProgress,
   PlayerProfileOverview,
+  QuestDifficulty,
+  QuestHistoryEntry,
   ReplaySnapshot
 } from "../domain.js";
+import { AUTHORED_QUEST_CHAINS, findAuthoredQuest } from "../authoredQuests/catalog.js";
 import {
   createActivityFingerprint,
   FINGERPRINT_CANDIDATE_WINDOW_MS,
   isHighConfidenceDuplicate,
   type ActivityFingerprint
 } from "../activityFingerprint.js";
+import { readableFlowlineName } from "../flowlineName.js";
 import { ActivityImportRejectedError } from "../errors.js";
 import { getLevelProgress, getTotalXpRequiredForLevel } from "../progression.js";
 import { FartlekCompletionRepository } from "./fartlekCompletionRepository.js";
@@ -41,7 +48,18 @@ interface ActivityRow {
   collected_count: number;
   has_video: boolean;
   replay_snapshot: ReplaySnapshot | null;
+  title: string | null;
+  revisit_count: string | number;
+  flowline_count: string | number;
 }
+
+/** Columns shared by every activity query; list queries skip the heavy replay snapshot. */
+const activityColumns = (includeSnapshot: boolean): string => `
+  activities.id, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video,
+  ${includeSnapshot ? "replay_snapshot" : "NULL::jsonb AS replay_snapshot"},
+  replay_snapshot->'activity'->>'title' AS title,
+  (SELECT COUNT(*) FROM activity_events e WHERE e.activity_id = activities.id AND e.repeat) AS revisit_count,
+  (SELECT COUNT(*) FROM fartlek_completions f WHERE f.activity_id = activities.id) AS flowline_count`;
 
 interface EventRow {
   id: string;
@@ -54,6 +72,7 @@ interface EventRow {
   collectible_name: string;
   collectible_type: PersistedActivityEvent["collectible"]["type"];
   collectible_category: CollectibleCategory | null;
+  repeat: boolean;
 }
 
 interface VideoRow {
@@ -72,12 +91,16 @@ interface VideoRow {
 interface ProgressLifetimeRow {
   distance_meters: number;
   total_collectibles: string;
+  total_flowlines: string;
 }
 
 const mapActivity = (row: ActivityRow): ActivityHistoryItem => ({
   id: row.id,
   type: row.activity_type,
+  title: row.title?.trim() || activityTypeLabel(row.activity_type),
   startedAt: row.started_at.toISOString(),
+  revisitCount: Number(row.revisit_count),
+  flowlineCount: Number(row.flowline_count),
   ...(row.distance_meters === null ? {} : { distanceMeters: row.distance_meters }),
   ...(row.duration_seconds === null ? {} : { durationSeconds: row.duration_seconds }),
   xpEarned: row.xp_earned,
@@ -85,11 +108,47 @@ const mapActivity = (row: ActivityRow): ActivityHistoryItem => ({
   hasVideo: row.has_video
 });
 
-const createReplaySnapshot = (activity: Activity, activityResult: ActivityResult): ReplaySnapshot => ({
+const createReplaySnapshot = (
+  activity: Activity,
+  activityResult: ActivityResult,
+  outcome?: ActivityOutcome
+): ReplaySnapshot => ({
   version: 1,
   activity: structuredClone(activity),
-  activityResult: structuredClone(activityResult)
+  activityResult: structuredClone(activityResult),
+  ...(outcome ? { outcome } : {})
 });
+
+/** Snapshots stored before name cleanup still carry raw OSM names. */
+const withReadableFlowlineNames = (snapshot: ReplaySnapshot): ReplaySnapshot => ({
+  ...snapshot,
+  activityResult: {
+    ...snapshot.activityResult,
+    fartlekCompletions: snapshot.activityResult.fartlekCompletions.map((completion) => ({
+      ...completion,
+      fartlekName: readableFlowlineName(completion.fartlekName)
+    }))
+  }
+});
+
+/**
+ * A collectible already claimed by the player earlier is a revisit: it stays in the replay and
+ * result card but grants no XP and no longer counts as a new collectible.
+ */
+const resolveCollectibleClaims = (result: ActivityResult, claimedSourceIds: ReadonlySet<string>): ActivityResult => {
+  const events = result.events.map((event) =>
+    claimedSourceIds.has(event.sourceId) ? { ...event, value: 0, repeat: true } : { ...event, repeat: false }
+  );
+  const lostXp = result.events.reduce((total, event, index) => total + event.value - events[index].value, 0);
+  const revisitCount = events.filter((event) => event.repeat).length;
+  return {
+    ...result,
+    events,
+    collectedCount: events.length - revisitCount,
+    revisitCount,
+    totalPoints: result.totalPoints - lostXp
+  };
+};
 
 const mapEvent = (row: EventRow): PersistedActivityEvent => ({
   id: row.id,
@@ -103,7 +162,8 @@ const mapEvent = (row: EventRow): PersistedActivityEvent => ({
   value: row.value,
   latitude: row.latitude,
   longitude: row.longitude,
-  activityTimestamp: Number(row.activity_timestamp)
+  activityTimestamp: Number(row.activity_timestamp),
+  ...(row.repeat ? { repeat: true } : {})
 });
 
 const mapVideo = (row: VideoRow): ActivityVideo => ({
@@ -128,7 +188,7 @@ export class ActivityRepository {
   async persistCompletedActivity(
     playerId: string,
     activity: Activity,
-    result: ActivityResult,
+    submittedResult: ActivityResult,
     importKey?: string
   ): Promise<{ activity: PersistedActivity; progress: PlayerProgress; inserted: boolean }> {
     const client = await this.pool.connect();
@@ -136,8 +196,8 @@ export class ActivityRepository {
       await client.query("BEGIN");
       // The player row lock serializes every acceptance decision for this player: exact identity,
       // cross-source duplicates, and the journey boundary are evaluated against committed state.
-      const player = await client.query<{ created_at: Date }>(
-        "SELECT created_at FROM players WHERE id = $1 FOR UPDATE",
+      const player = await client.query<{ created_at: Date; total_xp: number }>(
+        "SELECT created_at, total_xp FROM players WHERE id = $1 FOR UPDATE",
         [playerId]
       );
       if (player.rowCount !== 1) throw new Error("Default player does not exist.");
@@ -174,13 +234,29 @@ export class ActivityRepository {
         );
       }
 
+      const submittedSourceIds = [...new Set(submittedResult.events.map((event) => event.sourceId))];
+      const claimed = await client.query<{ source_id: string }>(
+        `SELECT DISTINCT events.source_id FROM activity_events AS events
+         INNER JOIN activities ON activities.id = events.activity_id
+         WHERE activities.player_id = $1 AND events.source_id = ANY($2::text[])`,
+        [playerId, submittedSourceIds]
+      );
+      const result = resolveCollectibleClaims(submittedResult, new Set(claimed.rows.map((row) => row.source_id)));
+      const knownFlowlines = await client.query<{ fartlek_id: string }>(
+        "SELECT DISTINCT fartlek_id FROM fartlek_completions WHERE player_id = $1 AND fartlek_id = ANY($2::text[])",
+        [playerId, result.fartlekCompletions.map((completion) => completion.fartlekId)]
+      );
+      const newFlowlineCount = new Set(result.fartlekCompletions.map((completion) => completion.fartlekId)).size
+        - knownFlowlines.rowCount!;
+      const skillTreeBefore = await readSkillTreeView(client, playerId);
+
       const inserted = await client.query<ActivityRow>(
         `INSERT INTO activities (
           id, player_id, source_type, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count,
           replay_snapshot, source_external_id, fingerprint_version, fingerprint_started_at, fingerprint, elevation_gain_m
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ON CONFLICT DO NOTHING
-        RETURNING id, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video, replay_snapshot`,
+        RETURNING id`,
         [
           activity.id,
           playerId,
@@ -214,8 +290,8 @@ export class ActivityRepository {
         await client.query(
           `INSERT INTO activity_events (
             id, activity_id, source_id, event_type, activity_timestamp, value, latitude, longitude,
-            collectible_name, collectible_type, collectible_category
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            collectible_name, collectible_type, collectible_category, repeat
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [
             randomUUID(),
             activity.id,
@@ -227,7 +303,8 @@ export class ActivityRepository {
             event.longitude,
             event.collectible.name,
             event.collectible.type,
-            categoriesBySourceId.get(event.sourceId) ?? null
+            categoriesBySourceId.get(event.sourceId) ?? null,
+            event.repeat === true
           ]
         );
       }
@@ -236,9 +313,23 @@ export class ActivityRepository {
           client, playerId, activity.id, result.fartlekCompletions
         );
       }
-      const questXp = await completeAuthoredQuestsWithClient(
-        client, playerId, activity.id, buildActivityQuestMetrics(activity, result, categoriesBySourceId)
+      const activityStartedAt = new Date(activity.startedAt);
+      const authoredOutcomes = await resolveAuthoredQuestAttemptsWithClient(
+        client, playerId, activity.id, activityStartedAt, buildActivityQuestMetrics(activity, result, categoriesBySourceId)
       );
+      const explorationOutcomes = await resolveExplorationAttemptsWithClient(client, playerId, activity.id, activityStartedAt, {
+        collectibles: result.events.map((event) => {
+          const category = categoriesBySourceId.get(event.sourceId);
+          return { sourceId: event.sourceId, ...(category ? { category } : {}) };
+        }),
+        flowlines: result.fartlekCompletions.map((completion) => ({
+          flowlineId: completion.fartlekId,
+          lengthMeters: completion.fartlekLengthMSnapshot,
+          averageSpeedMps: completion.averageSpeedMps
+        }))
+      });
+      const quests = [...authoredOutcomes, ...explorationOutcomes];
+      const questXp = quests.reduce((total, quest) => total + quest.xp, 0);
       const updatedPlayer = await client.query<{ total_xp: number }>(
         `UPDATE players
          SET total_xp = total_xp + $1
@@ -246,6 +337,20 @@ export class ActivityRepository {
         [result.totalPoints + questXp, playerId]
       );
       if (updatedPlayer.rowCount !== 1) throw new Error("Default player does not exist.");
+      const skillTreeAfter = await readSkillTreeView(client, playerId);
+      const outcome = buildActivityOutcome({
+        result,
+        previousTotalXp: player.rows[0].total_xp,
+        newTotalXp: updatedPlayer.rows[0].total_xp,
+        newFlowlineCount,
+        quests,
+        skillTreeBefore,
+        skillTreeAfter
+      });
+      await client.query("UPDATE activities SET replay_snapshot = $2 WHERE id = $1", [
+        activity.id,
+        JSON.stringify(createReplaySnapshot(activity, result, outcome))
+      ]);
       const persisted = await this.getActivityWithClient(client, playerId, activity.id);
       await client.query("COMMIT");
       return { activity: persisted, progress: getLevelProgress(updatedPlayer.rows[0].total_xp), inserted: true };
@@ -298,8 +403,8 @@ export class ActivityRepository {
 
   async listActivities(playerId: string): Promise<ActivityHistoryItem[]> {
     const result = await this.pool.query<ActivityRow>(
-      `SELECT id, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video, replay_snapshot
-       FROM activities WHERE player_id = $1 ORDER BY created_at DESC, id DESC`,
+      `SELECT ${activityColumns(false)}
+       FROM activities WHERE player_id = $1 ORDER BY started_at DESC, id DESC`,
       [playerId]
     );
     return result.rows.map(mapActivity);
@@ -381,8 +486,9 @@ export class ActivityRepository {
         [playerId]
       );
       if (player.rowCount !== 1) throw new Error("Player does not exist.");
-      const lifetime = await client.query<{ distance_meters: number; activity_count: string }>(
-        `SELECT COALESCE(SUM(distance_meters), 0) AS distance_meters, COUNT(*) AS activity_count
+      const lifetime = await client.query<{ distance_meters: number; activity_count: string; flowline_count: string }>(
+        `SELECT COALESCE(SUM(distance_meters), 0) AS distance_meters, COUNT(*) AS activity_count,
+                (SELECT COUNT(DISTINCT fartlek_id) FROM fartlek_completions WHERE player_id = $1) AS flowline_count
          FROM activities WHERE player_id = $1`,
         [playerId]
       );
@@ -391,7 +497,8 @@ export class ActivityRepository {
         displayName: player.rows[0].display_name,
         progress: getLevelProgress(player.rows[0].total_xp),
         distanceMeters: Number(lifetime.rows[0].distance_meters),
-        activityCount: Number(lifetime.rows[0].activity_count)
+        activityCount: Number(lifetime.rows[0].activity_count),
+        flowlineCount: Number(lifetime.rows[0].flowline_count)
       };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -413,21 +520,49 @@ export class ActivityRepository {
              FROM activities
              WHERE player_id = $1
            ), 0) AS distance_meters,
-           COUNT(DISTINCT events.source_id) AS total_collectibles
-         FROM activity_events AS events
-         INNER JOIN activities ON activities.id = events.activity_id
-         WHERE activities.player_id = $1`,
+           (
+             SELECT COUNT(DISTINCT events.source_id)
+             FROM activity_events AS events
+             INNER JOIN activities ON activities.id = events.activity_id
+             WHERE activities.player_id = $1
+           ) AS total_collectibles,
+           (SELECT COUNT(DISTINCT fartlek_id) FROM fartlek_completions WHERE player_id = $1) AS total_flowlines`,
         [playerId]
       );
       const recentActivitiesResult = await client.query<ActivityRow>(
-        `SELECT id, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video, replay_snapshot
+        `SELECT ${activityColumns(false)}
          FROM activities
          WHERE player_id = $1
-         ORDER BY created_at DESC, id DESC
+         ORDER BY started_at DESC, id DESC
          LIMIT 4`,
         [playerId]
       );
+      const questHistoryRows = await client.query<{
+        id: string; kind: "authored" | "exploration"; title: string; difficulty: QuestDifficulty | null;
+        xp: number; completed_at: Date; activity_id: string | null;
+      }>(
+        `SELECT quest_id AS id, 'authored' AS kind, quest_id AS title, NULL AS difficulty, xp, completed_at, activity_id
+         FROM authored_quest_completions WHERE player_id = $1
+         UNION ALL
+         SELECT id::text, 'exploration', title, difficulty, reward_xp, completed_at, resolved_activity_id
+         FROM quest_instances WHERE player_id = $1 AND status = 'completed'
+         ORDER BY completed_at DESC LIMIT 10`,
+        [playerId]
+      );
       await client.query("COMMIT");
+      const questHistory: QuestHistoryEntry[] = questHistoryRows.rows.map((row) => {
+        const authored = row.kind === "authored" ? findAuthoredQuest(row.id) : undefined;
+        return {
+          id: row.id,
+          kind: row.kind,
+          title: authored?.title ?? row.title,
+          ...(authored ? { chainTitle: AUTHORED_QUEST_CHAINS.find((chain) => chain.id === authored.chainId)?.title } : {}),
+          difficulty: authored?.difficulty ?? row.difficulty ?? "medium",
+          xp: row.xp,
+          completedAt: row.completed_at.toISOString(),
+          ...(row.activity_id ? { activityId: row.activity_id } : {})
+        };
+      });
       const lifetime = lifetimeResult.rows[0];
       const firstLevel = Math.max(1, progress.level - 2);
       const lastLevel = progress.level + 3;
@@ -436,7 +571,8 @@ export class ActivityRepository {
         progress,
         lifetime: {
           distanceMeters: Number(lifetime.distance_meters),
-          totalCollectibles: Number(lifetime.total_collectibles)
+          totalCollectibles: Number(lifetime.total_collectibles),
+          totalFlowlines: Number(lifetime.total_flowlines)
         },
         levels: Array.from({ length: lastLevel - firstLevel + 1 }, (_, index) => {
           const level = firstLevel + index;
@@ -446,7 +582,8 @@ export class ActivityRepository {
             skillPointsAwarded: earnedSkillPointsForLevel(level) - earnedSkillPointsForLevel(level - 1)
           };
         }),
-        recentActivities: recentActivitiesResult.rows.map(mapActivity)
+        recentActivities: recentActivitiesResult.rows.map(mapActivity),
+        questHistory
       };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -607,14 +744,14 @@ export class ActivityRepository {
 
   private async getActivityWithClient(client: PoolClient, playerId: string, id: string): Promise<PersistedActivity> {
     const activityResult = await client.query<ActivityRow>(
-      `SELECT id, activity_type, started_at, distance_meters, duration_seconds, xp_earned, collected_count, has_video, replay_snapshot
+      `SELECT ${activityColumns(true)}
        FROM activities WHERE id = $1 AND player_id = $2`,
       [id, playerId]
     );
     if (activityResult.rowCount !== 1) throw new Error("Activity not found.");
     const events = await client.query<EventRow>(
       `SELECT id, source_id, event_type, activity_timestamp, value, latitude, longitude,
-              collectible_name, collectible_type, collectible_category
+              collectible_name, collectible_type, collectible_category, repeat
        FROM activity_events WHERE activity_id = $1 ORDER BY activity_timestamp, id`,
       [id]
     );
@@ -625,7 +762,9 @@ export class ActivityRepository {
     return {
       ...mapActivity(activityResult.rows[0]),
       events: events.rows.map(mapEvent),
-      ...(activityResult.rows[0].replay_snapshot === null ? {} : { replay: activityResult.rows[0].replay_snapshot }),
+      ...(activityResult.rows[0].replay_snapshot === null
+        ? {}
+        : { replay: withReadableFlowlineNames(activityResult.rows[0].replay_snapshot) }),
       ...(video.rowCount === 1 ? { video: mapVideo(video.rows[0]) } : {})
     };
   }

@@ -1,27 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { QuestObjective } from "./domain.js";
 import { evaluateQuestObjectives } from "./questObjectives.js";
-import { historyFromQuestStart } from "./persistence/questInstanceRepository.js";
 
 describe("quest objective history evaluation", () => {
-  it("starts cancelled quest scopes with only history from the new start time", () => {
-    const history = historyFromQuestStart({
-      collectibles: [
-        { sourceId: "before", timestampMs: 99 },
-        { sourceId: "started", category: "peak", timestampMs: 100 },
-        { sourceId: "after", timestampMs: 101 }
-      ],
-      flowlines: [
-        { flowlineId: "before", activityId: "a1", lengthMeters: 1000, averageSpeedMps: 4, timestampMs: 99 },
-        { flowlineId: "started", activityId: "a2", lengthMeters: 1000, averageSpeedMps: 4, timestampMs: 100 },
-        { flowlineId: "after", activityId: "a3", lengthMeters: 1000, averageSpeedMps: 4, timestampMs: 101 }
-      ]
-    }, 100);
-    expect(history.collectibles.map((event) => event.sourceId)).toEqual(["started", "after"]);
-    expect(history.flowlines.map((completion) => completion.flowlineId)).toEqual(["started", "after"]);
-    expect(history.flowlines.map((completion) => completion.timestampMs)).toEqual([100, 101]);
-  });
-
   it("counts distinct qualifying Flowlines using length and average-speed snapshots", () => {
     const objective: QuestObjective = {
       id: "speed",

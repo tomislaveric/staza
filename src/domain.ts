@@ -71,6 +71,8 @@ export interface GameEvent {
   longitude: number;
   activityTimestamp: number;
   videoSecond?: number;
+  /** True when the player already claimed this collectible earlier; a revisit grants no XP. */
+  repeat?: boolean;
 }
 
 export interface NearMissCollectible {
@@ -200,13 +202,18 @@ export interface FartlekCompletionDraft {
   traversalDirection: FartlekTraversalDirection;
   fartlekLengthMSnapshot: number;
   fartlekGeometryVersionSnapshot: number;
+  /** XP this completion awards. */
+  xp?: number;
 }
 
 export interface ActivityResult {
   activityId: string;
   distance?: number;
   duration?: number;
+  /** Collectibles claimed for the first time by this activity. Revisits are counted in `revisitCount`. */
   collectedCount: number;
+  /** Collectibles passed again after an earlier claim; they award no XP. */
+  revisitCount?: number;
   totalPoints: number;
   distanceXp: number;
   distanceXpRewards: DistanceXpReward[];
@@ -235,6 +242,7 @@ export interface PlayerProfileOverview {
   progress: PlayerProgress;
   distanceMeters: number;
   activityCount: number;
+  flowlineCount: number;
 }
 
 export interface ProgressLevel {
@@ -245,7 +253,21 @@ export interface ProgressLevel {
 
 export interface ProgressLifetimeStats {
   distanceMeters: number;
+  /** Unique collectibles claimed. */
   totalCollectibles: number;
+  /** Unique Flowlines completed. */
+  totalFlowlines: number;
+}
+
+export interface QuestHistoryEntry {
+  id: string;
+  kind: "authored" | "exploration";
+  title: string;
+  chainTitle?: string;
+  difficulty: QuestDifficulty;
+  xp: number;
+  completedAt: string;
+  activityId?: string;
 }
 
 export interface ProgressDashboard {
@@ -253,6 +275,7 @@ export interface ProgressDashboard {
   lifetime: ProgressLifetimeStats;
   levels: ProgressLevel[];
   recentActivities: ActivityHistoryItem[];
+  questHistory: QuestHistoryEntry[];
 }
 
 export interface ProgressionResult {
@@ -267,11 +290,16 @@ export interface ProgressionResult {
 export interface ActivityHistoryItem {
   id: string;
   type: ActivityType;
+  title: string;
   startedAt: string;
   distanceMeters?: number;
   durationSeconds?: number;
   xpEarned: number;
+  /** Collectibles claimed for the first time (unique claims). */
   collectedCount: number;
+  /** Collectibles passed again after an earlier claim. */
+  revisitCount: number;
+  flowlineCount: number;
   hasVideo: boolean;
 }
 
@@ -313,12 +341,80 @@ export interface PersistedActivityEvent {
   latitude: number;
   longitude: number;
   activityTimestamp: number;
+  repeat?: boolean;
+}
+
+export type QuestDifficulty = "easy" | "medium" | "hard" | "prestige";
+
+/** One objective of a one-activity quest attempt, with the value the activity reached. */
+export interface QuestCriterionResult {
+  label: string;
+  current: number;
+  required: number;
+  met: boolean;
+  unit?: string;
+}
+
+export interface NextQuestSuggestion {
+  id: string;
+  title: string;
+  chainTitle?: string;
+  difficulty: QuestDifficulty;
+  xp: number;
+}
+
+/** What one activity did to a quest attempt: it either completed the quest or failed the attempt. */
+export interface QuestOutcome {
+  questId: string;
+  kind: "authored" | "exploration";
+  title: string;
+  chainTitle?: string;
+  difficulty: QuestDifficulty;
+  result: "completed" | "failed";
+  /** Bonus XP granted; always 0 for a failed attempt. */
+  xp: number;
+  criteria: QuestCriterionResult[];
+  next?: NextQuestSuggestion;
+}
+
+export interface ActivityOutcomeNode {
+  id: string;
+  name: string;
+  cost: number;
+}
+
+/** The authoritative "what changed" for one imported activity, frozen at import. */
+export interface ActivityOutcome {
+  version: 1;
+  xp: {
+    collectibles: number;
+    flowlines: number;
+    distance: number;
+    quests: number;
+    total: number;
+  };
+  progression: {
+    previousTotalXp: number;
+    newTotalXp: number;
+    previousLevel: number;
+    newLevel: number;
+    levelsGained: number;
+    skillPointsEarned: number;
+    unspentSkillPoints: number;
+    /** Levels previousLevel..newLevel+1 with their XP thresholds, for animating level-ups. */
+    levels: Array<{ level: number; totalXpRequired: number; skillPointsAwarded: number }>;
+  };
+  unlockableNodes: ActivityOutcomeNode[];
+  collectibles: { newCount: number; revisitCount: number };
+  flowlines: { completedCount: number; newCount: number };
+  quests: QuestOutcome[];
 }
 
 export interface ReplaySnapshot {
   version: 1;
   activity: Activity;
   activityResult: ActivityResult;
+  outcome?: ActivityOutcome;
 }
 
 export interface HudTrackSample {
@@ -422,6 +518,8 @@ export interface QuestObjectiveState {
   targetProgress: QuestObjectiveTargetProgress[];
 }
 
+export type QuestInstanceStatus = "active" | "completed" | "failed";
+
 export interface QuestInstance {
   id: string;
   /** Scope key: the confirmed proposal id for explorations, the suggestion id for legacy quests. */
@@ -431,9 +529,17 @@ export interface QuestInstance {
   title: string;
   description: string;
   recommendedLevel: number;
-  status: "active" | "completed";
+  status: QuestInstanceStatus;
+  difficulty: QuestDifficulty;
+  /** Bonus XP granted on completion. */
+  rewardXp: number;
+  /** Number of attempts started, including the current one. */
+  attemptCount: number;
   startedAt: string;
   completedAt?: string;
+  failedAt?: string;
+  /** The activity that completed or failed the attempt. */
+  resolvedActivityId?: string;
   objectives: QuestObjectiveState[];
 }
 

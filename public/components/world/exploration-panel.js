@@ -4,6 +4,15 @@ import { CollectibleSwatch } from "./collectible-swatch.js";
 export const DISTANCE_PRESETS_KM = [30, 50, 80];
 export const DURATION_PRESETS_MIN = [60, 120, 180];
 
+export const SPORT_OPTIONS = [
+  { value: "cycling", label: "Cycling", noun: "ride" },
+  { value: "running", label: "Running", noun: "run" },
+  { value: "hiking", label: "Hiking", noun: "hike" }
+];
+
+/** Sport-specific word for the outing: "ride", "run" or "hike". */
+export const outingNoun = (sport) => SPORT_OPTIONS.find((option) => option.value === sport)?.noun ?? "outing";
+
 const proposalLabels = {
   quick: "Quick",
   balanced: "Balanced",
@@ -30,6 +39,7 @@ export const createExplorationState = (area) => ({
   phase: "configure",
   status: "idle",
   routeType: "round_trip",
+  sport: "cycling",
   start: undefined,
   end: undefined,
   constraintType: "distance",
@@ -45,6 +55,7 @@ export const createExplorationState = (area) => ({
   catalog: { collectibles: [], flowlines: [] },
   limits: { maxRouteTargets: 12 },
   truncated: false,
+  warnings: [],
   adding: false,
   pendingTargetIds: undefined,
   error: undefined
@@ -103,7 +114,7 @@ export const buildGenerateRequest = (state) => {
   if (!state.start) return { error: "Choose a start on the map." };
   if (state.routeType === "point_to_point" && !state.end) return { error: "Choose a destination on the map." };
   const value = state.constraintType === "distance" ? Number(state.distanceKm) : Number(state.durationMin);
-  if (!Number.isFinite(value) || value <= 0) return { error: "Enter a ride distance or time." };
+  if (!Number.isFinite(value) || value <= 0) return { error: `Enter a ${outingNoun(state.sport)} distance or time.` };
   if (state.constraintType === "distance" && (value < 2 || value > 300)) {
     return { error: "Choose a distance between 2 and 300 km." };
   }
@@ -114,6 +125,7 @@ export const buildGenerateRequest = (state) => {
     body: {
       area: state.area,
       routeType: state.routeType,
+      sport: state.sport,
       start: state.start,
       ...(state.routeType === "point_to_point" ? { end: state.end } : {}),
       constraint: state.constraintType === "distance"
@@ -147,7 +159,7 @@ const constraintControls = (state) => {
   const disabled = state.phase !== "configure" ? " disabled" : "";
   return `
     <fieldset class="route-planner-constraint">
-      <legend>Ride length</legend>
+      <legend>Length</legend>
       <div class="route-planner-toggle" role="group" aria-label="Plan by">
         <button type="button" data-exploration-constraint="distance" aria-pressed="${isDistance}"${disabled}>Distance</button>
         <button type="button" data-exploration-constraint="duration" aria-pressed="${!isDistance}"${disabled}>Time</button>
@@ -170,8 +182,9 @@ const constraintControls = (state) => {
 };
 
 const rideSummary = (state) => {
+  const sport = SPORT_OPTIONS.find((option) => option.value === state.sport)?.label ?? "";
   const length = state.constraintType === "distance" ? `${state.distanceKm} km` : formatRouteDuration(state.durationMin * 60);
-  return `${state.routeType === "round_trip" ? "Round trip" : "A to B"} · ${length}`;
+  return `${sport ? `${sport} · ` : ""}${state.routeType === "round_trip" ? "Round trip" : "A to B"} · ${length}`;
 };
 
 /** One route proposal card; shows the edited version when the player customized it. */
@@ -207,7 +220,7 @@ export const RouteProposalCard = (state, original) => {
 
 const statusLine = (state) => {
   if (state.error) return `<p class="route-planner-error" role="alert">${escapeHtml(state.error)}</p>`;
-  if (state.phase === "generating") return '<p class="route-planner-status" role="status">Finding routes for your ride...</p>';
+  if (state.phase === "generating") return `<p class="route-planner-status" role="status">Finding routes for your ${outingNoun(state.sport)}...</p>`;
   if (state.status === "rerouting") return '<p class="route-planner-status" role="status">Updating route...</p>';
   if (state.phase === "confirming") return '<p class="route-planner-status" role="status">Starting exploration...</p>';
   if (state.adding) return '<p class="route-planner-status" role="status">Select a target on the map to add it to this route.</p>';
@@ -231,8 +244,11 @@ const ConfigureStep = (state) => {
   const generating = state.phase === "generating";
   return `
     <section class="world-detail exploration-panel" aria-label="Explore this area">
-      ${panelHeader("Step 1 · Describe your ride")}
+      ${panelHeader("Step 1 · Plan your outing")}
       <form class="route-planner-form" data-exploration-form novalidate>
+        <div class="route-planner-toggle" role="group" aria-label="Sport">
+          ${SPORT_OPTIONS.map((option) => `<button type="button" data-exploration-sport="${option.value}" aria-pressed="${state.sport === option.value}"${generating ? " disabled" : ""}>${option.label}</button>`).join("")}
+        </div>
         <div class="route-planner-toggle" role="group" aria-label="Route type">
           <button type="button" data-exploration-route-type="round_trip" aria-pressed="${state.routeType === "round_trip"}"${generating ? " disabled" : ""}>Round trip</button>
           <button type="button" data-exploration-route-type="point_to_point" aria-pressed="${state.routeType === "point_to_point"}"${generating ? " disabled" : ""}>A to B</button>
@@ -249,15 +265,20 @@ const ConfigureStep = (state) => {
   `;
 };
 
-const fitWarning = (proposal) => {
+const fitWarning = (proposal, sport) => {
+  const noun = outingNoun(sport);
   if (proposal.constraintFit === "long") {
-    return '<p class="route-planner-error exploration-warning" role="status">This route is longer than your planned ride.</p>';
+    return `<p class="route-planner-error exploration-warning" role="status">This route is longer than your planned ${noun}.</p>`;
   }
   if (proposal.constraintFit === "short") {
-    return '<p class="route-planner-note exploration-warning" role="status">This route is shorter than your planned ride.</p>';
+    return `<p class="route-planner-note exploration-warning" role="status">This route is shorter than your planned ${noun}.</p>`;
   }
   return "";
 };
+
+/** Server-reported planning warnings, e.g. the area cannot support the requested length. */
+const warningsBlock = (state) => (state.warnings ?? []).map((warning) =>
+  `<p class="route-planner-error exploration-warning" role="alert" data-exploration-warning="${escapeHtml(warning.code)}">${escapeHtml(warning.message)}</p>`).join("");
 
 /** CUSTOMIZE: the selected route's contents, editable; every edit re-plans this route only. */
 const CustomizeSection = (state) => {
@@ -296,7 +317,7 @@ const CustomizeSection = (state) => {
           `).join("")}
         </ul>` : ""}
       ${dropped.length ? `<p class="route-planner-note">Couldn't route to ${escapeHtml(dropped.join(", "))}, so ${dropped.length === 1 ? "it was" : "they were"} left out.</p>` : ""}
-      ${fitWarning(proposal)}
+      ${fitWarning(proposal, state.sport)}
       <div class="exploration-route-actions">
         <button type="button" data-exploration-add aria-pressed="${state.adding}"${!idle || (atLimit && !state.adding) ? " disabled" : ""}>
           ${state.adding ? "Done adding" : "Add destination"}</button>
@@ -323,6 +344,7 @@ const RouteStep = (state) => {
       <ol class="route-proposals" aria-label="Route proposals">
         ${state.proposals.map((proposal) => RouteProposalCard(state, proposal)).join("")}
       </ol>
+      ${warningsBlock(state)}
       ${selected ? CustomizeSection(state) : '<p class="route-planner-note">Choose a route to see what it includes.</p>'}
       ${statusLine(state)}
       <p class="route-planner-note">Routes are a planning aid. Progress only counts from your recorded activities after you start.</p>
@@ -336,6 +358,8 @@ export const ExplorationPanel = (state) =>
   state.phase === "configure" || state.phase === "generating" ? ConfigureStep(state) : RouteStep(state);
 
 /** Short summary of a stored PlannedRoute for a running exploration card. */
+export const plannedRouteGpxUrl = (instanceId) => `/api/quest-instances/${encodeURIComponent(instanceId)}/planned-route.gpx`;
+
 export const plannedRouteSummary = (route) =>
   `${formatRouteDistance(route.distanceM)} · ${formatRouteDuration(route.durationS)}${
     route.routeType === "round_trip" ? " · Round trip" : " · A to B"}`;

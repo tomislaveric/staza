@@ -1,6 +1,8 @@
 import type { QuestObjective } from "../domain.js";
 import { cheapestInsertion, generateCandidates, improveOrder, makeCandidate, selectTargetPool, withoutTarget } from "./candidates.js";
+import { closeRoundTrip } from "./roundTrip.js";
 import { buildRoutingPlan } from "./routingPlan.js";
+import { policyForSport, profileForSport } from "./sport.js";
 import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, type PlannerPolicy } from "./policy.js";
 import { proposalStops, routeTargetIds, selectProposals, toRouteProposal } from "./proposals.js";
 import { RoutingError } from "./routingClient.js";
@@ -138,10 +140,10 @@ const routeCandidates = async (
       const entry = next();
       if (!entry) return;
       routingRequests += 1;
-      const plan = buildRoutingPlan(input.start, input.end, entry.candidate.stops);
+      const plan = buildRoutingPlan(input.start, input.end, entry.candidate.stops, profileForSport(input.sport));
       try {
         const result = await routing.route(plan.request, { requestId: `${requestId}-${routingRequests}`, signal: deadline });
-        evaluate(entry, result);
+        evaluate(entry, input.routeType === "round_trip" ? closeRoundTrip(result, input.start) : result);
       } catch (error) {
         const code = error instanceof RoutingError ? error.code : "unexpected";
         failureCodes.push(code);
@@ -191,8 +193,9 @@ export interface GenerateExplorationRoutesInput {
  */
 export const generateExplorationRoutes = async (
   { requestId, playerId, scopeId, targets, flowlines, input }: GenerateExplorationRoutesInput,
-  { routing, policy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
+  { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal[]> => {
+  const policy = policyForSport(basePolicy, input.sport);
   const startedAt = now();
   const perStrategy = buildStrategies(targets, input.constraint, policy).map((strategy) => {
     const pool = selectTargetPool(strategy.targets, strategy.objectives, input, policy);
@@ -285,8 +288,9 @@ export const customizedStops = (
  */
 export const rerouteTargets = async (
   { requestId, playerId, scopeId, base, baseStops, targets, objectives, flowlines, input }: RerouteTargetsInput,
-  { routing, policy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
+  { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal> => {
+  const policy = policyForSport(basePolicy, input.sport);
   const startedAt = now();
   const stops = customizedStops(input, baseStops, targets, policy);
   const candidate = makeCandidate(input, objectives, stops, "custom", policy);

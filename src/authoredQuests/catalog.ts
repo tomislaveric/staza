@@ -1,4 +1,5 @@
-import type { ActivityType, CollectibleCategory } from "../domain.js";
+import type { ActivityType, CollectibleCategory, QuestDifficulty } from "../domain.js";
+import { QUEST_XP_BY_DIFFICULTY } from "../questObjectives.js";
 import { SKILL_TREE_NODES } from "../skillTree/catalog.js";
 import type { SkillTreeNode } from "../skillTree/types.js";
 
@@ -27,6 +28,8 @@ export interface AuthoredQuest {
   step: number;
   title: string;
   description: string;
+  difficulty: QuestDifficulty;
+  /** Bonus XP granted once on completion; fixed by difficulty. */
   xp: number;
   criteria: AuthoredQuestCriteria;
 }
@@ -166,7 +169,9 @@ const CHAIN_STEPS: Record<string, AuthoredQuestCriteria[]> = {
   "xs-multi-sport-explorer": [{ minCollectibles: 5 }, { minCollectibles: 8 }, { minCollectibles: 12 }]
 };
 
-const BASE_XP_BY_TIER: Record<string, number> = { "1": 60, "2": 90, "3": 120, "4": 150, "5": 180, prestige: 160 };
+export { QUEST_XP_BY_DIFFICULTY };
+
+const DIFFICULTY_BY_TIER: Record<string, QuestDifficulty> = { "1": "easy", "2": "medium", "3": "hard", prestige: "prestige" };
 
 const ROMAN = ["I", "II", "III", "IV"];
 
@@ -190,7 +195,7 @@ export const describeAuthoredQuestCriteria = (criteria: AuthoredQuestCriteria): 
 const buildChain = (node: SkillTreeNode, steps: AuthoredQuestCriteria[]): AuthoredQuestChain => {
   const label = node.grant.label.replace(/^Unlocks\s+/i, "");
   const title = label.charAt(0).toUpperCase() + label.slice(1);
-  const baseXp = BASE_XP_BY_TIER[String(node.tier)] ?? 60;
+  const difficulty = DIFFICULTY_BY_TIER[String(node.tier)] ?? "medium";
   return {
     id: node.grant.value,
     title,
@@ -201,7 +206,8 @@ const buildChain = (node: SkillTreeNode, steps: AuthoredQuestCriteria[]): Author
       step: index + 1,
       title: `${title} ${ROMAN[index] ?? index + 1}`,
       description: describeAuthoredQuestCriteria(criteria),
-      xp: Math.round(baseXp * (1 + index * 0.5)),
+      difficulty,
+      xp: QUEST_XP_BY_DIFFICULTY[difficulty],
       criteria
     }))
   };

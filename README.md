@@ -106,6 +106,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [P0 audit remediation](features/p0-audit/README.md) — plan and resolve the four
   P0 UX-audit findings across FIT sports, Skill Atlas rewards, journey start, and
   the Skill Point economy.
+- [P1 audit](features/p1-audit/README.md) — resolve all nine P1 UX-audit findings
+  across activity rewards, quests, collectibles, Flowlines, Explore, Home, and
+  activity history.
 - [Persistent activities player state v1](features/persistent-activities-player-state-v1/README.md)
   — persist compact activity/event history and single-player XP in PostgreSQL
   with transaction-safe exactly-once progression.

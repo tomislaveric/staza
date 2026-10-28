@@ -1,4 +1,5 @@
 import { getAppLocale } from "../app-locales.js";
+import { getActivityLabel } from "./activity-labels.js";
 
 const formatNumber = (value, maximumFractionDigits = 0) => new Intl.NumberFormat(getAppLocale(), {
   maximumFractionDigits
@@ -32,7 +33,8 @@ export const activitiesViewModel = (activities) => ({
     count: activities.length,
     distanceMeters: activities.reduce((total, activity) => total + (activity.distanceMeters ?? 0), 0),
     xp: activities.reduce((total, activity) => total + activity.xpEarned, 0),
-    collected: activities.reduce((total, activity) => total + activity.collectedCount, 0)
+    collected: activities.reduce((total, activity) => total + activity.collectedCount, 0),
+    flowlines: activities.reduce((total, activity) => total + (activity.flowlineCount ?? 0), 0)
   }
 });
 
@@ -51,14 +53,14 @@ export const ActivityCollectibleDots = (activity) => {
   const events = activity.events ?? [];
   if (!events.length) return "";
   return `
-    <span class="activity-collectible-dots" aria-label="${activity.collectedCount} collectibles found">
+    <span class="activity-collectible-dots" aria-label="${activity.collectedCount} new collectibles">
       ${events.slice(0, 5).map(() => "<i></i>").join("")}
       <small>${formatNumber(activity.collectedCount)}</small>
     </span>
   `;
 };
 
-export const ActivityStats = ({ count, distanceMeters, xp, collected }) => `
+export const ActivityStats = ({ count, distanceMeters, xp, collected, flowlines = 0 }) => `
   <p class="activities-stats">
     <span>${formatNumber(count)} ${count === 1 ? "activity" : "activities"} ·</span>
     <strong>${formatNumber(distanceMeters / 1000, 1)} km</strong>
@@ -66,7 +68,8 @@ export const ActivityStats = ({ count, distanceMeters, xp, collected }) => `
     <strong class="activities-stats-xp">+${formatNumber(xp)} XP</strong>
     <span>earned ·</span>
     <strong>${formatNumber(collected)}</strong>
-    <span>collectibles found</span>
+    <span>collected${flowlines > 0 ? " ·" : ""}</span>
+    ${flowlines > 0 ? `<strong>${formatNumber(flowlines)}</strong><span>${flowlines === 1 ? "Flowline" : "Flowlines"}</span>` : ""}
   </p>
 `;
 
@@ -75,15 +78,18 @@ export const ActivityMeta = (activity) => {
   return `
     <div class="activity-meta">
       <div class="activity-meta-heading">
-        <p>${escapeHtml(formatActivityDate(activity.startedAt))}</p>
+        <p>${escapeHtml(formatActivityDate(activity.startedAt))} · <span class="activity-sport">${escapeHtml(getActivityLabel(activity.type))}</span></p>
         ${activity.hasVideo ? '<span class="activity-pov">POV</span>' : ""}
       </div>
+      ${activity.title ? `<p class="activity-title" data-user-content>${escapeHtml(activity.title)}</p>` : ""}
       <div class="activity-measurements">
         <strong>${escapeHtml(formatActivityDistance(activity.distanceMeters).replace(" km", ""))}<span>${Number.isFinite(activity.distanceMeters) ? " km" : ""}</span></strong>
         <span>${escapeHtml(formatActivityDuration(activity.durationSeconds))}</span>
       </div>
       <div class="activity-rewards">
         <span class="activity-xp-chip">+${formatNumber(activity.xpEarned)} XP</span>
+        ${activity.flowlineCount > 0 ? `<span class="activity-flowline-chip">${formatNumber(activity.flowlineCount)} ${activity.flowlineCount === 1 ? "Flowline" : "Flowlines"}</span>` : ""}
+        ${activity.revisitCount > 0 ? `<span class="activity-revisit-chip">${formatNumber(activity.revisitCount)} revisited</span>` : ""}
       </div>
       ${collectibleDots ? `<div class="activity-collectible-row">${collectibleDots}</div>` : ""}
     </div>

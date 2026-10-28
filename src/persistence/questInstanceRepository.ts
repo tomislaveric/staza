@@ -4,12 +4,21 @@ import type {
   CollectibleCategory,
   NewPlannedRoute,
   PlannedRoute,
+  QuestCriterionResult,
+  QuestDifficulty,
   QuestInstance,
+  QuestInstanceStatus,
   QuestObjective,
-  QuestObjectiveState
+  QuestObjectiveState,
+  QuestOutcome
 } from "../domain.js";
 import type { NewExploration } from "../exploration/service.js";
-import { evaluateQuestObjectives, type QuestHistory } from "../questObjectives.js";
+import {
+  QUEST_XP_BY_DIFFICULTY,
+  evaluateQuestObjectives,
+  explorationDifficulty,
+  type QuestHistory
+} from "../questObjectives.js";
 
 /** Template row every player-created exploration references (created by migration 028). */
 export const EXPLORATION_TEMPLATE = { id: "exploration", version: 1 } as const;
@@ -23,10 +32,15 @@ interface InstanceRow {
   description: string;
   recommended_level: number;
   objectives: QuestObjective[];
-  status: "active" | "completed";
+  status: QuestInstanceStatus;
+  difficulty: QuestDifficulty;
+  reward_xp: number;
+  attempt_count: number;
   started_at: Date;
   completed_at: Date | null;
-  fresh_progress: boolean;
+  failed_at: Date | null;
+  resolved_activity_id: string | null;
+  attempt_result: { objectives?: QuestObjectiveState[] } | null;
 }
 
 interface PlannedRouteRow {
@@ -67,41 +81,83 @@ const mapPlannedRoute = (row: PlannedRouteRow): PlannedRoute => ({
   createdAt: row.created_at.toISOString()
 });
 
-interface TimedCollectibleHistory {
-  sourceId: string;
-  category?: CollectibleCategory;
-  timestampMs: number;
+/** What one activity did, in the shape quest objectives are evaluated against. */
+export interface ActivityQuestHistory {
+  collectibles: Array<{ sourceId: string; category?: CollectibleCategory }>;
+  flowlines: Array<{ flowlineId: string; lengthMeters: number; averageSpeedMps: number }>;
 }
 
-interface TimedFlowlineHistory {
-  flowlineId: string;
-  activityId: string;
-  lengthMeters: number;
-  averageSpeedMps: number;
-  timestampMs: number;
-}
+const criteriaFromObjectives = (states: QuestObjectiveState[]): QuestCriterionResult[] =>
+  states.map((state) => ({
+    label: state.objective.type === "flowline_rule"
+      ? "Flowlines"
+      : state.objective.type === "collectible_count"
+        ? `Collectibles: ${state.objective.category.replace("_", " ")}`
+        : "Targets",
+    current: state.progress.completed,
+    required: state.progress.required,
+    met: state.progress.complete
+  }));
 
-export const historyFromQuestStart = (
-  history: { collectibles: TimedCollectibleHistory[]; flowlines: TimedFlowlineHistory[] },
-  startedAtMs: number
-): QuestHistory => {
-  return {
-    collectibles: history.collectibles
-      .filter((event) => event.timestampMs >= startedAtMs)
-      .map(({ sourceId, category }) => ({
-        sourceId,
-        ...(category === undefined ? {} : { category })
-      })),
-    flowlines: history.flowlines
-      .filter((completion) => completion.timestampMs >= startedAtMs)
-      .map(({ flowlineId, activityId, lengthMeters, averageSpeedMps, timestampMs }) => ({
-        flowlineId,
-        activityId,
-        lengthMeters,
-        averageSpeedMps,
-        timestampMs
-      }))
+/**
+ * Resolves the active explorations against one newly persisted activity inside its transaction.
+ * An exploration is a one-activity attempt: the first activity that started after the attempt began
+ * either completes it (reward granted exactly once) or fails it (retry required). Earlier activities
+ * and other activities never contribute progress.
+ */
+export const resolveExplorationAttemptsWithClient = async (
+  client: PoolClient,
+  playerId: string,
+  activityId: string,
+  activityStartedAt: Date,
+  activityHistory: ActivityQuestHistory
+): Promise<QuestOutcome[]> => {
+  const instances = await client.query<{
+    id: string;
+    title: string;
+    objectives: QuestObjective[];
+    difficulty: QuestDifficulty;
+    reward_xp: number;
+  }>(
+    `SELECT id, title, objectives, difficulty, reward_xp FROM quest_instances
+     WHERE player_id = $1 AND status = 'active' AND started_at <= $2
+     ORDER BY started_at, id`,
+    [playerId, activityStartedAt]
+  );
+  const history: QuestHistory = {
+    collectibles: activityHistory.collectibles,
+    flowlines: activityHistory.flowlines.map((flowline) => ({ ...flowline, activityId }))
   };
+  const outcomes: QuestOutcome[] = [];
+  for (const row of instances.rows) {
+    const states = evaluateQuestObjectives(row.objectives, history);
+    const passed = states.every((state) => state.progress.complete);
+    const criteria = criteriaFromObjectives(states);
+    const base = {
+      questId: row.id,
+      kind: "exploration" as const,
+      title: row.title,
+      difficulty: row.difficulty
+    };
+    if (passed) {
+      const updated = await client.query(
+        `UPDATE quest_instances
+         SET status = 'completed', completed_at = now(), resolved_activity_id = $3, attempt_result = $4
+         WHERE id = $1 AND player_id = $2 AND status = 'active'`,
+        [row.id, playerId, activityId, JSON.stringify({ objectives: states })]
+      );
+      if (updated.rowCount === 1) outcomes.push({ ...base, result: "completed", xp: row.reward_xp, criteria });
+    } else {
+      const updated = await client.query(
+        `UPDATE quest_instances
+         SET status = 'failed', failed_at = now(), resolved_activity_id = $3, attempt_result = $4
+         WHERE id = $1 AND player_id = $2 AND status = 'active'`,
+        [row.id, playerId, activityId, JSON.stringify({ objectives: states })]
+      );
+      if (updated.rowCount === 1) outcomes.push({ ...base, result: "failed", xp: 0, criteria });
+    }
+  }
+  return outcomes;
 };
 
 export class QuestInstanceNotFoundError extends Error {
@@ -125,12 +181,13 @@ export class QuestInstanceRepository {
    * again returns the existing exploration without changing it.
    */
   async createExploration(playerId: string, exploration: NewExploration, route: NewPlannedRoute): Promise<string> {
+    const difficulty = explorationDifficulty(exploration.objectives);
     return this.inTransaction(async (client) => {
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO quest_instances (
           id, player_id, template_id, template_version, scope_hash,
-          title, description, recommended_level, objectives, fresh_progress
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, true)
+          title, description, recommended_level, objectives, fresh_progress, difficulty, reward_xp
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, true, $9, $10)
         ON CONFLICT (player_id, template_id, template_version, scope_hash) DO NOTHING
         RETURNING id`,
         [
@@ -141,7 +198,9 @@ export class QuestInstanceRepository {
           exploration.proposalId,
           exploration.title,
           exploration.description,
-          JSON.stringify(exploration.objectives)
+          JSON.stringify(exploration.objectives),
+          difficulty,
+          QUEST_XP_BY_DIFFICULTY[difficulty]
         ]
       );
       if (inserted.rowCount !== 1) {
@@ -221,17 +280,17 @@ export class QuestInstanceRepository {
         scope_hash: string;
       }>(
         `DELETE FROM quest_instances
-         WHERE id = $1 AND player_id = $2 AND status = 'active'
+         WHERE id = $1 AND player_id = $2 AND status IN ('active', 'failed')
          RETURNING template_id, template_version, scope_hash`,
         [instanceId, playerId]
       );
       if (deleted.rowCount !== 1) {
-        const current = await client.query<{ status: "active" | "completed" }>(
+        const current = await client.query<{ status: QuestInstanceStatus }>(
           "SELECT status FROM quest_instances WHERE id = $1 AND player_id = $2",
           [instanceId, playerId]
         );
         if (current.rowCount !== 1) throw new QuestInstanceNotFoundError();
-        throw new QuestInstanceStateError("Only active quests can be cancelled.");
+        throw new QuestInstanceStateError("Completed quests cannot be cancelled.");
       }
 
       const cancelled = deleted.rows[0];
@@ -252,146 +311,47 @@ export class QuestInstanceRepository {
     }
   }
 
+  /** Starts a new one-activity attempt for a failed exploration. */
+  async retry(playerId: string, instanceId: string, startedAt: Date = new Date()): Promise<void> {
+    const updated = await this.pool.query(
+      `UPDATE quest_instances
+       SET status = 'active', started_at = $3, attempt_count = attempt_count + 1,
+           failed_at = NULL, resolved_activity_id = NULL, attempt_result = NULL
+       WHERE id = $1 AND player_id = $2 AND status = 'failed'`,
+      [instanceId, playerId, startedAt]
+    );
+    if (updated.rowCount === 1) return;
+    const current = await this.pool.query("SELECT 1 FROM quest_instances WHERE id = $1 AND player_id = $2", [instanceId, playerId]);
+    if (current.rowCount !== 1) throw new QuestInstanceNotFoundError();
+    throw new QuestInstanceStateError("Only failed quests can be retried.");
+  }
+
   async listForPlayer(playerId: string): Promise<QuestInstance[]> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      const instances = await client.query<InstanceRow>(
-        `SELECT id, template_id, template_version, scope_hash, title, description, recommended_level,
-                objectives, status, started_at, completed_at, fresh_progress
-         FROM quest_instances WHERE player_id = $1
-         ORDER BY started_at DESC, id`,
-        [playerId]
-      );
-      if (instances.rowCount === 0) {
-        await client.query("COMMIT");
-        return [];
-      }
-      const collectibleTargetIds = new Set<string>();
-      const flowlineTargetIds = new Set<string>();
-      for (const instance of instances.rows) {
-        for (const objective of instance.objectives) {
-          const targetIds = objective.targets.map((target) => target.id);
-          if (objective.type === "flowline_rule") {
-            targetIds.forEach((id) => flowlineTargetIds.add(id));
-          } else {
-            targetIds.forEach((id) => collectibleTargetIds.add(id));
-          }
-        }
-      }
-      const [collectibleHistory, flowlineHistory] = await Promise.all([
-        collectibleTargetIds.size === 0
-          ? Promise.resolve({ rows: [] as Array<{
-            source_id: string;
-            collectible_category: CollectibleCategory | null;
-            activity_timestamp: number | string;
-          }> })
-          : client.query<{
-            source_id: string;
-            collectible_category: CollectibleCategory | null;
-            activity_timestamp: number | string;
-          }>(
-          `SELECT DISTINCT events.source_id, events.collectible_category, events.activity_timestamp
-           FROM activity_events AS events
-           INNER JOIN activities ON activities.id = events.activity_id
-           WHERE activities.player_id = $1 AND events.source_id = ANY($2::text[])`,
-          [playerId, [...collectibleTargetIds]]
-        ),
-        flowlineTargetIds.size === 0
-          ? Promise.resolve({ rows: [] as Array<{
-            fartlek_id: string;
-            activity_id: string;
-            fartlek_length_m_snapshot: number;
-            average_speed_mps: number;
-            completed_at: Date;
-          }> })
-          : client.query<{
-          fartlek_id: string;
-          activity_id: string;
-          fartlek_length_m_snapshot: number;
-          average_speed_mps: number;
-          completed_at: Date;
-        }>(
-          `SELECT fartlek_id, activity_id, fartlek_length_m_snapshot, average_speed_mps, completed_at
-           FROM fartlek_completions WHERE player_id = $1 AND fartlek_id = ANY($2::text[])`,
-          [playerId, [...flowlineTargetIds]]
-        )
-      ]);
-      const timedHistory = {
-        collectibles: collectibleHistory.rows.map((row) => ({
-          sourceId: row.source_id,
-          ...(row.collectible_category === null ? {} : { category: row.collectible_category }),
-          timestampMs: Number(row.activity_timestamp)
-        })),
-        flowlines: flowlineHistory.rows.map((row) => ({
-          flowlineId: row.fartlek_id,
-          activityId: row.activity_id,
-          lengthMeters: row.fartlek_length_m_snapshot,
-          averageSpeedMps: row.average_speed_mps,
-          timestampMs: row.completed_at.getTime()
-        }))
-      };
-      const mapped: QuestInstance[] = [];
-      for (const row of instances.rows) {
-        const history = row.fresh_progress
-          ? historyFromQuestStart(timedHistory, row.started_at.getTime())
-          : {
-            collectibles: timedHistory.collectibles.map(({ sourceId, category }) => ({
-              sourceId,
-              ...(category === undefined ? {} : { category })
-            })),
-            flowlines: timedHistory.flowlines.map(({ flowlineId, activityId, lengthMeters, averageSpeedMps, timestampMs }) => ({
-              flowlineId,
-              activityId,
-              lengthMeters,
-              averageSpeedMps,
-              timestampMs
-            }))
-          };
-        const objectiveStates: QuestObjectiveState[] = evaluateQuestObjectives(row.objectives, history);
-        const complete = objectiveStates.every((state) => state.progress.complete);
-        let status = row.status;
-        let completedAt = row.completed_at;
-        if (complete && status !== "completed") {
-          const updated = await client.query<{ completed_at: Date }>(
-            `UPDATE quest_instances SET status = 'completed', completed_at = now()
-             WHERE id = $1 AND player_id = $2 AND status = 'active'
-             RETURNING completed_at`,
-            [row.id, playerId]
-          );
-          if (updated.rowCount === 1) {
-            status = "completed";
-            completedAt = updated.rows[0].completed_at;
-          } else {
-            const stored = await client.query<{ status: "active" | "completed"; completed_at: Date | null }>(
-              "SELECT status, completed_at FROM quest_instances WHERE id = $1 AND player_id = $2",
-              [row.id, playerId]
-            );
-            status = stored.rows[0]?.status ?? status;
-            completedAt = stored.rows[0]?.completed_at ?? completedAt;
-          }
-        }
-        mapped.push({
-          id: row.id,
-          suggestionId: row.scope_hash,
-          templateId: row.template_id,
-          templateVersion: row.template_version,
-          title: row.title,
-          description: row.description,
-          recommendedLevel: row.recommended_level,
-          status,
-          startedAt: row.started_at.toISOString(),
-          ...(completedAt === null ? {} : { completedAt: completedAt.toISOString() }),
-          objectives: objectiveStates
-        });
-      }
-      await client.query("COMMIT");
-      return mapped;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+    const instances = await this.pool.query<InstanceRow>(
+      `SELECT id, template_id, template_version, scope_hash, title, description, recommended_level,
+              objectives, status, difficulty, reward_xp, attempt_count, started_at, completed_at,
+              failed_at, resolved_activity_id, attempt_result
+       FROM quest_instances WHERE player_id = $1
+       ORDER BY started_at DESC, id`,
+      [playerId]
+    );
+    return instances.rows.map((row): QuestInstance => ({
+      id: row.id,
+      suggestionId: row.scope_hash,
+      templateId: row.template_id,
+      templateVersion: row.template_version,
+      title: row.title,
+      description: row.description,
+      recommendedLevel: row.recommended_level,
+      status: row.status,
+      difficulty: row.difficulty,
+      rewardXp: row.reward_xp,
+      attemptCount: row.attempt_count,
+      startedAt: row.started_at.toISOString(),
+      ...(row.completed_at === null ? {} : { completedAt: row.completed_at.toISOString() }),
+      ...(row.failed_at === null ? {} : { failedAt: row.failed_at.toISOString() }),
+      ...(row.resolved_activity_id === null ? {} : { resolvedActivityId: row.resolved_activity_id }),
+      objectives: row.attempt_result?.objectives ?? evaluateQuestObjectives(row.objectives, { collectibles: [], flowlines: [] })
+    }));
   }
 }
