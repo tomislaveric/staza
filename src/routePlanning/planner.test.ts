@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { customizedStops, generateExplorationRoutes, PlanningError, rerouteTargets, type RouteProvider } from "./planner.js";
+import { areaAnchors, customizedStops, generateExplorationRoutes, PlanningError, rerouteTargets, type RouteProvider } from "./planner.js";
 import { PLANNING_LIMITS } from "./policy.js";
 import { constraintFitFlag, distinctRoutes, proposalHint, selectProposals } from "./proposals.js";
+import { backtrackRatio } from "./roundTrip.js";
 import { RoutingError } from "./routingClient.js";
 import { buildStrategies, targetCountFor } from "./strategies.js";
 import { at, flowlineGeometry, objectivesFor, pointTarget, straightLineRoute } from "./testFixtures.js";
@@ -306,5 +307,33 @@ describe("validateRoute", () => {
     const far = pointTarget("far", "places", 2, 2);
     const route = straightLineRoute({ profile: "bicycle", start: at(0, 0), end: at(0, 0), waypoints: [{ type: "via", ...at(2, 0) }] });
     expect(validateRoute(route, [close, near, far])).toEqual({ includedTargetIds: ["close"], nearbyTargetIds: ["near"] });
+  });
+});
+
+describe("areaAnchors", () => {
+  const sw = at(-10, -10);
+  const ne = at(10, 10);
+  const bounds = { minLatitude: sw.lat, maxLatitude: ne.lat, minLongitude: sw.lon, maxLongitude: ne.lon };
+  const flowline = flowlineGeometry("f", [4, 4], [4, 8]);
+  const onFlowline = (point: { lat: number; lon: number }) => flowline.coordinates.some(([lon, lat]) => lon === point.lon && lat === point.lat);
+  const loop = { stops: 3, reach: 0.55 };
+
+  it("bends cycling anchors to nearby Flowlines but never running or hiking ones", () => {
+    const cycling = areaAnchors({ ...roundTrip(30), sport: "cycling" }, bounds, [flowline], loop);
+    expect(cycling.some(onFlowline)).toBe(true);
+    for (const sport of ["running", "hiking"] as const) {
+      const anchors = areaAnchors({ ...roundTrip(30), sport }, bounds, [flowline], loop);
+      expect(anchors).toHaveLength(3);
+      expect(anchors.some(onFlowline)).toBe(false);
+    }
+  });
+});
+
+describe("backtrackRatio", () => {
+  const line = (points: Array<[number, number]>) => points.map(([n, e]) => [at(n, e).lon, at(n, e).lat] as [number, number]);
+
+  it("flags out-and-back routes but not loops", () => {
+    expect(backtrackRatio(line([[0, 0], [0, 5], [0, 0]]))).toBeGreaterThan(0.4);
+    expect(backtrackRatio(line([[0, 0], [0, 5], [5, 5], [5, 0], [0, 0]]))).toBeLessThan(0.1);
   });
 });

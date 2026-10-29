@@ -1,4 +1,4 @@
-import { distanceBetween } from "./geo.js";
+import { distanceBetween, sampleAlong } from "./geo.js";
 import type { LatLon, RoutingResult } from "./types.js";
 
 /**
@@ -18,4 +18,35 @@ export const closeRoundTrip = (result: RoutingResult, start: LatLon): RoutingRes
     durationS: result.durationS + gapM * paceSPerM,
     geometry: { type: "LineString", coordinates: [...coordinates, [start.lon, start.lat]] }
   };
+};
+
+const BACKTRACK_SPACING_M = 50;
+const BACKTRACK_CELL_DEG = 0.0006;
+/** Samples this close in sequence are the same pass, not a return along the road. */
+const BACKTRACK_MIN_GAP = 12;
+
+/** Share of a route (0-1) that retraces road it already rode, e.g. an out-and-back. */
+export const backtrackRatio = (coordinates: [number, number][]): number => {
+  const samples = sampleAlong(coordinates, BACKTRACK_SPACING_M);
+  if (samples.length <= BACKTRACK_MIN_GAP) return 0;
+  const cell = (value: number) => Math.round(value / BACKTRACK_CELL_DEG);
+  const visited = new Map<string, number>();
+  let repeated = 0;
+  samples.forEach(([lon, lat], index) => {
+    const x = cell(lon);
+    const y = cell(lat);
+    let seenBefore = false;
+    for (let dx = -1; dx <= 1 && !seenBefore; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        const first = visited.get(`${x + dx},${y + dy}`);
+        if (first !== undefined && index - first >= BACKTRACK_MIN_GAP) {
+          seenBefore = true;
+          break;
+        }
+      }
+    }
+    if (seenBefore) repeated += 1;
+    if (!visited.has(`${x},${y}`)) visited.set(`${x},${y}`, index);
+  });
+  return repeated / samples.length;
 };

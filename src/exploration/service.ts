@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { NewPlannedRoute, QuestObjective, WorldCollectible, WorldFartlek } from "../domain.js";
 import { UserInputError } from "../errors.js";
-import { generateExplorationRoutes, PlanningError, rerouteTargets, type PlannedProposal, type RouteProvider } from "../routePlanning/planner.js";
+import { generateAreaRoutes, generateExplorationRoutes, PlanningError, rerouteTargets, type PlannedProposal, type RouteProvider } from "../routePlanning/planner.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import type { ProposalStore } from "../routePlanning/proposalStore.js";
 import { routeTargetIds } from "../routePlanning/proposals.js";
@@ -165,8 +165,8 @@ export class ExplorationService {
       return { ...built, flowlineGeometries };
     };
     const resolved = resolve();
-    if (resolved.targets.length === 0) throw new ExplorationError("no_targets");
-    assertNearTargets(input, resolved.targets);
+    // Without collectibles the area itself is the exploration: route-only loops, no objectives.
+    if (resolved.targets.length > 0) assertNearTargets(input, resolved.targets);
     const sessionData = (current: typeof resolved) => {
       const ids = new Set(current.targets.map((target) => target.id));
       const flowlineIds = new Set(current.flowlineGeometries.map((flowline) => flowline.id));
@@ -182,11 +182,17 @@ export class ExplorationService {
 
     const plan = async (current: typeof resolved): Promise<{ planned?: PlannedProposal[]; failure?: unknown }> => {
       try {
+        const dependencies = { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) };
         return {
-          planned: await generateExplorationRoutes(
-            { requestId, playerId, scopeId: session.id, targets: current.targets, flowlines: current.flowlineGeometries, input, bounds: area.bounds },
-            { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) }
-          )
+          planned: current.targets.length === 0
+            ? await generateAreaRoutes(
+              { requestId, playerId, scopeId: session.id, flowlines: current.flowlineGeometries, input, bounds: area.bounds },
+              dependencies
+            )
+            : await generateExplorationRoutes(
+              { requestId, playerId, scopeId: session.id, targets: current.targets, flowlines: current.flowlineGeometries, input, bounds: area.bounds },
+              dependencies
+            )
         };
       } catch (failure) {
         return { failure };

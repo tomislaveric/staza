@@ -40,6 +40,7 @@ const plural = (count: number, singular: string, pluralForm: string) => `${count
 
 /** Human title and summary of an exploration, derived from its targets. */
 export const describeExploration = (targets: QuestRouteTarget[]): { title: string; description: string } => {
+  if (targets.length === 0) return { title: "Exploration: Area route", description: "A route through the explored area." };
   const names = targets.map((target) => target.name);
   const title = names.length <= 2
     ? `Exploration: ${names.join(" & ")}`

@@ -121,6 +121,7 @@ export const resolveExplorationAttemptsWithClient = async (
   }>(
     `SELECT id, title, objectives, difficulty, reward_xp FROM quest_instances
      WHERE player_id = $1 AND status = 'active' AND started_at <= $2
+       AND jsonb_array_length(objectives) > 0
      ORDER BY started_at, id`,
     [playerId, activityStartedAt]
   );
@@ -200,7 +201,8 @@ export class QuestInstanceRepository {
           exploration.description,
           JSON.stringify(exploration.objectives),
           difficulty,
-          QUEST_XP_BY_DIFFICULTY[difficulty]
+          // A route-only exploration has no objectives to complete, so it never pays XP.
+          exploration.objectives.length === 0 ? 0 : QUEST_XP_BY_DIFFICULTY[difficulty]
         ]
       );
       if (inserted.rowCount !== 1) {

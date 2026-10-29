@@ -74,7 +74,6 @@ export const parseRerouteRequest = (body: unknown): RerouteRequest => {
     throw new UserInputError("Route targets must be a list of target ids.");
   }
   const targetIds = [...new Set(ids as string[])];
-  if (targetIds.length === 0) throw new UserInputError("A route needs at least one target.");
   if (targetIds.length > PLANNING_LIMITS.maxRouteTargets) {
     throw new UserInputError(`A route can include at most ${PLANNING_LIMITS.maxRouteTargets} targets.`);
   }
@@ -88,5 +87,6 @@ export const parseRerouteRequest = (body: unknown): RerouteRequest => {
   if (waypoints.size > PLANNING_LIMITS.maxRouteWaypoints) {
     throw new UserInputError(`A route can include at most ${PLANNING_LIMITS.maxRouteWaypoints} map points.`);
   }
+  if (targetIds.length === 0 && waypoints.size === 0) throw new UserInputError("A route needs at least one destination or map point.");
   return { proposalId, targetIds, waypoints: [...waypoints.values()] };
 };

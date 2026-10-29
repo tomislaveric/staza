@@ -212,11 +212,13 @@ const CustomizeSection = (state) => {
   const atLimit = ids.length >= state.limits.maxRouteTargets;
   // Flowlines belong to the current geometry; hide them while an edit is being re-planned.
   const alongRoute = state.status === "rerouting" ? [] : traversedFlowlines(proposal);
+  const waypointCount = (proposal.waypoints ?? []).length;
   const dropped = (proposal.droppedTargetIds ?? []).map((id) => findCatalogTarget(state.catalog, id)?.name ?? id);
   return `
     <div class="exploration-targets" data-exploration-route-targets>
-      <p class="exploration-target-count"><strong>Included destinations</strong></p>
-      <ul class="exploration-selected" aria-label="Included destinations">
+      ${ids.length ? "" : '<p class="route-planner-note">No collectibles on this route. It can still be saved as a route and GPX, without objectives.</p>'}
+      <p class="exploration-target-count"${ids.length ? "" : " hidden"}><strong>Included destinations</strong></p>
+      <ul class="exploration-selected" aria-label="Included destinations"${ids.length ? "" : " hidden"}>
         ${ids.map((id) => {
           const target = findCatalogTarget(state.catalog, id);
           const name = target?.name ?? id;
@@ -225,7 +227,7 @@ const CustomizeSection = (state) => {
             <li data-exploration-target="${escapeHtml(id)}">
               <span class="exploration-target-name">${icon}<span data-user-content>${escapeHtml(name)}</span></span>
               <button type="button" data-exploration-remove="${escapeHtml(id)}"
-                aria-label="Remove ${escapeHtml(name)} from this route"${!idle || ids.length <= 1 ? " disabled" : ""}>\u2715</button>
+                aria-label="Remove ${escapeHtml(name)} from this route"${!idle || ids.length + waypointCount <= 1 ? " disabled" : ""}>\u2715</button>
             </li>
           `;
         }).join("")}
@@ -247,7 +249,7 @@ const CustomizeSection = (state) => {
             <li data-exploration-waypoint="${index}">
               <span class="exploration-target-name"><span>Map point ${escapeHtml(formatPoint(point))}</span></span>
               <button type="button" data-exploration-remove-waypoint="${index}"
-                aria-label="Remove map point ${index + 1} from this route"${idle ? "" : " disabled"}>\u2715</button>
+                aria-label="Remove map point ${index + 1} from this route"${idle && ids.length + waypointCount > 1 ? "" : " disabled"}>\u2715</button>
             </li>
           `).join("")}
         </ul>` : ""}

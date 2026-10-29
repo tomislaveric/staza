@@ -1,6 +1,6 @@
 import type { QuestObjective } from "../domain.js";
 import { cheapestInsertion, generateCandidates, improveOrder, makeCandidate, selectTargetPool, withoutTarget } from "./candidates.js";
-import { closeRoundTrip } from "./roundTrip.js";
+import { backtrackRatio, closeRoundTrip } from "./roundTrip.js";
 import { buildRoutingPlan } from "./routingPlan.js";
 import { policyForSport, profileForSport } from "./sport.js";
 import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, type PlannerPolicy } from "./policy.js";
@@ -11,6 +11,7 @@ import { buildStrategies } from "./strategies.js";
 import type {
   CandidateStop,
   FlowlineGeometry,
+  ProposalLabel,
   ProposalStop,
   LatLon,
   QuestRouteTarget,
@@ -23,6 +24,7 @@ import type {
 } from "./types.js";
 import { staysWithinBounds, validateRoute } from "./validation.js";
 import { insideBounds } from "./validation.js";
+import { distanceBetween } from "./geo.js";
 import type { GeoBounds } from "../worldQuery.js";
 
 export type PlanningErrorCode = "no_reachable_targets" | "no_route" | "routing_unavailable";
@@ -120,7 +122,7 @@ const routeCandidates = async (
     const validation = validateRoute(result, eligibleTargets);
     const planned = new Set(candidate.stops.map((stop) => stop.target.id));
     const nearbyTargetIds = validation.nearbyTargetIds.filter((id) => planned.has(id));
-    if (validation.includedTargetIds.length + nearbyTargetIds.length === 0) {
+    if (eligibleTargets.length > 0 && validation.includedTargetIds.length + nearbyTargetIds.length === 0) {
       failureCodes.push("no_targets_served");
       return;
     }
@@ -355,4 +357,118 @@ export const rerouteTargets = async (
       ...(droppedWaypoints.length > 0 ? { droppedWaypoints } : {}) },
     stops: proposalStops(best)
   };
+};
+
+export interface GenerateAreaRoutesInput {
+  requestId: string;
+  playerId: string;
+  scopeId: string;
+  flowlines: FlowlineGeometry[];
+  input: RoutePlanningInput;
+  bounds: GeoBounds;
+}
+
+/** Loop sizes of an area route: stops on an ellipse inscribed in the area, as a share of its half-extent. */
+const AREA_LOOPS = [
+  { label: "quick", stops: 2, reach: 0.4 },
+  { label: "balanced", stops: 3, reach: 0.55 },
+  { label: "adventure", stops: 4, reach: 0.7 }
+] as const;
+
+/** Largest share of an area loop that may retrace its own road. */
+const MAX_AREA_BACKTRACK = 0.25;
+
+/** Share of the area diagonal within which a cycling Flowline point replaces a loop point. */
+const FLOWLINE_SNAP_RATIO = 0.25;
+
+/**
+ * Anchor points of a loop through the area, starting on the side nearest the start. Cycling
+ * routes bend each point to a nearby Flowline so they follow existing Flowlines; running and
+ * hiking never do.
+ */
+export const areaAnchors = (
+  input: RoutePlanningInput,
+  bounds: GeoBounds,
+  flowlines: FlowlineGeometry[],
+  loop: { stops: number; reach: number }
+): LatLon[] => {
+  const center = { lat: (bounds.minLatitude + bounds.maxLatitude) / 2, lon: (bounds.minLongitude + bounds.maxLongitude) / 2 };
+  const halfLat = (bounds.maxLatitude - bounds.minLatitude) / 2;
+  const halfLon = (bounds.maxLongitude - bounds.minLongitude) / 2;
+  const first = Math.atan2((input.start.lat - center.lat) / (halfLat || 1), (input.start.lon - center.lon) / (halfLon || 1));
+  const snapM = FLOWLINE_SNAP_RATIO * distanceBetween(
+    { lat: bounds.minLatitude, lon: bounds.minLongitude },
+    { lat: bounds.maxLatitude, lon: bounds.maxLongitude }
+  );
+  const flowlinePoints = input.sport === undefined || input.sport === "cycling"
+    ? flowlines.flatMap((flowline) => flowline.coordinates)
+      .filter(([lon, lat]) => insideBounds([lon, lat], bounds, 0))
+      .map(([lon, lat]) => ({ lat, lon }))
+    : [];
+  const anchors = new Map<string, LatLon>();
+  for (let index = 0; index < loop.stops; index += 1) {
+    const angle = first + (2 * Math.PI * index) / loop.stops;
+    let point: LatLon = {
+      lat: center.lat + Math.sin(angle) * halfLat * loop.reach,
+      lon: center.lon + Math.cos(angle) * halfLon * loop.reach
+    };
+    let nearest = snapM;
+    for (const candidate of flowlinePoints) {
+      const gap = distanceBetween(point, candidate);
+      if (gap < nearest) {
+        nearest = gap;
+        point = candidate;
+      }
+    }
+    anchors.set(waypointId(point), point);
+  }
+  return [...anchors.values()];
+};
+
+/**
+ * Route generation for an area without destinations: the bbox is the only hard fact. Routes are
+ * loops of three sizes through route-only anchors, so they carry no objectives or progress.
+ */
+export const generateAreaRoutes = async (
+  { requestId, playerId, scopeId, flowlines, input, bounds }: GenerateAreaRoutesInput,
+  { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
+): Promise<PlannedProposal[]> => {
+  const policy = policyForSport(basePolicy, input.sport);
+  const startedAt = now();
+  const seen = new Set<string>();
+  const queued: QueuedCandidate[] = [];
+  for (const loop of AREA_LOOPS) {
+    const anchors = areaAnchors(input, bounds, flowlines, loop);
+    const candidate = makeCandidate(input, [], anchors.map((point) => ({ target: waypointTarget(point) })), "custom", policy);
+    if (anchors.length === 0 || seen.has(candidate.key)) continue;
+    seen.add(candidate.key);
+    queued.push({ candidate, objectives: [] });
+  }
+  const run = await routeCandidates(queued, {
+    requestId, input, bounds, eligibleTargets: [], maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy
+  });
+  // Loops should not ride the same road out and back; keep those only when nothing better exists.
+  const loops = run.scored.filter((route) => backtrackRatio(route.routing.geometry.coordinates) <= MAX_AREA_BACKTRACK);
+  const usable = loops.length > 0 ? loops : run.scored;
+  const byLength = [...usable].sort((a, b) => a.routing.distanceM - b.routing.distanceM);
+  const labels: ProposalLabel[][] = [[], ["balanced"], ["quick", "adventure"], ["quick", "balanced", "adventure"]];
+  const best = [...usable].sort((a, b) => b.score.total - a.score.total)[0];
+  const proposals = byLength.slice(0, 3).map((route, index, list) => {
+    const proposal = toRouteProposal({ label: labels[list.length][index], route, recommended: route === best }, input, new Map(), flowlines, policy);
+    const waypoints = route.candidate.stops.map((stop) => stop.target.coordinate);
+    return { proposal: { ...proposal, waypoints }, stops: proposalStops(route) };
+  });
+  log({
+    event: "exploration_area_route_generate",
+    requestId,
+    playerId,
+    explorationId: scopeId,
+    candidateCount: queued.length,
+    routingRequests: run.routingRequests,
+    failureCodes: [...new Set(run.failureCodes)].sort(),
+    planningDurationMs: now() - startedAt,
+    proposalCount: proposals.length
+  });
+  if (proposals.length === 0) throw noRouteError(run.failureCodes);
+  return proposals;
 };

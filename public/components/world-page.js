@@ -791,12 +791,13 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   function removeExplorationPoint(index) {
     const current = activeProposal(exploration);
     if (!current?.waypoints?.[index]) return;
+    if (routeTargetIds(current).length + current.waypoints.length <= 1) return;
     void rerouteSelected(routeTargetIds(current), current.waypoints.filter((_point, position) => position !== index));
   }
 
   function removeExplorationTarget(id) {
     const contents = routeTargetIds(activeProposal(exploration));
-    if (contents.length <= 1 || !contents.includes(id)) return;
+    if (contents.length + (activeProposal(exploration)?.waypoints ?? []).length <= 1 || !contents.includes(id)) return;
     void rerouteSelected(contents.filter((targetId) => targetId !== id));
   }
 

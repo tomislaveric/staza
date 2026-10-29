@@ -218,9 +218,24 @@ describe("ExplorationService", () => {
     expect(JSON.stringify(routeCalls)).not.toContain('"through"');
   });
 
-  it("reports empty areas and missing routing with stable codes", async () => {
-    await expect(setup({ collectibles: [collectible("hidden", 1, 1, { visibility: "hidden" })] }).service.generate("p1", generateBody))
-      .rejects.toMatchObject({ code: "no_targets" });
+  it("routes an area without collectibles as route-only loops that confirm without objectives", async () => {
+    const { service, created } = setup({ collectibles: [collectible("hidden", 1, 1, { visibility: "hidden" })] });
+    const result = await service.generate("p1", generateBody);
+    expect(result.proposals.length).toBeGreaterThan(0);
+    for (const proposal of result.proposals) {
+      expect(contents(proposal)).toEqual([]);
+      expect(proposal.waypoints!.length).toBeGreaterThan(0);
+    }
+    const proposal = result.proposals.find((entry) => entry.recommended)!;
+    await service.confirm("p1", { proposalId: proposal.id });
+    expect(created[0].exploration.objectives).toEqual([]);
+
+    const rerouted = await service.reroute("p1", result.explorationId, { proposalId: proposal.id, targetIds: [], waypoints: [at(2, 2)] });
+    expect(rerouted.proposal.waypoints).toEqual([at(2, 2)]);
+    await expect(service.reroute("p1", result.explorationId, { proposalId: proposal.id, targetIds: [] })).rejects.toThrow();
+  });
+
+  it("reports missing routing with a stable code", async () => {
     await expect(setup({ routing: null }).service.generate("p1", generateBody)).rejects.toMatchObject({ code: "planning_unavailable" });
   });
 
