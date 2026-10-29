@@ -235,6 +235,16 @@ describe("ExplorationService", () => {
     await expect(service.reroute("p1", result.explorationId, { proposalId: proposal.id, targetIds: [] })).rejects.toThrow();
   });
 
+  it("routes a loop through one chosen collectible and confirms it as that objective", async () => {
+    const { service, created } = setup();
+    const result = await service.generate("p1", { ...generateBody, destinationId: "c-mid" });
+    expect(result.proposals.length).toBeGreaterThan(0);
+    for (const proposal of result.proposals) expect(proposal.includedTargetIds).toEqual(["c-mid"]);
+    await service.confirm("p1", { proposalId: result.proposals[0].id });
+    expect(created[0].exploration.objectives.flatMap((objective) => objective.targets.map((target) => target.id))).toEqual(["c-mid"]);
+    await expect(service.generate("p1", { ...generateBody, destinationId: "nope" })).rejects.toThrow();
+  });
+
   it("reports missing routing with a stable code", async () => {
     await expect(setup({ routing: null }).service.generate("p1", generateBody)).rejects.toMatchObject({ code: "planning_unavailable" });
   });

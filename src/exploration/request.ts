@@ -29,6 +29,8 @@ export const parseArea = (value: unknown): ExplorationAreaContext => {
 export interface GenerateRequest {
   area: ExplorationAreaContext;
   input: RoutePlanningInput;
+  /** A collectible every route must visit ("Route to"). */
+  destinationId?: string;
 }
 
 /** Round-trip length that lets the planner span the frozen area: about twice its diagonal. */
@@ -48,9 +50,14 @@ export const areaConstraint = ({ bounds }: ExplorationAreaContext): { type: "dis
 export const parseGenerateRequest = (body: unknown): GenerateRequest => {
   if (!isRecord(body)) throw new UserInputError("An exploration request is required.");
   const area = parseArea(body.area);
+  const { destinationId } = body;
+  if (destinationId !== undefined && (typeof destinationId !== "string" || destinationId.trim() === "")) {
+    throw new UserInputError("The destination must be a collectible id.");
+  }
   return {
     area,
-    input: parseRoutePlanningInput({ routeType: "round_trip", constraint: areaConstraint(area), ...body })
+    input: parseRoutePlanningInput({ routeType: "round_trip", constraint: areaConstraint(area), ...body }),
+    ...(destinationId ? { destinationId } : {})
   };
 };
 

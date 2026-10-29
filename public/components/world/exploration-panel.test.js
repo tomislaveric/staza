@@ -82,6 +82,11 @@ describe("buildGenerateRequest", () => {
       start: { lat: 50, lon: 9 }
     });
   });
+
+  it("asks for a loop through the chosen collectible when routing to it", () => {
+    const state = createExplorationState(area, { lat: 50, lon: 9 }, { id: "c1", name: "Col" });
+    expect(buildGenerateRequest(state).body.destinationId).toBe("c1");
+  });
 });
 
 describe("ExplorationPanel configure step", () => {

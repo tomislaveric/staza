@@ -366,6 +366,8 @@ export interface GenerateAreaRoutesInput {
   flowlines: FlowlineGeometry[];
   input: RoutePlanningInput;
   bounds: GeoBounds;
+  /** A destination every loop must pass through, with the objectives it advances. */
+  required?: { target: QuestRouteTarget; objectives: QuestObjective[] };
 }
 
 /** Loop sizes of an area route: stops on an ellipse inscribed in the area, as a share of its half-extent. */
@@ -380,6 +382,31 @@ const MAX_AREA_BACKTRACK = 0.25;
 
 /** Share of the area diagonal within which a cycling Flowline point replaces a loop point. */
 const FLOWLINE_SNAP_RATIO = 0.25;
+
+/** Moves a point onto a nearby Flowline for cycling; running and hiking never follow Flowlines. */
+const flowlineSnapper = (input: RoutePlanningInput, bounds: GeoBounds, flowlines: FlowlineGeometry[]) => {
+  const snapM = FLOWLINE_SNAP_RATIO * distanceBetween(
+    { lat: bounds.minLatitude, lon: bounds.minLongitude },
+    { lat: bounds.maxLatitude, lon: bounds.maxLongitude }
+  );
+  const points = input.sport === undefined || input.sport === "cycling"
+    ? flowlines.flatMap((flowline) => flowline.coordinates)
+      .filter(([lon, lat]) => insideBounds([lon, lat], bounds, 0))
+      .map(([lon, lat]) => ({ lat, lon }))
+    : [];
+  return (point: LatLon): LatLon => {
+    let best = point;
+    let nearest = snapM;
+    for (const candidate of points) {
+      const gap = distanceBetween(point, candidate);
+      if (gap < nearest) {
+        nearest = gap;
+        best = candidate;
+      }
+    }
+    return best;
+  };
+};
 
 /**
  * Anchor points of a loop through the area, starting on the side nearest the start. Cycling
@@ -396,33 +423,62 @@ export const areaAnchors = (
   const halfLat = (bounds.maxLatitude - bounds.minLatitude) / 2;
   const halfLon = (bounds.maxLongitude - bounds.minLongitude) / 2;
   const first = Math.atan2((input.start.lat - center.lat) / (halfLat || 1), (input.start.lon - center.lon) / (halfLon || 1));
-  const snapM = FLOWLINE_SNAP_RATIO * distanceBetween(
-    { lat: bounds.minLatitude, lon: bounds.minLongitude },
-    { lat: bounds.maxLatitude, lon: bounds.maxLongitude }
-  );
-  const flowlinePoints = input.sport === undefined || input.sport === "cycling"
-    ? flowlines.flatMap((flowline) => flowline.coordinates)
-      .filter(([lon, lat]) => insideBounds([lon, lat], bounds, 0))
-      .map(([lon, lat]) => ({ lat, lon }))
-    : [];
+  const snap = flowlineSnapper(input, bounds, flowlines);
   const anchors = new Map<string, LatLon>();
   for (let index = 0; index < loop.stops; index += 1) {
     const angle = first + (2 * Math.PI * index) / loop.stops;
-    let point: LatLon = {
+    const point = snap({
       lat: center.lat + Math.sin(angle) * halfLat * loop.reach,
       lon: center.lon + Math.cos(angle) * halfLon * loop.reach
-    };
-    let nearest = snapM;
-    for (const candidate of flowlinePoints) {
-      const gap = distanceBetween(point, candidate);
-      if (gap < nearest) {
-        nearest = gap;
-        point = candidate;
-      }
-    }
+    });
     anchors.set(waypointId(point), point);
   }
   return [...anchors.values()];
+};
+
+/** Loops through a destination: side anchors beside the start-destination line, as a share of its length. */
+const DESTINATION_LOOPS = [
+  { label: "quick", sides: [0.3] },
+  { label: "balanced", sides: [-0.3, 0.3] },
+  { label: "adventure", sides: [-0.55, 0.55] }
+] as const;
+const MIN_DESTINATION_SPAN_M = 1500;
+
+/**
+ * Stops of a loop that reaches the destination along one side and returns along the other, so
+ * the way back does not retrace the way out. Anchors are clamped into the area.
+ */
+export const destinationStops = (
+  input: RoutePlanningInput,
+  bounds: GeoBounds,
+  flowlines: FlowlineGeometry[],
+  destination: QuestRouteTarget,
+  sides: readonly number[]
+): CandidateStop[] => {
+  const { start } = input;
+  const target = destination.coordinate;
+  const scale = Math.cos((start.lat * Math.PI) / 180);
+  const dx = (target.lon - start.lon) * scale;
+  const dy = target.lat - start.lat;
+  const spanM = Math.max(distanceBetween(start, target), MIN_DESTINATION_SPAN_M);
+  const span = Math.hypot(dx, dy) || 1;
+  const snap = flowlineSnapper(input, bounds, flowlines);
+  const clamp = (point: LatLon): LatLon => ({
+    lat: Math.min(bounds.maxLatitude, Math.max(bounds.minLatitude, point.lat)),
+    lon: Math.min(bounds.maxLongitude, Math.max(bounds.minLongitude, point.lon))
+  });
+  const side = (offset: number): LatLon => {
+    const metersToDeg = (spanM * Math.abs(offset)) / 111_320;
+    const sign = Math.sign(offset);
+    return snap(clamp({
+      lat: (start.lat + target.lat) / 2 + (dx / span) * sign * metersToDeg,
+      lon: (start.lon + target.lon) / 2 - ((dy / span) * sign * metersToDeg) / (scale || 1)
+    }));
+  };
+  const outbound = sides.filter((offset) => offset < 0).map(side);
+  const inbound = sides.filter((offset) => offset > 0).map(side);
+  return [...outbound.map((point) => waypointTarget(point)), destination, ...inbound.map((point) => waypointTarget(point))]
+    .map((stop) => ({ target: stop }));
 };
 
 /**
@@ -430,22 +486,26 @@ export const areaAnchors = (
  * loops of three sizes through route-only anchors, so they carry no objectives or progress.
  */
 export const generateAreaRoutes = async (
-  { requestId, playerId, scopeId, flowlines, input, bounds }: GenerateAreaRoutesInput,
+  { requestId, playerId, scopeId, flowlines, input, bounds, required }: GenerateAreaRoutesInput,
   { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal[]> => {
   const policy = policyForSport(basePolicy, input.sport);
   const startedAt = now();
   const seen = new Set<string>();
   const queued: QueuedCandidate[] = [];
-  for (const loop of AREA_LOOPS) {
-    const anchors = areaAnchors(input, bounds, flowlines, loop);
-    const candidate = makeCandidate(input, [], anchors.map((point) => ({ target: waypointTarget(point) })), "custom", policy);
-    if (anchors.length === 0 || seen.has(candidate.key)) continue;
+  const objectives = required?.objectives ?? [];
+  const shapes = required
+    ? DESTINATION_LOOPS.map((loop) => destinationStops(input, bounds, flowlines, required.target, loop.sides))
+    : AREA_LOOPS.map((loop) => areaAnchors(input, bounds, flowlines, loop).map((point) => ({ target: waypointTarget(point) })));
+  for (const stops of shapes) {
+    if (stops.length === 0) continue;
+    const candidate = makeCandidate(input, objectives, stops, "custom", policy);
+    if (seen.has(candidate.key)) continue;
     seen.add(candidate.key);
-    queued.push({ candidate, objectives: [] });
+    queued.push({ candidate, objectives });
   }
   const run = await routeCandidates(queued, {
-    requestId, input, bounds, eligibleTargets: [], maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy
+    requestId, input, bounds, eligibleTargets: required ? [required.target] : [], maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy
   });
   // Loops should not ride the same road out and back; keep those only when nothing better exists.
   const loops = run.scored.filter((route) => backtrackRatio(route.routing.geometry.coordinates) <= MAX_AREA_BACKTRACK);
@@ -454,8 +514,9 @@ export const generateAreaRoutes = async (
   const labels: ProposalLabel[][] = [[], ["balanced"], ["quick", "adventure"], ["quick", "balanced", "adventure"]];
   const best = [...usable].sort((a, b) => b.score.total - a.score.total)[0];
   const proposals = byLength.slice(0, 3).map((route, index, list) => {
-    const proposal = toRouteProposal({ label: labels[list.length][index], route, recommended: route === best }, input, new Map(), flowlines, policy);
-    const waypoints = route.candidate.stops.map((stop) => stop.target.coordinate);
+    const proposal = toRouteProposal({ label: labels[list.length][index], route, recommended: route === best }, input,
+      new Map(required ? [[required.target.id, required.target]] : []), flowlines, policy);
+    const waypoints = route.candidate.stops.filter((stop) => stop.target.routeOnly).map((stop) => stop.target.coordinate);
     return { proposal: { ...proposal, waypoints }, stops: proposalStops(route) };
   });
   log({

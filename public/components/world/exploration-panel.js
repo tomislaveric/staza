@@ -33,8 +33,9 @@ const proposalHints = {
  * - "confirming": the selected route is being persisted.
  * Proposals are ephemeral: `customizedById` maps an original proposal id to its edited route.
  */
-export const createExplorationState = (area, start) => ({
+export const createExplorationState = (area, start, destination) => ({
   area,
+  destination,
   phase: "configure",
   status: "idle",
   routeType: "round_trip",
@@ -109,7 +110,8 @@ export const buildGenerateRequest = (state) => {
       area: state.area,
       routeType: "round_trip",
       sport: state.sport,
-      start: state.start
+      start: state.start,
+      ...(state.destination ? { destinationId: state.destination.id } : {})
     }
   };
 };
@@ -190,6 +192,7 @@ const ConfigureStep = (state) => {
     <section class="world-detail exploration-panel" aria-label="Explore this area">
       ${panelHeader("Step 1 · Plan your outing")}
       <form class="route-planner-form" data-exploration-form novalidate>
+        ${state.destination ? `<p class="route-planner-note">Route to <strong data-user-content>${escapeHtml(state.destination.name)}</strong></p>` : ""}
         <div class="route-planner-toggle" role="group" aria-label="Sport">
           ${SPORT_OPTIONS.map((option) => `<button type="button" data-exploration-sport="${option.value}" aria-pressed="${state.sport === option.value}"${generating ? " disabled" : ""}>${option.label}</button>`).join("")}
         </div>

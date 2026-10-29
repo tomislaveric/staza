@@ -69,3 +69,11 @@ describe("CollectibleDetail", () => {
     expect(html).toContain('href="https://www.openstreetmap.org/way/42"');
   });
 });
+
+describe("CollectibleDetail route action", () => {
+  it("offers an in-app Route to button instead of an external link", () => {
+    const html = CollectibleDetail(pass({ latitude: 44.6, longitude: 6.9 }));
+    expect(html).toContain('data-collectible-route="quaeldich:col-agnel"');
+    expect(html).not.toContain("openstreetmap.org");
+  });
+});

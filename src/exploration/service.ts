@@ -147,7 +147,7 @@ export class ExplorationService {
   /** Freezes the area, resolves its eligible targets and generates the initial route proposals. */
   async generate(playerId: string, body: unknown, requestId: string = randomUUID()): Promise<GeneratedExploration> {
     const routing = this.requireRouting();
-    const { area, input } = parseGenerateRequest(body);
+    const { area, input, destinationId } = parseGenerateRequest(body);
     if (input.routeType === "point_to_point" && !insideBounds([input.end.lon, input.end.lat], area.bounds, 0)) {
       throw new UserInputError("The destination must be inside the explored area.");
     }
@@ -166,7 +166,9 @@ export class ExplorationService {
     };
     const resolved = resolve();
     // Without collectibles the area itself is the exploration: route-only loops, no objectives.
-    if (resolved.targets.length > 0) assertNearTargets(input, resolved.targets);
+    const destination = destinationId ? resolved.targets.find((target) => target.id === destinationId) : undefined;
+    if (destinationId && !destination) throw new UserInputError("The destination must be inside the explored area.");
+    if (resolved.targets.length > 0) assertNearTargets(input, destination ? [destination] : resolved.targets);
     const sessionData = (current: typeof resolved) => {
       const ids = new Set(current.targets.map((target) => target.id));
       const flowlineIds = new Set(current.flowlineGeometries.map((flowline) => flowline.id));
@@ -183,10 +185,16 @@ export class ExplorationService {
     const plan = async (current: typeof resolved): Promise<{ planned?: PlannedProposal[]; failure?: unknown }> => {
       try {
         const dependencies = { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) };
+        const required = destination
+          ? (() => {
+            const objectives = explorationObjectives([destination]);
+            return { target: withObjectiveIds([destination], objectives)[0], objectives };
+          })()
+          : undefined;
         return {
-          planned: current.targets.length === 0
+          planned: current.targets.length === 0 || required
             ? await generateAreaRoutes(
-              { requestId, playerId, scopeId: session.id, flowlines: current.flowlineGeometries, input, bounds: area.bounds },
+              { requestId, playerId, scopeId: session.id, flowlines: current.flowlineGeometries, input, bounds: area.bounds, ...(required ? { required } : {}) },
               dependencies
             )
             : await generateExplorationRoutes(

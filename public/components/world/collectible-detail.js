@@ -43,12 +43,7 @@ export const formatCollectibleDistance = (meters, locale) => {
     : `${new Intl.NumberFormat(locale, { maximumFractionDigits: km < 10 ? 1 : 0 }).format(km)} km`;
 };
 
-export const collectibleDirectionsUrl = (collectible, origin) => {
-  const from = origin ? `${origin.latitude},${origin.longitude}` : "";
-  return `https://www.openstreetmap.org/directions?route=${encodeURIComponent(`${from};${collectible.latitude},${collectible.longitude}`)}`;
-};
-
-export const CollectibleDetail = (collectible, relatedQuests = [], { distanceMeters, origin, locale } = {}) => {
+export const CollectibleDetail = (collectible, relatedQuests = [], { distanceMeters, locale } = {}) => {
   const hasPosition = Number.isFinite(collectible.latitude) && Number.isFinite(collectible.longitude);
   return `
     <section class="world-detail collectible-detail" aria-label="Collectible detail">
@@ -82,8 +77,7 @@ export const CollectibleDetail = (collectible, relatedQuests = [], { distanceMet
         </div>
       ` : ""}
       ${hasPosition ? `
-        <a class="collectible-detail-route" href="${escapeHtml(collectibleDirectionsUrl(collectible, origin))}"
-          target="_blank" rel="noopener noreferrer">Route to</a>
+        <button type="button" class="collectible-detail-route" data-collectible-route="${escapeHtml(collectible.id)}">Route to</button>
       ` : ""}
     </section>
   `;

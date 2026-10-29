@@ -426,6 +426,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     detailHost.querySelectorAll("[data-collectible-quest]").forEach((button) => {
       button.addEventListener("click", () => void selectQuest(button.dataset.collectibleQuest));
     });
+    detailHost.querySelector("[data-collectible-route]")?.addEventListener("click", (event) => openRouteTo(event.currentTarget.dataset.collectibleRoute));
     detailHost.querySelector("[data-world-close]")?.addEventListener("click", clearSelection);
     detailHost.querySelectorAll("[data-world-marker]").forEach((button) => {
       button.addEventListener("click", () => selectCollectible(button.dataset.worldMarker));
@@ -612,6 +613,35 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     setStatus(undefined);
     renderSidePanels();
     renderExploration();
+  }
+
+  /** "Route to" on a collectible: a loop from home through it, planned like Explore this Area. */
+  function openRouteTo(collectibleId) {
+    const collectible = collectibleById(collectibleId);
+    if (!worldMap || exploration || !collectible) return;
+    const start = homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined;
+    const lats = [collectible.latitude, ...(start ? [start.lat] : [])];
+    const lons = [collectible.longitude, ...(start ? [start.lon] : [])];
+    const padLat = Math.max(0.01, (Math.max(...lats) - Math.min(...lats)) * 0.5);
+    const padLon = Math.max(0.015, (Math.max(...lons) - Math.min(...lons)) * 0.5);
+    const bounds = {
+      west: Math.min(...lons) - padLon, south: Math.min(...lats) - padLat,
+      east: Math.max(...lons) + padLon, north: Math.max(...lats) + padLat
+    };
+    explorationToken += 1;
+    selectedQuestKey = undefined;
+    selectedQuestTargets = { collectibles: [], flowlines: [] };
+    selection = undefined;
+    exploration = createExplorationState({
+      bbox: boundsToParameter(bounds),
+      center: { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 },
+      zoom: worldMap.getView().zoom
+    }, start, { id: collectible.id, name: collectible.name });
+    setStatus(undefined);
+    renderSidePanels();
+    renderExploration();
+    worldMap.fitTo([[bounds.west, bounds.south], [bounds.east, bounds.north]]);
+    if (start) void generateRoutes();
   }
 
   /** Any phase → NORMAL. Server-side proposals simply expire; nothing was persisted. */
