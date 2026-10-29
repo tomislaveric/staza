@@ -174,6 +174,15 @@ describe("World filter controls", () => {
     expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
   });
 
+  it("makes locked filters link to their Skill Atlas node", () => {
+    const markup = WorldFilterControls([], collectibles, fartleks, [], [
+      { id: "high-flow", nodeId: "rusher-ii", nodeName: "Rusher II" }
+    ]);
+
+    expect(markup).toContain('type="button" data-world-filter-unlock="rusher-ii"');
+    expect(markup).toContain("Unlock Rusher II in the Skill Atlas");
+  });
+
   it("reuses the marker swatches for discovery, categories, and Fartleks", () => {
     const markup = WorldFilterControls([], [
       ...collectibles,
@@ -423,7 +432,8 @@ describe("mounted World page interactions", () => {
       getView: () => ({ center: { lat: 50.5, lon: 9.5 }, zoom: 8 }),
       setCollectibles: vi.fn(), setFartleks: vi.fn(), setDetailPanelOpen: vi.fn(),
       setRoute: vi.fn(), setAlternateRoutes: vi.fn(), fitTo: vi.fn(), setRouteEndpoints: vi.fn(),
-      setPickHandler: vi.fn(), isPicking: vi.fn(() => false), setHomePosition: vi.fn(), flyTo: vi.fn()
+      setPickHandler: vi.fn(), setMapClickHandler: vi.fn(), showPointTooltip: vi.fn(), isPicking: vi.fn(() => false),
+      setHomePosition: vi.fn(), flyTo: vi.fn()
     };
     const createMap = vi.spyOn(worldMap, "createWorldMap").mockResolvedValue(map);
     await mountWorldPage(mountPoint);
@@ -609,7 +619,6 @@ describe("mounted World page interactions", () => {
     page.map.setPickHandler.mock.lastCall[0]({ lat: 50, lon: 9 });
     expect(page.map.setPickHandler).toHaveBeenLastCalledWith(undefined);
     expect(page.map.setRouteEndpoints).toHaveBeenLastCalledWith({ start: { lat: 50, lon: 9 }, end: undefined });
-    expect(page.detail.innerHTML).toContain("50.0000, 9.0000");
     expect(page.fetchMock.mock.calls.some(([url]) => url.startsWith("/api/explorations"))).toBe(false);
     expect(page.detail.innerHTML).not.toContain("Included destinations");
   });
@@ -621,8 +630,7 @@ describe("mounted World page interactions", () => {
       area: { bbox: "8.00000,49.00000,11.00000,52.00000", center: { lat: 50.5, lon: 9.5 }, zoom: 8 },
       routeType: "round_trip",
       sport: "cycling",
-      start: { lat: 50, lon: 9 },
-      constraint: { type: "distance", value: 50_000 }
+      start: { lat: 50, lon: 9 }
     });
     expect(page.detail.innerHTML).toContain("Quick");
     expect(page.detail.innerHTML).toContain("Balanced");
@@ -646,10 +654,41 @@ describe("mounted World page interactions", () => {
     page.exploreButton.handlers.click();
     expect(getCurrentPosition).not.toHaveBeenCalled();
     page.bound("[data-exploration-locate]:click")();
-    expect(page.detail.innerHTML).toContain("50.2000, 9.2000");
     submit(page);
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Step 2"));
     expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body).start).toEqual({ lat: 50.2, lon: 9.2 });
+  });
+
+  it("prefills the start from the saved Locate Me position without requesting geolocation", async () => {
+    const getCurrentPosition = vi.fn();
+    vi.stubGlobal("navigator", { geolocation: { getCurrentPosition } });
+    const page = await mount({ savedHome: { latitude: 50.2, longitude: 9.2 } });
+    page.exploreButton.handlers.click();
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    submit(page);
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Step 2"));
+    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body).start).toEqual({ lat: 50.2, lon: 9.2 });
+  });
+
+  it("offers an Add destination tooltip for any map click while customizing and reroutes on confirm", async () => {
+    const page = await mount();
+    await page.generate();
+    const click = page.map.setMapClickHandler.mock.lastCall[0];
+    expect(click).toBeTypeOf("function");
+    click({ lat: 50.4, lon: 9.4 });
+    const [point, { onConfirm }] = page.map.showPointTooltip.mock.lastCall;
+    expect(point).toEqual({ lat: 50.4, lon: 9.4 });
+    expect(page.calls("/api/explorations/exp-1/reroute")).toHaveLength(0);
+    onConfirm(point);
+    await vi.waitFor(() => expect(page.calls("/api/explorations/exp-1/reroute", "POST")).toHaveLength(1));
+    expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[0][1].body))
+      .toEqual({ proposalId: "proposal-balanced", targetIds: ["viewpoint-found"], waypoints: [{ lat: 50.4, lon: 9.4 }] });
+  });
+
+  it("does not offer map-point tooltips outside customization", async () => {
+    const page = await mount();
+    page.exploreButton.handlers.click();
+    expect(page.map.setMapClickHandler).toHaveBeenLastCalledWith(undefined);
   });
 
   it("passes the last saved home into World map startup", async () => {
@@ -735,17 +774,16 @@ describe("mounted World page interactions", () => {
     page.callbacks.onCollectibleSelect("peak-unfound");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Customized"));
     expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[0][1].body))
-      .toEqual({ proposalId: "proposal-balanced", targetIds: ["viewpoint-found", "peak-unfound"] });
+      .toEqual({ proposalId: "proposal-balanced", targetIds: ["viewpoint-found", "peak-unfound"], waypoints: [] });
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: customGeometry });
     expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
     expect(page.collectibleFeature("peak-unfound").properties.questTarget).toBe(true);
-    expect(page.detail.innerHTML).toContain("This route is longer than your planned ride.");
     expect(page.detail.innerHTML).toContain("data-exploration-reset");
 
     page.bound("[data-exploration-remove]:click")();
     await vi.waitFor(() => expect(page.calls("/api/explorations/exp-1/reroute", "POST")).toHaveLength(2));
     expect(JSON.parse(page.calls("/api/explorations/exp-1/reroute", "POST")[1][1].body))
-      .toEqual({ proposalId: "proposal-custom-1", targetIds: ["peak-unfound"] });
+      .toEqual({ proposalId: "proposal-custom-1", targetIds: ["peak-unfound"], waypoints: [] });
     await vi.waitFor(() => expect(page.detail.innerHTML).not.toContain("Updating route"));
     expect(page.collectibleFeature("viewpoint-found").properties.questRelated).toBe(false);
 
@@ -800,7 +838,6 @@ describe("mounted World page interactions", () => {
     expect(page.detail.innerHTML).not.toContain("data-exploration-proposal");
     expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
     expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([]);
-    page.bound("[data-exploration-constraint]:click")();
     submit(page);
     await vi.waitFor(() => expect(page.calls("/api/explorations/generate", "POST")).toHaveLength(2));
   });

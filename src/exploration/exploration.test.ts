@@ -7,7 +7,6 @@ import { ProposalStore } from "../routePlanning/proposalStore.js";
 import { buildExplorationTargets, buildFlowlineGeometries, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
 import { at, flowlineGeometry, pointTarget, straightLineRoute } from "../routePlanning/testFixtures.js";
 import { buildGpx, gpxFilename } from "./gpx.js";
-import { wideningBounds } from "./widen.js";
 import { describeExploration, explorationObjectives } from "./objectives.js";
 import { parseGenerateRequest, parseRerouteRequest } from "./request.js";
 import { ExplorationService, type NewExploration } from "./service.js";
@@ -126,15 +125,18 @@ describe("exploration requests", () => {
     const parsed = parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 }, ...ride, targetIds: ["x"] });
     expect(parsed.area.bounds).toEqual(area.bounds);
     expect(parsed.input.constraint).toEqual({ type: "distance", meters: 40_000 });
+    const derived = parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 }, start: at(0, 0) });
+    expect(derived.input.routeType).toBe("round_trip");
+    expect(derived.input.constraint.type === "distance" && derived.input.constraint.meters).toBeGreaterThan(40_000);
     expect(parsed).not.toHaveProperty("targetIds");
     expect(() => parseGenerateRequest({ area: { bbox: "0,0,5,5", center: area.center, zoom: 5 }, ...ride })).toThrow(UserInputError);
     expect(() => parseGenerateRequest({ area: { bbox, center: area.center }, ...ride })).toThrow(UserInputError);
-    expect(() => parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 }, start: at(0, 0) })).toThrow(UserInputError);
+    expect(() => parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 } })).toThrow(UserInputError);
   });
 
   it("accepts a bounded, de-duplicated target list for rerouting", () => {
     const proposalId = "0b8f1c1e-3c3a-4c1e-9f5e-1c2d3e4f5a6b";
-    expect(parseRerouteRequest({ proposalId, targetIds: ["a", "b", "a"] })).toEqual({ proposalId, targetIds: ["a", "b"] });
+    expect(parseRerouteRequest({ proposalId, targetIds: ["a", "b", "a"] })).toEqual({ proposalId, targetIds: ["a", "b"], waypoints: [] });
     expect(() => parseRerouteRequest({ proposalId, targetIds: [] })).toThrow(UserInputError);
     expect(() => parseRerouteRequest({ proposalId, targetIds: [1] })).toThrow(UserInputError);
     expect(() => parseRerouteRequest({ proposalId: "nope", targetIds: ["a"] })).toThrow(UserInputError);
@@ -300,13 +302,52 @@ describe("ExplorationService outings", () => {
     ...extra
   });
 
-  it("widens the target search beyond the viewport so the requested distance is honoured", async () => {
-    const { service } = setup([...near, ...ring]);
-    const result = await service.generate("p1", body(100_000));
-    const longest = Math.max(...result.proposals.map((proposal) => proposal.distanceM));
-    expect(longest).toBeGreaterThan(80_000);
-    expect(result.warnings).toEqual([]);
-    expect(result.catalog.collectibles.map((item) => item.id)).toEqual(expect.arrayContaining(["r1", "n1"]));
+  it("never offers destinations outside the frozen area", async () => {
+    const leaky = new ExplorationService({
+      loadArea: async () => ({ collectibles: [...near, ...ring], flowlines: [], truncated: false }),
+      routing: { route: async (request) => straightLineRoute(request) },
+      sessions: new ExplorationSessionStore(),
+      proposals: new ProposalStore(),
+      explorations: { createExploration: async () => "instance" },
+      log: () => undefined
+    });
+    const result = await leaky.generate("p1", body(40_000));
+    expect(result.catalog.collectibles.map((item) => item.id).sort()).toEqual(["n1", "n2"]);
+  });
+
+  it("rejects routes leaving the area, except the connector from an outside start", async () => {
+    const detour: RouteProvider["route"] = async (request) => {
+      const route = straightLineRoute(request);
+      const out = [request.start.lon, at(0, 0).lat + 0.5] as [number, number];
+      return { ...route, geometry: { type: "LineString", coordinates: [...route.geometry.coordinates, out, ...route.geometry.coordinates.slice(-1)] } };
+    };
+    await expect(setup(near, detour).service.generate("p1", body(20_000))).rejects.toMatchObject({ code: "no_route" });
+
+    const outside = at(0, 12);
+    const { service } = setup(near);
+    const result = await service.generate("p1", body(20_000, { start: outside }));
+    expect(result.proposals.length).toBeGreaterThan(0);
+    const { maxLongitude } = area.bounds;
+    for (const proposal of result.proposals) {
+      const inside = proposal.geometry.coordinates.map(([lon]) => lon <= maxLongitude);
+      const first = inside.indexOf(true);
+      const last = inside.lastIndexOf(true);
+      expect(inside.slice(first, last + 1).every(Boolean)).toBe(true);
+    }
+  });
+
+  it("adds clicked map points as route-only waypoints", async () => {
+    const { service, requests } = setup(near);
+    const { explorationId, proposals } = await service.generate("p1", body(20_000));
+    const base = proposals[0];
+    const waypoint = at(-6, -6);
+    const { proposal } = await service.reroute("p1", explorationId, { proposalId: base.id, targetIds: ["n1"], waypoints: [waypoint] });
+    expect(JSON.stringify(requests.at(-1))).toContain(waypoint.lat.toFixed(6));
+    expect(proposal.waypoints).toEqual([waypoint]);
+    expect(proposal.includedTargetIds.concat(proposal.nearbyTargetIds).every((id) => !id.startsWith("waypoint:"))).toBe(true);
+    expect(proposal.targetSummary).toEqual({ peaks: 0, places: 1, other: 0 });
+    await expect(service.reroute("p1", explorationId, { proposalId: base.id, targetIds: ["n1"], waypoints: [at(0, 30)] }))
+      .rejects.toBeInstanceOf(UserInputError);
   });
 
   it("reports an insufficient area instead of silently returning a much shorter route", async () => {
@@ -343,15 +384,6 @@ describe("ExplorationService outings", () => {
     await cycling.service.generate("p1", body(20_000));
     expect(cycling.requests.every((request) => (request as { profile: string }).profile === "bicycle")).toBe(true);
     expect(() => parseGenerateRequest({ ...body(20_000, { sport: "swimming" }), area: { bbox, center: area.center, zoom: 11 } })).toThrow(UserInputError);
-  });
-});
-
-describe("wideningBounds", () => {
-  it("covers the reach of the ride around the start, capped at the maximum area", () => {
-    const bounds = wideningBounds({ ...roundTripInput, constraint: { type: "distance", meters: 50_000 } });
-    expect(bounds.maxLatitude - bounds.minLatitude).toBeGreaterThan(0.3);
-    const huge = wideningBounds({ ...roundTripInput, constraint: { type: "distance", meters: 300_000 } });
-    expect(huge.maxLatitude - huge.minLatitude).toBeLessThanOrEqual(2);
   });
 });
 

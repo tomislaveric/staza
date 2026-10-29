@@ -43,6 +43,8 @@ export interface QuestRouteTarget {
   /** Gameplay detection radius: the route must pass this close for the target to count. */
   radiusMeters: number;
   alreadyAchieved: boolean;
+  /** Player-chosen map point that only shapes the route: never a collectible, objective or progress. */
+  routeOnly?: boolean;
 }
 
 /** A Flowline's geometry, used only after routing to find the Flowlines a route happens to ride. */
@@ -187,6 +189,10 @@ export interface RouteProposal {
   basedOn?: string;
   /** Requested targets the customized route could not serve. */
   droppedTargetIds?: string[];
+  /** Route-only map points the route passes through; they never count as targets. */
+  waypoints?: LatLon[];
+  /** Requested route-only map points the customized route could not serve. */
+  droppedWaypoints?: LatLon[];
   /** Internal; useful for debugging and tests. Not intended for user display. */
   score: ScoreBreakdown;
 }

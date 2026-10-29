@@ -70,49 +70,31 @@ describe("exploration route formatting", () => {
 });
 
 describe("buildGenerateRequest", () => {
-  it("requires a start and, for A to B, a destination", () => {
+  it("requires a start", () => {
     expect(buildGenerateRequest(createExplorationState(area)).error).toBe("Choose a start on the map.");
-    expect(buildGenerateRequest(configured({ routeType: "point_to_point" })).error).toBe("Choose a destination on the map.");
   });
 
-  it("validates ride length bounds", () => {
-    expect(buildGenerateRequest(configured({ distanceKm: 1 })).error).toBe("Choose a distance between 2 and 300 km.");
-    expect(buildGenerateRequest(configured({ distanceKm: Number.NaN })).error).toBe("Enter a ride distance or time.");
-    expect(buildGenerateRequest(configured({ constraintType: "duration", durationMin: 800 })).error)
-      .toBe("Choose a time between 10 minutes and 12 hours.");
-  });
-
-  it("sends the frozen area and the ride only, in meters and seconds", () => {
-    expect(buildGenerateRequest(configured({ distanceKm: 42.5 })).body).toEqual({
+  it("sends the frozen area, sport and start only; the area defines the ride", () => {
+    expect(buildGenerateRequest(configured()).body).toEqual({
       area,
       routeType: "round_trip",
       sport: "cycling",
-      start: { lat: 50, lon: 9 },
-      constraint: { type: "distance", value: 42_500 }
-    });
-    expect(buildGenerateRequest(configured({
-      routeType: "point_to_point", end: { lat: 50.2, lon: 9.3 }, constraintType: "duration", durationMin: 90
-    })).body).toEqual({
-      area,
-      routeType: "point_to_point",
-      sport: "cycling",
-      start: { lat: 50, lon: 9 },
-      end: { lat: 50.2, lon: 9.3 },
-      constraint: { type: "duration", value: 5_400 }
+      start: { lat: 50, lon: 9 }
     });
   });
 });
 
 describe("ExplorationPanel configure step", () => {
-  it("asks only for start, route type and ride length", () => {
+  it("asks only for sport and start", () => {
     const markup = ExplorationPanel(createExplorationState(area));
     expect(markup).toContain("Explore this Area");
     expect(markup).toContain("Step 1");
     expect(markup).toContain("data-exploration-locate");
     expect(markup).toContain('data-exploration-pick="start" aria-pressed="true"');
     expect(markup).toContain("Click the map to set your start.");
-    expect(markup).toContain('data-exploration-route-type="round_trip" aria-pressed="true"');
-    expect(markup).toContain('data-exploration-preset="50" aria-pressed="true"');
+    for (const removed of ["data-exploration-route-type", "data-exploration-preset", "data-exploration-custom", "Length"]) {
+      expect(markup).not.toContain(removed);
+    }
     expect(markup).toContain("Generate Routes");
     expect(markup).toContain("data-exploration-cancel");
     for (const hidden of ["Included destinations", "Along this route", "data-exploration-remove", "data-exploration-add", "data-exploration-proposal", "Flowline", "data-exploration-confirm"]) {
@@ -120,19 +102,11 @@ describe("ExplorationPanel configure step", () => {
     }
   });
 
-  it("renders the destination row and time presets when configured", () => {
-    const markup = ExplorationPanel(configured({ routeType: "point_to_point", constraintType: "duration" }));
-    expect(markup).toContain('data-exploration-pick="end"');
-    expect(markup).toContain('data-exploration-preset="120" aria-pressed="true"');
-    expect(markup).toContain("Custom minutes");
-  });
-
   it("locks the ride and offers Cancel while generating", () => {
     const markup = ExplorationPanel(configured({ phase: "generating" }));
     expect(markup).toContain("Finding routes for your ride...");
     expect(markup).toContain("data-exploration-stop");
     expect(markup).not.toContain("data-exploration-generate");
-    expect(markup).toMatch(/data-exploration-preset="50" aria-pressed="true" disabled/);
     expect(markup).not.toContain("Included destinations");
   });
 
@@ -146,7 +120,6 @@ describe("ExplorationPanel route step", () => {
   it("shows Quick, Balanced and Adventure cards with composition hints, recommending one", () => {
     const markup = ExplorationPanel(customizing());
     expect(markup).toContain("Step 2");
-    expect(markup).toContain("Round trip · 50 km");
     expect(markup).toContain("data-exploration-edit-ride");
     expect(markup).toContain("Quick");
     expect(markup).toContain("Balanced");
@@ -194,11 +167,9 @@ describe("ExplorationPanel route step", () => {
     expect(markup).toContain("Customized");
     expect(markup).toContain("61.0 km");
     expect(markup).toContain("Peak Two");
-    expect(markup).toContain("This route is longer than your planned ride.");
+    expect(markup).not.toContain("planned ride");
     expect(markup).toContain("Couldn't route to Hidden Pass, so it was left out.");
     expect(markup).toContain("data-exploration-reset");
-    expect(ExplorationPanel(customizing({ customizedById: { p2: { ...edited, constraintFit: "short", droppedTargetIds: [] } } })))
-      .toContain("This route is shorter than your planned ride.");
   });
 
   it("disables edits and confirmation while a route is updating or starting", () => {
@@ -256,15 +227,6 @@ describe("sport choice, warnings and export", () => {
     expect(markup).toContain('data-exploration-sport="hiking" aria-pressed="false"');
     expect(ExplorationPanel(configured({ sport: "hiking", phase: "generating" }))).toContain("Finding routes for your hike...");
     expect(buildGenerateRequest(configured({ sport: "hiking" })).body.sport).toBe("hiking");
-    expect(ExplorationPanel(customizing({ sport: "running", customizedById: { p2: proposal("p2-c", "balanced", { constraintFit: "short" }) } })))
-      .toContain("shorter than your planned run.");
-  });
-
-  it("shows the insufficient-area warning from the API", () => {
-    const warnings = [{ code: "insufficient_area", message: "This area can't support a 50 km route <now>." }];
-    const markup = ExplorationPanel(customizing({ warnings }));
-    expect(markup).toContain('data-exploration-warning="insufficient_area"');
-    expect(markup).toContain("support a 50 km route &lt;now&gt;.");
   });
 
   it("links the GPX download for a planned route", () => {

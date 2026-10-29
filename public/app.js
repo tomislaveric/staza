@@ -60,18 +60,18 @@ const authenticateFetch = (input, init = {}) => {
 const mountPrivateApp = () => {
   const shell = mountAppShell(app, navigateScreen, currentRoute.locale);
   let selectedActivityId = currentRoute.activityId;
-  function navigateScreen(screen, activityId) {
+  function navigateScreen(screen, activityId, skillNodeId) {
     setRoute(screen, { activityId });
     if (screen === "activity-detail") selectedActivityId = activityId;
-    showScreen(screen);
+    showScreen(screen, skillNodeId);
   }
-  function showScreen(screen) {
+  function showScreen(screen, skillNodeId) {
     shell.setScreen(screen);
     if (screen === "add-activity") mountAddActivityPage(shell.content, selectActivity);
     else if (screen === "activities") mountActivitiesPage(shell.content, selectActivity);
     else if (screen === "activity-detail") mountActivityDetailPage(shell.content, selectedActivityId, () => navigateScreen("activities"), navigateScreen);
-    else if (screen === "world") mountWorldPage(shell.content);
-    else if (screen === "skill-tree") mountSkillTreePage(shell.content);
+    else if (screen === "world") mountWorldPage(shell.content, (nodeId) => navigateScreen("skill-tree", undefined, nodeId));
+    else if (screen === "skill-tree") mountSkillTreePage(shell.content, skillNodeId);
     else if (screen === "progress") mountProgressPage(shell.content);
     else if (screen === "profile") mountProfilePage(shell.content, {
       fetch: authenticateFetch,

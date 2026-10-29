@@ -1,5 +1,6 @@
 import { PolylineIndex, sampleAlong } from "./geo.js";
 import { VALIDATION } from "./policy.js";
+import type { GeoBounds } from "../worldQuery.js";
 import type { FlowlineGeometry, QuestRouteTarget, RoutingResult, TraversedFlowline } from "./types.js";
 
 export interface RouteValidation {
@@ -48,4 +49,29 @@ export const validateRoute = (routing: RoutingResult, eligibleTargets: QuestRout
     else nearby.push(target.id);
   }
   return { includedTargetIds: included, nearbyTargetIds: nearby };
+};
+
+/** Slack for router snapping noise at the area edge (~11 m). */
+const BOUNDS_TOLERANCE_DEGREES = 0.0001;
+
+export const insideBounds = ([lon, lat]: [number, number], bounds: GeoBounds, tolerance = BOUNDS_TOLERANCE_DEGREES): boolean =>
+  lat >= bounds.minLatitude - tolerance && lat <= bounds.maxLatitude + tolerance
+  && lon >= bounds.minLongitude - tolerance && lon <= bounds.maxLongitude + tolerance;
+
+/**
+ * Whether the routed geometry stays inside the frozen area. A start outside the area may be joined
+ * by a connector: the leading part before the route first enters the area and, for round trips,
+ * the trailing return part after it last leaves. Every other point must lie inside.
+ */
+export const staysWithinBounds = (
+  coordinates: [number, number][],
+  bounds: GeoBounds,
+  { startOutside, roundTrip }: { startOutside: boolean; roundTrip: boolean }
+): boolean => {
+  const inside = coordinates.map((point) => insideBounds(point, bounds));
+  if (!startOutside) return inside.every(Boolean);
+  const first = inside.indexOf(true);
+  if (first < 0) return false;
+  const last = roundTrip ? inside.lastIndexOf(true) : inside.length - 1;
+  return inside.slice(first, last + 1).every(Boolean);
 };

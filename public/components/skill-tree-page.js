@@ -134,7 +134,7 @@ const responseJson = async (response) => {
   return body;
 };
 
-export const mountSkillTreePage = async (mountPoint) => {
+export const mountSkillTreePage = async (mountPoint, initialNodeId) => {
   mountPoint.innerHTML = '<section class="skill-tree-page"><p class="skill-tree-loading" role="status">Loading Skill Atlas...</p></section>';
 
   let view;
@@ -329,9 +329,14 @@ export const mountSkillTreePage = async (mountPoint) => {
   try {
     view = await fetch("/api/skill-tree").then(responseJson);
     build();
-    selectedNodeId = defaultSelection();
+    const focusedNodeId = view.nodes.some((node) => node.id === initialNodeId) ? initialNodeId : undefined;
+    selectedNodeId = focusedNodeId ?? defaultSelection();
     renderScene();
     renderDetail();
+    if (focusedNodeId) {
+      detailSlot.classList.add("is-open");
+      focusNode(focusedNodeId);
+    }
   } catch (error) {
     mountPoint.innerHTML = `<section class="skill-tree-page"><p class="skill-tree-load-error" role="alert">Unable to load Skill Atlas: ${escapeHtml(error.message)}</p></section>`;
   }

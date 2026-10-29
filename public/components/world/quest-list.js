@@ -58,6 +58,7 @@ const objectiveGroup = (state, isCompletedQuest) => {
   const completedLabel = `${progress.completed}/${progress.required} complete`;
   return `
     <li class="quest-objective-group">
+      <p class="quest-objective-requirement">${escapeHtml(objectiveRequirement(objective))}</p>
       <div class="quest-objective-group-head">
         <span class="quest-objective-summary">
           ${objectiveIcon(objective)}
@@ -65,7 +66,6 @@ const objectiveGroup = (state, isCompletedQuest) => {
         </span>
         <small>${escapeHtml(completedLabel)}</small>
       </div>
-      <p class="quest-objective-requirement">${escapeHtml(objectiveRequirement(objective))}</p>
       <ul class="quest-objective-targets">
         ${targetProgress.map((target) => `
           <li class="${target.complete ? "is-complete" : ""}">

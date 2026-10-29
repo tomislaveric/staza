@@ -135,9 +135,9 @@ export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks
       `;
     }).join("")}
     ${lockedFilters.filter((filter) => filter.id in grantedFilterRules && !grantedFilters.includes(filter.id)).map((filter) => `
-      <span class="world-filter-locked" data-world-filter-locked="${escapeHtml(filter.id)}">
+      <button class="world-filter-locked" type="button" data-world-filter-unlock="${escapeHtml(filter.nodeId)}">
         <span>${filterLabels[filter.id]}</span><small>Unlock ${escapeHtml(filter.nodeName)} in the Skill Atlas</small>
-      </span>`).join("")}
+      </button>`).join("")}
   </div>
 `;
 };
@@ -231,7 +231,7 @@ export const explorationErrorMessage = (error) => {
   return error.message;
 };
 
-export const mountWorldPage = async (mountPoint) => {
+export const mountWorldPage = async (mountPoint, onNavigate) => {
   mountPoint.innerHTML = '<section class="world-page"><p class="world-loading" role="status">Loading World...</p></section>';
 
   let basemap;
@@ -284,6 +284,9 @@ export const mountWorldPage = async (mountPoint) => {
   const detailHost = mountPoint.querySelector("[data-world-detail]");
   const collectibleListHost = mountPoint.querySelector("[data-world-collectible-list]");
   const exploreButton = mountPoint.querySelector("[data-world-explore]");
+  mountPoint.querySelectorAll("[data-world-filter-unlock]").forEach((button) => {
+    button.addEventListener("click", () => onNavigate?.(button.dataset.worldFilterUnlock));
+  });
   const setStatus = (message) => {
     statusHost.hidden = !message;
     statusHost.textContent = message ?? "";
@@ -564,6 +567,8 @@ export const mountWorldPage = async (mountPoint) => {
   function syncRouteLayers() {
     if (!worldMap) return;
     worldMap.setPickHandler(exploration?.picking ? pickExplorationPoint : undefined);
+    const canAddPoint = exploration?.phase === "customize" && exploration.status === "idle" && !exploration.adding;
+    worldMap.setMapClickHandler(canAddPoint ? offerExplorationPoint : undefined);
     if (exploration) {
       const shownId = exploration.previewProposalId ?? exploration.selectedProposalId;
       const shown = activeProposal(exploration, shownId);
@@ -603,7 +608,7 @@ export const mountWorldPage = async (mountPoint) => {
       bbox: boundsToParameter(worldMap.getBounds()),
       center: view.center,
       zoom: view.zoom
-    });
+    }, homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined);
     setStatus(undefined);
     renderSidePanels();
     renderExploration();
@@ -731,7 +736,7 @@ export const mountWorldPage = async (mountPoint) => {
   }
 
   /** CUSTOMIZE: re-plans only the selected route for an edited target set. */
-  async function rerouteSelected(targetIds) {
+  async function rerouteSelected(targetIds, waypoints = activeProposal(exploration)?.waypoints ?? []) {
     const current = activeProposal(exploration);
     if (!current || exploration.phase !== "customize" || exploration.status !== "idle") return;
     const originalId = exploration.selectedProposalId;
@@ -749,7 +754,7 @@ export const mountWorldPage = async (mountPoint) => {
       const { proposal } = await jsonRequest(
         "POST",
         `/api/explorations/${encodeURIComponent(exploration.explorationId)}/reroute`,
-        { proposalId: current.id, targetIds }
+        { proposalId: current.id, targetIds, waypoints }
       );
       if (token !== explorationToken || !exploration) return;
       exploration.customizedById = { ...exploration.customizedById, [originalId]: proposal };
@@ -763,6 +768,30 @@ export const mountWorldPage = async (mountPoint) => {
       else exploration.error = explorationErrorMessage(rerouteError);
     }
     renderExploration();
+  }
+
+  /** A map click during customization offers to add that coordinate as a route-only point. */
+  function offerExplorationPoint(point) {
+    if (exploration?.phase !== "customize" || exploration.status !== "idle" || exploration.adding) return;
+    worldMap.showPointTooltip(point, { onConfirm: addExplorationPoint });
+  }
+
+  function addExplorationPoint(point) {
+    const current = activeProposal(exploration);
+    if (!current || exploration.phase !== "customize" || exploration.status !== "idle") return;
+    const waypoints = current.waypoints ?? [];
+    if (waypoints.length >= exploration.limits.maxRouteWaypoints) {
+      exploration.error = `A route can include at most ${exploration.limits.maxRouteWaypoints} map points.`;
+      renderDetail();
+      return;
+    }
+    void rerouteSelected(routeTargetIds(current), [...waypoints, point]);
+  }
+
+  function removeExplorationPoint(index) {
+    const current = activeProposal(exploration);
+    if (!current?.waypoints?.[index]) return;
+    void rerouteSelected(routeTargetIds(current), current.waypoints.filter((_point, position) => position !== index));
   }
 
   function removeExplorationTarget(id) {
@@ -849,21 +878,6 @@ export const mountWorldPage = async (mountPoint) => {
     on("[data-exploration-sport]", "click", (button) => updateRide(() => {
       exploration.sport = button.dataset.explorationSport;
     }));
-    on("[data-exploration-route-type]", "click", (button) => updateRide(() => {
-      exploration.routeType = button.dataset.explorationRouteType;
-      exploration.picking = exploration.routeType === "point_to_point" && !exploration.end ? "end" : undefined;
-    }));
-    on("[data-exploration-constraint]", "click", (button) => updateRide(() => {
-      exploration.constraintType = button.dataset.explorationConstraint;
-    }));
-    on("[data-exploration-preset]", "click", (button) => updateRide(() => {
-      if (exploration.constraintType === "distance") exploration.distanceKm = Number(button.dataset.explorationPreset);
-      else exploration.durationMin = Number(button.dataset.explorationPreset);
-    }));
-    on("[data-exploration-custom]", "change", (input) => updateRide(() => {
-      if (exploration.constraintType === "distance") exploration.distanceKm = Number(input.value);
-      else exploration.durationMin = Number(input.value);
-    }));
     on("[data-exploration-form]", "submit", (_form, event) => {
       event?.preventDefault?.();
       void generateRoutes();
@@ -879,6 +893,7 @@ export const mountWorldPage = async (mountPoint) => {
     on("[data-exploration-proposal]", "mouseleave", () => previewProposal(undefined));
     on("[data-exploration-target]", "mouseenter", (item) => previewExplorationTarget(item.dataset.explorationTarget));
     on("[data-exploration-target]", "mouseleave", () => previewExplorationTarget(undefined));
+    on("[data-exploration-remove-waypoint]", "click", (button) => removeExplorationPoint(Number(button.dataset.explorationRemoveWaypoint)));
     on("[data-exploration-remove]", "click", (button) => removeExplorationTarget(button.dataset.explorationRemove));
     on("[data-exploration-add]", "click", () => {
       if (exploration.status !== "idle" || exploration.phase !== "customize") return;

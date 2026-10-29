@@ -20,6 +20,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Default quests](features/default-quests/README.md) — *superseded by Explore this
   Area*; generated bbox-local recommendations including Mountain Passes and mixed
   Flowline challenges; track and cancel started quests independently of the map.
+- [Explore Area v2 polish](features/explore-area-v2-polish/README.md) — constrain routes to the selected area, reuse the last Locate Me position, and add arbitrary map points as route-only destinations.
 - [Explore this Area](features/explore-this-area/README.md) — route-first exploration:
   choose start and ride length, pick one of several generated routes from the frozen map
   area, tweak its targets, and confirm it as a single exploration.

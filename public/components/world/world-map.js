@@ -108,6 +108,8 @@ export const createHomeMarkerElement = (documentRef = globalThis.document) => {
   return marker;
 };
 
+const documentRefOf = (container) => container.ownerDocument ?? document;
+
 /**
  * Thin World map. It owns the World viewport events and quest-route plumbing only, over the
  * shared Staza map foundation; Staza gameplay rules stay in the World page.
@@ -123,6 +125,8 @@ export const createWorldMap = async (container, {
   let pendingFartleks = EMPTY_FEATURE_COLLECTION;
   let panelInset = 0;
   let pickHandler;
+  let clickHandler;
+  let pointTooltip;
   let homeMarker;
 
   const framingPadding = () => ({
@@ -201,8 +205,15 @@ export const createWorldMap = async (container, {
       alternateClicked = false;
       return;
     }
-    if (pickHandler) pickHandler({ lat: event.lngLat.lat, lon: event.lngLat.lng });
+    const point = { lat: event.lngLat.lat, lon: event.lngLat.lng };
+    if (pickHandler) pickHandler(point);
+    else clickHandler?.(point);
   });
+
+  const closePointTooltip = () => {
+    pointTooltip?.remove();
+    pointTooltip = undefined;
+  };
 
   return {
     map,
@@ -247,6 +258,32 @@ export const createWorldMap = async (container, {
       map.getCanvas().style.cursor = handler ? "crosshair" : "";
     },
     isPicking: () => Boolean(pickHandler),
+    /** Receives every map click that is not a point pick or a route selection. */
+    setMapClickHandler(handler) {
+      clickHandler = handler;
+      if (!handler) closePointTooltip();
+    },
+    /** Opens an "Add destination" tooltip at the coordinate; confirming reports it once. */
+    showPointTooltip(point, { onConfirm, label = "Add destination" }) {
+      closePointTooltip();
+      const content = documentRefOf(container).createElement("div");
+      content.className = "world-point-tooltip";
+      const button = documentRefOf(container).createElement("button");
+      button.type = "button";
+      button.dataset.worldPointAdd = "";
+      button.textContent = label;
+      button.addEventListener("click", () => {
+        closePointTooltip();
+        onConfirm(point);
+      });
+      content.append(button);
+      pointTooltip = new staza.maplibre.Popup({ closeButton: true, closeOnClick: false, offset: 12 })
+        .setLngLat([point.lon, point.lat])
+        .setDOMContent(content)
+        .addTo(map);
+      pointTooltip.on("close", () => { pointTooltip = undefined; });
+    },
+    closePointTooltip,
     setDetailPanelOpen(open) {
       panelInset = open ? DETAIL_PANEL_INSET : 0;
     },

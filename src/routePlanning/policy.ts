@@ -58,6 +58,8 @@ export const PLANNING_LIMITS = {
   maxProposals: 3,
   /** Targets one route may contain, generated or customized. */
   maxRouteTargets: 12,
+  /** Route-only map points a customized route may pass through. */
+  maxRouteWaypoints: 8,
   /** Eligible targets kept per objective after spatial ranking. */
   maxPoolTargetsPerObjective: 12,
   maxPoolTargets: 16,

@@ -12,6 +12,7 @@ import type {
   CandidateStop,
   FlowlineGeometry,
   ProposalStop,
+  LatLon,
   QuestRouteTarget,
   RouteCandidate,
   RoutePlanningInput,
@@ -20,7 +21,9 @@ import type {
   RoutingResult,
   ScoredRoute
 } from "./types.js";
-import { validateRoute } from "./validation.js";
+import { staysWithinBounds, validateRoute } from "./validation.js";
+import { insideBounds } from "./validation.js";
+import type { GeoBounds } from "../worldQuery.js";
 
 export type PlanningErrorCode = "no_reachable_targets" | "no_route" | "routing_unavailable";
 
@@ -71,9 +74,11 @@ interface RoutingRun {
  */
 const routeCandidates = async (
   queued: QueuedCandidate[],
-  { requestId, input, eligibleTargets, maxRequests, routing, policy }: {
+  { requestId, input, bounds, eligibleTargets, maxRequests, routing, policy }: {
     requestId: string;
     input: RoutePlanningInput;
+    /** Frozen exploration area; routes may not leave it except for an outside start's connector. */
+    bounds?: GeoBounds;
     eligibleTargets: QuestRouteTarget[];
     maxRequests: number;
     routing: RouteProvider;
@@ -106,7 +111,12 @@ const routeCandidates = async (
     return undefined;
   };
 
+  const startOutside = bounds ? !insideBounds([input.start.lon, input.start.lat], bounds, 0) : false;
   const evaluate = ({ candidate, objectives, strategy }: QueuedCandidate, result: RoutingResult) => {
+    if (bounds && !staysWithinBounds(result.geometry.coordinates, bounds, { startOutside, roundTrip: input.routeType === "round_trip" })) {
+      failureCodes.push("outside_area");
+      return;
+    }
     const validation = validateRoute(result, eligibleTargets);
     const planned = new Set(candidate.stops.map((stop) => stop.target.id));
     const nearbyTargetIds = validation.nearbyTargetIds.filter((id) => planned.has(id));
@@ -183,6 +193,8 @@ export interface GenerateExplorationRoutesInput {
   /** Flowlines of the frozen area, analysed only after routing; never routing constraints. */
   flowlines: FlowlineGeometry[];
   input: RoutePlanningInput;
+  /** Frozen exploration area bounding destinations and route geometry. */
+  bounds?: GeoBounds;
 }
 
 /**
@@ -192,7 +204,7 @@ export interface GenerateExplorationRoutesInput {
  * targets. It never touches gameplay state.
  */
 export const generateExplorationRoutes = async (
-  { requestId, playerId, scopeId, targets, flowlines, input }: GenerateExplorationRoutesInput,
+  { requestId, playerId, scopeId, targets, flowlines, input, bounds }: GenerateExplorationRoutesInput,
   { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal[]> => {
   const policy = policyForSport(basePolicy, input.sport);
@@ -220,7 +232,7 @@ export const generateExplorationRoutes = async (
   }
 
   const run = queued.length > 0
-    ? await routeCandidates(queued, { requestId, input, eligibleTargets: targets, maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy })
+    ? await routeCandidates(queued, { requestId, input, bounds, eligibleTargets: targets, maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy })
     : { scored: [], failureCodes: [], routingRequests: 0, unroutable: new Set<string>() };
   const targetsById = new Map(targets.map((target) => [target.id, target]));
   const proposals = selectProposals(run.scored).map((selected) => ({
@@ -259,7 +271,24 @@ export interface RerouteTargetsInput {
   objectives: QuestObjective[];
   flowlines: FlowlineGeometry[];
   input: RoutePlanningInput;
+  bounds?: GeoBounds;
+  /** Route-only map points to pass through; they shape the route but are never targets. */
+  waypoints?: LatLon[];
 }
+
+/** Id of a route-only waypoint; deterministic so a customized route keeps its stop order. */
+export const waypointId = (point: LatLon): string => `waypoint:${point.lat.toFixed(6)},${point.lon.toFixed(6)}`;
+
+const waypointTarget = (point: LatLon): QuestRouteTarget => ({
+  kind: "point",
+  id: waypointId(point),
+  name: "Map point",
+  objectiveIds: [],
+  coordinate: point,
+  radiusMeters: 0,
+  alreadyAchieved: true,
+  routeOnly: true
+});
 
 /** Stop order for an edited target set: keep the base order, insert new targets cheaply, then 2-opt. */
 export const customizedStops = (
@@ -287,15 +316,16 @@ export const customizedStops = (
  * reported. Only the edited targets count, so removed targets the road passes are not re-added.
  */
 export const rerouteTargets = async (
-  { requestId, playerId, scopeId, base, baseStops, targets, objectives, flowlines, input }: RerouteTargetsInput,
+  { requestId, playerId, scopeId, base, baseStops, targets, objectives, flowlines, input, bounds, waypoints = [] }: RerouteTargetsInput,
   { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal> => {
   const policy = policyForSport(basePolicy, input.sport);
   const startedAt = now();
-  const stops = customizedStops(input, baseStops, targets, policy);
+  const waypointTargets = waypoints.map(waypointTarget);
+  const stops = customizedStops(input, baseStops, [...targets, ...waypointTargets], policy);
   const candidate = makeCandidate(input, objectives, stops, "custom", policy);
   const run = await routeCandidates([{ candidate, objectives }], {
-    requestId, input, eligibleTargets: targets, maxRequests: PLANNING_LIMITS.maxRerouteRequests, routing, policy
+    requestId, input, bounds, eligibleTargets: targets, maxRequests: PLANNING_LIMITS.maxRerouteRequests, routing, policy
   });
   const best = [...run.scored].sort((a, b) => routeTargetIds(b).length - routeTargetIds(a).length
     || b.score.total - a.score.total)[0];
@@ -314,10 +344,15 @@ export const rerouteTargets = async (
   if (!best) throw noRouteError(run.failureCodes);
   const served = new Set(routeTargetIds(best));
   const droppedTargetIds = targets.map((target) => target.id).filter((id) => !served.has(id)).sort();
+  const servedStops = new Set(best.candidate.stops.map((stop) => stop.target.id));
+  const servedWaypoints = waypoints.filter((point) => servedStops.has(waypointId(point)));
+  const droppedWaypoints = waypoints.filter((point) => !servedStops.has(waypointId(point)));
   const proposal = toRouteProposal({ label: base.label, route: best, recommended: base.recommended }, input,
     new Map(targets.map((target) => [target.id, target])), flowlines, policy);
   return {
-    proposal: { ...proposal, customized: true, basedOn: base.id, ...(droppedTargetIds.length > 0 ? { droppedTargetIds } : {}) },
+    proposal: { ...proposal, customized: true, basedOn: base.id, ...(droppedTargetIds.length > 0 ? { droppedTargetIds } : {}),
+      ...(servedWaypoints.length > 0 ? { waypoints: servedWaypoints } : {}),
+      ...(droppedWaypoints.length > 0 ? { droppedWaypoints } : {}) },
     stops: proposalStops(best)
   };
 };

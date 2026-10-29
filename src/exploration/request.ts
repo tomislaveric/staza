@@ -1,7 +1,8 @@
 import { UserInputError } from "../errors.js";
+import { distanceBetween } from "../routePlanning/geo.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import { isRecord, isUuid, parseLatLon, parseProposalId, parseRoutePlanningInput } from "../routePlanning/request.js";
-import type { RoutePlanningInput } from "../routePlanning/types.js";
+import type { LatLon, RoutePlanningInput } from "../routePlanning/types.js";
 import { parseBoundsParameter } from "../worldQuery.js";
 import type { ExplorationAreaContext } from "./types.js";
 
@@ -30,10 +31,27 @@ export interface GenerateRequest {
   input: RoutePlanningInput;
 }
 
-/** `{ area, start, end?, routeType, constraint }`: the ride only — never targets. */
+/** Round-trip length that lets the planner span the frozen area: about twice its diagonal. */
+export const areaConstraint = ({ bounds }: ExplorationAreaContext): { type: "distance"; value: number } => {
+  const diagonalM = distanceBetween(
+    { lat: bounds.minLatitude, lon: bounds.minLongitude },
+    { lat: bounds.maxLatitude, lon: bounds.maxLongitude }
+  );
+  const value = Math.round(Math.min(PLANNING_LIMITS.maxDistanceMeters, Math.max(PLANNING_LIMITS.minDistanceMeters, diagonalM * 2)));
+  return { type: "distance", value };
+};
+
+/**
+ * `{ area, start, sport?, routeType?, constraint? }`: the ride only — never targets. The area's
+ * size defines the ride, so route type defaults to a round trip and the length is derived from it.
+ */
 export const parseGenerateRequest = (body: unknown): GenerateRequest => {
   if (!isRecord(body)) throw new UserInputError("An exploration request is required.");
-  return { area: parseArea(body.area), input: parseRoutePlanningInput(body) };
+  const area = parseArea(body.area);
+  return {
+    area,
+    input: parseRoutePlanningInput({ routeType: "round_trip", constraint: areaConstraint(area), ...body })
+  };
 };
 
 export const parseExplorationId = (value: unknown): string => {
@@ -44,6 +62,8 @@ export const parseExplorationId = (value: unknown): string => {
 export interface RerouteRequest {
   proposalId: string;
   targetIds: string[];
+  /** Route-only map points; they shape the route and never count as targets. */
+  waypoints: LatLon[];
 }
 
 /** `{ proposalId, targetIds }`: the exact edited target set of one proposal. */
@@ -58,5 +78,15 @@ export const parseRerouteRequest = (body: unknown): RerouteRequest => {
   if (targetIds.length > PLANNING_LIMITS.maxRouteTargets) {
     throw new UserInputError(`A route can include at most ${PLANNING_LIMITS.maxRouteTargets} targets.`);
   }
-  return { proposalId, targetIds };
+  const rawWaypoints = isRecord(body) ? body.waypoints : undefined;
+  if (rawWaypoints !== undefined && !Array.isArray(rawWaypoints)) throw new UserInputError("Route waypoints must be a list of coordinates.");
+  const waypoints = new Map<string, LatLon>();
+  for (const value of rawWaypoints ?? []) {
+    const point = parseLatLon(value, "Waypoint");
+    waypoints.set(`${point.lat.toFixed(6)},${point.lon.toFixed(6)}`, point);
+  }
+  if (waypoints.size > PLANNING_LIMITS.maxRouteWaypoints) {
+    throw new UserInputError(`A route can include at most ${PLANNING_LIMITS.maxRouteWaypoints} map points.`);
+  }
+  return { proposalId, targetIds, waypoints: [...waypoints.values()] };
 };
