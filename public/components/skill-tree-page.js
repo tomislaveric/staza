@@ -23,6 +23,11 @@ export const SkillTreeHeader = (model) => `
       <strong>${formatNumber(model.balance)}</strong>
       <span>Skill Points</span>
       <small>${formatNumber(model.spentPoints)} spent · ${formatNumber(model.earnedPoints)} earned</small>
+      ${model.nextSkillPoint ? `
+        <div class="skill-points-next">
+          <span>Next Skill Point at Level ${formatNumber(model.nextSkillPoint.level)} · ${formatNumber(model.nextSkillPoint.xpRemaining)} XP to go</span>
+          <i role="progressbar" aria-label="Progress to the next Skill Point" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(model.nextSkillPoint.progress * 100)}"><b style="width: ${model.nextSkillPoint.progress * 100}%"></b></i>
+        </div>` : ""}
     </div>
   </header>
 `;
@@ -62,13 +67,20 @@ const GRANT_TYPE_LABEL = {
   tree_access: "BRANCH"
 };
 
-export const SkillNodeDetail = (node) => {
+const skillPointsLabel = (count) => `${formatNumber(count)} ${count === 1 ? "Skill Point" : "Skill Points"}`;
+
+export const SkillNodeDetail = (node, nodesById = new Map()) => {
   if (!node) {
     return '<aside class="skill-detail skill-detail-empty"><p>Select a node to see its requirements and reward.</p></aside>';
   }
+  const prerequisites = node.prerequisites.map((id) => nodesById.get(id));
+  const missingNames = prerequisites.filter((entry) => entry && entry.state !== "unlocked").map((entry) => entry.name);
   const prerequisiteNote = node.prerequisites.length && !node.prerequisitesMet
-    ? '<p class="skill-detail-hint">Unlock the connected node first.</p>'
+    ? `<p class="skill-detail-hint">Unlock ${escapeHtml(missingNames.join(", ") || "the connected node")} first.</p>`
     : "";
+  const noRequirementsNote = node.prerequisites.length
+    ? `<p class="skill-detail-hint">Requires: ${escapeHtml(prerequisites.map((entry, index) => entry?.name ?? node.prerequisites[index]).join(", "))}</p>`
+    : '<p class="skill-detail-hint">No progress requirements.</p>';
   const premiumNote = node.state === "premium_locked"
     ? '<p class="skill-detail-hint">This node is part of Premium (cross-sport and late-game progression).</p>'
     : "";
@@ -79,10 +91,11 @@ export const SkillNodeDetail = (node) => {
   const footer = node.state === "unlockable"
     ? `<button class="skill-unlock-button" type="button" data-skill-unlock="${escapeHtml(node.id)}">Unlock · ${formatNumber(node.cost)} SP</button>`
     : node.state === "unlocked"
-      ? '<p class="skill-detail-unlocked">Unlocked</p>'
-      : `<p class="skill-detail-cost">Cost: <strong>${formatNumber(node.cost)} Skill Points</strong></p>`;
+      ? ""
+      : `<p class="skill-detail-cost">Cost: <strong>${skillPointsLabel(node.cost)}</strong></p>`;
   return `
     <aside class="skill-detail" aria-labelledby="skill-detail-name">
+      <button class="skill-detail-close" type="button" data-skill-detail-close aria-label="Close details">&times;</button>
       <span class="skill-detail-state is-${node.state}">${stateLabel[node.state] ?? ""}</span>
       <h2 id="skill-detail-name">${escapeHtml(node.name)}</h2>
       <p class="skill-detail-description">${escapeHtml(node.description)}</p>
@@ -92,7 +105,7 @@ export const SkillNodeDetail = (node) => {
       </div>
       ${node.requirements.length
         ? `<p class="skill-detail-subhead">REQUIREMENTS</p><ul class="skill-requirements">${node.requirements.map(RequirementRow).join("")}</ul>`
-        : '<p class="skill-detail-hint">No progress requirements.</p>'}
+        : noRequirementsNote}
       ${questChain}
       ${prerequisiteNote}
       ${premiumNote}
@@ -170,7 +183,7 @@ export const mountSkillTreePage = async (mountPoint) => {
 
   const renderDetail = () => {
     if (!detailSlot) return;
-    detailSlot.innerHTML = SkillNodeDetail(detailNodeById(selectedNodeId));
+    detailSlot.innerHTML = SkillNodeDetail(detailNodeById(selectedNodeId), layout?.byId);
   };
 
   const highlightSelection = () => {
@@ -226,6 +239,7 @@ export const mountSkillTreePage = async (mountPoint) => {
         body: JSON.stringify({ nodeId })
       }).then(responseJson);
       selectedNodeId = nodeId;
+      headerSlot.innerHTML = SkillTreeHeader(view);
       renderScene({ keepView: true });
       renderDetail();
       flashUnlock(nodeId);
@@ -256,7 +270,9 @@ export const mountSkillTreePage = async (mountPoint) => {
 
     canvasHost.addEventListener("click", (event) => {
       const nodeGroup = event.target.closest(".skill-node");
-      if (nodeGroup?.dataset.nodeId) selectNode(nodeGroup.dataset.nodeId);
+      if (!nodeGroup?.dataset.nodeId) return;
+      selectNode(nodeGroup.dataset.nodeId);
+      detailSlot.classList.add("is-open");
     });
 
     canvasHost.addEventListener("dblclick", (event) => {
@@ -270,6 +286,7 @@ export const mountSkillTreePage = async (mountPoint) => {
       if (nodeGroup?.dataset.nodeId) {
         event.preventDefault();
         selectNode(nodeGroup.dataset.nodeId);
+        detailSlot.classList.add("is-open");
         focusNode(nodeGroup.dataset.nodeId);
       }
     });
@@ -303,6 +320,7 @@ export const mountSkillTreePage = async (mountPoint) => {
     canvasHost.addEventListener("wheel", hideTooltip, { passive: true });
 
     detailSlot.addEventListener("click", (event) => {
+      if (event.target.closest("[data-skill-detail-close]")) detailSlot.classList.remove("is-open");
       const unlockButton = event.target.closest("[data-skill-unlock]");
       if (unlockButton) unlock(unlockButton.dataset.skillUnlock, unlockButton);
     });

@@ -1,5 +1,4 @@
 import { mountReplayMap, mountReplayStill } from "./activity-replay-map.js";
-import { getActivityLabel } from "./activity-labels.js";
 import { CollectionPanel, collectionProgressLabel, collectionProgressPercent, collectionStateLabel } from "./shared/collection-panel.js";
 import { escapeHtml } from "./collected-list.js";
 import { formatDistance, formatElapsed, formatSpeed } from "./world/fartlek-detail.js";
@@ -12,8 +11,9 @@ const REWARD_EXIT_MS = 160;
 const XP_ANIMATION_MS = 420;
 
 /** Ride Detail replay: the shared Staza map with an activity route, position and collection. */
-export const ReplayTab = () => `
+export const ReplayTab = (stats = "") => `
   <section class="activity-replay activity-replay-map" aria-label="Animated route replay">
+    ${stats}
     <div class="activity-replay-map-canvas staza-map" data-replay-map></div>
     <div class="activity-replay-panel" data-replay-panel hidden></div>
     <button class="activity-replay-panel-reopen" type="button" data-replay-panel-reopen hidden aria-label="Show collectibles">COLLECTIBLES</button>
@@ -180,7 +180,7 @@ export const replayRewardStateAt = (items, timestampMs, windowMs = REWARD_WINDOW
   };
 };
 
-const replayPanelTitle = (activity) => activity?.title || getActivityLabel(activity?.type);
+const replayPanelTitle = (activity) => activity?.title || "Collectibles on this route";
 
 /**
  * Completed Fartleks for this activity: name, length, elapsed time, average speed/pace, and
@@ -222,6 +222,7 @@ const mountReplayPanel = (host, replay) => {
     progress: { collected: 0, total },
     closable: true,
     ariaLabel: "Replay collection",
+    progressNoun: "discovered",
     emptyMessage: "No collectibles on this activity.",
     rows: rows.map((row) => ({ id: row.id, name: row.name, state: "unvisited" })),
     footer: FartlekCompletionsSection(replay.activityResult.fartlekCompletions)
@@ -262,7 +263,7 @@ const mountReplayPanel = (host, replay) => {
     });
     const progress = { collected, total };
     const percent = collectionProgressPercent(progress);
-    if (labelElement) labelElement.textContent = collectionProgressLabel(progress);
+    if (labelElement) labelElement.textContent = collectionProgressLabel(progress, "discovered");
     if (percentElement) percentElement.textContent = percent;
     if (barElement) barElement.style.width = percent;
   };
@@ -340,7 +341,7 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
   };
   const setXpText = (value) => {
     visibleXp = value;
-    if (xpElement) xpElement.textContent = `+${xpFormatter.format(value)}`;
+    if (xpElement) xpElement.textContent = value === 0 && persistedXp > 0 ? "\u2013" : `+${xpFormatter.format(value)}`;
     setLevelFor(value);
   };
   const setXpTarget = (target, immediate = false) => {

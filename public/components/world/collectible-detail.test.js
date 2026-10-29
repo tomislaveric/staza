@@ -64,7 +64,7 @@ describe("CollectibleDetail", () => {
         sourceAttribution: "© OpenStreetMap contributors"
       }
     }));
-    expect(html).toContain("<small>castle</small>");
+    expect(html).toContain("<small>Castle</small>");
     expect(html).toContain("© OpenStreetMap contributors");
     expect(html).toContain('href="https://www.openstreetmap.org/way/42"');
   });

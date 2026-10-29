@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SkillNodeDetail, SkillTreeHeader } from "./skill-tree-page.js";
 import { atlasLayout } from "./skill-atlas-layout.js";
-import { atlasScene, nodeGlyph } from "./skill-atlas-render.js";
+import { atlasScene, distantNodeIds, nodeGlyph } from "./skill-atlas-render.js";
 import { tooltipHtml } from "./skill-atlas-tooltip.js";
 import { SYNTHETIC_ROOT_ID } from "./skill-atlas-visual-config.js";
 
@@ -132,6 +132,14 @@ describe("Skill atlas rendering", () => {
   });
 });
 
+describe("Distant nodes", () => {
+  it("dims locked nodes with no unlocked or unlockable prerequisite", () => {
+    expect([...distantNodeIds(view.nodes)]).toEqual([]);
+    const far = [{ ...view.nodes[2], prerequisites: ["missing-far"] }, { id: "missing-far", state: "locked", prerequisites: ["x"] }];
+    expect([...distantNodeIds(far)].sort()).toEqual(["flow-hunter", "missing-far"]);
+  });
+});
+
 describe("Skill atlas tooltip", () => {
   it("summarizes state, requirement progress, cost and reward", () => {
     const premium = view.nodes.find((entry) => entry.id === "flow-hunter");
@@ -156,6 +164,12 @@ describe("Skill atlas tooltip", () => {
 });
 
 describe("Skill tree header", () => {
+  it("explains how to earn the next Skill Point", () => {
+    const header = SkillTreeHeader({ ...view, nextSkillPoint: { level: 8, xpRemaining: 310, progress: 0.4 } });
+    expect(header).toContain("Next Skill Point at Level 8 · 310 XP to go");
+    expect(header).toContain('aria-valuenow="40"');
+  });
+
   it("renders the balance and point breakdown in the header", () => {
     const header = SkillTreeHeader(view);
     expect(header).toContain("Skill Points");
@@ -186,13 +200,28 @@ describe("Skill node detail", () => {
 
   it("shows the unlocked state without an unlock button", () => {
     const detail = SkillNodeDetail(view.nodes[0]);
-    expect(detail).toContain("Unlocked");
+    expect(detail).toContain("UNLOCKED");
+    expect(detail.match(/>UNLOCKED</g)).toHaveLength(1);
     expect(detail).not.toContain("data-skill-unlock");
   });
 
   it("hints to unlock the prerequisite when it is not met", () => {
     const detail = SkillNodeDetail(view.nodes[2]);
     expect(detail).toContain("Unlock the connected node first.");
+  });
+
+  it("names the unmet prerequisite and pluralizes the cost", () => {
+    const byId = new Map(view.nodes.map((item) => [item.id, item]));
+    expect(SkillNodeDetail(view.nodes[2], byId)).toContain("Unlock Rusher I first.");
+    expect(SkillNodeDetail(view.nodes[2], byId)).toContain("2 Skill Points");
+    expect(SkillNodeDetail({ ...view.nodes[2], cost: 1 }, byId)).toContain("1 Skill Point<");
+  });
+
+  it("lists prerequisites when a node has no progress requirements", () => {
+    const byId = new Map(view.nodes.map((item) => [item.id, item]));
+    const detail = SkillNodeDetail({ ...view.nodes[2], requirements: [] }, byId);
+    expect(detail).toContain("Requires: Rusher I");
+    expect(detail).not.toContain("No progress requirements");
   });
 
   it("lists the quest chain a quest_unlock node opens", () => {

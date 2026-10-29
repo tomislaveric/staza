@@ -53,6 +53,8 @@ export const createAtlasViewport = (host) => {
   };
 
   const apply = () => {
+    // Keep labels near a readable on-screen size when zoomed out.
+    svg.style.setProperty("--atlas-label-scale", Math.min(2.4, Math.max(1, 0.9 / state.k)).toFixed(2));
     world.setAttribute(
       "transform",
       `translate(${state.tx.toFixed(2)} ${state.ty.toFixed(2)}) scale(${state.k.toFixed(4)})`

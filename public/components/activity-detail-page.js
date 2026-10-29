@@ -1,7 +1,7 @@
 import { ActivityProgress } from "./activity-progress.js";
 import { ActivityOutcome } from "./activity-outcome.js";
 import { ReplayTab, mountReplayTab } from "./replay-tab.js";
-import { ActivitySummary } from "./activity-summary.js";
+import { ActivityStats, ActivitySummary } from "./activity-summary.js";
 import { ActivityTabs } from "./activity-tabs.js";
 import { VideoTab, mountVideoTab } from "./video-tab.js";
 
@@ -46,7 +46,8 @@ export const ActivityDetailPage = (activity, progress, selectedTab = "replay") =
   const replay = replayInputs(activity);
   const tabContent = selectedTab === "video"
     ? VideoTab(activity)
-    : (replay ? ReplayTab() : ReplayUnavailable());
+    : (replay ? ReplayTab(ActivityStats(activity, { overlay: true })) : ReplayUnavailable());
+  const inlineStats = selectedTab === "video" || !replay ? ActivityStats(activity) : "";
   return `
     <section class="activity-detail-page" aria-labelledby="activity-detail-title">
       <div class="activity-detail-toolbar">
@@ -56,6 +57,7 @@ export const ActivityDetailPage = (activity, progress, selectedTab = "replay") =
       ${ActivityProgress(activity, progress)}
       ${ActivityOutcome(activity.replay?.outcome)}
       ${ActivityTabs(activity, selectedTab)}
+      ${inlineStats}
       <div class="activity-detail-tab-content">${tabContent}</div>
     </section>
   `;
@@ -88,24 +90,6 @@ export const mountActivityDetailPage = async (mountPoint, activityId, onBack, on
         tab.addEventListener("click", () => render(tab.dataset.activityTab));
       });
       mountPoint.querySelector("[data-outcome-open-atlas]")?.addEventListener("click", () => onNavigate?.("skill-tree"));
-      const sportSelect = mountPoint.querySelector("[data-activity-sport]");
-      sportSelect?.addEventListener("change", async () => {
-        const errorHost = mountPoint.querySelector(".activity-detail-sport-error");
-        sportSelect.disabled = true;
-        try {
-          activity = await fetch(`/api/activities/${encodeURIComponent(activityId)}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: sportSelect.value })
-          }).then(responseJson);
-          render(selectedTab);
-        } catch (error) {
-          sportSelect.disabled = false;
-          sportSelect.value = activity.type ?? "unknown";
-          errorHost.textContent = error instanceof Error ? error.message : "Unable to update the sport.";
-          errorHost.hidden = false;
-        }
-      });
       const replay = replayInputs(activity);
       if (selectedTab === "replay" && replay) {
         void loadBasemap().then((config) => {

@@ -32,10 +32,9 @@ import {
 } from "../activityFingerprint.js";
 import { readableFlowlineName } from "../flowlineName.js";
 import { ActivityImportRejectedError } from "../errors.js";
-import { getLevelProgress, getTotalXpRequiredForLevel } from "../progression.js";
+import { getLevelProgress } from "../progression.js";
 import { FartlekCompletionRepository } from "./fartlekCompletionRepository.js";
 import type { SkillTreeStats } from "../skillTree/types.js";
-import { earnedSkillPointsForLevel } from "../skillTree/catalog.js";
 import { aggregateSkillTreeStats } from "../skillTree/statsQuery.js";
 
 interface ActivityRow {
@@ -422,52 +421,6 @@ export class ActivityRepository {
     }
   }
 
-  /** Corrects the sport of an owned activity, keeping the replay snapshot, fallback title and fingerprint in step. */
-  async updateActivityType(
-    playerId: string,
-    id: string,
-    type: ActivityType
-  ): Promise<PersistedActivity | undefined> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      const current = await client.query<{ activity_type: ActivityType; replay_snapshot: ReplaySnapshot | null }>(
-        "SELECT activity_type, replay_snapshot FROM activities WHERE id = $1 AND player_id = $2 FOR UPDATE",
-        [id, playerId]
-      );
-      if (current.rowCount !== 1) {
-        await client.query("ROLLBACK");
-        return undefined;
-      }
-      const previousType = current.rows[0].activity_type;
-      const snapshot = current.rows[0].replay_snapshot;
-      if (snapshot?.activity) {
-        // Only generated fallback titles follow the sport; a title from the device or provider is kept.
-        if (snapshot.activity.title === activityTypeLabel(previousType)) {
-          snapshot.activity.title = activityTypeLabel(type);
-        }
-        snapshot.activity.type = type;
-      }
-      await client.query(
-        `UPDATE activities
-         SET activity_type = $3,
-             replay_snapshot = $4,
-             fingerprint = CASE WHEN fingerprint IS NULL THEN NULL
-               ELSE jsonb_set(fingerprint, '{activityType}', to_jsonb($3::text)) END
-         WHERE id = $1 AND player_id = $2`,
-        [id, playerId, type, snapshot === null ? null : JSON.stringify(snapshot)]
-      );
-      const persisted = await this.getActivityWithClient(client, playerId, id);
-      await client.query("COMMIT");
-      return persisted;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
   async getProgress(playerId: string): Promise<PlayerProgress> {
     const result = await this.pool.query<{ total_xp: number }>(
       "SELECT total_xp FROM players WHERE id = $1",
@@ -537,6 +490,29 @@ export class ActivityRepository {
          LIMIT 4`,
         [playerId]
       );
+      const sportRecordRows = await client.query<{
+        activity_type: ActivityType; activity_count: string; distance_meters: number;
+        longest_distance_meters: number; highest_elevation_gain_m: number | null;
+      }>(
+        `SELECT activity_type,
+                COUNT(*) AS activity_count,
+                COALESCE(SUM(distance_meters), 0) AS distance_meters,
+                COALESCE(MAX(distance_meters), 0) AS longest_distance_meters,
+                MAX(elevation_gain_m) AS highest_elevation_gain_m
+         FROM activities
+         WHERE player_id = $1 AND activity_type IN ('cycling', 'running', 'hiking')
+         GROUP BY activity_type
+         ORDER BY activity_type`,
+        [playerId]
+      );
+      const milestoneRows = await client.query<{ category: string | null; total: string }>(
+        `SELECT events.collectible_category AS category, COUNT(DISTINCT events.source_id) AS total
+         FROM activity_events AS events
+         INNER JOIN activities ON activities.id = events.activity_id
+         WHERE activities.player_id = $1
+         GROUP BY events.collectible_category`,
+        [playerId]
+      );
       const questHistoryRows = await client.query<{
         id: string; kind: "authored" | "exploration"; title: string; difficulty: QuestDifficulty | null;
         xp: number; completed_at: Date; activity_id: string | null;
@@ -564,8 +540,8 @@ export class ActivityRepository {
         };
       });
       const lifetime = lifetimeResult.rows[0];
-      const firstLevel = Math.max(1, progress.level - 2);
-      const lastLevel = progress.level + 3;
+      const milestoneTotal = (category: string) =>
+        Number(milestoneRows.rows.find((row) => row.category === category)?.total ?? 0);
 
       return {
         progress,
@@ -574,14 +550,19 @@ export class ActivityRepository {
           totalCollectibles: Number(lifetime.total_collectibles),
           totalFlowlines: Number(lifetime.total_flowlines)
         },
-        levels: Array.from({ length: lastLevel - firstLevel + 1 }, (_, index) => {
-          const level = firstLevel + index;
-          return {
-            level,
-            totalXpRequired: getTotalXpRequiredForLevel(level),
-            skillPointsAwarded: earnedSkillPointsForLevel(level) - earnedSkillPointsForLevel(level - 1)
-          };
-        }),
+        sportRecords: sportRecordRows.rows.map((row) => ({
+          type: row.activity_type,
+          activityCount: Number(row.activity_count),
+          distanceMeters: Number(row.distance_meters),
+          longestDistanceMeters: Number(row.longest_distance_meters),
+          ...(row.highest_elevation_gain_m === null ? {} : { highestElevationGainM: Number(row.highest_elevation_gain_m) })
+        })),
+        milestones: {
+          places: milestoneTotal("place"),
+          peaks: milestoneTotal("peak"),
+          mountainPasses: milestoneTotal("mountain_pass"),
+          flowlines: Number(lifetime.total_flowlines)
+        },
         recentActivities: recentActivitiesResult.rows.map(mapActivity),
         questHistory
       };

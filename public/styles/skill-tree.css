@@ -64,6 +64,31 @@
   font-size: 11px;
   color: var(--text-subtle);
 }
+.skill-points-next {
+  display: grid;
+  gap: 6px;
+  justify-items: stretch;
+  margin-top: 10px;
+  width: 100%;
+}
+.skill-points-next span {
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-align: right;
+  text-transform: none;
+}
+.skill-points-next i {
+  background: rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  height: 4px;
+  overflow: hidden;
+}
+.skill-points-next b {
+  background: var(--accent-yellow);
+  display: block;
+  height: 100%;
+}
 
 /* Layout -------------------------------------------------------------- */
 .skill-tree-body {
@@ -191,7 +216,7 @@
 .skill-branch-label {
   fill: var(--text-subtle);
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: calc(15px * var(--atlas-label-scale, 1));
   letter-spacing: 0.22em;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -259,9 +284,10 @@
 .skill-node-label {
   fill: var(--text-muted);
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: calc(13px * var(--atlas-label-scale, 1));
   letter-spacing: 0.02em;
   text-anchor: middle;
+  transform: translateY(calc((var(--atlas-label-scale, 1) - 1) * 9px));
   transition: fill 0.2s ease;
 }
 
@@ -570,27 +596,64 @@
 .skill-unlock-button:hover { filter: brightness(1.07); }
 .skill-unlock-button:active { transform: translateY(1px); }
 .skill-unlock-button:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
-.skill-detail-unlocked {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--accent-success);
-  font-family: var(--font-display);
-  font-size: 17px;
-  margin: 0;
-}
-.skill-detail-unlocked::before { content: "\2713"; font-size: 15px; }
 .skill-detail-error { color: #e26d6d; font-size: 12px; margin: 12px 0 0; }
+
+/* Progressive disclosure: distant tiers recede; their labels return on hover,
+   focus or selection. */
+.skill-node.is-distant { opacity: 0.38; }
+.skill-node.is-distant .skill-node-label { opacity: 0; transition: opacity 0.15s ease; }
+.skill-node.is-distant:hover,
+.skill-node.is-distant:focus-visible,
+.skill-node.is-distant.is-selected { opacity: 0.9; }
+.skill-node.is-distant:hover .skill-node-label,
+.skill-node.is-distant:focus-visible .skill-node-label,
+.skill-node.is-distant.is-selected .skill-node-label { opacity: 1; }
+.skill-connector.is-distant { opacity: 0.1; }
+.skill-detail-close { display: none; }
 
 /* Responsive ---------------------------------------------------------- */
 @media (max-width: 860px) {
   .skill-tree-page { padding: 20px 16px 96px; }
   .skill-tree-body { grid-template-columns: 1fr; }
   .skill-tree-canvas { height: clamp(380px, 60vh, 560px); }
-  .skill-detail { position: static; }
+  .skill-detail-slot {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--mobile-nav-height, 66px) + var(--mobile-action-space, 58px) + env(safe-area-inset-bottom));
+    z-index: 15;
+    max-height: 52vh;
+    overflow-y: auto;
+    transform: translateY(110%);
+    visibility: hidden;
+    transition: transform 0.25s ease, visibility 0.25s;
+    box-shadow: 0 -16px 40px rgb(0 0 0 / 55%);
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  }
+  .skill-detail-slot.is-open { transform: none; visibility: visible; }
+  .skill-detail { position: relative; top: auto; border-radius: inherit; border-bottom: 0; }
+  .skill-detail-empty { display: none; }
+  .skill-detail-close {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    font-size: 22px;
+    line-height: 1;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .skill-tree-canvas { height: clamp(380px, calc(100dvh - 260px), 640px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .skill-detail-slot { transition: none; }
   .skill-connector.is-active,
   .skill-connector.just-connected,
   .skill-node.is-unlockable .skill-node-halo,

@@ -1,3 +1,4 @@
+import { formatDuration } from "./format-duration.js";
 import { getAppLocale } from "../app-locales.js";
 import { getActivityLabel } from "./activity-labels.js";
 
@@ -22,9 +23,7 @@ export const formatActivityDistance = (distanceMeters) => (
 
 export const formatActivityDuration = (durationSeconds) => {
   if (!Number.isFinite(durationSeconds)) return "Duration unavailable";
-  const hours = Math.floor(durationSeconds / 3600);
-  const minutes = Math.floor((durationSeconds % 3600) / 60);
-  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+  return formatDuration(durationSeconds);
 };
 
 export const activitiesViewModel = (activities) => ({

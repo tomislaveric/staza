@@ -1,3 +1,4 @@
+import { formatDuration } from "./format-duration.js";
 import { getAppLocale } from "../app-locales.js";
 import { getActivityLabel } from "./activity-labels.js";
 
@@ -9,12 +10,7 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => (
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
 
-const durationLabel = (seconds) => {
-  if (!Number.isFinite(seconds)) return undefined;
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.round((seconds % 3600) / 60);
-  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
-};
+const durationLabel = (seconds) => (Number.isFinite(seconds) ? formatDuration(seconds) : undefined);
 
 const dateLabel = (startedAt) => new Intl.DateTimeFormat(getAppLocale(), {
   day: "2-digit", month: "short", weekday: "short"
@@ -110,50 +106,6 @@ export const HomeRecentActivity = (activity) => {
   `;
 };
 
-export const activeQuestInstances = (instances) => (instances ?? []).filter((instance) => instance.status === "active");
-
-/** Active attempts plus failed ones the player can retry. */
-export const openQuestInstances = (instances) => (instances ?? []).filter((instance) => instance.status === "active" || instance.status === "failed");
-
-export const HomeActiveQuestCard = (instance) => {
-  const objectives = instance.objectives ?? [];
-  const completed = objectives.filter((item) => item.progress.complete).length;
-  const ratio = objectives.length ? completed / objectives.length : 0;
-  const failed = instance.status === "failed";
-  return `
-    <li class="quest-instance-card is-${escapeHtml(instance.status)}">
-      <article>
-        <span class="quest-card-head"><strong data-user-content>${escapeHtml(instance.title)}</strong><small>Exploration</small></span>
-        <span class="quest-card-description" data-user-content>${escapeHtml(instance.description)}</span>
-        <span class="quest-card-progress">
-          <span class="quest-progress-track" aria-hidden="true"><i style="width: ${Math.round(ratio * 100)}%;"></i></span>
-          <small>${failed ? `Not completed · ${completed} / ${objectives.length} objectives` : `${completed} / ${objectives.length} objectives · your next activity decides`}</small>
-        </span>
-        ${failed ? `<button type="button" class="home-retry-exploration" data-retry-instance="${escapeHtml(instance.id)}">Retry</button>` : ""}
-      </article>
-    </li>
-  `;
-};
-
-export const HomeActiveQuests = (instances = [], authoredAttempts = []) => `
-  <section class="home-active-quests" aria-labelledby="active-quests-title">
-    <div class="home-section-heading"><h1 id="active-quests-title">QUESTS &amp; EXPLORATIONS</h1></div>
-    ${authoredAttempts.length || instances.length
-      ? `<ol class="home-quest-list">${authoredAttempts.map(HomeAuthoredAttemptCard).join("")}${instances.map(HomeActiveQuestCard).join("")}</ol>`
-      : `<div class="home-empty-state"><p>Nothing in progress. Start a quest on <button type="button" class="home-find-quests" data-home-progress>Progress</button> or plan an exploration in <button type="button" class="home-find-quests" data-home-find-quests>World</button>.</p></div>`}
-  </section>
-`;
-
-const HomeAuthoredAttemptCard = (quest) => `
-  <li class="quest-instance-card is-${escapeHtml(quest.state)}">
-    <article>
-      <span class="quest-card-head"><strong data-user-content>${escapeHtml(quest.title)}</strong><small>Quest</small></span>
-      <span class="quest-card-description" data-user-content>${escapeHtml(quest.description)}</span>
-      <span class="quest-card-progress"><small>${quest.state === "failed" ? "Not completed · retry on Progress" : "Active · your next activity decides"} · +${formatNumber(quest.xp)} XP</small></span>
-    </article>
-  </li>
-`;
-
 /**
  * One recommended next step. Priority: spend Skill Points, resolve a failed attempt, wait on an
  * active one, start the next quest, otherwise plan an exploration.
@@ -164,8 +116,10 @@ export const homeNextAction = ({ skillPoints = 0, authoredQuests = [], instances
   }
   const failed = authoredQuests.find((quest) => quest.state === "failed");
   if (failed) return { id: "retry-quest", title: `Retry ${failed.title}`, body: "Your last attempt didn't meet every criterion. Start it again and your next activity decides.", cta: "Open Quests", target: "progress" };
-  const active = authoredQuests.find((quest) => quest.state === "active") ?? instances.find((instance) => instance.status === "active");
+  const active = authoredQuests.find((quest) => quest.state === "active");
   if (active) return { id: "active-quest", title: `${active.title} is active`, body: "Go for your next ride, run or hike. That activity decides the attempt.", cta: "View Quests", target: "progress" };
+  const exploration = instances.find((instance) => instance.status === "active");
+  if (exploration) return { id: "active-exploration", title: `${exploration.title} is active`, body: "Go for your next ride, run or hike. That activity decides the attempt.", cta: "Open World", target: "world" };
   const available = authoredQuests.find((quest) => quest.state === "available");
   if (available) return { id: "start-quest", title: `Start ${available.title}`, body: `${available.chainTitle ?? "Quest"} · +${formatNumber(available.xp)} XP when your next activity completes it.`, cta: "Open Quests", target: "progress" };
   return { id: "plan-exploration", title: "Plan an exploration", body: "Pick an area in World and turn it into a route with targets to collect.", cta: "Open World", target: "world" };
@@ -186,7 +140,7 @@ export const HomeOnboarding = () => `
     <h2 id="onboarding-title">Turn real rides, runs and hikes into a game</h2>
     <p>Staza finds the places you pass on real routes. Collect them for XP, level up, spend Skill Points in the Skill Atlas and complete quests.</p>
     <ol>
-      <li>Add an activity from a FIT file or Strava.</li>
+      <li>Add an activity from a FIT or GPX file or Strava.</li>
       <li>Watch the replay and see what changed.</li>
       <li>Pick a quest or plan an exploration for your next outing.</li>
     </ol>
@@ -240,7 +194,6 @@ export const HomePage = (model) => `
     ${model.latest ? HomeNextAction(homeNextAction({ skillPoints: model.achievements?.skillPoints, authoredQuests: model.achievements?.authoredQuests, instances: model.activeQuests })) : HomeOnboarding()}
     ${HomeAchievements({ ...model.achievements, stats: model.stats })}
     ${HomeRecentActivity(model.latest)}
-    ${HomeActiveQuests(model.activeQuests, (model.achievements?.authoredQuests ?? []).filter((quest) => quest.state === "active" || quest.state === "failed"))}
   </section>
 `;
 
@@ -287,7 +240,7 @@ export const mountHomePage = async (mountPoint, onSelectActivity, onNavigate) =>
       : undefined;
     const model = {
       ...homeViewModel(dashboard.progress, latest ? [latest, ...history.slice(1)] : [], dashboard.lifetime),
-      activeQuests: openQuestInstances(questBody.instances),
+      activeQuests: questBody.instances,
       achievements
     };
     mountPoint.innerHTML = HomePage(model);
@@ -298,21 +251,8 @@ export const mountHomePage = async (mountPoint, onSelectActivity, onNavigate) =>
     }
     mountPoint.querySelector("[data-home-skill-tree]")?.addEventListener("click", () => onNavigate?.("skill-tree"));
     mountPoint.querySelector("[data-home-next-quest]")?.addEventListener("click", () => onNavigate?.("progress"));
-    mountPoint.querySelector("[data-home-find-quests]")?.addEventListener("click", () => onNavigate?.("world"));
-    mountPoint.querySelector("[data-home-progress]")?.addEventListener("click", () => onNavigate?.("progress"));
     mountPoint.querySelectorAll("[data-home-action-target]").forEach((button) => {
       button.addEventListener("click", () => onNavigate?.(button.dataset.homeActionTarget));
-    });
-    mountPoint.querySelectorAll("[data-retry-instance]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-        try {
-          await fetch(`/api/quest-instances/${encodeURIComponent(button.dataset.retryInstance)}/retry`, { method: "POST" }).then(responseJson);
-          void mountHomePage(mountPoint, onSelectActivity, onNavigate);
-        } catch {
-          button.disabled = false;
-        }
-      });
     });
     mountPoint.querySelector("[data-activity-id]")?.addEventListener("click", () => {
       onSelectActivity?.(model.latest.id);

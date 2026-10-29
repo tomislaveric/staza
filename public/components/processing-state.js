@@ -7,7 +7,7 @@ export const processingSteps = [
 
 export const ProcessingState = ({ step = 0 }) => `
   <header class="add-activity-header">
-    <div><h1 id="add-activity-title">Add Activity</h1><p>Import a FIT file to start discovering</p></div>
+    <div><h1 id="add-activity-title">Add Activity</h1><p>Import a FIT or GPX file to start discovering</p></div>
   </header>
   <section class="processing-state" aria-labelledby="processing-title" aria-live="polite">
     <div class="processing-activity-icon" aria-hidden="true"><img src="/assets/add-activity-processing.svg" width="20" height="20" alt=""></div>

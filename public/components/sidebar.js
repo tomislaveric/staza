@@ -45,7 +45,7 @@ export const Sidebar = (locale = "en") => `
 
 export const MobileNavigation = () => `
   <div class="mobile-navigation">
-    <button class="mobile-add-activity" type="button" data-screen="add-activity">
+    <button class="mobile-add-activity" type="button" data-screen="add-activity" aria-label="Add Activity">
       <img src="/assets/add-activity-upload.svg" width="16" height="16" alt="">
       <span>ADD ACTIVITY</span>
     </button>

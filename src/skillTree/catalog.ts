@@ -34,6 +34,16 @@ export const earnedSkillPointsForLevel = (level: number): number => {
   return earned;
 };
 
+/** The next level above `level` that awards a Skill Point. */
+export const nextSkillPointLevel = (level: number): number => {
+  const flooredLevel = Math.max(1, Math.floor(level));
+  const next = SKILL_POINT_AWARD_LEVELS.find((awardLevel) => awardLevel > flooredLevel);
+  if (next !== undefined) return next;
+  const lastAward = SKILL_POINT_AWARD_LEVELS[SKILL_POINT_AWARD_LEVELS.length - 1];
+  const steps = Math.floor((flooredLevel - lastAward) / SKILL_POINT_INTERVAL_AFTER_30) + 1;
+  return lastAward + steps * SKILL_POINT_INTERVAL_AFTER_30;
+};
+
 type RequirementSpec = [metric: string, target: number, label: string];
 type GrantSpec = [type: SkillTreeGrantType, value: string, label: string];
 

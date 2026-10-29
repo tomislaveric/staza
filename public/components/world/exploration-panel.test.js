@@ -60,12 +60,12 @@ describe("exploration route formatting", () => {
   it("formats distance, duration, and target summaries", () => {
     expect(formatRouteDistance(42_300)).toBe("42.3 km");
     expect(formatRouteDistance(123_456)).toBe("123 km");
-    expect(formatRouteDuration(5_400)).toBe("1:30 h");
-    expect(formatRouteDuration(600)).toBe("0:10 h");
+    expect(formatRouteDuration(5_400)).toBe("1h 30m");
+    expect(formatRouteDuration(600)).toBe("10m");
     expect(targetSummaryText({ peaks: 1, places: 0, other: 1 }))
       .toBe("1 Peak · 1 other target");
     expect(plannedRouteSummary({ distanceM: 42_300, durationS: 5_400, routeType: "point_to_point" }))
-      .toBe("42.3 km · 1:30 h · A to B");
+      .toBe("42.3 km · 1h 30m · A to B");
   });
 });
 

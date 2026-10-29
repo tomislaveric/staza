@@ -245,12 +245,6 @@ export interface PlayerProfileOverview {
   flowlineCount: number;
 }
 
-export interface ProgressLevel {
-  level: number;
-  totalXpRequired: number;
-  skillPointsAwarded: number;
-}
-
 export interface ProgressLifetimeStats {
   distanceMeters: number;
   /** Unique collectibles claimed. */
@@ -270,10 +264,29 @@ export interface QuestHistoryEntry {
   activityId?: string;
 }
 
+/** Lifetime totals and personal bests for one sport, derived from stored activities. */
+export interface SportRecord {
+  type: ActivityType;
+  activityCount: number;
+  distanceMeters: number;
+  longestDistanceMeters: number;
+  /** Highest recorded gain in a single activity; absent when no activity carries elevation data. */
+  highestElevationGainM?: number;
+}
+
+/** Unique collectibles and Flowlines the player has discovered. */
+export interface DiscoveryMilestones {
+  places: number;
+  peaks: number;
+  mountainPasses: number;
+  flowlines: number;
+}
+
 export interface ProgressDashboard {
   progress: PlayerProgress;
   lifetime: ProgressLifetimeStats;
-  levels: ProgressLevel[];
+  sportRecords: SportRecord[];
+  milestones: DiscoveryMilestones;
   recentActivities: ActivityHistoryItem[];
   questHistory: QuestHistoryEntry[];
 }

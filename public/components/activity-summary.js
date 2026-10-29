@@ -1,4 +1,5 @@
-import { getActivityCompleteLabel } from "./activity-labels.js";
+import { getActivityCompleteLabel, getActivityLabel } from "./activity-labels.js";
+import { formatDuration } from "./format-duration.js";
 import { getAppLocale } from "../app-locales.js";
 
 const formatNumber = (value, maximumFractionDigits = 0) => new Intl.NumberFormat(getAppLocale(), {
@@ -11,29 +12,29 @@ export const activityDistanceLabel = (distanceMeters) => Number.isFinite(distanc
 
 export const activityDurationLabel = (durationSeconds) => {
   if (!Number.isFinite(durationSeconds)) return "DURATION UNAVAILABLE";
-  const hours = Math.floor(durationSeconds / 3600);
-  const minutes = Math.floor((durationSeconds % 3600) / 60);
-  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+  return formatDuration(durationSeconds);
 };
 
-const sportOptions = [["cycling", "Cycling"], ["running", "Running"], ["hiking", "Hiking"], ["unknown", "Not set"]];
+const sportIcons = { cycling: "🚴", running: "🏃", hiking: "🥾", walking: "🚶" };
 
-export const ActivitySportControl = (activity) => `
-  <label class="activity-detail-sport">
-    <span>Sport</span>
-    <select data-activity-sport>
-      ${sportOptions.map(([value, label]) => `<option value="${value}"${(activity.type ?? "unknown") === value ? " selected" : ""}>${label}</option>`).join("")}
-      ${sportOptions.some(([value]) => value === activity.type) || !activity.type ? "" : `<option value="${activity.type}" selected>${activity.type}</option>`}
-    </select>
-  </label>
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+})[character]);
+
+/** Distance, duration and collected count; overlaid on the replay map or shown inline elsewhere. */
+export const ActivityStats = (activity, { overlay = false } = {}) => `
+  <p class="activity-detail-stats${overlay ? " is-overlay" : ""}">
+    <strong>${activityDistanceLabel(activity.distanceMeters)}</strong>
+    <span>${activityDurationLabel(activity.durationSeconds)}</span>
+    <span>${formatNumber(activity.collectedCount ?? 0)} collected</span>
+  </p>
 `;
 
 export const ActivitySummary = (activity) => `
   <header class="activity-detail-summary">
     <p class="activity-detail-eyebrow">${getActivityCompleteLabel(activity.type).toUpperCase()}</p>
-    <h1 id="activity-detail-title">${activityDistanceLabel(activity.distanceMeters)}</h1>
-    <p class="activity-detail-duration">${activityDurationLabel(activity.durationSeconds)}</p>
-    ${ActivitySportControl(activity)}
-    <p class="activity-detail-sport-error" role="alert" hidden></p>
+    <h1 id="activity-detail-title">
+      ${sportIcons[activity.type] ? `<span class="activity-detail-sport-icon" role="img" aria-label="${getActivityLabel(activity.type)}">${sportIcons[activity.type]}</span>` : ""}<span data-user-content>${escapeHtml(activity.title)}</span>
+    </h1>
   </header>
 `;

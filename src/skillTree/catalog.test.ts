@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SKILL_TREE_NODES,
   earnedSkillPointsForLevel,
+  nextSkillPointLevel,
   isPremiumNode,
   validateSkillTreeCatalog,
   findSkillTreeNode
@@ -106,5 +107,15 @@ describe("skill tree catalog", () => {
       const buildsOnCrossSport = parents.some((parent) => parent!.branch === "cross_sport");
       expect(sports.size >= 2 || buildsOnCrossSport).toBe(true);
     }
+  });
+});
+
+describe("nextSkillPointLevel", () => {
+  it("returns the next awarding level, including past level 30", () => {
+    expect(nextSkillPointLevel(1)).toBe(2);
+    expect(nextSkillPointLevel(12)).toBe(14);
+    expect(nextSkillPointLevel(13)).toBe(14);
+    expect(nextSkillPointLevel(30)).toBe(33);
+    expect(nextSkillPointLevel(33)).toBe(36);
   });
 });

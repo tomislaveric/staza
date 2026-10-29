@@ -95,12 +95,4 @@ describePersistence("authored quests", () => {
     await activities!.persistCompletedActivity(playerId, ride("i".repeat(48), 5_000), result("i".repeat(48)));
     expect((await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!.state).toBe("active");
   });
-
-  it("updates the sport of a stored activity and its fallback title", async () => {
-    const id = "d".repeat(48);
-    await activities!.persistCompletedActivity(playerId, ride(id, 5000, "unknown"), result(id));
-    const updated = await activities!.updateActivityType(playerId, id, "running");
-    expect(updated?.type).toBe("running");
-    expect(await activities!.updateActivityType(playerId, "missing", "running")).toBeUndefined();
-  });
 });

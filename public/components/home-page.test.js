@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HomeAchievements, HomeActiveQuests, HomeActiveQuestCard, HomeNextAction, HomeOnboarding, HomePage, HomeRecentActivity, activeQuestInstances, homeNextAction, homeViewModel, openQuestInstances } from "./home-page.js";
+import { HomeAchievements, HomeNextAction, HomeOnboarding, HomePage, HomeRecentActivity, homeNextAction, homeViewModel } from "./home-page.js";
 
 describe("Home data transformation", () => {
   const progress = { totalXp: 700, level: 4, currentLevelXp: 100, nextLevelXp: 400, progressToNextLevel: .25 };
@@ -38,40 +38,6 @@ describe("Home data transformation", () => {
   });
 });
 
-describe("Home active quests", () => {
-  const quest = (over = {}) => ({
-    id: "q1", status: "active", title: "<b>Run</b>", description: "A & B",
-    objectives: [{ progress: { complete: true } }, { progress: { complete: false } }], ...over
-  });
-
-  it("keeps only active instances", () => {
-    expect(activeQuestInstances([quest(), quest({ id: "q2", status: "completed" })]).map((q) => q.id)).toEqual(["q1"]);
-  });
-
-  it("renders escaped read-only cards with progress", () => {
-    const html = HomeActiveQuestCard(quest());
-    expect(html).toContain("&lt;b&gt;Run&lt;/b&gt;");
-    expect(html).toContain("A &amp; B");
-    expect(html).toContain("1 / 2 objectives");
-    expect(html).toContain("width: 50%");
-    expect(html).not.toContain("data-quest-cancel");
-  });
-
-  it("renders the empty state with a World control", () => {
-    const html = HomeActiveQuests([]);
-    expect(html).toContain("Nothing in progress.");
-    expect(html).toContain("data-home-find-quests");
-    expect(html).toContain("data-home-progress");
-  });
-
-  it("keeps failed explorations visible with a Retry action", () => {
-    const failed = { id: "i1", status: "failed", title: "T", description: "D", objectives: [] };
-    expect(openQuestInstances([failed, { ...failed, id: "i2", status: "completed" }])).toHaveLength(1);
-    expect(HomeActiveQuestCard(failed)).toContain('data-retry-instance="i1"');
-    expect(HomeActiveQuestCard(failed)).toContain("Not completed");
-  });
-});
-
 describe("Home next action", () => {
   it("prioritises Skill Points, failed, active, available quests, then exploration", () => {
     const quest = (state) => ({ title: "Q", chainTitle: "C", xp: 100, state });
@@ -79,6 +45,7 @@ describe("Home next action", () => {
     expect(homeNextAction({ authoredQuests: [quest("available"), quest("failed")] }).id).toBe("retry-quest");
     expect(homeNextAction({ authoredQuests: [quest("active")] }).id).toBe("active-quest");
     expect(homeNextAction({ authoredQuests: [quest("available")] }).id).toBe("start-quest");
+    expect(homeNextAction({ instances: [{ status: "active", title: "E" }] })).toMatchObject({ id: "active-exploration", target: "world" });
     expect(homeNextAction({}).target).toBe("world");
     expect(HomeNextAction(homeNextAction({ skillPoints: 1 }))).toContain('data-home-action-target="skill-tree"');
   });

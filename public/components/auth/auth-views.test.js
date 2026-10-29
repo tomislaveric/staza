@@ -28,6 +28,7 @@ describe("authentication presentation", () => {
     expect(renderAuthEmailRequest({ busy: false, email: "rider@example.com", purpose: "register", message: "", messageType: "status" })).toContain("Send code");
     expect(renderAuthVerifyEmail({ busy: false, email: "rider@example.com", message: "", messageType: "status" }).match(/name="code-\d"/g)).toHaveLength(6);
     expect(renderAuthCreatePasskey({ busy: false, message: "", messageType: "status" })).toContain("Create passkey");
+    expect(renderAuthCreatePasskey({ busy: false, message: "", messageType: "status" })).toContain("data-auth-skip-passkey");
     expect(renderAuthPasskeyReady()).toContain("Continue to Staza");
     expect(renderAuthError({ unavailable: true, message: "Use an email code to sign in on this device." })).toContain("Passkey unavailable");
     expect(renderAuthError({ unavailable: true, message: "Use an email code to sign in on this device." })).toContain("Create an account");

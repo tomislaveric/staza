@@ -3,15 +3,26 @@ import { AddActivityPage, PROCESSING_STEP_DURATION_MS } from "./add-activity-pag
 import { ProcessingState, processingSteps } from "./processing-state.js";
 
 describe("AddActivityPage", () => {
-  it("renders only the accessible required FIT upload control", () => {
+  it("renders the required FIT/GPX upload control with a mandatory sport choice", () => {
     const page = AddActivityPage();
     expect(page).toContain('name="fit"');
     expect(page).toContain("required");
     expect(page).toContain("Drop file here or click");
-    expect(page).toContain(".fit files supported");
+    expect(page).toContain(".fit and .gpx files supported");
+    expect(page).toContain('accept=".fit,.gpx');
     expect(page).toContain("PROCESS ACTIVITY");
+    expect(page).toMatch(/<button class="upload-primary-button" type="submit" disabled>/);
+    expect(page).toContain('<option value="" selected disabled>Choose a sport</option>');
+    expect(page).not.toContain('value="unknown"');
     expect(page).not.toContain('name="video"');
     expect(page).not.toContain("Add video (optional)");
+  });
+
+  it("enables processing once a file and a sport are chosen", () => {
+    const page = AddActivityPage({ fit: { name: "ride.gpx", size: 2048 }, sport: "cycling" });
+    expect(page).not.toMatch(/upload-primary-button" type="submit" disabled/);
+    expect(page).toContain('<option value="cycling" selected>');
+    expect(AddActivityPage({ fit: { name: "ride.gpx" } })).toMatch(/upload-primary-button" type="submit" disabled/);
   });
 
   it("renders factual persisted activity completion", () => {

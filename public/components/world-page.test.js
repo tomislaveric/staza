@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { availableWorldFilters, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mappedWorldFartleks, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
+import { availableWorldFilters, distanceBetween, WorldDiscovered, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mappedWorldFartleks, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
 import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import * as worldMarkers from "./world/world-markers.js";
 import * as worldMap from "./world/world-map.js";
@@ -206,8 +206,15 @@ describe("World filter controls", () => {
     expect(buttonMarkup(markup, "place")).toContain("collectible-place-muted.svg");
   });
 
+  it("scopes Discovered to the visible area and measures distance", () => {
+    expect(WorldDiscovered()).toContain("\u2013");
+    expect(WorldDiscovered({ discoveredCount: 2, totalCollectibles: 9 })).toContain("2");
+    const metres = distanceBetween({ latitude: 50, longitude: 9 }, { latitude: 50, longitude: 10 });
+    expect(Math.round(metres / 1000)).toBe(71);
+  });
+
   it("renders one filter group without a map-overlay legend", () => {
-    const markup = WorldPage({ lifetime: { discoveredCount: 1, totalCollectibles: 3 }, selectedFilters: [] });
+    const markup = WorldPage({ stats: { discoveredCount: 1, totalCollectibles: 3 }, selectedFilters: [] });
     expect(markup.match(/class="world-filter-controls"/g)).toHaveLength(1);
     expect(markup).not.toContain("world-legend");
     expect(markup).not.toContain("World marker legend");
@@ -325,7 +332,7 @@ describe("mounted World page interactions", () => {
       filter, { ...element(), dataset: { worldFilter: filter } }
     ]));
     const hosts = Object.fromEntries([
-      "map", "status", "stats", "quests", "detail", "collectible-list", "locate", "explore"
+      "map", "status", "stats", "discovered", "quests", "detail", "collectible-list", "locate", "explore"
     ].map((name) => [`[data-world-${name}]`, element()]));
     const questCancelButton = { ...element(), dataset: { questCancel: "instance-1" } };
     const questSelectButton = { ...element(), dataset: { questSelect: "instance:instance-1" } };
@@ -496,7 +503,7 @@ describe("mounted World page interactions", () => {
     expect(page.buttons.all.attributes["aria-pressed"]).toBe("true");
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
     expect(page.fartlekIds()).toEqual(fartleks.map((item) => item.id));
-    expect(page.fetchMock).toHaveBeenCalledTimes(5);
+    expect(page.fetchMock).toHaveBeenCalledTimes(4);
     expect(page.fetchMock.mock.calls.some(([url]) => url.includes("includeQuestSuggestions"))).toBe(false);
   });
 

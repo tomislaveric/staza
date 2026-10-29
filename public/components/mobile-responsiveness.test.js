@@ -33,7 +33,7 @@ describe("mobile app navigation", () => {
   it("reserves scroll space for the fixed mobile controls", () => {
     expect(appShellCss).toMatch(/@media \(max-width: 720px\)/);
     expect(appShellCss).toMatch(/padding-bottom:\s*calc\(var\(--mobile-nav-height\) \+ var\(--mobile-action-space\)/);
-    expect(appShellCss).toMatch(/grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/);
+    expect(appShellCss).toMatch(/grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/);
   });
 
   it("places replay collection details below the map on mobile", () => {

@@ -173,6 +173,7 @@ export const mountAuthFlow = (root, {
     });
     root.querySelector("[data-auth-retry]")?.addEventListener("click", signInWithPasskey);
     root.querySelector("[data-auth-register-passkey]")?.addEventListener("click", createPasskey);
+    root.querySelector("[data-auth-skip-passkey]")?.addEventListener("click", onAuthenticated);
     root.querySelector("[data-auth-continue]")?.addEventListener("click", onAuthenticated);
     root.querySelector("[data-auth-resend]")?.addEventListener("click", () => requestCode());
     root.querySelector("[data-auth-email-form]")?.addEventListener("submit", (event) => {

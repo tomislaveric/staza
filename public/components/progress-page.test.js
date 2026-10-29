@@ -22,14 +22,11 @@ const dashboard = {
     totalCollectibles: 34,
     totalFlowlines: 3
   },
-  levels: [
-    { level: 5, skillPointsAwarded: 1, totalXpRequired: 1_000 },
-    { level: 6, skillPointsAwarded: 0, totalXpRequired: 1_500 },
-    { level: 7, skillPointsAwarded: 0, totalXpRequired: 2_100 },
-    { level: 8, skillPointsAwarded: 1, totalXpRequired: 2_800 },
-    { level: 9, skillPointsAwarded: 0, totalXpRequired: 3_600 },
-    { level: 10, skillPointsAwarded: 0, totalXpRequired: 4_500 }
+  sportRecords: [
+    { type: "cycling", activityCount: 3, distanceMeters: 900_000, longestDistanceMeters: 120_000, highestElevationGainM: 1_450 },
+    { type: "running", activityCount: 1, distanceMeters: 21_000, longestDistanceMeters: 21_000 }
   ],
+  milestones: { places: 4, peaks: 2, mountainPasses: 1, flowlines: 3 },
   recentActivities: [{
     id: "latest",
     startedAt: "2026-09-26T09:00:00.000Z",
@@ -55,54 +52,48 @@ describe("Progress page", () => {
     expect(page).toContain("310 to Level 8");
     expect(page).toContain('aria-valuemax="700"');
     expect(page).toContain('aria-valuenow="390"');
-    expect(page).toContain("2,800 XP needed");
     expect(page).toContain("Activity · SAT 26 SEP");
     expect(page).toContain("+540");
     expect(page).toContain("+320");
   });
 
-  it("derives completed, current, and future level states from canonical player level", () => {
-    const model = progressViewModel(dashboard);
+  it("shows the level once, with no level window", () => {
+    const page = ProgressPage(progressViewModel(dashboard));
 
-    expect(model.levels.map((level) => level.state)).toEqual([
-      "completed", "completed", "current", "future", "future", "future"
-    ]);
-    expect(ProgressPage(model)).toContain("CURRENT");
-    expect(ProgressPage(model)).toContain("COMPLETE");
-    expect(levelName(7)).toBe("Level 7");
+    expect(page.match(/Level 7/gi)).toHaveLength(1);
+    expect(page).not.toContain("progress-journey");
+    expect(page).not.toContain("Level 5");
     expect(levelName(15)).toBe("Level 15");
   });
 
-  it("clamps the visual percentage and renders a valid new-player journey", () => {
+  it("clamps the visual percentage for a new player", () => {
     const model = progressViewModel({
       ...dashboard,
-      progress: {
-        totalXp: 0,
-        level: 1,
-        currentLevelXp: 0,
-        nextLevelXp: 100,
-        progressToNextLevel: -1
-      },
-      levels: [
-        { level: 1, totalXpRequired: 0 },
-        { level: 2, totalXpRequired: 100 },
-        { level: 3, totalXpRequired: 300 },
-        { level: 4, totalXpRequired: 600 }
-      ],
+      progress: { totalXp: 0, level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: -1 },
+      sportRecords: [],
       recentActivities: []
     });
 
     expect(model.progress.percentage).toBe(0);
-    expect(model.levels.map((level) => level.state)).toEqual(["current", "future", "future", "future"]);
     expect(ProgressPage(model)).toContain("NO COMPLETED ACTIVITIES YET");
-    expect(ProgressPage(model)).not.toContain("is-completed");
+    expect(ProgressPage(model)).toContain("NO BADGES OR TITLES YET");
+    expect(ProgressPage(model)).toContain("IMPORT AN ACTIVITY TO SET YOUR FIRST RECORD");
   });
 
-  it("explains Skill Points and marks only awarding levels", () => {
-    const page = ProgressPage(progressViewModel(dashboard));
+  it("renders badges, titles, per-sport records and discovery milestones", () => {
+    const page = ProgressPage({
+      ...progressViewModel(dashboard),
+      capabilities: { badges: [{ id: "b", label: "Ultra <Cyclist>" }], titles: [{ id: "t", label: "World Seeker" }] }
+    });
 
-    expect(page).toContain("earn Skill Points you can spend in the Skill Atlas");
-    expect(page.match(/\+1 Skill Point/g)).toHaveLength(2);
+    expect(page).toContain("Ultra &lt;Cyclist&gt;");
+    expect(page).toContain("World Seeker");
+    expect(page).toContain('data-sport-record="cycling"');
+    expect(page).toContain("900 km");
+    expect(page).toContain("120 km");
+    expect(page).toContain("1,450 m");
+    expect(page.match(/Highest elevation gain/g)).toHaveLength(1);
+    expect(page).toContain("<dt>Mountain passes</dt><dd>1</dd>");
   });
 
   it("renders no activity history safely", () => {

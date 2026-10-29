@@ -134,7 +134,8 @@ export const renderAuthCreatePasskey = ({ busy, message, messageType }) =>
       <li><i aria-hidden="true">◈</i><span><strong>Uses device security</strong>Face ID, Touch ID, Windows Hello, or your device PIN.</span></li>
       <li><i aria-hidden="true">◇</i><span><strong>Private by default</strong>Your biometric data never leaves your device.</span></li>
     </ul>
-    <button class="auth-primary" type="button" data-auth-register-passkey${disabled(busy)}>${busy ? "Creating passkey…" : "Create passkey"}</button>`,
+    <button class="auth-primary" type="button" data-auth-register-passkey${disabled(busy)}>${busy ? "Creating passkey…" : "Create passkey"}</button>
+    <button class="auth-text-action" type="button" data-auth-skip-passkey${disabled(busy)}>Later</button>`,
   });
 
 export const renderAuthPasskeyReady = () =>

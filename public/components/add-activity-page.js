@@ -16,15 +16,42 @@ import {
 const importKey = () => crypto.randomUUID();
 export const PROCESSING_STEP_DURATION_MS = 1_000;
 
+// Prefills the sport dropdown from what the file declares; any failure just leaves it for the player to choose.
+const declaredSport = async (file) => {
+  try {
+    const data = new FormData();
+    data.append("fit", file);
+    const response = await fetch("/api/activities/inspect", { method: "POST", body: data });
+    if (!response.ok) return undefined;
+    const { sport } = await response.json();
+    return IMPORT_SPORT_OPTIONS.some(([value]) => value === sport) ? sport : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const selectedFiles = ({ fit }) => `
+export const IMPORT_SPORT_OPTIONS = [["cycling", "Cycling"], ["running", "Running"], ["hiking", "Hiking"]];
+
+const SportSelect = (sport) => `
+  <label class="add-activity-sport">
+    <span>Sport</span>
+    <select name="sport" data-import-sport required>
+      ${sport ? "" : '<option value="" selected disabled>Choose a sport</option>'}
+      ${IMPORT_SPORT_OPTIONS.map(([value, label]) => `<option value="${value}"${sport === value ? " selected" : ""}>${label}</option>`).join("")}
+    </select>
+  </label>
+`;
+
+const selectedFiles = ({ fit, sport }) => `
   <div class="add-activity-files">
     <section>
       <p>ACTIVITY</p>
-      <span>Your activity from Garmin, Wahoo, or any FIT-compatible device</span>
+      <span>Your activity from Garmin, Wahoo, or any FIT or GPX file</span>
       ${ActivityFileUpload(fit)}
     </section>
+    ${SportSelect(sport)}
   </div>
 `;
 
@@ -40,12 +67,12 @@ const content = (state) => {
   if (state.processing !== undefined) return ProcessingState({ step: state.processing });
   return `
     <header class="add-activity-header">
-      <div><h1 id="add-activity-title">Add Activity</h1><p>Import a FIT file to start discovering</p><p class="add-activity-rule">Only activities from after you created your Staza account can be imported.</p></div>
+      <div><h1 id="add-activity-title">Add Activity</h1><p>Import a FIT or GPX file to start discovering</p><p class="add-activity-rule">Only activities from after you created your Staza account can be imported.</p></div>
     </header>
     <form class="add-activity-form" novalidate>
       ${selectedFiles(state)}
       ${state.error ? UploadError({ message: state.error }) : ""}
-      <button class="upload-primary-button" type="submit">PROCESS ACTIVITY</button>
+      <button class="upload-primary-button" type="submit"${state.fit && state.sport ? "" : " disabled"}>PROCESS ACTIVITY</button>
     </form>
     ${StravaImportSection(state.strava)}
   `;
@@ -61,6 +88,7 @@ export const mountAddActivityPage = (mountPoint, onActivityReady) => {
   const callback = consumeStravaCallbackNotice();
   const state = {
     fit: undefined,
+    sport: undefined,
     importKey: importKey(),
     processing: undefined,
     error: undefined,
@@ -148,26 +176,42 @@ export const mountAddActivityPage = (mountPoint, onActivityReady) => {
     mountPoint.querySelectorAll("[data-upload-dropzone]").forEach((dropzone) => {
       const input = dropzone.querySelector("input");
       mountUploadDropzone(dropzone, (file) => {
-        if (input.name === "fit") state.fit = file;
+        if (input.name !== "fit") return;
+        state.fit = file;
         state.error = undefined;
+        state.sport = undefined;
         render();
+        void declaredSport(file).then((sport) => {
+          if (state.fit !== file || state.sport) return;
+          state.sport = sport;
+          if (mountPoint.querySelector(".add-activity-form")) render();
+        });
       });
     });
     mountPoint.querySelectorAll("[data-remove-upload]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (button.dataset.removeUpload === "ACTIVITY FILE") state.fit = undefined;
+        if (button.dataset.removeUpload === "ACTIVITY FILE") {
+          state.fit = undefined;
+          state.sport = undefined;
+        }
         state.error = undefined;
         render();
       });
     });
+    mountPoint.querySelector("[data-import-sport]")?.addEventListener("change", (event) => {
+      state.sport = event.target.value || undefined;
+      state.error = undefined;
+      render();
+    });
     mountPoint.querySelector(".add-activity-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!state.fit) {
-        state.error = "Choose a FIT activity file before processing.";
+      if (!state.fit || !state.sport) {
+        state.error = state.fit ? "Choose a sport before processing." : "Choose a FIT or GPX activity file before processing.";
         render();
         return;
       }
       const data = new FormData();
+      data.append("sport", state.sport);
       data.append("fit", state.fit);
       const request = fetch("/api/activities/import", {
         method: "POST",

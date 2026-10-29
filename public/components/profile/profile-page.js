@@ -35,7 +35,7 @@ const stravaConnection = (status) => {
 };
 
 export const profileOverviewView = (profile, session, stravaStatus) => {
-  const { progress, collectibles } = profile;
+  const { progress } = profile;
   const initial = profile.displayName.trim().slice(0, 1).toUpperCase() || "?";
   return shell("overview", `
     <header class="profile-heading"><h1>Profile</h1></header>
@@ -48,13 +48,6 @@ export const profileOverviewView = (profile, session, stravaStatus) => {
       <p><span>Level ${formatNumber(progress.level)}</span><span>${formatNumber(progress.currentLevelXp)} / ${formatNumber(progress.nextLevelXp)} XP</span></p>
       <div role="progressbar" aria-valuemin="0" aria-valuemax="${progress.nextLevelXp}" aria-valuenow="${progress.currentLevelXp}"><i style="width:${Math.max(0, Math.min(100, progress.progressToNextLevel * 100))}%"></i></div>
     </section>
-    <section class="profile-section"><h2>YOUR RECORD</h2><dl class="profile-stats">
-      <div><dt>Total XP earned</dt><dd>${formatNumber(progress.totalXp)} XP</dd></div>
-      <div><dt>Distance</dt><dd>${formatNumber(profile.distanceMeters / 1000, 1)} km</dd></div>
-      <div><dt>Activities completed</dt><dd>${formatNumber(profile.activityCount)}</dd></div>
-      <div><dt>Collected</dt><dd>${formatNumber(collectibles.discoveredCount)} of ${formatNumber(collectibles.totalCollectibles)}</dd></div>
-      <div><dt>Flowlines completed</dt><dd>${formatNumber(profile.flowlineCount ?? 0)}</dd></div>
-    </dl></section>
     <section class="profile-section"><h2>ACCOUNT &amp; SECURITY</h2><div class="profile-card">
       ${row("Account email", { email: session.user.email, verified: session.user.emailVerified ? "Verified" : "" }, "account")}
       ${row("Passkeys", "Manage registered passkeys", "passkeys")}

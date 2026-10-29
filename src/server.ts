@@ -11,7 +11,7 @@ import { createCanonicalActivityProcessor } from "./activityProcessing.js";
 import { config } from "./config.js";
 import type { ActivityImportResult, ActivityType, ActivityVideo, Fartlek, HudTimeline, Job, MappedGameEvent, PersistedActivity, WorldFartlek } from "./domain.js";
 import { ActivityImportRejectedError, UserInputError } from "./errors.js";
-import { parseFitTrack, parseFitMetadata } from "./fit.js";
+import { declaredSport, parseImportSport, parseTrackFile } from "./trackFile.js";
 import { extractGps5Times, mapToVideoSecond } from "./gpmf.js";
 import {
   assessSynchronization,
@@ -199,12 +199,12 @@ const processDetection = async (
   job: Job,
   hasVideo: boolean,
   repository: ActivityRepository,
-  playerId: string
+  playerId: string,
+  sport: ActivityType
 ): Promise<void> => {
   try {
-    const fit = path.join(directory, "track.fit");
-    const [track, metadata] = await Promise.all([parseFitTrack(fit), parseFitMetadata(fit)]);
-    const activity = deriveActivity(job.token, track, metadata.activityType, metadata);
+    const { track, metadata } = await parseTrackFile(path.join(directory, "track.fit"));
+    const activity = deriveActivity(job.token, track, sport, metadata);
     const { result: activityResult, totalCollectibles, relevantCollectibles } = await processActivity(activity);
     job.activity = activity;
     job.activityResult = activityResult;
@@ -441,6 +441,7 @@ const importActivity = async (
   playerId: string,
   importKey: string,
   fit: Express.Multer.File,
+  sport: ActivityType,
   uploadedVideo?: Express.Multer.File
 ): Promise<ActivityImportResult> => {
   const existing = await activityRepository.getActivityByImportKey(playerId, importKey);
@@ -450,8 +451,8 @@ const importActivity = async (
   }
 
   try {
-    const [track, metadata] = await Promise.all([parseFitTrack(fit.path), parseFitMetadata(fit.path)]);
-    const activity = deriveActivity(randomUUID(), track, metadata.activityType, metadata);
+    const { track, metadata } = await parseTrackFile(fit.path);
+    const activity = deriveActivity(randomUUID(), track, sport, metadata);
     const { result: activityResult } = await processActivity(activity);
     const persisted = await activityRepository.persistCompletedActivity(playerId, activity, activityResult, importKey);
     let importedActivity = persisted.activity;
@@ -791,7 +792,15 @@ app.post(
     const video = files?.video?.[0];
     const importKey = request.header("Idempotency-Key");
     if (!fit) {
-      response.status(400).json({ error: "One FIT file is required." });
+      response.status(400).json({ error: "One FIT or GPX file is required." });
+      return;
+    }
+    let sport: ActivityType;
+    try {
+      sport = parseImportSport(request.body?.sport);
+    } catch (error) {
+      await Promise.all([rm(fit.path, { force: true }), video ? rm(video.path, { force: true }) : Promise.resolve()]);
+      response.status(400).json({ error: error instanceof Error ? error.message : "Invalid sport." });
       return;
     }
     if (!importKey || !/^[a-zA-Z0-9-]{16,128}$/.test(importKey)) {
@@ -800,10 +809,33 @@ app.post(
       return;
     }
     try {
-      response.status(201).json(await importActivity(request.user!.playerId, importKey, fit, video));
+      response.status(201).json(await importActivity(request.user!.playerId, importKey, fit, sport, video));
     } catch (error) {
       await Promise.all([rm(fit.path, { force: true }), video ? rm(video.path, { force: true }) : Promise.resolve()]);
       next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/activities/inspect",
+  requirePlayer,
+  requireCsrf,
+  importUpload.fields([{ name: "fit", maxCount: 1 }]),
+  async (request: UploadRequest, response, next) => {
+    const file = (request.files as Record<string, Express.Multer.File[]> | undefined)?.fit?.[0];
+    if (!file) {
+      response.status(400).json({ error: "One FIT or GPX file is required." });
+      return;
+    }
+    try {
+      const { metadata } = await parseTrackFile(file.path);
+      const sport = declaredSport(metadata.activityType);
+      response.json(sport ? { sport } : {});
+    } catch (error) {
+      next(error);
+    } finally {
+      await rm(file.path, { force: true });
     }
   }
 );
@@ -818,10 +850,18 @@ app.post(
     const files = request.files as Record<string, Express.Multer.File[]> | undefined;
     if (!request.job || !request.jobDir || !files?.fit?.[0]) {
       await cleanupReservation(request);
-      response.status(400).json({ error: "One FIT file is required." });
+      response.status(400).json({ error: "One FIT or GPX file is required." });
       return;
     }
-    void processDetection(request.jobDir, request.job, Boolean(files.video?.[0]), activityRepository, request.user!.playerId);
+    let sport: ActivityType;
+    try {
+      sport = parseImportSport(request.body?.sport);
+    } catch (error) {
+      await cleanupReservation(request);
+      response.status(400).json({ error: error instanceof Error ? error.message : "Invalid sport." });
+      return;
+    }
+    void processDetection(request.jobDir, request.job, Boolean(files.video?.[0]), activityRepository, request.user!.playerId, sport);
     response.status(202).json({ token: request.job.token });
     next();
   }
@@ -1124,29 +1164,6 @@ app.post("/api/quest-instances/:instanceId/retry", requirePlayer, requireCsrf, a
 app.get("/api/activities/:id", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
     const activity = await activityRepository.getActivity(request.user!.playerId, String(request.params.id));
-    if (!activity) {
-      response.status(404).json({ error: "Activity not found." });
-      return;
-    }
-    response.json(attachVideoUrls(activity));
-  } catch (error) {
-    next(error);
-  }
-});
-
-const CORRECTABLE_ACTIVITY_TYPES: readonly ActivityType[] = ["cycling", "running", "hiking", "unknown"];
-
-app.patch("/api/activities/:id", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const type: unknown = request.body?.type;
-    if (typeof type !== "string" || !CORRECTABLE_ACTIVITY_TYPES.includes(type as ActivityType)) {
-      throw new UserInputError("Choose cycling, running, hiking, or unknown.");
-    }
-    const activity = await activityRepository.updateActivityType(
-      request.user!.playerId,
-      String(request.params.id),
-      type as ActivityType
-    );
     if (!activity) {
       response.status(404).json({ error: "Activity not found." });
       return;

@@ -37,7 +37,25 @@ const ROOT_ICON = '<path d="M12 2.5 L13.6 10.4 L21.5 12 L13.6 13.6 L12 21.5 L10.
 const TIER_GLYPH = { 1: "I", 2: "II", 3: "III", prestige: "★" };
 
 // Curved connector bending gently toward the center for an organic, radial feel.
-export const connectorPath = (connector) => {
+// A node is "near" when it is already usable (unlocked or unlockable), a hub, or
+// sits directly beyond one the player can reach. Everything further out is
+// "distant" and dimmed so the reachable frontier reads first.
+export const distantNodeIds = (nodes) => {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const distant = new Set();
+  for (const node of nodes) {
+    if (node.role === "root" || node.role === "sport") continue;
+    if (node.state === "unlocked" || node.state === "unlockable") continue;
+    const near = (node.prerequisites ?? []).some((id) => {
+      const state = byId.get(id)?.state;
+      return state === "unlocked" || state === "unlockable";
+    });
+    if (!near) distant.add(node.id);
+  }
+  return distant;
+};
+
+export const connectorPath = (connector, distant = new Set()) => {
   const midX = (connector.from.x + connector.to.x) / 2;
   const midY = (connector.from.y + connector.to.y) / 2;
   const curve = 0.14; // pull the control point toward the origin
@@ -48,10 +66,11 @@ export const connectorPath = (connector) => {
   const classes = ["skill-connector"];
   if (connector.active) classes.push("is-active");
   else if (connector.reachable) classes.push("is-reachable");
+  if (distant.has(connector.toId)) classes.push("is-distant");
   return `<path class="${classes.join(" ")}" data-to="${escapeHtml(connector.toId)}" d="${d}" fill="none" />`;
 };
 
-export const nodeGlyph = (node) => {
+export const nodeGlyph = (node, distant = new Set()) => {
   const r = node.radius;
   const accent = node.sport ? sportVisual(node.sport).accent : "var(--accent-yellow-bright)";
 
@@ -89,7 +108,7 @@ export const nodeGlyph = (node) => {
   const hitRadius = r + 26;
 
   return `
-    <g class="skill-node is-${node.state} is-${node.role}" data-node-id="${escapeHtml(node.id)}"
+    <g class="skill-node is-${node.state} is-${node.role}${distant.has(node.id) ? " is-distant" : ""}" data-node-id="${escapeHtml(node.id)}"
       data-tier="${escapeHtml(String(node.tier ?? ""))}" data-role="${escapeHtml(node.role)}"
       style="--sport-accent: ${accent};"
       tabindex="0" role="button"
@@ -127,12 +146,15 @@ export const sectorLabels = (nodes) => {
 };
 
 // Inner world group that the viewport pans and zooms via a transform.
-export const atlasScene = (layout) => `
+export const atlasScene = (layout) => {
+  const distant = distantNodeIds(layout.nodes);
+  return `
   <g class="atlas-world">
-    <g class="skill-connectors">${layout.connectors.map(connectorPath).join("")}</g>
+    <g class="skill-connectors">${layout.connectors.map((connector) => connectorPath(connector, distant)).join("")}</g>
     <g class="skill-branch-headers">${sectorLabels(layout.nodes)}</g>
-    <g class="skill-nodes">${layout.nodes.map(nodeGlyph).join("")}</g>
+    <g class="skill-nodes">${layout.nodes.map((node) => nodeGlyph(node, distant)).join("")}</g>
   </g>
 `;
+};
 
 export { SYNTHETIC_ROOT_ID };

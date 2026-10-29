@@ -1,3 +1,4 @@
+import { formatDuration } from "../format-duration.js";
 import { escapeHtml } from "../collected-list.js";
 import { CollectibleSwatch } from "./collectible-swatch.js";
 
@@ -63,11 +64,7 @@ export const createExplorationState = (area) => ({
 
 export const formatRouteDistance = (meters) => `${(meters / 1000).toFixed(meters >= 100_000 ? 0 : 1)} km`;
 
-export const formatRouteDuration = (seconds) => {
-  const totalMinutes = Math.round(seconds / 60);
-  const hours = Math.floor(totalMinutes / 60);
-  return `${hours}:${String(totalMinutes % 60).padStart(2, "0")} h`;
-};
+export const formatRouteDuration = formatDuration;
 
 const plural = (count, singular, pluralForm) => `${count} ${count === 1 ? singular : pluralForm}`;
 

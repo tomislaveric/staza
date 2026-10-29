@@ -11,8 +11,8 @@ export const collectionStateLabel = (state) => {
 export const collectionProgressPercent = ({ collected = 0, total = 0 } = {}) =>
   total === 0 ? "0%" : `${Math.round((collected / total) * 100)}%`;
 
-export const collectionProgressLabel = ({ collected = 0, total = 0 } = {}) =>
-  total === 0 ? "No collectibles yet" : `${collected} / ${total} completed`;
+export const collectionProgressLabel = ({ collected = 0, total = 0 } = {}, noun = "completed") =>
+  total === 0 ? "No collectibles yet" : `${collected} / ${total} ${noun}`;
 
 /**
  * One collectible row. `interactive` rows render a `data-world-marker` button so the World map
@@ -49,7 +49,8 @@ export const CollectionPanel = ({
   metaLeading = "",
   metaTrailing = "",
   footer = "",
-  emptyMessage = "No collectibles yet."
+  emptyMessage = "No collectibles yet.",
+  progressNoun = "completed"
 }) => {
   const percent = collectionProgressPercent(progress);
   return `
@@ -70,7 +71,7 @@ export const CollectionPanel = ({
         <span class="quest-progress-track" aria-hidden="true">
           <i style="width: ${escapeHtml(percent)};" data-collection-progress-bar></i>
         </span>
-        <strong data-collection-progress-label>${escapeHtml(collectionProgressLabel(progress))}</strong>
+        <strong data-collection-progress-label>${escapeHtml(collectionProgressLabel(progress, progressNoun))}</strong>
         <small data-collection-progress-percent>${escapeHtml(percent)}</small>
       </p>
       ${rows.length

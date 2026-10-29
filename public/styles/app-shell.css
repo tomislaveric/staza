@@ -408,169 +408,102 @@ input {
     font-size: 16px;
     font-style: normal;
 }
-.progress-journey {
-    list-style: none;
-    margin: 32px 0 0;
-    padding: 0;
-    position: relative;
+.progress-level-card {
+    background: var(--surface-background);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    margin-top: 24px;
+    padding: 16px 18px;
 }
-.progress-journey::before {
-    background: linear-gradient(
-        180deg,
-        rgb(52 199 111 / 55%) 0%,
-        rgb(52 199 111 / 55%) 31%,
-        rgb(232 184 10 / 70%) 48%,
-        rgb(232 184 10 / 15%) 63%,
-        rgb(255 255 255 / 5%) 100%
-    );
-    border-radius: 999px;
-    bottom: 24px;
-    content: "";
-    left: 19px;
-    position: absolute;
-    top: 16px;
-    width: 2px;
-}
-.progress-level-step,
-.progress-current-level {
-    display: grid;
-    grid-template-columns: 38px minmax(0, 1fr);
-    gap: 24px;
-    position: relative;
-}
-.progress-level-step {
-    min-height: 90px;
-    padding-bottom: 32px;
-}
-.progress-level-marker {
-    align-items: center;
-    background: #181b22;
-    border: 1px solid var(--border-faint);
-    border-radius: 50%;
-    color: var(--text-subtle);
-    display: flex;
-    font-family: var(--font-display);
-    font-size: 14px;
-    font-weight: 700;
-    height: 30px;
-    justify-content: center;
-    margin: 6px 0 0 4px;
-    width: 30px;
-    z-index: 1;
-}
-.is-completed .progress-level-marker {
-    background: var(--accent-success);
-    border-color: var(--accent-success);
-    height: 34px;
-    margin: 2px 0 0 2px;
-    width: 34px;
-}
-.progress-level-marker img {
-    display: block;
-    height: 13px;
-    width: 13px;
-}
-.progress-level-details {
-    min-width: 0;
-    padding-top: 2px;
-}
-.progress-level-details > div:first-child {
-    align-items: center;
-    display: flex;
-    min-height: 20px;
-}
-.progress-level-details strong {
-    color: var(--text-primary);
-    font-family: var(--font-display);
-    font-size: 14px;
-    font-weight: 600;
-}
-.progress-level-details em {
-    color: var(--accent-success);
-    font-family: var(--font-display);
-    font-size: 9px;
-    font-style: normal;
-    letter-spacing: 0.18em;
-    margin-left: 8px;
-}
-.progress-level-details > div:first-child > span {
-    color: var(--text-subtle);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    margin-left: auto;
-}
-.progress-level-details small {
-    color: var(--text-subtle);
-    display: block;
-    font-family: var(--font-display);
-    font-size: 10px;
-    letter-spacing: 0.05em;
-    line-height: 24px;
-}
-.progress-level-complete-bar {
-    background: #181b22;
-    border-radius: 999px;
-    height: 4px;
-    margin-top: 4px;
-    overflow: hidden;
-}
-.progress-level-complete-bar span {
-    background: rgb(52 199 111 / 45%);
-    border-radius: inherit;
-    display: block;
-    height: 100%;
-    width: 100%;
-}
-.progress-current-level {
-    padding-bottom: 40px;
-}
-.progress-current-level > .progress-level-marker {
-    background: var(--accent-yellow);
-    border: 0;
-    box-shadow:
-        0 0 0 6px rgb(232 184 10 / 12%),
-        0 0 20px rgb(232 184 10 / 20%);
-    color: var(--activities-canvas-background);
-    font-size: 16px;
-    height: 38px;
-    margin: 2px 0 0;
-    width: 38px;
-}
-.progress-current-card {
-    background: rgb(232 184 10 / 10%);
-    border: 1px solid rgb(232 184 10 / 30%);
-    border-radius: var(--radius-card);
-    min-height: 184px;
-    padding: 20px;
-}
-.progress-current-title {
-    align-items: end;
-    display: flex;
-    height: 95px;
-}
-.progress-current-title > strong {
-    color: var(--text-primary);
-    font-family: var(--font-display);
-    font-size: 68px;
-    font-weight: 700;
-    line-height: 1;
-}
-.progress-current-title > div {
-    margin: 0 0 2px 12px;
-}
-.progress-current-title span {
+.progress-level-card-head h2 {
     color: var(--accent-yellow);
-    display: block;
+    font-family: var(--font-display);
+    font-size: 20px;
+    margin: 0 0 12px;
+}
+.progress-level-card-caption {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 8px 0 0;
+}
+.progress-trophies,
+.progress-records,
+.progress-milestones {
+    margin-top: 28px;
+}
+.progress-trophies h2,
+.progress-records h2,
+.progress-milestones h2 {
+    color: var(--text-subtle);
     font-family: var(--font-display);
     font-size: 10px;
-    letter-spacing: 0.22em;
+    letter-spacing: .12em;
+    margin: 0 0 10px;
 }
-.progress-current-title h2 {
+.progress-trophy-list,
+.progress-record-list {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.progress-trophy,
+.progress-record {
+    background: var(--surface-background);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
+}
+.progress-trophy small {
+    color: var(--text-subtle);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.progress-trophy.is-badge strong {
+    color: var(--accent-yellow);
+}
+.progress-record dl,
+.progress-milestone-list {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+}
+.progress-record dl div,
+.progress-milestone-list div {
+    display: flex;
+    justify-content: space-between;
+}
+.progress-record dt,
+.progress-milestone-list dt {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+.progress-record dd,
+.progress-milestone-list dd {
     color: var(--text-primary);
-    font-family: var(--font-display);
-    font-size: 18px;
+    font-size: 13px;
     font-weight: 600;
-    line-height: 28px;
+    margin: 0;
+}
+.progress-milestone-list {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+.progress-milestone-list div {
+    background: var(--surface-background);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+.progress-empty {
+    color: var(--text-subtle);
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: .08em;
     margin: 0;
 }
 .progress-current-track {
@@ -587,26 +520,10 @@ input {
     display: block;
     height: 100%;
 }
-.progress-current-card > p {
-    color: var(--text-subtle);
-    display: flex;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    justify-content: space-between;
-    margin: 8px 0 0;
-}
-.progress-current-card > p strong {
-    color: var(--accent-yellow);
-    font-family: var(--font-display);
-    font-weight: 400;
-}
 .is-future {
     min-height: 84px;
     opacity: 0.45;
     padding-bottom: 32px;
-}
-.is-future .progress-level-details {
-    padding-top: 8px;
 }
 .home-achievements {
     margin-top: 24px;
@@ -736,79 +653,72 @@ button.home-tile,
     .home-tiles {
         grid-template-columns: 1fr 1fr;
     }
+    .home-tiles {
+        gap: 10px;
+    }
     .home-summary {
+        gap: 8px;
         grid-column: 1 / -1;
         min-height: 0;
+        padding: 14px 16px;
     }
 }
 .authored-quests {
-    margin-top: 32px;
+    background: linear-gradient(164deg, rgb(232 184 10 / 6%), transparent 60%);
+    border: 1px solid rgb(232 184 10 / 30%);
+    border-radius: var(--radius-card);
+    display: grid;
+    gap: 12px;
+    margin-top: 24px;
+    padding: 20px;
 }
 .authored-quests h2 {
-    color: var(--text-subtle);
-    font-family: var(--font-display);
-    font-size: 10px;
-    font-weight: 400;
-    letter-spacing: 0.24em;
-    line-height: 15px;
-    margin: 0;
-}
-.authored-quests ol {
-    list-style: none;
-    margin: 12px 0 0;
-    padding: 0;
-}
-.authored-quest {
-    align-items: center;
-    border-bottom: 1px solid var(--border-faint);
-    display: flex;
-    gap: 16px;
-    padding: 12px 0;
-}
-.authored-quest div {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-}
-.authored-quest strong {
-    color: var(--text-primary);
+    color: var(--accent-yellow);
     font-family: var(--font-display);
     font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0.24em;
+    margin: 0;
 }
-.authored-quest span,
-.authored-quest-lock,
-.authored-quests-empty,
-.authored-quests-done,
-.authored-quests-locked summary {
-    color: var(--text-subtle);
+.authored-quests .quest-instance-card article {
+    cursor: default;
+    gap: 8px;
+    padding: 14px;
+}
+.authored-quests .quest-card-head strong {
     font-family: var(--font-display);
-    font-size: 12px;
+    font-size: 15px;
 }
-.authored-quest-lock {
-    color: var(--accent-yellow);
-}
-.authored-quest em {
-    color: var(--accent-yellow);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-style: normal;
-    margin-left: auto;
-    white-space: nowrap;
+.authored-quests .quest-card-description {
+    font-size: 13px;
 }
 .authored-quest.is-locked {
     opacity: 0.6;
 }
-.authored-quests-locked summary {
-    cursor: pointer;
-    margin-top: 12px;
+.authored-quest.is-active article {
+    border-color: var(--accent-yellow);
+    box-shadow: 0 0 0 1px rgb(232 184 10 / 35%);
 }
+.authored-quest.is-failed article {
+    border-color: #ff9a9a;
+}
+.authored-quest-lock {
+    color: var(--accent-yellow);
+}
+.authored-quests-empty,
+.authored-quests-done,
+.authored-quests-locked summary,
 .authored-quests-rule,
 .authored-quest-meta,
 .authored-quest-criteria {
     color: var(--text-subtle);
     font-family: var(--font-display);
     font-size: 12px;
-    margin: 4px 0 0;
+    margin: 0;
+}
+.authored-quests-locked summary {
+    cursor: pointer;
+    margin-bottom: 12px;
 }
 .authored-quest-criteria {
     display: grid;
@@ -823,18 +733,10 @@ button.home-tile,
     color: #ff9a9a;
     font-family: var(--font-display);
     font-size: 12px;
-}
-.authored-quest.is-failed {
-    border-left: 3px solid #ff9a9a;
-    padding-left: 12px;
-}
-.authored-quest.is-active {
-    border-left: 3px solid var(--accent-yellow);
-    padding-left: 12px;
+    margin: 0;
 }
 .authored-quest-action,
-.home-next-action-cta,
-.home-retry-exploration {
+.home-next-action-cta {
     background: var(--accent-yellow);
     border: 0;
     border-radius: 8px;
@@ -847,6 +749,10 @@ button.home-tile,
     margin-left: auto;
     padding: 8px 14px;
     white-space: nowrap;
+}
+.authored-quests .authored-quest-action {
+    justify-self: start;
+    margin-left: 0;
 }
 .authored-quest-action:disabled {
     opacity: 0.5;
@@ -1288,28 +1194,44 @@ button.home-tile,
 .activity-detail-summary h1 {
     color: var(--text-primary);
     font-family: var(--font-display);
-    font-size: 60px;
+    font-size: 32px;
     font-weight: 700;
     letter-spacing: 0;
-    line-height: 1;
+    line-height: 1.1;
     margin: 8px 0 0;
+    overflow-wrap: anywhere;
 }
-.activity-detail-duration {
+.activity-detail-sport-icon {
+    margin-right: 10px;
+}
+.activity-detail-stats {
+    align-items: baseline;
     color: var(--text-muted);
+    display: flex;
+    flex-wrap: wrap;
     font-family: var(--font-mono);
-    font-size: 16px;
-    margin: 12px 0 0;
-}
-.activity-detail-sport {
-    align-items: center;
-    color: var(--text-muted);
-    display: inline-flex;
-    font-family: var(--font-display);
     font-size: 12px;
-    gap: 8px;
-    margin-top: 12px;
+    gap: 4px 12px;
+    margin: 16px 0 0;
 }
-.activity-detail-sport select {
+.activity-detail-stats strong {
+    color: var(--text-primary);
+    font-size: 16px;
+}
+.activity-detail-stats.is-overlay {
+    backdrop-filter: blur(12px);
+    background: rgb(11 12 15 / 82%);
+    border: 1px solid var(--border-faint);
+    border-radius: 10px;
+    left: 14px;
+    margin: 0;
+    padding: 8px 12px;
+    pointer-events: none;
+    position: absolute;
+    top: 14px;
+    z-index: 3;
+}
+.add-activity-sport select {
     background: #181b22;
     border: 1px solid var(--border-faint);
     border-radius: 8px;
@@ -1317,12 +1239,6 @@ button.home-tile,
     font: inherit;
     min-height: 32px;
     padding: 4px 8px;
-}
-.activity-detail-sport-error {
-    color: #ff9a9a;
-    font-family: var(--font-display);
-    font-size: 12px;
-    margin: 8px 0 0;
 }
 .activity-progress-card {
     background: linear-gradient(164deg, rgb(232 184 10 / 4%), transparent 60%);
@@ -2293,9 +2209,6 @@ button.home-tile,
     .home-progress {
         gap: 20px;
     }
-    .activity-detail-summary h1 {
-        font-size: 48px;
-    }
     .activity-progress-earned {
         font-size: 64px;
     }
@@ -2359,12 +2272,23 @@ button.home-tile,
         font-family: var(--font-mono);
         font-size: 10px;
         font-weight: 700;
-        gap: 8px;
-        height: 42px;
+        gap: 0;
+        height: 44px;
+        justify-content: center;
         letter-spacing: .07em;
         margin: 0 14px 8px auto;
-        padding: 0 16px;
+        padding: 0;
         pointer-events: auto;
+        width: 44px;
+    }
+
+    .mobile-add-activity span {
+        clip: rect(0 0 0 0);
+        height: 1px;
+        overflow: hidden;
+        position: absolute;
+        white-space: nowrap;
+        width: 1px;
     }
 
     .mobile-add-activity.is-current {
@@ -2376,7 +2300,7 @@ button.home-tile,
         background: rgb(17 19 24 / 96%);
         border-top: 1px solid var(--border-subtle);
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         min-height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
         padding: 5px 4px env(safe-area-inset-bottom);
         pointer-events: auto;
@@ -2392,7 +2316,7 @@ button.home-tile,
         display: flex;
         flex-direction: column;
         font-family: var(--font-display);
-        font-size: 9px;
+        font-size: 8px;
         gap: 4px;
         justify-content: center;
         min-height: 54px;
@@ -2472,25 +2396,6 @@ button.home-tile,
         font-size: 38px;
     }
 
-    .progress-level-step,
-    .progress-current-level {
-        gap: 14px;
-        grid-template-columns: 38px minmax(0, 1fr);
-    }
-
-    .progress-current-card {
-        padding: 16px;
-    }
-
-    .progress-current-title {
-        height: auto;
-        min-height: 84px;
-    }
-
-    .progress-current-title > strong {
-        font-size: 56px;
-    }
-
     .recent-activity {
         align-items: flex-start;
         flex-wrap: wrap;
@@ -2534,11 +2439,6 @@ button.home-tile,
 
     .activity-detail-summary {
         padding-top: 20px;
-    }
-
-    .activity-detail-summary h1 {
-        font-size: 38px;
-        overflow-wrap: anywhere;
     }
 
     .activity-progress-card {
@@ -2706,6 +2606,20 @@ h3 {
     font-size: 11px;
     line-height: 16px;
     margin: 0 0 12px;
+}
+.add-activity-sport {
+    align-items: center;
+    color: var(--text-muted);
+    display: flex;
+    font-family: var(--font-display);
+    font-size: 12px;
+    gap: 12px;
+}
+.upload-primary-button:disabled {
+    cursor: not-allowed;
+    filter: grayscale(0.6);
+    opacity: 0.45;
+    box-shadow: none;
 }
 .upload-dropzone {
     border: 1px dashed rgb(115 120 128 / 55%);
@@ -3234,27 +3148,4 @@ h3 {
     }
 }
 
-.home-active-quests { display: grid; gap: 12px; }
 .home-quest-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); list-style: none; margin: 0; padding: 0; }
-.home-find-quests { background: transparent; border: 0; color: var(--accent-yellow); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
-.progress-skill-point-note {
-    color: var(--text-subtle);
-    font-size: 13px;
-    line-height: 1.5;
-    margin: 0 0 20px;
-}
-.progress-skill-point-award {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--border-faint);
-    border-radius: 999px;
-    color: var(--text-primary);
-    display: inline-block;
-    font-family: var(--font-display);
-    font-size: 10px;
-    letter-spacing: 0.05em;
-    margin-top: 4px;
-    padding: 2px 8px;
-}
-.progress-current-card .progress-skill-point-award {
-    margin: 0 0 8px;
-}

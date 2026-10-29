@@ -1,5 +1,6 @@
 import { SKILL_TREE_NODES } from "./catalog.js";
-import { earnedSkillPointsForLevel } from "./catalog.js";
+import { earnedSkillPointsForLevel, nextSkillPointLevel } from "./catalog.js";
+import { getTotalXpRequiredForLevel } from "../progression.js";
 import type {
   SkillTreeNode,
   SkillTreeNodeState,
@@ -50,6 +51,17 @@ export const statMetrics = (stats: SkillTreeStats): Record<string, number> => ({
 
 export const earnedPoints = (stats: SkillTreeStats): number =>
   earnedSkillPointsForLevel(stats.level);
+
+const nextSkillPointProgress = (stats: SkillTreeStats): SkillTreeView["nextSkillPoint"] => {
+  const level = nextSkillPointLevel(stats.level);
+  const from = getTotalXpRequiredForLevel(stats.level);
+  const to = getTotalXpRequiredForLevel(level);
+  return {
+    level,
+    xpRemaining: Math.max(0, to - stats.totalXp),
+    progress: Math.max(0, Math.min(1, (stats.totalXp - from) / (to - from)))
+  };
+};
 
 export const spentPoints = (
   unlockedNodeIds: Iterable<string>,
@@ -150,6 +162,7 @@ export const buildSkillTreeView = (
     earnedPoints: earned,
     spentPoints: spent,
     balance: availableBalance,
+    nextSkillPoint: nextSkillPointProgress(stats),
     stats,
     nodes: nodeViews
   };

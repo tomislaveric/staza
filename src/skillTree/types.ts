@@ -133,6 +133,8 @@ export interface SkillTreeView {
   earnedPoints: number;
   spentPoints: number;
   balance: number;
+  /** The level that awards the next Skill Point, and the XP still needed to reach it. */
+  nextSkillPoint: { level: number; xpRemaining: number; progress: number };
   stats: SkillTreeStats;
   nodes: SkillTreeNodeView[];
 }

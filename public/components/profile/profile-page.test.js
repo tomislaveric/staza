@@ -13,7 +13,8 @@ describe("Profile views", () => {
       collectibles: { discoveredCount: 4, totalCollectibles: 20 }
     }, session);
     expect(view).toContain("Rider");
-    expect(view).toContain("4 of 20");
+    expect(view).not.toContain("YOUR RECORD");
+    expect(view).not.toContain("Total XP earned");
     expect(view).not.toContain("achievement");
     expect(view).not.toContain("@alexrides");
   });

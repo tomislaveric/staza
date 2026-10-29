@@ -256,13 +256,12 @@ describePersistence("ActivityRepository", () => {
       totalCollectibles: 3,
       totalFlowlines: 0
     });
-    expect(dashboard.levels).toEqual([
-      { level: 1, totalXpRequired: 0, skillPointsAwarded: 1 },
-      { level: 2, totalXpRequired: 100, skillPointsAwarded: 1 },
-      { level: 3, totalXpRequired: 300, skillPointsAwarded: 1 },
-      { level: 4, totalXpRequired: 600, skillPointsAwarded: 1 },
-      { level: 5, totalXpRequired: 1_000, skillPointsAwarded: 1 }
-    ]);
+    expect(dashboard).not.toHaveProperty("levels");
+    expect(dashboard.milestones).toEqual({ places: 0, peaks: 0, mountainPasses: 0, flowlines: 0 });
+    expect(dashboard.sportRecords.reduce((sum, record) => sum + record.distanceMeters, 0)).toBe(49_380);
+    for (const record of dashboard.sportRecords) {
+      expect(record.longestDistanceMeters).toBeLessThanOrEqual(record.distanceMeters);
+    }
     expect(dashboard.recentActivities.map((item) => item.id)).toEqual([
       "e".repeat(48), "d".repeat(48), "c".repeat(48), "b".repeat(48)
     ]);

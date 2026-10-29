@@ -222,40 +222,48 @@ Out of scope:
 
 ### P2: polish and consistency
 
-- [ ] **P2-1 The Skill Atlas Skill Points badge is stale after an unlock.** It keeps
+- [x] **P2-1 The Skill Atlas Skill Points badge is stale after an unlock.** It keeps
   showing the old spent/available values until reload.
-- [ ] **P2-2 Skill Atlas copy.**
+  _Resolved: the header badge re-renders after every successful unlock._
+- [x] **P2-2 Skill Atlas copy.**
+  _Resolved: costs are pluralized, prerequisite-only nodes read "Requires: …", and the hint names the node (EN + DE)._
   - "Cost: 1 Skill Points" (pluralization).
   - "Triple Discipline" says "No progress requirements" although its description
     requires progress in all three sports.
   - "Unlock the connected node first" doesn't name the node.
-- [ ] **P2-3 Skill Atlas readability.**
+- [x] **P2-3 Skill Atlas readability.**
+  _Resolved: zoom-scaled labels, dimmed distant tiers, and a mobile bottom-sheet detail panel._
   - All 79 nodes are visible from day one.
   - Labels are unreadable at the default zoom.
   - On mobile the detail panel is below the fold.
   - Consider progressive disclosure: the reachable frontier is emphasized and
     distant tiers are dimmed.
-- [ ] **P2-4 World polish.**
+- [x] **P2-4 World polish.**
+  _Resolved: "Discovered" uses the visible area, cards show distance, route-to and related quests, categories are capitalized and localized._
   - "Discovered 1 / 10,740" uses a nationwide denominator; use a meaningful scope
     such as the visible area or region.
   - Collectible cards have no actions (distance, route-to, related quest or node).
   - Categories render lowercase ("castle").
-- [ ] **P2-5 Onboarding and import polish.**
+- [x] **P2-5 Onboarding and import polish.**
+  _Resolved: "Later" on the passkey step, Process Activity disabled until file and sport are set, GPX accepted with a server-validated sport._
   - The passkey step after registration has no "later" option.
   - "Process Activity" is enabled with no file selected.
   - Only FIT is accepted; decide on GPX support.
-- [ ] **P2-6 Activity Detail polish.**
+- [x] **P2-6 Activity Detail polish.**
+  _Resolved: no "+0" placeholder, replay above the fold, clear collectibles panel title, one shared duration formatter._
   - "XP EARNED +0" is shown until the replay animates.
   - The replay map is below the fold.
   - The collectibles panel is titled "Activity · 1/1 completed".
   - Duration rounding differs between screens (5h 19m vs 5h 20m).
-- [ ] **P2-7 Progress and Profile roles.**
+- [x] **P2-7 Progress and Profile roles.**
+  _Resolved: Progress is a trophy room (badges/titles, per-sport records, discoveries, completed quests); Profile drops "Your record"._
   - Progress repeats "Level 2 / LEVEL 2", shows only a ±3-level window, and has no
     achievements.
   - Profile's "Explorer record" duplicates Home and Progress.
   - Target split: Home = next action, Progress = trophy room (quests, badges,
     records, per-sport stats), Profile = account.
-- [ ] **P2-8 Mobile layout (390 px).**
+- [x] **P2-8 Mobile layout (390 px).**
+  _Resolved: six-column single-row nav, compact Add Activity button, tighter Home stats grid._
   - The bottom nav wraps Profile onto a second row.
   - The Add Activity floating button overlaps content.
   - Home's stats grid crowds the "Recent activity" label.

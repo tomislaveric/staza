@@ -24,7 +24,7 @@ export const formatActivityDate = (startedAt) => {
 };
 
 export const progressViewModel = (dashboard) => {
-  const { progress, lifetime, levels, recentActivities } = dashboard;
+  const { progress, lifetime, recentActivities } = dashboard;
   const maximumActivityXp = Math.max(0, ...recentActivities.map((activity) => activity.xpEarned));
   return {
     ...dashboard,
@@ -33,12 +33,9 @@ export const progressViewModel = (dashboard) => {
       percentage: Math.max(0, Math.min(100, progress.progressToNextLevel * 100)),
       remainingXp: Math.max(0, progress.nextLevelXp - progress.currentLevelXp)
     },
-    levels: levels.map((item) => ({
-      ...item,
-      name: levelName(item.level),
-      state: item.level < progress.level ? "completed" : item.level === progress.level ? "current" : "future"
-    })),
     lifetime: { ...lifetime },
+    sportRecords: dashboard.sportRecords ?? [],
+    milestones: dashboard.milestones ?? { places: 0, peaks: 0, mountainPasses: 0, flowlines: lifetime.totalFlowlines ?? 0 },
     recentActivities: recentActivities.map((activity) => ({
       ...activity,
       percentage: maximumActivityXp ? Math.max(0, Math.min(100, activity.xpEarned / maximumActivityXp * 100)) : 0
@@ -58,55 +55,67 @@ export const ProgressSummary = ({ progress, lifetime }) => `
   </p>
 `;
 
-const SkillPointAward = (level) => level.skillPointsAwarded > 0
-  ? `<span class="progress-skill-point-award">+${formatNumber(level.skillPointsAwarded)} ${level.skillPointsAwarded === 1 ? "Skill Point" : "Skill Points"}</span>`
-  : "";
-
-export const LevelStep = (level) => {
-  if (level.state === "completed") {
-    return `
-      <li class="progress-level-step is-completed">
-        <span class="progress-level-marker"><img src="/assets/progress-complete-check.svg" width="13" height="13" alt=""></span>
-        <div class="progress-level-details">
-          <div><strong>${escapeHtml(level.name)}</strong><em>COMPLETE</em><span>${formatNumber(level.totalXpRequired)} XP</span></div>
-          ${SkillPointAward(level)}
-          <div class="progress-level-complete-bar" aria-hidden="true"><span></span></div>
-        </div>
-      </li>
-    `;
-  }
-  return `
-    <li class="progress-level-step is-future">
-      <span class="progress-level-marker">${formatNumber(level.level)}</span>
-      <div class="progress-level-details">
-        <div><strong>${escapeHtml(level.name)}</strong><span>${formatNumber(level.totalXpRequired)} XP needed</span></div>
-        ${SkillPointAward(level)}
-      </div>
-    </li>
-  `;
-};
-
-export const CurrentLevel = (level, progress) => `
-  <li class="progress-current-level">
-    <span class="progress-level-marker">${formatNumber(level.level)}</span>
-    <section class="progress-current-card" aria-label="Current level ${formatNumber(level.level)}">
-      <div class="progress-current-title">
-        <strong>${formatNumber(level.level)}</strong>
-        <div><span>CURRENT</span><h2>${escapeHtml(level.name)}</h2></div>
-      </div>
-      ${SkillPointAward(level)}
-      <div class="progress-current-track" role="progressbar" aria-valuemin="0" aria-valuemax="${progress.nextLevelXp}" aria-valuenow="${progress.currentLevelXp}">
-        <span style="width: ${progress.percentage}%"></span>
-      </div>
-      <p><span>${formatNumber(progress.currentLevelXp)} XP</span><strong>${formatNumber(progress.remainingXp)} to Level ${formatNumber(progress.level + 1)}</strong></p>
-    </section>
-  </li>
+/** The player's level once, with progress to the next one. */
+export const LevelCard = (progress) => `
+  <section class="progress-level-card" aria-label="Level progress">
+    <div class="progress-level-card-head">
+      <h2>${escapeHtml(levelName(progress.level))}</h2>
+    </div>
+    <div class="progress-current-track" role="progressbar" aria-valuemin="0" aria-valuemax="${progress.nextLevelXp}" aria-valuenow="${progress.currentLevelXp}">
+      <span style="width: ${progress.percentage}%"></span>
+    </div>
+    <p class="progress-level-card-caption">${formatNumber(progress.currentLevelXp)} XP · ${formatNumber(progress.remainingXp)} to Level ${formatNumber(progress.level + 1)}</p>
+  </section>
 `;
 
-export const ProgressJourney = ({ levels, progress }) => `
-  <ol class="progress-journey" aria-label="Level journey">
-    ${levels.map((level) => level.state === "current" ? CurrentLevel(level, progress) : LevelStep(level)).join("")}
-  </ol>
+const sportLabels = { cycling: "Cycling", running: "Running", hiking: "Hiking" };
+
+const kmLabel = (meters) => `${formatNumber(meters / 1000, 1)} km`;
+
+/** Badges and titles earned from unlocked Skill Atlas nodes. */
+export const Trophies = (capabilities) => {
+  const badges = capabilities?.badges ?? [];
+  const titles = capabilities?.titles ?? [];
+  return `
+  <section class="progress-trophies" aria-labelledby="progress-trophies-title">
+    <h2 id="progress-trophies-title">BADGES &amp; TITLES</h2>
+    ${badges.length || titles.length ? `<ul class="progress-trophy-list">
+      ${badges.map((badge) => `<li class="progress-trophy is-badge"><small>Badge</small><strong>${escapeHtml(badge.label)}</strong></li>`).join("")}
+      ${titles.map((title) => `<li class="progress-trophy is-title"><small>Title</small><strong>${escapeHtml(title.label)}</strong></li>`).join("")}
+    </ul>` : '<p class="progress-empty">NO BADGES OR TITLES YET</p>'}
+  </section>
+`;
+};
+
+/** Per-sport lifetime distance and personal bests. */
+export const PersonalRecords = (sportRecords = []) => `
+  <section class="progress-records" aria-labelledby="progress-records-title">
+    <h2 id="progress-records-title">PERSONAL RECORDS</h2>
+    ${sportRecords.length ? `<ul class="progress-record-list">
+      ${sportRecords.map((record) => `
+        <li class="progress-record" data-sport-record="${escapeHtml(record.type)}">
+          <strong>${escapeHtml(sportLabels[record.type] ?? record.type)}</strong>
+          <dl>
+            <div><dt>Total distance</dt><dd>${escapeHtml(kmLabel(record.distanceMeters))}</dd></div>
+            <div><dt>Longest</dt><dd>${escapeHtml(kmLabel(record.longestDistanceMeters))}</dd></div>
+            ${Number.isFinite(record.highestElevationGainM)
+    ? `<div><dt>Highest elevation gain</dt><dd>${formatNumber(record.highestElevationGainM)} m</dd></div>` : ""}
+          </dl>
+        </li>`).join("")}
+    </ul>` : '<p class="progress-empty">IMPORT AN ACTIVITY TO SET YOUR FIRST RECORD</p>'}
+  </section>
+`;
+
+export const DiscoveryMilestones = (milestones) => `
+  <section class="progress-milestones" aria-labelledby="progress-milestones-title">
+    <h2 id="progress-milestones-title">DISCOVERIES</h2>
+    <dl class="progress-milestone-list">
+      <div><dt>Flowlines</dt><dd>${formatNumber(milestones.flowlines)}</dd></div>
+      <div><dt>Places</dt><dd>${formatNumber(milestones.places)}</dd></div>
+      <div><dt>Peaks</dt><dd>${formatNumber(milestones.peaks)}</dd></div>
+      <div><dt>Mountain passes</dt><dd>${formatNumber(milestones.mountainPasses)}</dd></div>
+    </dl>
+  </section>
 `;
 
 export const activityFacts = (activity) => [
@@ -165,15 +174,17 @@ const questStatus = (quest) => {
 };
 
 const AuthoredQuest = (quest) => `
-  <li class="authored-quest is-${quest.state}" data-authored-quest="${escapeHtml(quest.id)}">
-    <div>
-      <strong data-user-content>${escapeHtml(quest.title)}</strong>
-      <span data-user-content>${escapeHtml(quest.description)}</span>
-      <small class="authored-quest-meta"><span>${escapeHtml(difficultyLabel(quest.difficulty))}</span> · +${formatNumber(quest.xp)} XP${questStatus(quest) ? ` · <span>${questStatus(quest)}</span>` : ""}</small>
-      ${quest.state === "failed" ? criteriaList(quest.attempt?.criteria) : ""}
-      ${quest.state === "locked" ? `<small class="authored-quest-lock">${escapeHtml(questRequirement(quest))}</small>` : ""}
-    </div>
-    ${questAction(quest)}
+  <li class="quest-instance-card authored-quest is-${quest.state}" data-authored-quest="${escapeHtml(quest.id)}">
+    <article>
+      <span class="quest-card-head"><strong data-user-content>${escapeHtml(quest.title)}</strong></span>
+      <span class="quest-card-description" data-user-content>${escapeHtml(quest.description)}</span>
+      <span class="quest-card-progress">
+        <small class="authored-quest-meta"><span>${escapeHtml(difficultyLabel(quest.difficulty))}</span> · +${formatNumber(quest.xp)} XP${questStatus(quest) ? ` · <span>${questStatus(quest)}</span>` : ""}</small>
+        ${quest.state === "failed" ? criteriaList(quest.attempt?.criteria) : ""}
+        ${quest.state === "locked" ? `<small class="authored-quest-lock">${escapeHtml(questRequirement(quest))}</small>` : ""}
+      </span>
+      ${questAction(quest)}
+    </article>
   </li>
 `;
 
@@ -187,10 +198,10 @@ export const AuthoredQuests = (quests = []) => {
     <p class="authored-quests-rule">Start a quest, then your next activity decides it. Quests pay bonus XP by difficulty.</p>
     <p class="authored-quests-error" role="alert" hidden></p>
     ${open.length
-    ? `<ol>${open.map(AuthoredQuest).join("")}</ol>`
+    ? `<ol class="home-quest-list">${open.map(AuthoredQuest).join("")}</ol>`
     : '<p class="authored-quests-empty">Unlock quest nodes in the Skill Atlas to start quest chains.</p>'}
     ${completed.length ? `<p class="authored-quests-done">${formatNumber(completed.length)} completed</p>` : ""}
-    ${locked.length ? `<details class="authored-quests-locked"><summary>Locked quests (${formatNumber(locked.length)})</summary><ol>${locked.map(AuthoredQuest).join("")}</ol></details>` : ""}
+    ${locked.length ? `<details class="authored-quests-locked"><summary>Locked quests (${formatNumber(locked.length)})</summary><ol class="home-quest-list">${locked.map(AuthoredQuest).join("")}</ol></details>` : ""}
   </section>
 `;
 };
@@ -215,13 +226,15 @@ export const ProgressPage = (model) => `
   <section class="progress-page" aria-labelledby="progress-title">
     <header class="progress-header">
       <h1 id="progress-title">Progress</h1>
-      <p>Your exploration journey</p>
+      <p>What you have accomplished</p>
     </header>
-    ${ProgressSummary(model)}
-    <p class="progress-skill-point-note">Reach certain levels to earn Skill Points you can spend in the Skill Atlas.</p>
+    ${LevelCard(model.progress)}
     ${AuthoredQuests(model.authoredQuests)}
+    ${ProgressSummary(model)}
+    ${Trophies(model.capabilities)}
+    ${PersonalRecords(model.sportRecords)}
+    ${DiscoveryMilestones(model.milestones)}
     ${QuestHistory(model.questHistory)}
-    ${ProgressJourney(model)}
     ${RecentActivities(model.recentActivities)}
   </section>
 `;
@@ -235,12 +248,13 @@ const responseJson = async (response) => {
 export const mountProgressPage = async (mountPoint) => {
   mountPoint.innerHTML = '<section class="progress-page"><p class="progress-loading" role="status">Loading Progress...</p></section>';
   try {
-    const [dashboard, authored] = await Promise.all([
+    const [dashboard, authored, capabilities] = await Promise.all([
       fetch("/api/player/progress-dashboard").then(responseJson),
-      fetch("/api/authored-quests").then(responseJson).catch(() => ({ quests: [] }))
+      fetch("/api/authored-quests").then(responseJson).catch(() => ({ quests: [] })),
+      fetch("/api/player/capabilities").then(responseJson).catch(() => ({}))
     ]);
     const render = (quests) => {
-      mountPoint.innerHTML = ProgressPage({ ...progressViewModel(dashboard), authoredQuests: quests });
+      mountPoint.innerHTML = ProgressPage({ ...progressViewModel(dashboard), capabilities, authoredQuests: quests });
       mountPoint.querySelectorAll("[data-start-quest]").forEach((button) => {
         button.addEventListener("click", async () => {
           button.disabled = true;

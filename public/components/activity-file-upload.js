@@ -7,7 +7,7 @@ export const ActivityFileUpload = (file) => file
     id: "activity-file",
     name: "fit",
     label: "Drop file here or click",
-    detail: ".fit files supported",
-    accept: ".fit,application/octet-stream",
+    detail: ".fit and .gpx files supported",
+    accept: ".fit,.gpx,application/octet-stream,application/gpx+xml,text/xml",
     required: true
   });

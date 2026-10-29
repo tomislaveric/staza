@@ -151,17 +151,20 @@ export const WorldStats = (stats, truncated) => `
   </p>
 `;
 
-export const WorldPage = ({ lifetime, selectedFilters, lockedFilters = [] }) => `
+/** "Discovered X / Y" for the visible map area; placeholders until the first viewport loads. */
+export const WorldDiscovered = (stats) => `
+  <span>Discovered in view</span>
+  <strong>${stats ? formatNumber(stats.discoveredCount) : "\u2013"} <i>/ ${stats ? formatNumber(stats.totalCollectibles) : "\u2013"}</i></strong>
+`;
+
+export const WorldPage = ({ stats, selectedFilters, lockedFilters = [] }) => `
   <section class="world-page" aria-labelledby="world-title">
     <header class="world-header">
       <div>
         <h1 id="world-title">World</h1>
         <p>Discover what is worth exploring</p>
       </div>
-      <div class="world-discovered">
-        <span>Discovered</span>
-        <strong>${formatNumber(lifetime.discoveredCount)} <i>/ ${formatNumber(lifetime.totalCollectibles)}</i></strong>
-      </div>
+      <div class="world-discovered" data-world-discovered>${WorldDiscovered(stats)}</div>
     </header>
     ${WorldFilterControls(selectedFilters, [], [], [], lockedFilters)}
     <div class="world-map-shell">
@@ -207,6 +210,18 @@ const loadPlannedRoute = async (instanceId) => {
   return responseJson(response);
 };
 
+const EARTH_RADIUS_M = 6_371_000;
+const toRadians = (degrees) => degrees * Math.PI / 180;
+
+/** Great-circle distance in metres between two {latitude, longitude} points. */
+export const distanceBetween = (from, to) => {
+  const dLat = toRadians(to.latitude - from.latitude);
+  const dLon = toRadians(to.longitude - from.longitude);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRadians(from.latitude)) * Math.cos(toRadians(to.latitude)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(a)));
+};
+
 const emptyStats = { totalCollectibles: 0, discoveredCount: 0, remainingCount: 0 };
 
 const expiredCodes = new Set(["exploration_expired", "proposal_expired"]);
@@ -220,18 +235,15 @@ export const mountWorldPage = async (mountPoint) => {
   mountPoint.innerHTML = '<section class="world-page"><p class="world-loading" role="status">Loading World...</p></section>';
 
   let basemap;
-  let lifetime = emptyStats;
   let questInstances = [];
   let grantedFilters = [];
   let lockedFilters = [];
   try {
-    const [loadedBasemap, globalSnapshot, activeQuests] = await Promise.all([
+    const [loadedBasemap, activeQuests] = await Promise.all([
       fetch("/api/world/basemap").then(responseJson),
-      fetch("/api/world").then(responseJson),
       fetch("/api/quest-instances").then(responseJson)
     ]);
     basemap = loadedBasemap;
-    lifetime = globalSnapshot.stats;
     questInstances = activeQuests.instances;
     // Filters are an enhancement; the World stays usable if capabilities cannot load.
     const capabilities = await fetch("/api/player/capabilities").then(responseJson).catch(() => ({}));
@@ -257,15 +269,17 @@ export const mountWorldPage = async (mountPoint) => {
   /** Collectible cache: the wide area last loaded, so panning inside it never reloads icons. */
   let loadedArea;
   let worldMap;
+  let homePosition;
   /** Active "Explore this Area" session; undefined in the NORMAL map state. */
   let exploration;
   let explorationToken = 0;
   const plannedRoutes = new Map();
 
-  mountPoint.innerHTML = WorldPage({ lifetime, selectedFilters, lockedFilters });
+  mountPoint.innerHTML = WorldPage({ stats: undefined, selectedFilters, lockedFilters });
   const mapContainer = mountPoint.querySelector("[data-world-map]");
   const statusHost = mountPoint.querySelector("[data-world-status]");
   const statsHost = mountPoint.querySelector("[data-world-stats]");
+  const discoveredHost = mountPoint.querySelector("[data-world-discovered]");
   const questHost = mountPoint.querySelector("[data-world-quests]");
   const detailHost = mountPoint.querySelector("[data-world-detail]");
   const collectibleListHost = mountPoint.querySelector("[data-world-collectible-list]");
@@ -367,6 +381,11 @@ export const mountWorldPage = async (mountPoint) => {
     worldMap?.setDetailPanelOpen(false);
   };
 
+  const relatedInstances = (collectibleId) => questInstances
+    .filter((instance) => instance.objectives.some(({ objective }) =>
+      objective.type !== "flowline_rule" && objective.targets.some((target) => target.id === collectibleId)))
+    .map((instance) => ({ id: `instance:${instance.id}`, title: instance.title }));
+
   const renderDetail = () => {
     if (exploreButton) exploreButton.hidden = Boolean(exploration);
     if (exploration) {
@@ -395,8 +414,15 @@ export const mountWorldPage = async (mountPoint) => {
         hideDetail();
         return;
       }
-      detailHost.innerHTML = CollectibleDetail(collectible, []);
+      detailHost.innerHTML = CollectibleDetail(collectible, relatedInstances(collectible.id), {
+        distanceMeters: homePosition ? distanceBetween(homePosition, collectible) : undefined,
+        origin: homePosition,
+        locale: getAppLocale()
+      });
     }
+    detailHost.querySelectorAll("[data-collectible-quest]").forEach((button) => {
+      button.addEventListener("click", () => void selectQuest(button.dataset.collectibleQuest));
+    });
     detailHost.querySelector("[data-world-close]")?.addEventListener("click", clearSelection);
     detailHost.querySelectorAll("[data-world-marker]").forEach((button) => {
       button.addEventListener("click", () => selectCollectible(button.dataset.worldMarker));
@@ -405,6 +431,7 @@ export const mountWorldPage = async (mountPoint) => {
 
   const renderSidePanels = () => {
     statsHost.innerHTML = WorldStats(stats, truncated);
+    discoveredHost.innerHTML = WorldDiscovered(stats);
     questHost.innerHTML = QuestList(questInstances, pendingQuestId, selectedQuestKey, plannedRoutes);
     questHost.querySelectorAll("[data-quest-retry]").forEach((button) => {
       button.addEventListener("click", () => void retryQuest(button.dataset.questRetry));
@@ -970,7 +997,6 @@ export const mountWorldPage = async (mountPoint) => {
 
   renderSidePanels();
 
-  let homePosition;
   try {
     homePosition = readHomeLocation();
   } catch (error) {
@@ -1008,6 +1034,7 @@ export const mountWorldPage = async (mountPoint) => {
         } catch (error) {
           setStatus(`Unable to save home location: ${error.message}`);
         }
+        homePosition = location;
         worldMap.setHomePosition(location);
         worldMap.flyTo(location.longitude, location.latitude, homeScaleZoom(location.latitude));
       },
