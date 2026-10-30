@@ -49,6 +49,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Localize public app UI and routes](features/localize-public-app-ui-and-routes/README.md)
   — localize the app interface in English and German and use locale-aware URLs
   for app screens.
+- [Make UI Stupid](features/make-ui-stupid/README.md) — move feasible derived
+  product data and rules behind backend APIs so native clients can reuse them.
 - [Milestone 11.1 — Application shell (historical)](features/milestone-11-1-trailhunt-application-shell/README.md)
   — historical implementation of desktop tokens, shell, sidebar, and main content.
 - [Milestone 11.10 — Progress desktop (historical)](features/milestone-11-10-trailhunt-progress-desktop/README.md)
