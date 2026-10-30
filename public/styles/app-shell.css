@@ -717,6 +717,15 @@ button.home-tile,
     font-size: 12px;
     margin: 0;
 }
+.authored-quest-state {
+    border: 1px solid rgb(232 184 10 / 45%);
+    border-radius: 999px;
+    color: var(--accent-yellow);
+    display: inline-flex;
+    font-size: 10px;
+    line-height: 1;
+    padding: 3px 7px;
+}
 .authored-quests-locked summary {
     cursor: pointer;
     margin-bottom: 12px;

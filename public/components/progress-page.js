@@ -159,6 +159,7 @@ const questAction = (quest) => {
 };
 
 const questStatus = (quest) => {
+  if (quest.state === "available") return "Available";
   if (quest.state === "completed") return "Done";
   if (quest.state === "active") return "Active · your next activity decides";
   if (quest.state === "failed") return "Not completed · retry any time";
@@ -171,7 +172,7 @@ const AuthoredQuest = (quest) => `
       <span class="quest-card-head"><strong data-user-content>${escapeHtml(quest.title)}</strong></span>
       <span class="quest-card-description" data-user-content>${escapeHtml(quest.description)}</span>
       <span class="quest-card-progress">
-        <small class="authored-quest-meta"><span>${escapeHtml(difficultyLabel(quest.difficulty))}</span> · +${formatNumber(quest.xp)} XP${questStatus(quest) ? ` · <span>${questStatus(quest)}</span>` : ""}</small>
+        <small class="authored-quest-meta"><span>${escapeHtml(difficultyLabel(quest.difficulty))}</span> · +${formatNumber(quest.xp)} XP${questStatus(quest) ? ` · ${quest.state === "available" ? `<span class="authored-quest-state">${questStatus(quest)}</span>` : `<span>${questStatus(quest)}</span>`}` : ""}</small>
         ${quest.state === "failed" ? criteriaList(quest.attempt?.criteria) : ""}
         ${quest.state === "locked" ? `<small class="authored-quest-lock">${escapeHtml(questRequirement(quest))}</small>` : ""}
       </span>
@@ -231,7 +232,8 @@ export const ProgressPage = (model) => `
   </section>
 `;
 
-const responseJson = async (response) => {
+export const responseJson = async (response) => {
+  if (response.status === 204) return undefined;
   const body = await response.json();
   if (!response.ok) throw new Error(body.error ?? "Unable to load Progress data.");
   return body;

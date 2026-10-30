@@ -6,7 +6,8 @@ import {
   QuestHistory,
   RecentActivities,
   levelName,
-  progressViewModel
+  progressViewModel,
+  responseJson
 } from "./progress-page.js";
 
 const dashboard = {
@@ -128,10 +129,16 @@ describe("Authored quests on Progress", () => {
       quest({ id: "q:6", state: "failed", attempt: { status: "failed", attemptCount: 1, startedAt: "x", criteria: [{ label: "Distance", current: 12, required: 30, met: false, unit: "km" }] } })
     ]);
     expect(html).toContain('data-start-quest="q:1">Start<');
+    expect(html).toContain('class="authored-quest-state">Available</span>');
     expect(html).toContain("Active · your next activity decides");
     expect(html).toContain('data-start-quest="q:6">Retry<');
     expect(html).toContain("12 / 30 km");
     expect(html).toContain("Easy</span> · +60 XP");
+  });
+
+  it("accepts no-content responses when starting a quest", async () => {
+    const response = { status: 204, ok: true, json: () => { throw new Error("No response body"); } };
+    await expect(responseJson(response)).resolves.toBeUndefined();
   });
 
   it("lists completed quest history and unique Flowline counts", () => {
