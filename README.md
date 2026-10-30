@@ -37,6 +37,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Home Active Quests](features/home-active-quests/README.md) — list the player's
   active quests on Home with read-only cards, and link to Staza World when none
   are active.
+- [Import data workflow](features/import-data-workflow/README.md) — import
+  quäldich, OSM/Wikidata, and Fartlek snapshots into DEV or PROD through GitHub
+  Actions while keeping PostgreSQL private on the VPS.
 - [HUD](features/hud/README.md) — replace physical-scene Coin visuals with a
   compact, camera-independent route and event overlay.
 - [Job lifecycle operational robustness](features/job-lifecycle-operational-robustness/README.md)
@@ -308,10 +311,12 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
   passes from the official quäldich Pässelexikon GeoJSON
   (`https://www.quaeldich.de/common/js/paesse_geojson.php?license=odbl`, licensed
   **ODbL 1.0**) into the same `collectibles` table as `mountain_pass` records.
-  Add `-- --dry-run` to download, validate, and report expected changes without
-  writing. The importer is manual/on-demand (no scheduled sync) and is never on
-  the runtime World request path. It is idempotent: records use the stable
-  identity `quaeldich:<TextID>` (`source_type = quaeldich`,
+  By default it downloads the source; use `npm run import:quaeldich -- --snapshot
+  path/to/paesse_geojson.php.json` to read a local GeoJSON file instead. Add
+  `-- --dry-run` to validate and report expected changes without writing. The
+  importer is manual/on-demand (no scheduled sync) and is never on the runtime
+  World request path. It is idempotent: records use the stable identity
+  `quaeldich:<TextID>` (`source_type = quaeldich`,
   `source_external_id = TextID`), so re-running updates existing rows instead of
   creating duplicates or rotating ids. Only the licensed elementary fields are
   imported — pass name, coordinates, elevation (`elevation_m`), and TextID;
@@ -326,9 +331,22 @@ TEST_DATABASE_URL=postgresql://post_ride_ar:post_ride_ar@localhost:5432/post_rid
   imported; do not replace this GeoJSON import with website scraping without a
   separate licensing review. See
   [Milestone 15.4](features/milestone-15-4-quaeldich-pass-import/README.md).
-  On the VPS, the manual quäldich workflow runs the compiled package command
-  `npm run import:quaeldich:dist` in a one-off container; see the
-  [deployment guide](ops/app/README.md#manual-quäldich-import).
+  For GitHub Actions, upload the full GeoJSON to
+  `/opt/staza/data/quaeldich-sample.geojson` on the VPS, then dispatch the
+  quäldich workflow for DEV or PROD. It reads the file through the app
+  container's `/import-source` mount; see the
+  [deployment guide](ops/app/README.md#manual-quäldich-import). The local
+  `import:quaeldich` command uses `tsx`; the remote workflow uses
+  `import:quaeldich:dist` because the deployed image contains compiled
+  JavaScript, not `tsx`. The committed repository fixture with this name is a
+  seven-feature test sample; the workflow reads the file contents staged on the
+  VPS, not that repository fixture. The upload command below replaces the VPS
+  copy with the full downloaded GeoJSON.
+  To stage a downloaded file for the VPS, configure
+  `QUAELDICH_VPS_SSH_TARGET` in `.env`, then run
+  `npm run move:quaeldich2vps -- path/to/paesse_geojson.php.json`. It validates
+  the GeoJSON and copies it to the workflow's expected path; `scp` handles SSH
+  authentication and leaves the local file intact.
 
 - **OSM extract snapshot:** The importer reads an uploaded OpenStreetMap extract
   instead of querying a live API. Download the Geofabrik Germany PBF

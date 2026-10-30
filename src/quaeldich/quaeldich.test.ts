@@ -8,6 +8,7 @@ import {
   passDeeplink
 } from "./normalize.js";
 import { planQuaeldichImport, formatImportReport } from "./import.js";
+import { readQuaeldichGeoJsonFile } from "./fetchGeoJson.js";
 import type { Collectible } from "../domain.js";
 
 const OPTIONS = { radiusMeters: 100 };
@@ -98,8 +99,8 @@ describe("normalizeQuaeldichFeature", () => {
 
 describe("normalizeQuaeldichCollection", () => {
   it("normalizes the committed fixture, rejecting malformed and duplicate records", async () => {
-    const payload = JSON.parse(
-      await readFile(new URL("../../fixtures/quaeldich-sample.geojson", import.meta.url), "utf8")
+    const payload = await readQuaeldichGeoJsonFile(
+      new URL("../../fixtures/quaeldich-sample.geojson", import.meta.url)
     );
     const batch = normalizeQuaeldichCollection(payload, OPTIONS);
     expect(batch.fetchedCount).toBe(7);

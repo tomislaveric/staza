@@ -184,11 +184,39 @@ selected target.
 
 ## Manual quäldich import
 
-`.github/workflows/import-quaeldich.yml` runs the quäldich importer using the
-configured source URL. No GeoJSON upload or application repository checkout
-is needed on the VPS; `quaeldich-sample.geojson` is only a test fixture. The
-workflow invokes `npm run import:quaeldich:dist`, the compiled-image variant
-of the local `npm run import:quaeldich` package command.
+`.github/workflows/import-quaeldich.yml` imports a full GeoJSON snapshot staged
+at `/opt/staza/data/quaeldich-sample.geojson` on the VPS. Download the official
+GeoJSON from the configured source URL. Set `QUAELDICH_VPS_SSH_TARGET` in the
+project-root `.env` to your `user@host` (or SSH config alias), then run:
+
+```sh
+npm run move:quaeldich2vps -- ~/Downloads/paesse_geojson.php.json
+```
+
+The upload command validates that the input is a nonempty GeoJSON
+`FeatureCollection`, copies it with `scp`, and renames the remote file to
+`/opt/staza/data/quaeldich-sample.geojson`. `scp` prompts for SSH
+authentication when needed; the local source file is not deleted.
+`QUAELDICH_VPS_SSH_PORT` is optional if the server does not use the SSH
+client's configured/default port.
+
+The selected Compose file mounts `/opt/staza/data` read-only at
+`/import-source`. The workflow checks that the file exists and is nonempty,
+then runs `npm run import:quaeldich:dist -- --snapshot
+/import-source/quaeldich-sample.geojson` in a one-off container. It does not
+fetch from quäldich on the VPS; this avoids the HTTP 403 returned by the source
+in the latest failed run. The same staged file can be used for DEV and PROD;
+the workflow target determines which private database receives the import.
+The repository's committed `quaeldich-sample.geojson` is a test-only sample;
+the workflow reads the separate file on the VPS. The upload command replaces
+that VPS file with the downloaded GeoJSON.
+
+Locally, `npm run import:quaeldich` runs the TypeScript source via `tsx` and
+downloads from the configured URL by default. To use a local GeoJSON snapshot,
+pass `-- --snapshot path/to/paesse_geojson.php.json`. The remote `:dist`
+command runs the compiled JavaScript in the deployed image, which does not
+include `tsx`. The test-only `quaeldich-sample.geojson` is not a full import
+source.
 
 Every workflow run applies pending migrations and writes planned creates and
 updates to the selected database. There is no dry-run option. Deploy an app

@@ -12,6 +12,7 @@
     "migrate": "tsx src/persistence/migrate.ts",
     "clean:activities": "tsx src/persistence/cleanActivities.ts",
     "import:quaeldich": "tsx src/persistence/importQuaeldichPasses.ts",
+    "move:quaeldich2vps": "node scripts/move-quaeldich-to-vps.mjs",
     "analyze:road-segments": "tsx src/osm/analyzeRoadSegments.ts",
     "import:osm-wikidata": "tsx src/persistence/importOSMWikidata.ts",
     "extract:osm-germany": "bash scripts/extract-osm-germany.sh",

@@ -24,13 +24,15 @@ describe("manual data import workflows", () => {
     expect(builder).toContain("coverageComplete: args.coverageComplete");
   });
 
-  it("runs the compiled quäldich package command without a dry-run option", async () => {
+  it("imports the uploaded quäldich GeoJSON with the compiled package command", async () => {
     const workflow = await readFile(".github/workflows/import-quaeldich.yml", "utf8");
     const packageJson = await readFile("package.json", "utf8");
     expect(workflow).toContain("npm run import:quaeldich:dist");
+    expect(workflow).toContain("/opt/staza/data/quaeldich-sample.geojson");
+    expect(workflow).toContain("--snapshot /import-source/quaeldich-sample.geojson");
+    expect(workflow).toContain('if [ ! -s "$snapshot_file" ]');
     expect(workflow).not.toContain("dry_run");
     expect(workflow).not.toContain("--dry-run");
-    expect(workflow).not.toContain("quaeldich-sample.geojson");
     expect(packageJson).toContain('"import:quaeldich:dist": "node dist/persistence/importQuaeldichPasses.js"');
   });
 });

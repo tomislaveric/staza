@@ -119,9 +119,21 @@ jobs:
             exit 1
           fi
 
+          echo "Checking uploaded quäldich GeoJSON snapshot."
+          compose run --rm --no-deps --entrypoint sh app -c '
+            set -eu
+            snapshot_file=/import-source/quaeldich-sample.geojson
+            if [ ! -s "$snapshot_file" ]; then
+              echo "quäldich GeoJSON snapshot not found or empty: $snapshot_file" >&2
+              echo "Upload it to /opt/staza/data/quaeldich-sample.geojson on the VPS." >&2
+              exit 1
+            fi
+            ls -lh "$snapshot_file"
+          '
+
           echo "Importing quäldich data into $target."
           compose run --rm --no-deps app \
-            npm run import:quaeldich:dist
+            npm run import:quaeldich:dist -- --snapshot /import-source/quaeldich-sample.geojson
 
           echo "quäldich import completed successfully."
           REMOTE

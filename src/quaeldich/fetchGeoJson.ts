@@ -1,4 +1,8 @@
+import { readFile } from "node:fs/promises";
 import { config } from "../config.js";
+
+export const readQuaeldichGeoJsonFile = async (file: string | URL): Promise<unknown> =>
+  JSON.parse(await readFile(file, "utf8")) as unknown;
 
 /**
  * Downloads the official quäldich Pässelexikon GeoJSON. Kept isolated from
