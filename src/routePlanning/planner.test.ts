@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { areaAnchors, customizedStops, generateExplorationRoutes, PlanningError, rerouteTargets, type RouteProvider } from "./planner.js";
+import { areaAnchors, customizedStops, generateAreaRoutes, generateExplorationRoutes, PlanningError, rerouteTargets, type RouteProvider } from "./planner.js";
 import { PLANNING_LIMITS } from "./policy.js";
 import { constraintFitFlag, distinctRoutes, proposalHint, selectProposals } from "./proposals.js";
-import { backtrackRatio } from "./roundTrip.js";
+import { backtrackRatio, detourLengthM } from "./roundTrip.js";
 import { RoutingError } from "./routingClient.js";
 import { buildStrategies, targetCountFor } from "./strategies.js";
 import { at, flowlineGeometry, objectivesFor, pointTarget, straightLineRoute } from "./testFixtures.js";
@@ -335,5 +335,41 @@ describe("backtrackRatio", () => {
   it("flags out-and-back routes but not loops", () => {
     expect(backtrackRatio(line([[0, 0], [0, 5], [0, 0]]))).toBeGreaterThan(0.4);
     expect(backtrackRatio(line([[0, 0], [0, 5], [5, 5], [5, 0], [0, 0]]))).toBeLessThan(0.1);
+  });
+});
+
+describe("detourLengthM", () => {
+  const line = (points: Array<[number, number]>) => points.map(([n, e]) => [at(n, e).lon, at(n, e).lat] as [number, number]);
+
+  it("flags short local spurs but not a clean loop", () => {
+    expect(detourLengthM(line([[0, 0], [0, 2], [0.8, 2], [0, 2], [0, 4], [4, 4], [4, 0], [0, 0]]))).toBeGreaterThan(150);
+    expect(detourLengthM(line([[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]]))).toBe(0);
+  });
+});
+
+describe("generateAreaRoutes", () => {
+  const sw = at(-6, -6);
+  const ne = at(6, 6);
+  const bounds = { minLatitude: sw.lat, maxLatitude: ne.lat, minLongitude: sw.lon, maxLongitude: ne.lon };
+  const area = (routing: RouteProvider) =>
+    generateAreaRoutes({ requestId: "req", playerId: "player", scopeId: "area", flowlines: [], input: roundTrip(20), bounds }, { routing, log: () => undefined });
+  const withSpur = (request: RoutingRequest) => {
+    const result = straightLineRoute(request);
+    const coordinates = result.geometry.coordinates;
+    const middle = Math.floor(coordinates.length / 2);
+    const spur = [[0.9, 0.0], [1.8, 0.0], [0.9, 0.0]].map(([n]) => [coordinates[middle][0], coordinates[middle][1] + (n * 1000) / 111_195] as [number, number]);
+    return { ...result, geometry: { ...result.geometry, coordinates: [...coordinates.slice(0, middle), ...spur, ...coordinates.slice(middle)] } };
+  };
+
+  it("drops candidates with local detours when clean alternatives exist", async () => {
+    let calls = 0;
+    const routing: RouteProvider = { route: async (request) => { calls += 1; return calls === 1 ? withSpur(request) : straightLineRoute(request); } };
+    const proposals = await area(routing);
+    expect(proposals.length).toBeGreaterThan(0);
+    expect(proposals.length).toBeLessThan(calls);
+  });
+
+  it("reports no route when every candidate has a local detour", async () => {
+    await expect(area({ route: async (request) => withSpur(request) })).rejects.toMatchObject({ code: "no_route" });
   });
 });

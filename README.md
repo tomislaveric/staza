@@ -118,6 +118,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   with transaction-safe exactly-once progression.
 - [Progression V1](features/progression-v1/README.md) — make each completed ride
   contribute XP toward a derived player level without adding persistence or rewards.
+- [Reduce unnecessary detours in generated routes](features/reduce-unnecessary-detours-in-generated-routes/README.md)
+  — filter or rank low-quality area routes while preserving road geometry,
+  route bounds, and destination coverage.
 - [Quest Route Exploration V1](features/quest-route-exploration-v1/README.md) —
   *planner reused by Explore this Area*; explore a quest by generating scored ride-route proposals via the standalone
   routing service, then commit the quest and selected PlannedRoute together.

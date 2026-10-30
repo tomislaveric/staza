@@ -50,3 +50,27 @@ export const backtrackRatio = (coordinates: [number, number][]): number => {
   });
   return repeated / samples.length;
 };
+
+/** A sample this close to an earlier, nearby-in-sequence sample is a spur or zigzag, not a switchback. */
+const DETOUR_RETURN_M = 30;
+const DETOUR_MIN_GAP = 4;
+
+/**
+ * Length in metres of a route spent on short local detours: it leaves a road and comes back to it
+ * within a few hundred metres. Longer retracing is measured by `backtrackRatio`.
+ */
+export const detourLengthM = (coordinates: [number, number][]): number => {
+  const samples = sampleAlong(coordinates, BACKTRACK_SPACING_M);
+  if (samples.length <= DETOUR_MIN_GAP) return 0;
+  const points = samples.map(([lon, lat]) => ({ lat, lon }));
+  let detoured = 0;
+  for (let index = DETOUR_MIN_GAP; index < points.length; index += 1) {
+    for (let earlier = Math.max(0, index - BACKTRACK_MIN_GAP + 1); earlier <= index - DETOUR_MIN_GAP; earlier += 1) {
+      if (distanceBetween(points[index], points[earlier]) <= DETOUR_RETURN_M) {
+        detoured += 1;
+        break;
+      }
+    }
+  }
+  return detoured * BACKTRACK_SPACING_M;
+};

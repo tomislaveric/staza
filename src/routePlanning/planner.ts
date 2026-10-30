@@ -1,6 +1,6 @@
 import type { QuestObjective } from "../domain.js";
 import { cheapestInsertion, generateCandidates, improveOrder, makeCandidate, selectTargetPool, withoutTarget } from "./candidates.js";
-import { backtrackRatio, closeRoundTrip } from "./roundTrip.js";
+import { backtrackRatio, closeRoundTrip, detourLengthM } from "./roundTrip.js";
 import { buildRoutingPlan } from "./routingPlan.js";
 import { policyForSport, profileForSport } from "./sport.js";
 import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, type PlannerPolicy } from "./policy.js";
@@ -379,6 +379,8 @@ const AREA_LOOPS = [
 
 /** Largest share of an area loop that may retrace its own road. */
 const MAX_AREA_BACKTRACK = 0.25;
+/** Local spurs and zigzags are never returned: the router's geometry is shown as is, so they cannot be trimmed. */
+const MAX_AREA_DETOUR_M = 150;
 
 /** Share of the area diagonal within which a cycling Flowline point replaces a loop point. */
 const FLOWLINE_SNAP_RATIO = 0.25;
@@ -508,8 +510,9 @@ export const generateAreaRoutes = async (
     requestId, input, bounds, eligibleTargets: required ? [required.target] : [], maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy
   });
   // Loops should not ride the same road out and back; keep those only when nothing better exists.
-  const loops = run.scored.filter((route) => backtrackRatio(route.routing.geometry.coordinates) <= MAX_AREA_BACKTRACK);
-  const usable = loops.length > 0 ? loops : run.scored;
+  const direct = run.scored.filter((route) => detourLengthM(route.routing.geometry.coordinates) <= MAX_AREA_DETOUR_M);
+  const loops = direct.filter((route) => backtrackRatio(route.routing.geometry.coordinates) <= MAX_AREA_BACKTRACK);
+  const usable = loops.length > 0 ? loops : direct;
   const byLength = [...usable].sort((a, b) => a.routing.distanceM - b.routing.distanceM);
   const labels: ProposalLabel[][] = [[], ["balanced"], ["quick", "adventure"], ["quick", "balanced", "adventure"]];
   const best = [...usable].sort((a, b) => b.score.total - a.score.total)[0];
