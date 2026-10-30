@@ -129,11 +129,12 @@ jobs:
               exit 1
             fi
             ls -lh "$snapshot_file"
-          '
+          ' </dev/null
 
           echo "Importing quäldich data into $target."
           compose run --rm --no-deps app \
-            npm run import:quaeldich:dist -- --snapshot /import-source/quaeldich-sample.geojson
+            npm run import:quaeldich:dist -- --snapshot /import-source/quaeldich-sample.geojson \
+            </dev/null
 
           echo "quäldich import completed successfully."
           REMOTE

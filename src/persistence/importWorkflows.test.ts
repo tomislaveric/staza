@@ -31,6 +31,8 @@ describe("manual data import workflows", () => {
     expect(workflow).toContain("/opt/staza/data/quaeldich-sample.geojson");
     expect(workflow).toContain("--snapshot /import-source/quaeldich-sample.geojson");
     expect(workflow).toContain('if [ ! -s "$snapshot_file" ]');
+    expect(workflow.match(/compose run/g)).toHaveLength(2);
+    expect(workflow.match(/<\/dev\/null/g)).toHaveLength(2);
     expect(workflow).not.toContain("dry_run");
     expect(workflow).not.toContain("--dry-run");
     expect(packageJson).toContain('"import:quaeldich:dist": "node dist/persistence/importQuaeldichPasses.js"');

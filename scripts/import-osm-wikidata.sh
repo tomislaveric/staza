@@ -121,7 +121,7 @@ fi
 snapshot_file=/import-source/osm-germany.json
 echo "Uploaded OSM extract snapshot:"
 if ! compose run --rm --no-TTY --no-deps --entrypoint sh app -c \
-  'test -s /import-source/osm-germany.json && ls -lh /import-source/osm-germany.json'; then
+  'test -s /import-source/osm-germany.json && ls -lh /import-source/osm-germany.json' </dev/null; then
   echo "Snapshot not found or empty: /opt/staza/data/osm-germany.json" >&2
   exit 1
 fi
@@ -130,11 +130,11 @@ echo "Running the compiled importer as a one-off container on the private Compos
 compose run --rm --no-TTY \
   -e OSM_WIKIDATA_CACHE_DIR=/data/osm-cache/wikidata \
   app node dist/persistence/importOSMWikidata.js \
-  --snapshot "$snapshot_file"
+  --snapshot "$snapshot_file" </dev/null
 
 echo "Persistent Wikidata cache on the app-data volume:"
 compose run --rm --no-TTY --entrypoint sh app -c \
-  'du -sh /data/osm-cache/wikidata 2>/dev/null || true'
+  'du -sh /data/osm-cache/wikidata 2>/dev/null || true' </dev/null
 REMOTE_IMPORT
 
 echo "Import run finished for target=$IMPORT_TARGET."

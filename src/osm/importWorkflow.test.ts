@@ -38,6 +38,8 @@ describe("manual OSM/Wikidata import workflow", () => {
     expect(contents).toContain("node dist/persistence/importOSMWikidata.js");
     expect(contents).toContain("/import-source/osm-germany.json");
     expect(contents).toContain('--snapshot "$snapshot_file"');
+    expect(contents.match(/compose run/g)).toHaveLength(3);
+    expect(contents.match(/<\/dev\/null/g)).toHaveLength(3);
     expect(contents).not.toContain("/app/fixtures/osm-germany.json");
     expect(contents).toContain("OSM_WIKIDATA_CACHE_DIR=/data/osm-cache/wikidata");
     expect(contents).toContain("if [[ -n \"${DATABASE_URL:-}\" ]]; then");
