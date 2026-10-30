@@ -6,7 +6,7 @@ services:
     container_name: staza-dev-app
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: dev
       PORT: "3000"
       DATA_DIR: /data/jobs
       MEDIA_DIR: /data/media
@@ -26,6 +26,7 @@ services:
       STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI:-}
       STRAVA_TOKEN_ENCRYPTION_KEY: ${STRAVA_TOKEN_ENCRYPTION_KEY:-}
       STRAVA_RECENT_ACTIVITY_LIMIT: ${STRAVA_RECENT_ACTIVITY_LIMIT:-3}
+      ROUTING_SERVICE_URL: ${ROUTING_SERVICE_URL:-http://routing-api:3000}
     volumes:
       - app-data:/data
       - /opt/staza/data:/import-source:ro
@@ -47,6 +48,7 @@ services:
       proxy:
         aliases:
           - staza-dev-app
+      routing: {}
 
   postgres:
     image: postgres:16-alpine
@@ -74,6 +76,9 @@ networks:
   proxy:
     external: true
     name: staza-proxy
+  routing:
+    external: true
+    name: staza-routing
 
 volumes:
   postgres-data:

@@ -19,9 +19,21 @@ Create the real environment files separately at `/opt/staza/dev/.env` and
 `/opt/staza/prod/.env`. Updating the Compose file must not overwrite either
 server-side `.env`.
 
-Before starting either project, the shared external Docker network
-`staza-proxy` must exist. Only the app joins that network; PostgreSQL is on its
-environment's private internal network and publishes no host port.
+Before starting either project, the shared external Docker networks
+`staza-proxy` and `staza-routing` must exist. Create the routing network once
+on the VPS with `docker network create staza-routing` (skip this if it already
+exists). The app joins both networks; PostgreSQL stays only on its
+environment's private internal network and publishes no host port. The
+standalone routing project also joins `staza-routing` with its API, while
+Valhalla remains on that project's private network.
+
+The app's `ROUTING_SERVICE_URL` is set to `http://routing-api:3000` in the
+DEV/PROD environment examples and Compose defaults. This is the routing
+container's port on `staza-routing`; the routing API's host-only diagnostic
+port defaults to `127.0.0.1:3001`. Do not use `localhost` or the host port from
+inside an app container. Start the standalone routing project separately and
+before relying on route planning; these Compose projects do not have a
+cross-project `depends_on`.
 
 ## Caddy and service names
 
