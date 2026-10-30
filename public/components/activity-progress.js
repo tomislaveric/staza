@@ -24,7 +24,7 @@ export const ActivityProgress = (activity, progress) => {
           <p class="activity-progress-label">XP EARNED</p>
           <div class="activity-progress-earned-row">
             <strong class="activity-progress-earned" data-activity-xp="${earnedXp}">+${formatNumber(earnedXp)}</strong>
-            <div class="activity-replay-reward" data-replay-reward hidden aria-live="polite"></div>
+            <div class="activity-replay-reward activity-replay-reward--desktop" data-replay-reward hidden aria-live="polite"></div>
           </div>
         </div>
         <div class="activity-progress-found"><p class="activity-progress-label">COLLECTED</p><strong>${formatNumber(collected)}</strong><span>${revisits > 0 ? `new · ${formatNumber(revisits)} revisited` : "new collectibles"}</span></div>
@@ -33,8 +33,11 @@ export const ActivityProgress = (activity, progress) => {
         <div><span data-level-label>Level ${formatNumber(state.level)}</span></div>
         <p><strong data-level-xp>${formatNumber(state.currentLevelXp)}</strong> <em data-level-next>/ ${formatNumber(state.nextLevelXp)}</em></p>
       </div>
-      <div class="activity-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="${state.nextLevelXp}" aria-valuenow="${state.currentLevelXp}">
-        <span data-level-fill style="width: ${percent}%"></span>
+      <div class="activity-progress-track-wrap">
+        <div class="activity-replay-reward activity-replay-reward--mobile" data-replay-reward hidden aria-live="polite"></div>
+        <div class="activity-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="${state.nextLevelXp}" aria-valuenow="${state.currentLevelXp}">
+          <span data-level-fill style="width: ${percent}%"></span>
+        </div>
       </div>
       <p class="activity-progress-caption" data-level-caption>${formatNumber(remaining)} XP to Level ${formatNumber(state.level + 1)}</p>
     </section>

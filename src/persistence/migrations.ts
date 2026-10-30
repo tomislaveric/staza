@@ -855,6 +855,30 @@ export const migrations: Migration[] = [{
       );
     `);
   }
+}, {
+  id: "035_cascade_user_account_deletion",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE players
+        DROP CONSTRAINT players_user_id_fkey,
+        ADD CONSTRAINT players_user_id_fkey
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+      ALTER TABLE security_events
+        DROP CONSTRAINT security_events_user_id_fkey,
+        ADD CONSTRAINT security_events_user_id_fkey
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+    `);
+  }
+}, {
+  id: "036_activity_event_mountain_pass_type",
+  async up(client) {
+    await client.query(`
+        ALTER TABLE activity_events
+          DROP CONSTRAINT activity_events_collectible_type_check,
+          ADD CONSTRAINT activity_events_collectible_type_check
+            CHECK (collectible_type IN ('coin', 'landmark', 'mountain_pass'));
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

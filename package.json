@@ -11,6 +11,7 @@
     "test:sync": "tsx src/runSyncValidation.ts",
     "migrate": "tsx src/persistence/migrate.ts",
     "clean:activities": "tsx src/persistence/cleanActivities.ts",
+    "clean:user-data": "tsx src/persistence/cleanUserData.ts",
     "import:quaeldich": "tsx src/persistence/importQuaeldichPasses.ts",
     "move:quaeldich2vps": "node scripts/move-quaeldich-to-vps.mjs",
     "analyze:road-segments": "tsx src/osm/analyzeRoadSegments.ts",

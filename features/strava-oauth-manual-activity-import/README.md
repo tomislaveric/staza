@@ -8,9 +8,10 @@ imported activity must use the same canonical processing and persistence as a
 FIT upload, so normal collectibles, Fartlek completions, XP, progression, and
 replay continue to come from existing gameplay logic.
 
-The first successfully accepted Staza activity establishes the player's
-permanent journey start. No activity older than that boundary may be imported
-from FIT, Strava, or a future source.
+Activities older than account creation are normally not importable. The first
+three accepted activities are onboarding slots: Strava activities in those
+slots may predate account creation. FIT imports and later Strava imports must
+be at or after account creation.
 
 ## Current architecture
 
@@ -35,7 +36,8 @@ No Strava-specific gameplay or reward pipeline is introduced.
 - Retrieval and normalization of that activity's GPS/time streams.
 - Shared canonical activity processing, replay, collectible/Fartlek handling,
   and progression.
-- An immutable, source-independent journey-start boundary.
+- A consistent account-creation cutoff, with a three-activity Strava onboarding
+  exception.
 - A Strava connection status and disconnect action in the existing profile and
   activity-import experience.
 
@@ -93,24 +95,20 @@ social features, route publishing, Garmin, and scheduled synchronization.
 
 ### Journey start and transaction boundary
 
-- Store nullable `players.journey_started_at`. For existing players with
-  activities, backfill from the `started_at` of the earliest accepted activity,
-  ordered by `created_at, id`; do not backfill from the oldest activity date.
-  Players without activities start with a null boundary.
+- Migration `021` retains nullable `players.journey_started_at` and its
+  historical backfill; import eligibility uses the account-creation timestamp.
 - Check exact import identity before the journey rule so a retry of an
   already-accepted import remains idempotent. Normalize and validate source
-  data, then check cross-source duplication, then enforce the journey boundary
-  before a new activity is accepted.
-- In the canonical persistence transaction, lock the player row. If the
-  boundary is unset, set it to the first successfully committed activity's
-  `startedAt`. Otherwise reject an activity whose `startedAt` is earlier.
-  Persist the activity, events, replay snapshot, Fartlek completions, XP, and
-  initial boundary atomically. Failed/invalid imports and duplicates do not set
-  or change the boundary.
-- The boundary belongs to the Player lifecycle and cannot be moved backward or
-  reset by any import source or by disconnecting Strava. Existing account
-  deletion semantics remove the Player and all associated data; a subsequently
-  created account is a new Player journey.
+  data, then check cross-source duplication, then enforce the account-creation
+  cutoff and onboarding allowance before a new activity is accepted.
+- In the canonical persistence transaction, lock the player row and count
+  accepted activities. Reject activities before account creation except when
+  the source is Strava and fewer than three activities in total have been accepted.
+  Exact retries and duplicates do not consume an onboarding import.
+- The cutoff is the Player's account-creation timestamp and cannot be moved by
+  importing activities or disconnecting Strava. Existing account deletion
+  semantics remove the Player and all associated data; a subsequently created
+  account starts a new onboarding allowance.
 
 ### Connection and privacy lifecycle
 
@@ -177,10 +175,10 @@ social features, route publishing, Garmin, and scheduled synchronization.
   FIT upload, legacy FIT jobs, and Strava.
 - `ActivityRepository.persistCompletedActivity` locks the player row, then
   resolves exact source identity, rejects high-confidence cross-source
-  duplicates (`src/activityFingerprint.ts`), rejects activities before the
-  journey boundary, and sets the boundary with `COALESCE` in the same
-  transaction as the activity, events, and XP. Same-source FIT re-uploads with a
-  new idempotency key keep their previous behavior.
+  duplicates (`src/activityFingerprint.ts`), and enforces the account-creation
+  cutoff with a three-accepted-activity Strava onboarding exception. The check
+  and activity insert share the same transaction. Same-source FIT re-uploads
+  with a new idempotency key keep their previous behavior.
 - The recent list is one first-page request of 30 items, filtered to
   activities with GPS data (not manual, with a polyline or start position) and
   cut to the configured limit.
@@ -202,9 +200,10 @@ social features, route publishing, Garmin, and scheduled synchronization.
 - Repeating a request for the same provider identity cannot create another
   activity, event set, or XP award. A high-confidence cross-source duplicate
   cannot award gameplay twice.
-- The first successfully accepted activity establishes the journey boundary.
-  Every source rejects activities before it; failed attempts, retries, and
-  disconnects cannot move or reset it.
+- Strava activities among the first three accepted activities may predate
+  account creation for onboarding. FIT imports and later Strava imports reject
+  pre-account activities; failed attempts, retries, and duplicates do not
+  consume an activity slot.
 - Disconnect removes local credentials and stops future access while retaining
   imported Staza activity and progression.
 - OAuth state, CSRF, session ownership, token encryption, rate limiting, and

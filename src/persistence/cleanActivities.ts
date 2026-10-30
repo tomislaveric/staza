@@ -4,20 +4,12 @@ import path from "node:path";
 import { stdin, stdout } from "node:process";
 import { config } from "../config.js";
 import { createDatabasePool } from "./database.js";
+import { mediaDirectoryFor } from "./mediaCleanup.js";
 import { migrate } from "./migrate.js";
 
 interface ActivityVideoRow {
   source_path: string;
 }
-
-const mediaDirectoryFor = (sourcePath: string, mediaRoot: string): string => {
-  const directory = path.resolve(path.dirname(sourcePath));
-  const relative = path.relative(mediaRoot, directory);
-  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new Error(`Activity video is outside MEDIA_DIR; refusing to remove it: ${sourcePath}`);
-  }
-  return directory;
-};
 
 const cleanActivities = async (): Promise<void> => {
   if (config.nodeEnv === "production") {

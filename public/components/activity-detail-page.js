@@ -48,8 +48,9 @@ export const ActivityDetailPage = (activity, progress, selectedTab = "replay") =
     ? VideoTab(activity)
     : (replay ? ReplayTab(ActivityStats(activity, { overlay: true })) : ReplayUnavailable());
   const inlineStats = selectedTab === "video" || !replay ? ActivityStats(activity) : "";
+  const replayLayout = selectedTab === "replay" && Boolean(replay);
   return `
-    <section class="activity-detail-page" aria-labelledby="activity-detail-title">
+    <section class="activity-detail-page${replayLayout ? " has-replay-layout" : ""}" aria-labelledby="activity-detail-title">
       <div class="activity-detail-toolbar">
         <button class="activity-detail-back" type="button"><img src="/assets/activity-detail-back.svg" width="16" height="16" alt="">BACK</button>
       </div>

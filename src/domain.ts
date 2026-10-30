@@ -90,6 +90,7 @@ export type ActivityType = "cycling" | "running" | "hiking" | "walking" | "unkno
 
 export type ActivitySource = "fit" | "strava";
 
+export const STRAVA_ONBOARDING_IMPORT_LIMIT = 3;
 
 export interface Activity {
   id: string;

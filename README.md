@@ -4,6 +4,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 
 ## Features
 
+- [Account and user-data deletion](features/account-and-user-data-deletion/README.md) — delete all user-owned data with an account and safely clean up selected users or all user data while preserving shared catalogs.
 - [Activity Detail Replay Reward Presentation](features/activity-detail-replay-reward-presentation/README.md) — refine replay rewards with timestamp-driven single-item feedback and deterministic XP presentation while preserving the existing panel.
 - [Activity Distance XP Bonus](features/activity-distance-xp-bonus/README.md) — award incremental XP at distance milestones during replay while preserving collectible and Flowline rewards.
 - [Activity mode animated ride POC](features/activity-mode-animated-ride-poc/README.md)

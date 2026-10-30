@@ -300,7 +300,7 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
   const panelHost = mountPoint.querySelector("[data-replay-panel]");
   const reopenButton = mountPoint.querySelector("[data-replay-panel-reopen]");
   const xpElement = mountPoint.querySelector(".activity-progress-earned");
-  const rewardHost = mountPoint.querySelector("[data-replay-reward]");
+  const rewardHosts = [...mountPoint.querySelectorAll("[data-replay-reward]")];
   const persistedXp = Number(xpElement?.dataset.activityXp ?? replay.activityResult.totalPoints ?? 0);
   const rewards = replayRewardItems(replay, persistedXp);
   const rewardWindowMs = replayRewardWindowMs(replay);
@@ -370,10 +370,7 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
   const commitReward = (reward) => {
     displayedRewardId = reward?.id;
     rewardIsExiting = false;
-    if (!rewardHost) return;
-    rewardHost.classList.remove("is-visible", "is-exiting");
-    rewardHost.hidden = !reward;
-    rewardHost.innerHTML = reward ? `
+    const markup = reward ? `
       <span class="activity-replay-reward-icon activity-replay-reward-icon--${reward.kind}" aria-hidden="true"></span>
       <span class="activity-replay-reward-copy">
         <small class="activity-replay-reward-type">${escapeHtml(reward.typeLabel)}</small>
@@ -382,14 +379,19 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
       </span>
       <strong class="activity-replay-reward-xp">+${xpFormatter.format(reward.xpGain)} XP</strong>
     ` : "";
+    for (const host of rewardHosts) {
+      host.classList.remove("is-visible", "is-exiting");
+      host.hidden = !reward;
+      host.innerHTML = markup;
+    }
     if (!reward || reduceMotion) {
-      if (reward) rewardHost.classList.add("is-visible");
+      if (reward) rewardHosts.forEach((host) => host.classList.add("is-visible"));
       return;
     }
     if (rewardEnterFrame !== undefined) cancelAnimationFrame(rewardEnterFrame);
     rewardEnterFrame = requestAnimationFrame(() => {
       rewardEnterFrame = undefined;
-      if (displayedRewardId === reward.id) rewardHost.classList.add("is-visible");
+      if (displayedRewardId === reward.id) rewardHosts.forEach((host) => host.classList.add("is-visible"));
     });
   };
   const setReward = (reward, immediate = false) => {
@@ -407,8 +409,10 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
       return;
     }
     rewardIsExiting = true;
-    rewardHost?.classList.remove("is-visible");
-    rewardHost?.classList.add("is-exiting");
+    rewardHosts.forEach((host) => {
+      host.classList.remove("is-visible");
+      host.classList.add("is-exiting");
+    });
     rewardTimer = setTimeout(() => {
       rewardTimer = undefined;
       commitReward(pendingReward);

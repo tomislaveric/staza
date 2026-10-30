@@ -23,6 +23,7 @@ import type {
   QuestHistoryEntry,
   ReplaySnapshot
 } from "../domain.js";
+import { STRAVA_ONBOARDING_IMPORT_LIMIT } from "../domain.js";
 import { AUTHORED_QUEST_CHAINS, findAuthoredQuest } from "../authoredQuests/catalog.js";
 import {
   createActivityFingerprint,
@@ -201,6 +202,10 @@ export class ActivityRepository {
         [playerId]
       );
       if (player.rowCount !== 1) throw new Error("Default player does not exist.");
+      const activityCount = await client.query<{ activity_count: number }>(
+        "SELECT count(*)::int AS activity_count FROM activities WHERE player_id = $1",
+        [playerId]
+      );
 
       const existingId = importKey
         ? await this.findActivityIdByImportKeyWithClient(client, playerId, activity.source, importKey)
@@ -224,9 +229,11 @@ export class ActivityRepository {
         }
       }
 
-      // The journey starts at account creation, for every import source.
+      // Allow Strava imports among the first three accepted activities to seed the journey.
       const journeyStartedAt = player.rows[0].created_at;
-      if (activity.startedAt < journeyStartedAt.getTime()) {
+      const isStravaOnboardingImport = activity.source === "strava"
+        && activityCount.rows[0].activity_count < STRAVA_ONBOARDING_IMPORT_LIMIT;
+      if (activity.startedAt < journeyStartedAt.getTime() && !isStravaOnboardingImport) {
         throw new ActivityImportRejectedError(
           "before_journey_start",
           "This activity happened before your Staza account was created.",
@@ -399,6 +406,14 @@ export class ActivityRepository {
     );
     if (result.rowCount !== 1) throw new Error("Player does not exist.");
     return result.rows[0].created_at;
+  }
+
+  async getActivityCount(playerId: string): Promise<number> {
+    const result = await this.pool.query<{ activity_count: number }>(
+      "SELECT count(*)::int AS activity_count FROM activities WHERE player_id = $1",
+      [playerId]
+    );
+    return result.rows[0].activity_count;
   }
 
   async listActivities(playerId: string): Promise<ActivityHistoryItem[]> {

@@ -70,6 +70,8 @@ describeAuth("AuthService", () => {
       [randomUUID(), email, codeHash("123456")]
     );
 
+    await pool!.query("INSERT INTO security_events (id, user_id, event_type, success) VALUES ($1, $2, 'login', true)", [randomUUID(), userId]);
+
     const user = {
       id: userId,
       email,
@@ -88,5 +90,14 @@ describeAuth("AuthService", () => {
     expect(await pool!.query("SELECT id FROM activities WHERE id = $1", [activityId])).toMatchObject({ rowCount: 0 });
     expect(await pool!.query("SELECT id FROM quests WHERE created_by_player_id = $1", [playerId])).toMatchObject({ rowCount: 0 });
     expect(await pool!.query("SELECT id FROM email_codes WHERE email = $1", [email])).toMatchObject({ rowCount: 0 });
+    expect(await pool!.query("SELECT id FROM security_events")).toMatchObject({ rowCount: 0 });
+
+    const otherPlayerId = randomUUID();
+    await pool!.query("INSERT INTO players (id, display_name) VALUES ($1, 'Other')", [otherPlayerId]);
+    await pool!.query(
+      `INSERT INTO activities (id, player_id, source_type, started_at, xp_earned, collected_count)
+       VALUES ($1, $2, 'fit', now(), 0, 0)`,
+      [activityId, otherPlayerId]
+    );
   });
 });

@@ -32,10 +32,9 @@ the audit backlog's default of one finding per session.
   quest. Milestone/prestige quests may grant a badge or title. Normal quests do
   not grant Skill Points and do not auto-unlock Atlas nodes. Player-built
   explorations are not the primary consumer of `quest_unlock`.
-- **Journey start:** use account creation as the boundary. Reject activities
-  dated before account creation, consistently across FIT and Strava imports, and
-  explain before the first import that only activities on or after account
-  creation are eligible.
+- **Journey start:** use account creation as the normal cutoff. Allow Strava
+  activities among the first three accepted activities to predate the account;
+  FIT imports and later Strava imports must be on or after account creation.
 - **PRO boundary:** prioritize breadth and advanced content, not universal tier
   depth. Keep the athlete root, sport hubs, core Cycling/Running/Hiking branches,
   core progression through several tiers, meaningful specialization choices,
@@ -54,8 +53,9 @@ the audit backlog's default of one finding per session.
    quest unlocks, server-side availability checks, World/segment filters, and
    Profile title/badge presentation. Make grant copy describe actual effects;
    remove any catalog grants that will not be supported.
-3. Derive journey start from account creation, enforce the same pre-account
-   rejection for FIT and Strava imports, and explain the rule in the import flow.
+3. Use account creation as the normal import cutoff, while allowing Strava
+   imports among the first three activities to predate account creation; explain
+   the rule in the import flow.
 4. Rebalance Skill Point award levels and premium eligibility against the
    breadth-focused PRO boundary. Ensure free players can make meaningful
    specialization choices and complete the free core tier in a reasonable
@@ -71,8 +71,9 @@ the audit backlog's default of one finding per session.
   in titles, detail UI, and Atlas statistics.
 - Every remaining Skill Atlas reward has a visible consumer. Quest unlocks are
   enforced server-side and clearly identify the required node while locked.
-- Pre-account activities are rejected by every import path with a clear
-  explanation; the boundary is communicated before the first import.
+- Pre-account activities are rejected with a clear explanation except for
+  Strava imports among the first three accepted activities; the rule is
+  communicated in the import flow.
 - Free Skill Point awards and access support meaningful core specialization;
   PRO gates breadth/advanced content rather than all Tier II nodes.
 - All four P0 items in the audit README are checked off with one-line

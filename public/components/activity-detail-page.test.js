@@ -52,6 +52,8 @@ describe("Activity detail data transformation", () => {
     expect(page).toContain("data-replay-panel");
     expect(page).toContain('data-activity-xp="25"');
     expect(page).toContain("data-replay-reward");
+    expect(page.match(/data-replay-reward/g)).toHaveLength(2);
+    expect(page).toContain('class="activity-detail-page has-replay-layout"');
   });
 
   it("shows the fixed sport as an icon before the title", () => {

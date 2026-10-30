@@ -168,15 +168,17 @@ export const WorldPage = ({ stats, selectedFilters, lockedFilters = [] }) => `
     </header>
     ${WorldFilterControls(selectedFilters, [], [], [], lockedFilters)}
     <div class="world-map-shell">
-      <div class="world-map staza-map" data-world-map></div>
-      <ul class="world-collectible-list" aria-label="Collectibles on the map" data-world-collectible-list></ul>
-      <a class="world-osm-attribution" href="https://www.openstreetmap.org/copyright"
-        target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
-      <div class="world-map-actions">
-        <button class="world-locate" type="button" data-world-locate>LOCATE ME</button>
+      <div class="world-map-frame">
+        <div class="world-map staza-map" data-world-map></div>
+        <ul class="world-collectible-list" aria-label="Collectibles on the map" data-world-collectible-list></ul>
+        <a class="world-osm-attribution" href="https://www.openstreetmap.org/copyright"
+          target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
+        <div class="world-map-actions">
+          <button class="world-locate" type="button" data-world-locate>LOCATE ME</button>
+        </div>
+        <button class="world-explore" type="button" data-world-explore>EXPLORE THIS AREA</button>
+        <p class="world-map-status" data-world-status role="status" hidden></p>
       </div>
-      <button class="world-explore" type="button" data-world-explore>EXPLORE THIS AREA</button>
-      <p class="world-map-status" data-world-status role="status" hidden></p>
       <div class="world-detail-host" data-world-detail hidden></div>
     </div>
     <div data-world-stats></div>

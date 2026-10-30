@@ -56,6 +56,7 @@ import { RoutingClient } from "./routePlanning/routingClient.js";
 import { buildGpx, gpxFilename } from "./exploration/gpx.js";
 import { ExplorationSessionStore } from "./exploration/sessionStore.js";
 import { ExplorationError, ExplorationService } from "./exploration/service.js";
+import { mediaDirectoryFor } from "./persistence/mediaCleanup.js";
 import { AuthService, EmailSender, type SessionUser } from "./auth.js";
 
 interface UploadRequest extends Request {
@@ -698,7 +699,11 @@ app.post("/api/account/deletion-intent", requireUser, requireCsrf, async (reques
 app.post("/api/account/delete", requireUser, requireCsrf, async (request: UploadRequest, response, next) => {
   try {
     const paths = await authService.confirmDeletion(request.user!, request.body?.confirmationToken);
-    await Promise.all(paths.map((mediaPath) => rm(path.dirname(mediaPath), { recursive: true, force: true })));
+    const directories = new Set<string>();
+    for (const mediaPath of paths) {
+      try { directories.add(mediaDirectoryFor(mediaPath, config.mediaDir)); } catch (error) { console.error(error); }
+    }
+    await Promise.all([...directories].map((directory) => rm(directory, { recursive: true, force: true })));
     clearSession(response);
     response.status(204).end();
   } catch (error) { next(error); }

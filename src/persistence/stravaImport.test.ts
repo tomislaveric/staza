@@ -64,16 +64,51 @@ if (pool) {
 }
 
 describePersistence("Strava import persistence", () => {
-  it("uses account creation as the journey start for every source", async () => {
+  it("allows three pre-account Strava onboarding imports, then enforces the account cutoff", async () => {
     await expect(persist(activity("2026-05-07T08:00:00Z")))
       .rejects.toMatchObject({ code: "before_journey_start", details: { journeyStartedAt: "2026-05-08T00:00:00.000Z" } });
-    await expect(persist(activity("2026-05-07T08:00:00Z", "strava"), "2003"))
-      .rejects.toMatchObject({ code: "before_journey_start" });
     expect(await playerState()).toMatchObject({ total_xp: 0, count: "0" });
 
+    await persist(activity("2026-05-07T08:00:00Z", "strava"), "2001");
+    await persist(activity("2026-05-06T08:00:00Z", "strava", 0.05), "2002");
+    await persist(activity("2026-05-05T08:00:00Z", "strava", 0.1), "2003");
+    await expect(persist(activity("2026-05-04T08:00:00Z", "strava", 0.15), "2004"))
+      .rejects.toMatchObject({ code: "before_journey_start", details: { journeyStartedAt: "2026-05-08T00:00:00.000Z" } });
+
     await persist(activity("2026-05-10T08:00:00Z"));
-    await persist(activity("2026-05-09T08:00:00Z", "strava"), "2001");
-    expect(await playerState()).toMatchObject({ total_xp: 20, count: "2" });
+    expect(await playerState()).toMatchObject({ count: "4" });
+  });
+
+  it("persists mountain-pass collectible events from Strava", async () => {
+    const item = activity("2026-05-10T08:00:00Z", "strava");
+    const submitted = result(item.id);
+    const passId = "quaeldich:michaelsberg-kraichgau";
+    submitted.collectibles = [{
+      id: passId,
+      name: "Michaelsberg (Kraichgau)",
+      type: "mountain_pass",
+      latitude: 49.08786,
+      longitude: 8.56167,
+      radiusMeters: 100,
+      value: 100
+    }];
+    submitted.events = [{
+      id: passId,
+      sourceId: passId,
+      type: "collectible_collected",
+      collectible: { name: "Michaelsberg (Kraichgau)", type: "mountain_pass" },
+      value: 100,
+      latitude: 49.08786,
+      longitude: 8.56167,
+      activityTimestamp: item.startedAt + 30_000
+    }];
+
+    await activities!.persistCompletedActivity(playerId, item, submitted, "5001");
+
+    expect(await pool!.query(
+      "SELECT collectible_type FROM activity_events WHERE source_id = $1",
+      [passId]
+    )).toMatchObject({ rows: [{ collectible_type: "mountain_pass" }] });
   });
 
   it("backfills fingerprints for existing activities so they participate in duplicate checks", async () => {

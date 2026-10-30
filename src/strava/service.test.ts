@@ -37,7 +37,7 @@ const setup = () => {
     getActivityByImportKey: vi.fn(async (): Promise<PersistedActivity | undefined> => undefined),
     listActivityIdsByImportKeys: vi.fn(async () => new Map([["1001", "staza-1"]])),
     getJourneyStartedAt: vi.fn(async (): Promise<Date | undefined> => new Date("2026-04-15T00:00:00Z")),
-    getActivityCount: vi.fn(async () => 3),
+    getActivityCount: vi.fn(async () => 0),
     persistCompletedActivity: vi.fn(async (_player: string, activity: { id: string }) => ({
       activity: { id: activity.id } as PersistedActivity,
       inserted: true
@@ -99,12 +99,14 @@ describe("StravaService activities", () => {
     expect(client.listRecentActivities).toHaveBeenCalledTimes(1);
   });
 
-  it("marks activities before account creation as not importable, regardless of earlier imports", async () => {
+  it("allows pre-account Strava activities during the first three imports only", async () => {
     const { service, activities } = setup();
-    activities.getJourneyStartedAt.mockResolvedValueOnce(new Date("2026-05-15T00:00:00Z"));
-    const list = await service.listRecent("player");
-    expect(list.journeyStartedAt).toBe("2026-05-15T00:00:00.000Z");
-    expect(list.activities[0].beforeJourneyStart).toBe(true);
+    activities.getJourneyStartedAt.mockResolvedValue(new Date("2026-05-15T00:00:00Z"));
+    activities.getActivityCount.mockResolvedValueOnce(2).mockResolvedValueOnce(3);
+    const onboardingList = await service.listRecent("player");
+    const regularList = await service.listRecent("player");
+    expect(onboardingList.activities[0].beforeJourneyStart).toBe(false);
+    expect(regularList.activities[0].beforeJourneyStart).toBe(true);
   });
 
   it("returns an existing import without calling Strava", async () => {

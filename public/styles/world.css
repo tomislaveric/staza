@@ -42,11 +42,15 @@
 .world-filter-controls button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 
 .world-map-shell {
+  height: 520px;
+  margin-top: 16px;
+  position: relative;
+}
+.world-map-frame {
   background: var(--world-map-background);
   border: 1px solid var(--border-faint);
   border-radius: var(--radius-card);
   height: 520px;
-  margin-top: 16px;
   overflow: hidden;
   position: relative;
 }
@@ -559,12 +563,25 @@
   .world-filter-controls button { flex: none; min-height: 38px; white-space: nowrap; }
   /* Leave room above/below the map so the page can still be scrolled past it by touch. */
   .world-map-shell {
-    height: clamp(320px, calc(100dvh - var(--mobile-header-height, 0px) - var(--mobile-nav-clearance, 0px) - 190px), 600px);
+    height: auto;
     margin-top: 12px;
+  }
+  .world-map-frame {
+    height: clamp(320px, calc(100dvh - var(--mobile-header-height, 0px) - var(--mobile-nav-clearance, 0px) - 190px), 600px);
   }
   .world-explore { bottom: 58px; }
   .world-map-status { left: 70px; max-width: calc(100% - 150px); overflow-wrap: anywhere; transform: none; }
-  .world-detail-host { left: 10px; max-height: calc(100% - 110px); right: 10px; width: auto; }
+  .world-detail-host {
+    backdrop-filter: none;
+    bottom: auto;
+    left: auto;
+    margin-top: 12px;
+    max-height: none;
+    position: relative;
+    right: auto;
+    top: auto;
+    width: auto;
+  }
   .world-stats { margin-inline: 6px; }
   .quest-list ol { grid-template-columns: 1fr; }
 }

@@ -231,6 +231,11 @@ describe("World filter controls", () => {
     expect(buttonMarkup(WorldFilterControls([]), "all")).not.toContain(" hidden");
   });
 
+  it("keeps the exploration panel separate from the map frame", () => {
+    const markup = WorldPage({ stats: undefined, selectedFilters: [] });
+    expect(markup).toMatch(/class="world-map-frame">[\s\S]*<\/div>\s*<div class="world-detail-host"/);
+  });
+
   it("hides filters without matching viewport items", () => {
     const markup = WorldFilterControls([], collectibles, []);
     expect(buttonMarkup(markup, "waterfall")).toContain(" hidden");
