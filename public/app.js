@@ -9,14 +9,21 @@ import { mountSkillTreePage } from "./components/skill-tree-page.js";
 import { mountProfilePage } from "./components/profile/profile-page.js";
 import { startAuthentication, startRegistration } from "/shared/webauthn/index.js";
 import { mountAuthFlow, mountAuthSessionLoading } from "./components/auth/auth-flow.js";
-import { appPath, localizeAppUi, parseAppPath, setAppLocale } from "./app-locales.js";
+import {
+  appPath,
+  getLocalePreference,
+  localizeAppUi,
+  parseAppPath,
+  setAppLocale,
+  setLocalePreference
+} from "./app-locales.js";
 import { initComingSoon } from "./components/shared/coming-soon.js";
 
 const app = document.querySelector("#app");
 const nativeFetch = window.fetch.bind(window);
 let csrfToken;
 let currentSession;
-let currentRoute = parseAppPath(window.location.pathname, navigator.languages);
+let currentRoute = parseAppPath(window.location.pathname, navigator.languages, getLocalePreference());
 let sessionChecked = false;
 
 const setDocumentLocale = (locale) => {
@@ -28,21 +35,23 @@ const localizeRoot = () => localizeAppUi(app, currentRoute.locale);
 
 new MutationObserver(localizeRoot).observe(app, { childList: true, characterData: true, subtree: true });
 window.addEventListener("popstate", () => {
-  currentRoute = parseAppPath(window.location.pathname, navigator.languages);
-  if (currentRoute.legacy) {
-    window.history.replaceState(null, "", currentRoute.path);
-    currentRoute = parseAppPath(currentRoute.path, navigator.languages);
-  }
+  currentRoute = parseAppPath(window.location.pathname, navigator.languages, getLocalePreference());
   setDocumentLocale(currentRoute.locale);
   renderCurrentRoute();
 });
 
+app.addEventListener("change", (event) => {
+  if (!event.target.matches?.("[data-locale-selector]")) return;
+  setLocalePreference(event.target.value);
+  window.location.reload();
+});
+
 const setRoute = (screen, { activityId, replace = false } = {}) => {
-  const path = appPath(currentRoute.locale, screen, activityId);
+  const path = appPath(screen, activityId);
   if (window.location.pathname !== path) {
     window.history[replace ? "replaceState" : "pushState"](null, "", path);
   }
-  currentRoute = parseAppPath(path, navigator.languages);
+  currentRoute = parseAppPath(path, navigator.languages, getLocalePreference());
   setDocumentLocale(currentRoute.locale);
 };
 
@@ -122,7 +131,7 @@ const mountSignIn = (message = "") => mountAuthFlow(app, {
 });
 
 const showNotFound = () => {
-  app.innerHTML = `<main class="auth-screen"><section class="auth-content"><h1>Page not found</h1><a href="${appPath(currentRoute.locale, "sign-in")}">Sign in</a></section></main>`;
+  app.innerHTML = `<main class="auth-screen"><section class="auth-content"><h1>Page not found</h1><a href="${appPath("sign-in")}">Sign in</a></section></main>`;
   localizeRoot();
 };
 
@@ -136,10 +145,6 @@ const renderCurrentRoute = () => {
   mountSignIn();
 };
 
-if (currentRoute.legacy) {
-  window.history.replaceState(null, "", currentRoute.path);
-  currentRoute = parseAppPath(currentRoute.path, navigator.languages);
-}
 setDocumentLocale(currentRoute.locale);
 initComingSoon();
 mountAuthSessionLoading(app);

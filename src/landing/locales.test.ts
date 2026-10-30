@@ -66,10 +66,26 @@ describe("landing page localization", () => {
     expect(script).toContain("preserveLanguageFragment();");
   });
 
-  it("leaves the authenticated app routes mapped to the app document", () => {
+  it("links landing CTAs to the app host and carries the selected language in a shared cookie", () => {
+    expect(renderedEnglish).toContain('href="https://play.staza.world/sign-in" data-app-locale="en"');
+    expect(renderedGerman).toContain('href="https://play.staza.world/sign-in" data-app-locale="de"');
+    const script = readFileSync(path.resolve("public/landing/landing.js"), "utf8");
+    expect(script).toContain("staza_locale=${locale}");
+    expect(script).toContain("; Domain=staza.world");
+    expect(script).toContain('window.location.hostname.startsWith("dev.")');
+    expect(script).toContain('"dev.play.staza.world"');
+  });
+
+  it("routes app-host root and locale-neutral paths to the app document", () => {
     const server = readFileSync(path.resolve("src/server.ts"), "utf8");
-    expect(server).toContain('app.get(["/app", "/sign-in"]');
+    expect(server).toMatch(/app\.get\("\/", \(_request, response\) => \{\s*response\.redirect\(302, "\/home"\);/);
+    expect(server).toContain('  "/sign-in",\n  "/register",\n  "/home",');
     expect(server).toContain("response.sendFile(appDocument)");
-    expect(server).toContain('app.get(/^\\/(?:en|de)(?:\\/.*)?$/');
+    expect(server).toContain('app.get("/activities/:activityId"');
+    expect(server).not.toContain('app.get(/^\\/(?:en|de)(?:\\/.*)?$/');
+    expect(server).toContain('response.redirect(303, `/add-activity?strava=${outcome}`)');
+    expect(server).toContain('response.cookie("staza_locale", locale,');
+    expect(server).not.toContain("/de/aktivitaet-hinzufuegen");
+    expect(server).not.toContain("/en/add-activity");
   });
 });

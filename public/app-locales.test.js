@@ -1,16 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appCopy,
   appPath,
   appRoutes,
+  getLocalePreference,
+  localeCookieName,
   parseAppPath,
   resolvePreferredLocale,
   setAppLocale,
+  setLocalePreference,
   translateAppText,
   translateAppTextNode
 } from "./app-locales.js";
 import { AppShell } from "./components/app-shell.js";
+import { LanguageSelector } from "./components/language-selector.js";
 import { formatActivityDate, formatActivityDistance } from "./components/activities-page.js";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("public app locale and route handling", () => {
   it("keeps the English and German UI catalogs in sync", () => {
@@ -28,9 +34,12 @@ describe("public app locale and route handling", () => {
     }
   });
 
-  it("uses locale-aware labels and formats without adding a language switcher", () => {
-    expect(AppShell("de")).toContain('href="/de/start"');
-    expect(AppShell("de")).not.toContain("language-switcher");
+  it("uses locale-neutral routes and includes a language selector", () => {
+    expect(AppShell("de")).toContain('href="/home"');
+    expect(AppShell("de")).not.toContain('data-locale-selector');
+    const selector = LanguageSelector("de");
+    expect(selector).toContain('🇩🇪');
+    expect(selector).toContain('value="de" data-locale-selector checked');
     setAppLocale("de");
     expect(formatActivityDistance(5_400)).toBe("5,4 km");
     expect(formatActivityDate("2026-09-26T12:00:00.000Z")).not.toBe("SAT, SEP 26");
@@ -44,38 +53,43 @@ describe("public app locale and route handling", () => {
     expect(resolvePreferredLocale(["fr-FR", "it-IT"])).toBe("en");
   });
 
-  it("prefers explicit URL locales over browser preferences", () => {
-    expect(parseAppPath("/de/start", ["en-US"])).toMatchObject({ locale: "de", screen: "home" });
-    expect(parseAppPath("/en/world", ["de-DE"])).toMatchObject({ locale: "en", screen: "world" });
+  it("prefers a saved locale over browser preferences and falls back to browser language", () => {
+    expect(parseAppPath("/home", ["en-US"], "de")).toMatchObject({ locale: "de", screen: "home" });
+    expect(parseAppPath("/world", ["de-DE"], undefined)).toMatchObject({ locale: "de", screen: "world" });
+    expect(parseAppPath("/world", ["fr-FR"], "invalid")).toMatchObject({ locale: "en", screen: "world" });
+    expect(getLocalePreference(`${localeCookieName}=de; other=value`)).toBe("de");
+    expect(getLocalePreference(`${localeCookieName}=fr`)).toBeUndefined();
   });
 
-  it("maps every declared screen to its localized route", () => {
-    for (const locale of ["en", "de"]) {
-      for (const screen of Object.keys(appRoutes[locale])) {
-        const path = appPath(locale, screen, "activity/id");
-        const route = parseAppPath(path, [locale]);
-        expect(route.locale).toBe(locale);
-        expect(route.screen).toBe(screen);
-        if (screen === "activity-detail") expect(route.activityId).toBe("activity/id");
-      }
+  it("maps every declared screen to a locale-neutral route", () => {
+    for (const [screen] of Object.entries(appRoutes)) {
+      const path = appPath(screen, "activity/id");
+      const route = parseAppPath(path, ["de-DE"]);
+      expect(route.locale).toBe("de");
+      expect(route.screen).toBe(screen);
+      if (screen === "activity-detail") expect(route.activityId).toBe("activity/id");
     }
-    expect(appPath("de", "activities")).toBe("/de/aktivitaeten");
-    expect(appPath("de", "activity-detail", "ride 1")).toBe("/de/aktivitaeten/ride%201");
+    expect(appPath("home")).toBe("/home");
+    expect(appPath("activity-detail", "ride 1")).toBe("/activities/ride%201");
   });
 
-  it("normalizes legacy entry paths to the preferred locale sign-in route", () => {
-    expect(parseAppPath("/app", ["de-AT", "en-US"])).toMatchObject({
-      locale: "de",
-      screen: "sign-in",
-      path: "/de/anmelden",
-      legacy: true
-    });
+  it("parses shared sign-in routes and no longer recognizes locale-prefixed URLs", () => {
     expect(parseAppPath("/sign-in", ["fr-FR"])).toMatchObject({
       locale: "en",
       screen: "sign-in",
-      path: "/en/sign-in",
-      legacy: true
+      path: "/sign-in"
     });
+    expect(parseAppPath("/de/start", ["en-US"]).screen).toBe("not-found");
+    expect(parseAppPath("/en/world", ["de-DE"]).screen).toBe("not-found");
+  });
+
+  it("writes a shared secure cookie on Staza hosts and a host-only cookie locally", () => {
+    vi.stubGlobal("document", { cookie: "" });
+    setLocalePreference("de", { hostname: "dev.play.staza.world", protocol: "https:" });
+    expect(document.cookie).toBe("staza_locale=de; Max-Age=31536000; Path=/; SameSite=Lax; Domain=staza.world; Secure");
+    setLocalePreference("en", { hostname: "localhost", protocol: "http:" });
+    expect(document.cookie).toBe("staza_locale=en; Max-Age=31536000; Path=/; SameSite=Lax");
+    expect(() => setLocalePreference("fr")).toThrow("Unsupported app locale: fr");
   });
 
   it("preserves dynamic text in localized message prefixes", () => {
@@ -85,7 +99,7 @@ describe("public app locale and route handling", () => {
   });
 
   it("returns a not-found route for unknown paths and malformed activity ids", () => {
-    expect(parseAppPath("/de/unknown", ["en-US"]).screen).toBe("not-found");
-    expect(parseAppPath("/en/activities/%E0%A4%A", ["de-DE"]).screen).toBe("not-found");
+    expect(parseAppPath("/unknown", ["en-US"]).screen).toBe("not-found");
+    expect(parseAppPath("/activities/%E0%A4%A", ["de-DE"]).screen).toBe("not-found");
   });
 });

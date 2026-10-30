@@ -1,4 +1,5 @@
 import { getAppLocale } from "../../app-locales.js";
+import { LanguageSelector } from "../language-selector.js";
 import { disconnectStrava, loadStravaStatus, requestStravaAuthorization } from "../strava-import.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -53,6 +54,7 @@ export const profileOverviewView = (profile, session, stravaStatus) => {
       ${row("Passkeys", "Manage registered passkeys", "passkeys")}
       ${row("Sessions", "Sign out or manage active devices", "account")}
     </div></section>
+    <section class="profile-section"><h2>LANGUAGE</h2><div class="profile-card profile-language">${LanguageSelector()}</div></section>
     ${["connected", "disconnected", "reconnect_required"].includes(stravaStatus)
       ? `<section class="profile-section"><h2>CONNECTIONS</h2><div class="profile-card">${stravaConnection(stravaStatus)}</div></section>`
       : ""}`);

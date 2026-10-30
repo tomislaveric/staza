@@ -17,6 +17,8 @@ describe("Profile views", () => {
     expect(view).not.toContain("Total XP earned");
     expect(view).not.toContain("achievement");
     expect(view).not.toContain("@alexrides");
+    expect(view).toContain("data-locale-selector");
+    expect(view).toContain("🇬🇧");
   });
 
   it("renders verified email and canonical account actions", () => {

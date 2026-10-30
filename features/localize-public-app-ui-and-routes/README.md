@@ -1,5 +1,11 @@
 # localize-public-app-ui-and-routes
 
+> **Current routing and language selection:** The original locale-prefixed
+> routes and no-language-switcher decision below are superseded by
+> [App host redirects and locale-neutral routes](../app-host-redirects-and-locale-neutral-routes/README.md).
+> The app now uses shared locale-neutral paths and a cookie-backed language
+> selector.
+
 ## Goal
 
 Localize the public app interface in English and German, and make locale and

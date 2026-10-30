@@ -30,6 +30,23 @@ if (toggle && menu) {
 }
 
 const languageLinks = document.querySelectorAll(".language-switcher a");
+const appHost = window.location.hostname.startsWith("dev.")
+  ? "dev.play.staza.world"
+  : "play.staza.world";
+for (const link of document.querySelectorAll("a[data-app-locale]")) {
+  link.href = `${window.location.protocol}//${appHost}/sign-in`;
+  link.addEventListener("click", () => {
+    const locale = link.dataset.appLocale;
+    if (locale !== "en" && locale !== "de") return;
+    const sharedDomain = window.location.hostname === "staza.world"
+      || window.location.hostname.endsWith(".staza.world")
+      ? "; Domain=staza.world"
+      : "";
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `staza_locale=${locale}; Max-Age=31536000; Path=/; SameSite=Lax${sharedDomain}${secure}`;
+  });
+}
+
 const preserveLanguageFragment = () => {
   for (const link of languageLinks) {
     const destination = new URL(link.getAttribute("href") ?? link.href, window.location.origin);

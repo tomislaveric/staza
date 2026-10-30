@@ -46,8 +46,22 @@ describe("landing page document", () => {
     for (const target of ctas) {
       expect(target === "{{landing.signInPath}}" || target.startsWith("#")).toBe(true);
     }
-    expect(translateLandingTemplate(html, "en")).toContain('href="/en/sign-in"');
-    expect(translateLandingTemplate(html, "de")).toContain('href="/de/anmelden"');
+    expect(translateLandingTemplate(html, "en")).toContain('href="https://play.staza.world/sign-in" data-app-locale="en"');
+    expect(translateLandingTemplate(html, "de")).toContain('href="https://play.staza.world/sign-in" data-app-locale="de"');
+  });
+
+  it("keeps landing-page internal links and asset references same-origin", () => {
+    const rendered = translateLandingTemplate(html, "en");
+    const anchorTargets = [...rendered.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map((match) => match[1]!);
+    for (const target of anchorTargets) {
+      if (target.startsWith("#")) continue;
+      if (target === "https://play.staza.world/sign-in") continue;
+      expect(target).toMatch(/^\/(?!\/)/);
+    }
+
+    const assets = [...rendered.matchAll(/(?:src|href)="([^"]+\.(?:svg|jpg|png|css|js))"/g)].map((match) => match[1]!);
+    expect(assets.length).toBeGreaterThanOrEqual(6);
+    for (const asset of assets) expect(asset).toMatch(/^\/(?!\/)/);
   });
 
   it("resolves every in-page anchor to an existing element id", () => {

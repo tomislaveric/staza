@@ -10,7 +10,7 @@ export const navItems = [
 ];
 
 export const SidebarLogo = (locale = "en") => `
-  <a class="sidebar-logo" href="${appPath(locale, "home")}" aria-label="Staza home">
+  <a class="sidebar-logo" href="${appPath("home")}" aria-label="Staza home">
     <img src="/assets/logo-full.svg" alt="">
   </a>
 `;
@@ -43,7 +43,7 @@ export const Sidebar = (locale = "en") => `
   </aside>
 `;
 
-export const MobileNavigation = () => `
+export const MobileNavigation = (locale = "en") => `
   <div class="mobile-navigation">
     <button class="mobile-add-activity" type="button" data-screen="add-activity" aria-label="Add Activity">
       <img src="/assets/add-activity-upload.svg" width="16" height="16" alt="">

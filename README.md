@@ -12,6 +12,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Activity Replay Presentation / Game Feel V1](features/activity-replay-presentation-game-feel-v1/README.md)
   — improve the dependency-free activity recap with collectible states, feedback,
   readable score/events, next-item context, and completion presentation.
+- [App host redirects and locale-neutral routes](features/app-host-redirects-and-locale-neutral-routes/README.md) — route app hosts into the app, share URLs across languages, and persist the selected locale.
 - [Coin collection](features/coin-collection/README.md) — animate Coin pickups
   with a 2.5D Collect effect, reward, and generated audio Chime.
 - [Collectible rarity cleanup and category icons](features/collectible-rarity-cleanup-and-category-icons/README.md) — remove Rare/Epic collectible tiers and add distinct SVG map icons for Viewpoint and Place.

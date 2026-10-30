@@ -56,7 +56,6 @@ import { buildGpx, gpxFilename } from "./exploration/gpx.js";
 import { ExplorationSessionStore } from "./exploration/sessionStore.js";
 import { ExplorationError, ExplorationService } from "./exploration/service.js";
 import { AuthService, EmailSender, type SessionUser } from "./auth.js";
-import { translateLandingTemplate } from "./landing/locales.js";
 
 interface UploadRequest extends Request {
   job?: Job;
@@ -740,7 +739,14 @@ app.get("/api/integrations/strava/callback", requireStrava, async (request: Uplo
       return;
     }
     const { outcome, locale } = await stravaService!.completeAuthorization(request.user, request.query);
-    response.redirect(303, `${locale === "de" ? "/de/aktivitaet-hinzufuegen" : "/en/add-activity"}?strava=${outcome}`);
+    response.cookie("staza_locale", locale, {
+      ...(request.hostname === "staza.world" || request.hostname.endsWith(".staza.world") ? { domain: "staza.world" } : {}),
+      secure: request.secure,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 365 * 24 * 60 * 60 * 1000
+    });
+    response.redirect(303, `/add-activity?strava=${outcome}`);
   } catch (error) { next(error); }
 });
 app.delete("/api/integrations/strava", requireUser, requireCsrf, requireStrava, async (request: UploadRequest, response, next) => {
@@ -763,19 +769,24 @@ app.get("/shared/progression.js", (_request, response) => {
 app.use("/shared/webauthn", express.static(path.resolve("node_modules/@simplewebauthn/browser/esm")));
 app.use("/shared/maplibre", express.static(path.resolve("node_modules/maplibre-gl/dist")));
 
-const landingDocument = path.resolve("public/landing/index.html");
 const appDocument = path.resolve("public/index.html");
-const landingTemplate = await readFile(landingDocument, "utf8");
 app.get("/", (_request, response) => {
-  response.type("html").send(translateLandingTemplate(landingTemplate, "en"));
+  response.redirect(302, "/home");
 });
-app.get(["/de", "/de/"], (_request, response) => {
-  response.type("html").send(translateLandingTemplate(landingTemplate, "de"));
-});
-app.get(["/app", "/sign-in"], (_request, response) => {
+app.get([
+  "/sign-in",
+  "/register",
+  "/home",
+  "/activities",
+  "/world",
+  "/skill-tree",
+  "/progress",
+  "/profile",
+  "/add-activity"
+], (_request, response) => {
   response.sendFile(appDocument);
 });
-app.get(/^\/(?:en|de)(?:\/.*)?$/, (_request, response) => {
+app.get("/activities/:activityId", (_request, response) => {
   response.sendFile(appDocument);
 });
 

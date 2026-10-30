@@ -7,7 +7,7 @@ export const AppShell = (locale = "en") => `
   <div class="app-shell">
     ${sidebar(locale)}
     ${mainContent()}
-    ${MobileNavigation()}
+    ${MobileNavigation(locale)}
   </div>
 `;
 

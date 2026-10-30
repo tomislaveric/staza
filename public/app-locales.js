@@ -1,39 +1,22 @@
 export const appRoutes = {
-  en: {
-    "sign-in": "sign-in",
-    register: "register",
-    home: "home",
-    activities: "activities",
-    "activity-detail": "activities",
-    world: "world",
-    "skill-tree": "skill-tree",
-    progress: "progress",
-    profile: "profile",
-    "add-activity": "add-activity"
-  },
-  de: {
-    "sign-in": "anmelden",
-    register: "registrieren",
-    home: "start",
-    activities: "aktivitaeten",
-    "activity-detail": "aktivitaeten",
-    world: "welt",
-    "skill-tree": "skillbaum",
-    progress: "fortschritt",
-    profile: "profil",
-    "add-activity": "aktivitaet-hinzufuegen"
-  }
+  "sign-in": "sign-in",
+  register: "register",
+  home: "home",
+  activities: "activities",
+  "activity-detail": "activities",
+  world: "world",
+  "skill-tree": "skill-tree",
+  progress: "progress",
+  profile: "profile",
+  "add-activity": "add-activity"
 };
-
 const screensByRoute = Object.fromEntries(
-  Object.entries(appRoutes).map(([locale, routes]) => [
-    locale,
-    Object.fromEntries(Object.entries(routes).map(([screen, slug]) => [slug, screen]))
-  ])
+  Object.entries(appRoutes).map(([screen, slug]) => [slug, screen])
 );
 
 export const supportedLocales = ["en", "de"];
 export const defaultLocale = "en";
+export const localeCookieName = "staza_locale";
 let activeLocale = defaultLocale;
 
 export const setAppLocale = (locale) => {
@@ -41,6 +24,27 @@ export const setAppLocale = (locale) => {
 };
 
 export const getAppLocale = () => activeLocale;
+
+export const getLocalePreference = (cookie = document.cookie) => {
+  const entry = cookie.split(";").map((part) => part.trim())
+    .find((part) => part.startsWith(`${localeCookieName}=`));
+  const locale = entry?.slice(localeCookieName.length + 1);
+  return supportedLocales.includes(locale) ? locale : undefined;
+};
+
+export const setLocalePreference = (
+  locale,
+  options = {}
+) => {
+  if (!supportedLocales.includes(locale)) throw new Error(`Unsupported app locale: ${locale}`);
+  const hostname = options.hostname ?? window.location.hostname;
+  const protocol = options.protocol ?? window.location.protocol;
+  const sharedDomain = hostname === "staza.world" || hostname.endsWith(".staza.world")
+    ? "; Domain=staza.world"
+    : "";
+  const secure = protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${localeCookieName}=${locale}; Max-Age=31536000; Path=/; SameSite=Lax${sharedDomain}${secure}`;
+};
 
 export const resolvePreferredLocale = (languages = []) => {
   for (const language of languages) {
@@ -50,9 +54,8 @@ export const resolvePreferredLocale = (languages = []) => {
   return defaultLocale;
 };
 
-export const appPath = (locale, screen, activityId) => {
-  const selectedLocale = supportedLocales.includes(locale) ? locale : defaultLocale;
-  const slug = appRoutes[selectedLocale][screen];
+export const appPath = (screen, activityId) => {
+  const slug = appRoutes[screen];
   if (!slug) throw new Error(`Unknown app screen: ${screen}`);
   if (screen === "activity-detail" && (activityId === undefined || activityId === null || activityId === "")) {
     throw new Error("An activity ID is required for the activity detail route");
@@ -60,42 +63,33 @@ export const appPath = (locale, screen, activityId) => {
   const suffix = screen === "activity-detail"
     ? `/${encodeURIComponent(String(activityId))}`
     : "";
-  return `/${selectedLocale}/${slug}${suffix}`;
+  return `/${slug}${suffix}`;
 };
 
-export const parseAppPath = (pathname, languages = []) => {
+export const parseAppPath = (pathname, languages = [], localePreference) => {
   const parts = pathname.split("/").filter(Boolean);
-  const explicitLocale = supportedLocales.includes(parts[0]) ? parts[0] : undefined;
-  const locale = explicitLocale ?? resolvePreferredLocale(languages);
-  const routeIndex = explicitLocale ? 1 : 0;
-  const route = parts[routeIndex];
-  let screen = screensByRoute[locale][route];
+  const locale = supportedLocales.includes(localePreference)
+    ? localePreference
+    : resolvePreferredLocale(languages);
+  const route = parts[0];
+  let screen = screensByRoute[route];
   if (screen === "activity-detail") {
-    screen = parts[routeIndex + 1] ? "activity-detail" : "activities";
+    screen = parts[1] ? "activity-detail" : "activities";
   }
 
-  if (!explicitLocale && ["app", "sign-in"].includes(route)) {
-    return {
-      locale,
-      screen: "sign-in",
-      path: appPath(locale, "sign-in"),
-      legacy: true
-    };
-  }
-
-  if (screen === "activity-detail" && parts[routeIndex + 1]) {
-    if (parts.length !== routeIndex + 2) return { locale, screen: "not-found", path: pathname };
+  if (screen === "activity-detail" && parts[1]) {
+    if (parts.length !== 2) return { locale, screen: "not-found", path: pathname };
     let activityId;
     try {
-      activityId = decodeURIComponent(parts[routeIndex + 1]);
+      activityId = decodeURIComponent(parts[1]);
     } catch {
       return { locale, screen: "not-found", path: pathname };
     }
-    return { locale, screen, activityId, path: appPath(locale, screen, activityId) };
+    return { locale, screen, activityId, path: appPath(screen, activityId) };
   }
 
-  if (screen && parts.length === routeIndex + 1) {
-    return { locale, screen, path: appPath(locale, screen) };
+  if (screen && parts.length === 1) {
+    return { locale, screen, path: appPath(screen) };
   }
 
   return { locale, screen: "not-found", path: pathname };
@@ -667,7 +661,9 @@ const germanCopy = {
   "A to B": "A nach B",
   "Step 1 · Plan your outing": "Schritt 1 · Plane deine Tour",
   "Download GPX": "GPX herunterladen",
-  "Planned route": "Geplante Route"
+  "Planned route": "Geplante Route",
+  Language: "Sprache",
+  LANGUAGE: "SPRACHE"
 };
 
 export const appCopy = {
