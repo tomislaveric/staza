@@ -40,7 +40,9 @@ export const getLevelProgress = (totalXp: number): PlayerProgress => {
     level,
     currentLevelXp,
     nextLevelXp,
-    progressToNextLevel: currentLevelXp / nextLevelXp
+    progressToNextLevel: currentLevelXp / nextLevelXp,
+    remainingXp: Math.max(0, nextLevelXp - currentLevelXp),
+    progressPercent: Math.max(0, Math.min(100, (currentLevelXp / nextLevelXp) * 100))
   };
 };
 

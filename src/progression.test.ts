@@ -23,7 +23,9 @@ describe("progression", () => {
       level: 2,
       currentLevelXp: 150,
       nextLevelXp: 200,
-      progressToNextLevel: 0.75
+      progressToNextLevel: 0.75,
+      remainingXp: 50,
+      progressPercent: 75
     });
   });
 

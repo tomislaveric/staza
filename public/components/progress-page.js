@@ -25,21 +25,13 @@ export const formatActivityDate = (startedAt) => {
 
 export const progressViewModel = (dashboard) => {
   const { progress, lifetime, recentActivities } = dashboard;
-  const maximumActivityXp = Math.max(0, ...recentActivities.map((activity) => activity.xpEarned));
   return {
     ...dashboard,
-    progress: {
-      ...progress,
-      percentage: Math.max(0, Math.min(100, progress.progressToNextLevel * 100)),
-      remainingXp: Math.max(0, progress.nextLevelXp - progress.currentLevelXp)
-    },
+    progress: { ...progress, percentage: progress.progressPercent },
     lifetime: { ...lifetime },
     sportRecords: dashboard.sportRecords ?? [],
     milestones: dashboard.milestones ?? { places: 0, peaks: 0, mountainPasses: 0, flowlines: lifetime.totalFlowlines ?? 0 },
-    recentActivities: recentActivities.map((activity) => ({
-      ...activity,
-      percentage: maximumActivityXp ? Math.max(0, Math.min(100, activity.xpEarned / maximumActivityXp * 100)) : 0
-    }))
+    recentActivities: recentActivities.map((activity) => ({ ...activity, percentage: activity.xpPercentOfBest }))
   };
 };
 

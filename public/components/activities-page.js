@@ -26,16 +26,7 @@ export const formatActivityDuration = (durationSeconds) => {
   return formatDuration(durationSeconds);
 };
 
-export const activitiesViewModel = (activities) => ({
-  activities,
-  stats: {
-    count: activities.length,
-    distanceMeters: activities.reduce((total, activity) => total + (activity.distanceMeters ?? 0), 0),
-    xp: activities.reduce((total, activity) => total + activity.xpEarned, 0),
-    collected: activities.reduce((total, activity) => total + activity.collectedCount, 0),
-    flowlines: activities.reduce((total, activity) => total + (activity.flowlineCount ?? 0), 0)
-  }
-});
+export const activitiesViewModel = (activities, stats) => ({ activities, stats });
 
 const replayForActivity = (activity) => {
   const replay = activity?.replay;
@@ -137,12 +128,15 @@ const responseJson = async (response) => {
 export const mountActivitiesPage = async (mountPoint, onSelectActivity) => {
   mountPoint.innerHTML = '<section class="activities-page"><p class="activities-loading" role="status">Loading activities...</p></section>';
   try {
-    const history = await fetch("/api/activities").then(responseJson);
+    const [history, stats] = await Promise.all([
+      fetch("/api/activities").then(responseJson),
+      fetch("/api/activities/summary").then(responseJson)
+    ]);
     const activities = await Promise.all(history.map(async (activity) => ({
       ...activity,
       ...(await fetch(`/api/activities/${encodeURIComponent(activity.id)}`).then(responseJson))
     })));
-    const model = activitiesViewModel(activities);
+    const model = activitiesViewModel(activities, stats);
     mountPoint.innerHTML = ActivitiesPage(model);
     const basemap = await fetch("/api/world/basemap").then(responseJson).catch(() => undefined);
     mountPoint.querySelectorAll(".activity-card").forEach((card) => {

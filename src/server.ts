@@ -19,6 +19,7 @@ import {
   SynchronizationError
 } from "./synchronization.js";
 import { createHudTimeline, loadHudTimeline, saveHudTimeline } from "./hud/timeline.js";
+import { summarizeActivities } from "./activitySummary.js";
 import { ActivityRepository } from "./persistence/activityRepository.js";
 import { CollectibleRepository } from "./persistence/collectibleRepository.js";
 import { FartlekRepository } from "./persistence/fartlekRepository.js";
@@ -920,6 +921,14 @@ app.post("/api/activities/:id/video", requirePlayer, requireCsrf, lateVideoUploa
 app.get("/api/activities", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
     response.json(await activityRepository.listActivities(request.user!.playerId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/activities/summary", requirePlayer, async (request: UploadRequest, response, next) => {
+  try {
+    response.json(summarizeActivities(await activityRepository.listActivities(request.user!.playerId)));
   } catch (error) {
     next(error);
   }

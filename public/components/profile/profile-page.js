@@ -47,7 +47,7 @@ export const profileOverviewView = (profile, session, stravaStatus) => {
     </section>
     <section class="profile-progress" aria-label="Level progress">
       <p><span>Level ${formatNumber(progress.level)}</span><span>${formatNumber(progress.currentLevelXp)} / ${formatNumber(progress.nextLevelXp)} XP</span></p>
-      <div role="progressbar" aria-valuemin="0" aria-valuemax="${progress.nextLevelXp}" aria-valuenow="${progress.currentLevelXp}"><i style="width:${Math.max(0, Math.min(100, progress.progressToNextLevel * 100))}%"></i></div>
+      <div role="progressbar" aria-valuemin="0" aria-valuemax="${progress.nextLevelXp}" aria-valuenow="${progress.currentLevelXp}"><i style="width:${progress.progressPercent}%"></i></div>
     </section>
     <section class="profile-section"><h2>ACCOUNT &amp; SECURITY</h2><div class="profile-card">
       ${row("Account email", { email: session.user.email, verified: session.user.emailVerified ? "Verified" : "" }, "account")}

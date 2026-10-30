@@ -56,3 +56,20 @@ behavior.
 - Run focused tests for changed backend and UI behavior.
 - Run the repository test suite as appropriate to the final set of changes.
 - Run `npm run build` to verify the TypeScript backend.
+
+## Implementation notes
+
+Migrated to the backend (additive, backward-compatible):
+
+- `PlayerProgress` now includes `remainingXp` and `progressPercent`
+  (`src/progression.ts`); Home, Progress and Profile render them.
+- `GET /api/activities/summary` returns history totals (`count`,
+  `distanceMeters`, `xp`, `collected`, `flowlines`) from
+  `src/activitySummary.ts`; the Activities page renders them.
+- Progress dashboard `recentActivities` include `xpPercentOfBest`.
+- Home stats come only from the dashboard `lifetime` totals.
+
+Intentionally left in the browser (presentation/interaction): replay XP
+animation and `levelStateAt` (frozen level table), map viewport/layout, tooltip
+positioning, formatting, and quest open/locked/completed grouping and world
+filters (follow-ups; world filters need a reviewed `/api/world` contract).

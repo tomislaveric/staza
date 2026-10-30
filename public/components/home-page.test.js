@@ -11,10 +11,11 @@ describe("Home data transformation", () => {
     events: [{ collectible: { name: "Peak" } }]
   }];
 
-  it("derives Home totals from persisted activity history", () => {
-    expect(homeViewModel(progress, activities)).toMatchObject({
+  it("maps backend lifetime totals onto Home stats", () => {
+    const lifetime = { distanceMeters: 6_000, totalCollectibles: 3, totalFlowlines: 1 };
+    expect(homeViewModel({ ...progress, remainingXp: 300 }, activities, lifetime)).toMatchObject({
       progress: { remainingXp: 300 },
-      stats: { totalXp: 700, distanceMeters: 6_000, totalCollected: 3 },
+      stats: { totalXp: 700, distanceMeters: 6_000, totalCollected: 3, totalFlowlines: 1 },
       latest: activities[0]
     });
   });

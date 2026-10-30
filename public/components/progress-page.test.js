@@ -15,7 +15,9 @@ const dashboard = {
     level: 7,
     currentLevelXp: 390,
     nextLevelXp: 700,
-    progressToNextLevel: 390 / 700
+    progressToNextLevel: 390 / 700,
+    remainingXp: 310,
+    progressPercent: 55.7
   },
   lifetime: {
     distanceMeters: 1_247_800,
@@ -66,10 +68,10 @@ describe("Progress page", () => {
     expect(levelName(15)).toBe("Level 15");
   });
 
-  it("clamps the visual percentage for a new player", () => {
+  it("renders a new player's backend-provided percentage", () => {
     const model = progressViewModel({
       ...dashboard,
-      progress: { totalXp: 0, level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: -1 },
+      progress: { totalXp: 0, level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0, remainingXp: 100, progressPercent: 0 },
       sportRecords: [],
       recentActivities: []
     });

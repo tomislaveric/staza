@@ -235,6 +235,10 @@ export interface PlayerProgress {
   currentLevelXp: number;
   nextLevelXp: number;
   progressToNextLevel: number;
+  /** XP still needed to reach the next level. */
+  remainingXp: number;
+  /** progressToNextLevel as a 0-100 percentage. */
+  progressPercent: number;
 }
 
 export interface PlayerProfileOverview {
@@ -282,12 +286,26 @@ export interface DiscoveryMilestones {
   flowlines: number;
 }
 
+/** Recent activity with its XP relative to the best recent activity (0-100). */
+export interface ProgressDashboardActivity extends ActivityHistoryItem {
+  xpPercentOfBest: number;
+}
+
+/** Totals across a player's activity history. */
+export interface ActivityHistorySummary {
+  count: number;
+  distanceMeters: number;
+  xp: number;
+  collected: number;
+  flowlines: number;
+}
+
 export interface ProgressDashboard {
   progress: PlayerProgress;
   lifetime: ProgressLifetimeStats;
   sportRecords: SportRecord[];
   milestones: DiscoveryMilestones;
-  recentActivities: ActivityHistoryItem[];
+  recentActivities: ProgressDashboardActivity[];
   questHistory: QuestHistoryEntry[];
 }
 

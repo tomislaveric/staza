@@ -27,23 +27,16 @@ const replayForHome = (activity) => {
   return replay;
 };
 
-export const homeViewModel = (progress, activities, lifetime) => {
-  const latest = activities[0];
-  const totalDistanceMeters = activities.reduce((total, activity) => total + (activity.distanceMeters ?? 0), 0);
-  return {
-    progress: {
-      ...progress,
-      remainingXp: Math.max(0, progress.nextLevelXp - progress.currentLevelXp)
-    },
-    stats: {
-      totalXp: progress.totalXp,
-      distanceMeters: lifetime?.distanceMeters ?? totalDistanceMeters,
-      totalCollected: lifetime?.totalCollectibles ?? activities.reduce((total, activity) => total + activity.collectedCount, 0),
-      totalFlowlines: lifetime?.totalFlowlines ?? activities.reduce((total, activity) => total + (activity.flowlineCount ?? 0), 0)
-    },
-    latest
-  };
-};
+export const homeViewModel = (progress, activities, lifetime) => ({
+  progress,
+  stats: {
+    totalXp: progress.totalXp,
+    distanceMeters: lifetime.distanceMeters,
+    totalCollected: lifetime.totalCollectibles,
+    totalFlowlines: lifetime.totalFlowlines
+  },
+  latest: activities[0]
+});
 
 export const HomePlayerProgress = ({ progress, stats }) => `
   <section class="home-hero" aria-label="Player progress">
@@ -53,7 +46,7 @@ export const HomePlayerProgress = ({ progress, stats }) => `
         <p class="home-section-label">LEVEL ${formatNumber(progress.level)}</p>
         <p class="home-xp"><strong>${formatNumber(progress.currentLevelXp)}</strong> <span>/ ${formatNumber(progress.nextLevelXp)} XP</span></p>
         <div class="home-xp-track" role="progressbar" aria-valuemin="0" aria-valuemax="${progress.nextLevelXp}" aria-valuenow="${progress.currentLevelXp}">
-          <span style="width: ${Math.min(100, Math.max(0, progress.progressToNextLevel * 100))}%"></span>
+          <span style="width: ${progress.progressPercent}%"></span>
         </div>
         <p class="home-progress-caption">${formatNumber(progress.remainingXp)} XP to Level ${formatNumber(progress.level + 1)}</p>
       </div>

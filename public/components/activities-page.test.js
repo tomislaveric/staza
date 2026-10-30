@@ -13,11 +13,9 @@ describe("Activities data transformation", () => {
     }
   ];
 
-  it("preserves repository ordering while deriving compact history totals", () => {
-    expect(activitiesViewModel(activities)).toMatchObject({
-      activities,
-      stats: { count: 2, distanceMeters: 5_400, xp: 50, collected: 3 }
-    });
+  it("preserves repository ordering and renders backend history totals", () => {
+    const stats = { count: 2, distanceMeters: 5_400, xp: 50, collected: 3, flowlines: 0 };
+    expect(activitiesViewModel(activities, stats)).toEqual({ activities, stats });
   });
 
   it("formats persisted activity metadata and missing values explicitly", () => {

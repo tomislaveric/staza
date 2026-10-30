@@ -33,6 +33,7 @@ import {
 import { readableFlowlineName } from "../flowlineName.js";
 import { ActivityImportRejectedError } from "../errors.js";
 import { getLevelProgress } from "../progression.js";
+import { withXpPercentOfBest } from "../activitySummary.js";
 import { FartlekCompletionRepository } from "./fartlekCompletionRepository.js";
 import type { SkillTreeStats } from "../skillTree/types.js";
 import { aggregateSkillTreeStats } from "../skillTree/statsQuery.js";
@@ -563,7 +564,7 @@ export class ActivityRepository {
           mountainPasses: milestoneTotal("mountain_pass"),
           flowlines: Number(lifetime.total_flowlines)
         },
-        recentActivities: recentActivitiesResult.rows.map(mapActivity),
+        recentActivities: withXpPercentOfBest(recentActivitiesResult.rows.map(mapActivity)),
         questHistory
       };
     } catch (error) {
