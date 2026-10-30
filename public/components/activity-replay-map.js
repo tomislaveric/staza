@@ -10,6 +10,7 @@ import { collectiblesToFeatureCollection } from "./shared/map/staza-collectible-
 import { lineFeature, pointFeature, pointsToBounds } from "./shared/map/staza-map-utils.js";
 import { interpolatePosition, markerState, replayDurationSeconds, replayMarkers } from "../replay.js";
 
+const REPLAY_PLAYBACK_RATE = 2;
 const ROUTE_BACKGROUND_SOURCE = "staza-activity-route-background";
 const ROUTE_PROGRESS_SOURCE = "staza-activity-route";
 const POSITION_SOURCE = "staza-activity-position";
@@ -226,8 +227,8 @@ export const mountReplayMap = async ({
   let replayStarted = false;
 
   const play = (now) => {
-    if (startedAt === undefined) startedAt = now - elapsed * 1000;
-    elapsed = Math.min(duration, (now - startedAt) / 1000);
+    if (startedAt === undefined) startedAt = now - elapsed * 1000 / REPLAY_PLAYBACK_RATE;
+    elapsed = Math.min(duration, (now - startedAt) / 1000 * REPLAY_PLAYBACK_RATE);
     render(elapsed / duration);
     if (elapsed < duration) frame = requestAnimationFrame(play);
     else {

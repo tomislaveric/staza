@@ -40,13 +40,14 @@ describe("Activity detail data transformation", () => {
     expect(nearMissInputs({ replay: snapshot })).toBe(snapshot);
   });
 
-  it("renders only the REPLAY and VIDEO tabs", () => {
+  it("keeps the Replay and Video tabs in markup while hiding their tablist", () => {
     const page = ActivityDetailPage({
       id: "activity-1", distanceMeters: 1_000, durationSeconds: 600, xpEarned: 25, collectedCount: 1,
       replay: replay()
     }, { level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0 }, "replay");
     expect(page).toContain('data-activity-tab="replay"');
     expect(page).toContain('data-activity-tab="video"');
+    expect(page).toContain('class="activity-tabs" role="tablist" aria-label="Activity detail sections" hidden');
     expect(page).not.toContain('data-activity-tab="collected"');
     expect(page).not.toContain('data-activity-tab="near-misses"');
     expect(page).toContain("data-replay-panel");
@@ -54,6 +55,30 @@ describe("Activity detail data transformation", () => {
     expect(page).toContain("data-replay-reward");
     expect(page.match(/data-replay-reward/g)).toHaveLength(2);
     expect(page).toContain('class="activity-detail-page has-replay-layout"');
+  });
+
+  it("places What Changed after the replay content", () => {
+    const outcome = {
+      progression: {
+        previousTotalXp: 0,
+        levels: [{ level: 1, totalXpRequired: 0 }, { level: 2, totalXpRequired: 100 }],
+        newLevel: 1,
+        previousLevel: 1,
+        levelsGained: 0,
+        skillPointsEarned: 0,
+        unspentSkillPoints: 0
+      },
+      xp: { total: 0, collectibles: 0, flowlines: 0, distance: 0, quests: 0 },
+      collectibles: { newCount: 0, revisitCount: 0 },
+      flowlines: { completedCount: 0 },
+      unlockableNodes: [],
+      quests: []
+    };
+    const page = ActivityDetailPage({
+      id: "activity-1", distanceMeters: 1_000, durationSeconds: 600, xpEarned: 0, collectedCount: 0,
+      replay: { ...replay(), outcome }
+    }, { level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0 }, "replay");
+    expect(page.indexOf('class="activity-detail-tab-content"')).toBeLessThan(page.indexOf("data-activity-outcome"));
   });
 
   it("shows the fixed sport as an icon before the title", () => {

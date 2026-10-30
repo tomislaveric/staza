@@ -1551,6 +1551,9 @@ button.home-tile,
     overflow: hidden;
     padding: 4px;
 }
+.activity-tabs[hidden] {
+    display: none;
+}
 .activity-tabs button {
     background: transparent;
     border: 0;

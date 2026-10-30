@@ -56,10 +56,10 @@ export const ActivityDetailPage = (activity, progress, selectedTab = "replay") =
       </div>
       ${ActivitySummary(activity)}
       ${ActivityProgress(activity, progress)}
-      ${ActivityOutcome(activity.replay?.outcome)}
       ${ActivityTabs(activity, selectedTab)}
       ${inlineStats}
       <div class="activity-detail-tab-content">${tabContent}</div>
+      ${ActivityOutcome(activity.replay?.outcome)}
     </section>
   `;
 };

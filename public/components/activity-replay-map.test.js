@@ -169,7 +169,7 @@ describe("mountReplayMap replay lifecycle", () => {
     const finalFrameId = [...frames.keys()].at(-1);
     const finalFrame = frames.get(finalFrameId);
     frames.delete(finalFrameId);
-    finalFrame(12_000);
+    finalFrame(6_000);
     expect(onReplayComplete).toHaveBeenCalledTimes(1);
 
     player.play();
