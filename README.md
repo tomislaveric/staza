@@ -105,6 +105,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Mobile responsiveness](features/mobile-responsiveness/README.md) — make the
   authenticated app and auth screens usable on mobile with a compact bottom
   navigation and focused responsive layouts.
+- [Mobile UX Audit](features/mobile-ux-audit/README.md) — audit the app in a
+  real browser and improve mobile navigation and responsiveness while preserving
+  the existing visual style and desktop behavior.
 - [Multi Clip creation](features/multi-clip-creation/README.md) — select detected
   Coin passages and combine them into one chronological highlight video.
 - [Multi-Sport Skill Atlas](features/multi-sport-skill-atlas/README.md) — extend the
