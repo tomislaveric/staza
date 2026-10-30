@@ -112,4 +112,10 @@ rsync -az --delete \
   "${STAGING_DIR}/" \
   "${remote}:${normalized}/"
 
+quoted_path="$(printf '%q' "${normalized}")"
+permission_command="find ${quoted_path} -type d -exec chmod 755 {} + && find ${quoted_path} -type f -exec chmod 644 {} +"
+if ! "${ssh_command[@]}" "${remote}" "${permission_command}"; then
+  fail "Could not normalize permissions in the remote landing webroot"
+fi
+
 echo "Landing deployment complete."
