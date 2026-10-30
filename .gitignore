@@ -86,3 +86,8 @@ prod.env
 *.osm.pbf
 *.osm.pbf.md5
 *.ndjson
+
+# Playwright browser tests
+e2e/.auth/
+test-results/
+playwright-report/

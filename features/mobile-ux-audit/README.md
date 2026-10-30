@@ -42,3 +42,18 @@ Audit the authenticated app's mobile experience in a real browser, then implemen
 - Run Playwright or equivalent browser checks at representative phone, tablet and desktop viewport sizes.
 - Exercise the key navigation flows and inspect layout/scroll behavior on World and the other listed app screens.
 - Run the focused existing Vitest tests and project build after changes.
+
+## Audit findings and resolution
+
+Baseline at 320×568, 390×844, 768×1024 and 1440×900 showed no horizontal overflow, but:
+
+- World filters wrapped into a tall stack that pushed the map down → single horizontally scrolling row; map height clamped to 320–600px.
+- The floating Add Activity button covered map edges and Skill Atlas controls → moved into a slim mobile header with muted styling.
+- Replay stats overlay and Collectibles button covered zoom controls → overlay width capped and controls offset.
+- MapLibre compact attribution started expanded over Explore/play → collapsed on load.
+- Small touch targets (map zoom, Back, home CTA, Collectibles) → enlarged on mobile/coarse pointers.
+- Cramped Skill Atlas header at 320px and 8px nav labels → stacked header, 10px labels.
+
+## Running the browser checks
+
+`npm run test:e2e` runs `e2e/*.e2e.ts` in Chromium at the four viewports above. It needs `DATABASE_URL` (or `E2E_DATABASE_URL`) and creates an `e2e-mobile@staza.test` user with a session. Set `E2E_USER_EMAIL` to a user with activities to include the activity detail and replay checks.

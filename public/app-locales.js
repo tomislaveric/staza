@@ -522,6 +522,8 @@ const germanCopy = {
   "Create account": "Konto erstellen",
   "Profile navigation": "Profilnavigation",
   "Primary navigation": "Hauptnavigation",
+  "More destinations": "Weitere Bereiche",
+  More: "Mehr",
   "Show collectibles": "Sammelobjekte anzeigen",
   "Play replay": "Wiedergabe starten",
   "Pause replay": "Wiedergabe pausieren",

@@ -620,7 +620,7 @@
     position: fixed;
     left: 0;
     right: 0;
-    bottom: calc(var(--mobile-nav-height, 66px) + var(--mobile-action-space, 58px) + env(safe-area-inset-bottom));
+    bottom: var(--mobile-nav-clearance, 0px);
     z-index: 15;
     max-height: 52vh;
     overflow-y: auto;
@@ -650,6 +650,11 @@
     cursor: pointer;
   }
   .skill-tree-canvas { height: clamp(380px, calc(100dvh - 260px), 640px); }
+}
+
+@media (max-width: 480px) {
+  .skill-tree-header { flex-direction: column; gap: 16px; }
+  .skill-points { justify-items: start; width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

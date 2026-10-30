@@ -543,13 +543,33 @@
 
 @media (max-width: 760px) {
   .world-page { padding: 20px 16px 28px; }
-  .world-header { flex-wrap: wrap; gap: 16px; }
+  .world-header { align-items: flex-end; flex-wrap: nowrap; gap: 12px; }
   .world-header h1 { font-size: 38px; }
-  .world-discovered { justify-items: start; }
-  .world-filter-controls button { min-height: 38px; }
-  .world-map-shell { height: max(420px, 62dvh); margin-top: 12px; }
+  .world-discovered { flex: none; }
+  /* One horizontally scrolling filter row keeps the map near the top of the screen. */
+  .world-filter-controls {
+    flex-wrap: nowrap;
+    margin-inline: -16px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 16px 16px 4px;
+    scrollbar-width: none;
+  }
+  .world-filter-controls::-webkit-scrollbar { display: none; }
+  .world-filter-controls button { flex: none; min-height: 38px; white-space: nowrap; }
+  /* Leave room above/below the map so the page can still be scrolled past it by touch. */
+  .world-map-shell {
+    height: clamp(320px, calc(100dvh - var(--mobile-header-height, 0px) - var(--mobile-nav-clearance, 0px) - 190px), 600px);
+    margin-top: 12px;
+  }
+  .world-explore { bottom: 58px; }
   .world-map-status { left: 70px; max-width: calc(100% - 150px); overflow-wrap: anywhere; transform: none; }
   .world-detail-host { left: 10px; max-height: calc(100% - 110px); right: 10px; width: auto; }
   .world-stats { margin-inline: 6px; }
   .quest-list ol { grid-template-columns: 1fr; }
+}
+
+@media (pointer: coarse) {
+  .staza-map .maplibregl-ctrl-group button { height: 36px; width: 36px; }
+  .world-locate, .world-explore { min-height: 36px; }
 }

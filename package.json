@@ -19,7 +19,8 @@
     "extract:osm-germany-fartleks": "bash scripts/extract-osm-germany-fartleks.sh",
     "import:fartleks": "NODE_OPTIONS=\"--max-old-space-size=8192\" node dist/persistence/importFartleks.js",
     "import:quaeldich:dist": "node dist/persistence/importQuaeldichPasses.js",
-    "test:persistence": "TEST_DATABASE_URL=${TEST_DATABASE_URL:?TEST_DATABASE_URL is required} vitest run --no-file-parallelism src/persistence/activityRepository.test.ts src/persistence/questRepository.test.ts src/persistence/questInstanceRepository.test.ts src/auth.test.ts"
+    "test:persistence": "TEST_DATABASE_URL=${TEST_DATABASE_URL:?TEST_DATABASE_URL is required} vitest run --no-file-parallelism src/persistence/activityRepository.test.ts src/persistence/questRepository.test.ts src/persistence/questInstanceRepository.test.ts src/auth.test.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",
@@ -35,6 +36,7 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/express": "^5.0.1",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.13.4",

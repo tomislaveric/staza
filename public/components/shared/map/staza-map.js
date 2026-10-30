@@ -32,6 +32,12 @@ export const createStazaMap = async (container, {
   map.addControl(new maplibre.AttributionControl({ compact: true, customAttribution: attribution }), "bottom-right");
 
   const ready = new Promise((resolve) => map.on("load", () => resolve()));
+  // MapLibre opens compact attribution until the first drag; start collapsed so it never covers map actions.
+  ready.then(() => {
+    const attributionElement = container.querySelector(".maplibregl-ctrl-attrib.maplibregl-compact");
+    attributionElement?.classList.remove("maplibregl-compact-show");
+    attributionElement?.removeAttribute("open");
+  });
 
   return {
     map,
