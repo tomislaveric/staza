@@ -22,6 +22,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Default quests](features/default-quests/README.md) — *superseded by Explore this
   Area*; generated bbox-local recommendations including Mountain Passes and mixed
   Flowline challenges; track and cancel started quests independently of the map.
+- [Dev data reset](features/dev-data-reset/README.md) — dev/localhost-only Profile button that wipes a user's activities, XP, points and quests while keeping the login.
 - [Explore Area v2 polish](features/explore-area-v2-polish/README.md) — constrain routes to the selected area, reuse the last Locate Me position, and add arbitrary map points as route-only destinations.
 - [Explore this Area](features/explore-this-area/README.md) — route-first exploration:
   choose start and ride length, pick one of several generated routes from the frozen map
@@ -467,6 +468,12 @@ attachment store source and rendered media in `MEDIA_DIR` (default
 metadata, state, and media references—not MP4 binaries. A valid FIT activity is
 committed before optional video synchronization or rendering, so later video
 failure does not remove its history or XP.
+
+When `NODE_ENV` is not `production` (localhost and the DEV stage), Profile →
+Account & Security shows a DEVELOPMENT section with "Reset my game data". It calls
+`POST /api/dev/reset-data` and deletes the signed-in player's activities, XP,
+quests, progress and media while keeping the login, passkeys and Strava connection.
+The endpoint is not registered in production.
 
 ## API
 

@@ -67,7 +67,8 @@ export const profileAccountView = (session, passkeyCount) => shell("account", `
   <section class="profile-section"><h2>PASSKEYS</h2><div class="profile-card">${row("Manage passkeys", `${formatNumber(passkeyCount)} registered`, "passkeys")}${row("Add passkey", "", "add-passkey")}</div><p class="profile-help">Passkeys use your device to sign in without a password.</p></section>
   <section class="profile-section"><h2>SESSIONS</h2><div class="profile-card">${row("Sign out", "", "logout")}${row("Sign out all devices", "Ends all active sessions including this one", "logout-all", true)}</div></section>
   <section class="profile-section"><h2>PRIVACY &amp; ACCOUNT</h2><div class="profile-card">${row("Export my data", "Download a copy of your account and activity data", "export")}</div></section>
-  <section class="profile-section"><h2>DANGER ZONE</h2><div class="profile-card profile-danger">${row("Delete account", "Permanently removes your account and data", "delete", true)}</div></section>`);
+  <section class="profile-section"><h2>DANGER ZONE</h2><div class="profile-card profile-danger">${row("Delete account", "Permanently removes your account and data", "delete", true)}</div></section>${session.devTools ? `
+  <section class="profile-section"><h2>DEVELOPMENT</h2><div class="profile-card profile-danger">${row("Reset my game data", "Development feature: deletes all your activities, XP, points, quests and media. Your login, passkeys and Strava connection stay.", "dev-reset", true)}</div><p class="profile-help">Only available on development and localhost.</p></section>` : ""}`);
 
 export const profilePasskeysView = (passkeys) => shell("passkeys", `
   <button class="profile-back" type="button" data-profile-screen="account">‹ Account &amp; Security</button>
@@ -132,6 +133,13 @@ export const mountProfilePage = (root, { fetch: request, session, startRegistrat
       if (action === "strava-connect") { await requestStravaAuthorization(request); return; }
       if (action === "strava-disconnect") { await disconnectStrava(request); await show(); return; }
       if (action === "export") { window.location.assign("/api/account/export"); return; }
+      if (action === "dev-reset") {
+        if (!window.confirm("Delete all your activities, XP, points and quests? This cannot be undone.")) return;
+        const response = await request("/api/dev/reset-data", { method: "POST" });
+        if (!response.ok) await json(response);
+        window.location.assign("/");
+        return;
+      }
       if (action === "delete") { screen = "delete"; await show(); return; }
       if (action === "confirm-delete") {
         const intent = await json(await request("/api/account/deletion-intent", { method: "POST" }));

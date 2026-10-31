@@ -8,11 +8,15 @@ import type { SkillTreeView } from "../skillTree/types.js";
 
 /** Reads the player's current Skill Atlas state using the transaction's client. */
 export const readSkillTreeView = async (client: PoolClient, playerId: string): Promise<SkillTreeView> => {
-  const [stats, unlocks, player] = await Promise.all([
-    aggregateSkillTreeStats(client, playerId),
-    client.query<{ node_id: string }>("SELECT node_id FROM skill_tree_unlocks WHERE player_id = $1", [playerId]),
-    client.query<{ is_premium: boolean }>("SELECT is_premium FROM players WHERE id = $1", [playerId])
-  ]);
+  const stats = await aggregateSkillTreeStats(client, playerId);
+  const unlocks = await client.query<{ node_id: string }>(
+    "SELECT node_id FROM skill_tree_unlocks WHERE player_id = $1",
+    [playerId]
+  );
+  const player = await client.query<{ is_premium: boolean }>(
+    "SELECT is_premium FROM players WHERE id = $1",
+    [playerId]
+  );
   return buildSkillTreeView(stats, unlocks.rows.map((row) => row.node_id), player.rows[0]?.is_premium ?? false);
 };
 

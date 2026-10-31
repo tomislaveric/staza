@@ -57,6 +57,7 @@ import { buildGpx, gpxFilename } from "./exploration/gpx.js";
 import { ExplorationSessionStore } from "./exploration/sessionStore.js";
 import { ExplorationError, ExplorationService } from "./exploration/service.js";
 import { mediaDirectoryFor } from "./persistence/mediaCleanup.js";
+import { resetPlayerData } from "./persistence/resetPlayerData.js";
 import { AuthService, EmailSender, type SessionUser } from "./auth.js";
 
 interface UploadRequest extends Request {
@@ -654,9 +655,17 @@ app.get("/api/auth/session", (request: UploadRequest, response) => {
   response.json(request.user ? {
     authenticated: true,
     user: { email: request.user.email, emailVerified: request.user.emailVerified },
-    csrfToken: request.user.csrfToken
+    csrfToken: request.user.csrfToken,
+    devTools: config.devTools
   } : { authenticated: false });
 });
+if (config.devTools) {
+  app.post("/api/dev/reset-data", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+    try {
+      response.json(await resetPlayerData(databasePool, request.user!.playerId, path.resolve(config.mediaDir)));
+    } catch (error) { next(error); }
+  });
+}
 app.post("/api/auth/logout", requireUser, requireCsrf, async (request: UploadRequest, response, next) => {
   try { await authService.logout(request.sessionToken); clearSession(response); response.status(204).end(); } catch (error) { next(error); }
 });

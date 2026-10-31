@@ -176,7 +176,9 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL?.trim(),
   defaultPlayerId: uuidEnv("DEFAULT_PLAYER_ID", "00000000-0000-4000-8000-000000000001"),
   defaultPlayerName: process.env.DEFAULT_PLAYER_NAME?.trim() || "Local player",
-  nodeEnv: process.env.NODE_ENV ?? "development",
+  nodeEnv: process.env.NODE_ENV ?? "dev",
+  /** Enables destructive development tools (e.g. resetting a player's data); everything except production. */
+  devTools: (process.env.NODE_ENV ?? "dev") !== "production",
   webauthnRpId: process.env.WEBAUTHN_RP_ID?.trim(),
   webauthnRpName: process.env.WEBAUTHN_RP_NAME?.trim(),
   webauthnOrigin: optionalUrlEnv("WEBAUTHN_ORIGIN"),
