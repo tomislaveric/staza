@@ -1228,20 +1228,6 @@ button.home-tile,
     color: var(--text-primary);
     font-size: 16px;
 }
-.activity-detail-stats.is-overlay {
-    max-width: calc(100% - 168px);
-    backdrop-filter: blur(12px);
-    background: rgb(11 12 15 / 82%);
-    border: 1px solid var(--border-faint);
-    border-radius: 10px;
-    left: 14px;
-    margin: 0;
-    padding: 8px 12px;
-    pointer-events: none;
-    position: absolute;
-    top: 14px;
-    z-index: 3;
-}
 .add-activity-sport select {
     background: #181b22;
     border: 1px solid var(--border-faint);
@@ -1322,11 +1308,10 @@ button.home-tile,
     border-radius: 999px;
     box-sizing: border-box;
     display: flex;
-    flex: 1 1 0;
     gap: 8px;
     height: 28px;
-    margin: 0 12px;
-    max-width: 320px;
+    margin: 0;
+    max-width: 360px;
     min-width: 0;
     opacity: 0;
     padding: 0 12px;
@@ -1445,10 +1430,23 @@ button.home-tile,
     0%, 100% { box-shadow: 0 0 0 0 rgb(232 184 10 / 0%); transform: scale(1); }
     50% { box-shadow: 0 0 18px 4px rgb(232 184 10 / 55%); transform: scale(1.06); }
 }
-.activity-progress-level > span.is-level-up {
+.activity-progress-level .level-up-to {
     color: var(--accent-yellow);
-    font-size: 14px;
     font-weight: 800;
+}
+.activity-progress-feed {
+    display: grid;
+    margin-top: 10px;
+    min-height: 28px;
+}
+.activity-progress-feed > * {
+    grid-area: 1 / 1;
+}
+.activity-progress-feed:not(.is-replaying) .activity-replay-reward {
+    visibility: hidden;
+}
+.activity-progress-feed.is-replaying .activity-progress-facts {
+    visibility: hidden;
 }
 .activity-progress-cta:hover {
     background: rgb(232 184 10 / 24%);
@@ -1465,9 +1463,9 @@ button.home-tile,
 .activity-progress-facts {
     color: var(--text-muted);
     font-family: var(--font-display);
+    align-self: center;
     font-size: 12px;
-    margin: 10px 0 0;
-    min-height: 16px;
+    margin: 0;
 }
 .activity-progress-level {
     align-items: center;
@@ -2584,13 +2582,15 @@ button.home-tile,
     }
 
     .activity-replay-reward {
-        margin: 0 8px;
         padding: 0 8px;
+    }
+
+    .activity-progress-feed {
+        margin-top: 6px;
     }
 
     .activity-progress-facts {
         font-size: 11px;
-        margin-top: 6px;
     }
 
     .activity-tabs {

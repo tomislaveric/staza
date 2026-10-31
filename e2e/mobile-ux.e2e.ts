@@ -179,13 +179,12 @@ test.describe("Activity replay map", () => {
     test.skip(await replay.count() === 0, "The activity has no replay.");
     const zoomIn = replay.getByRole("button", { name: "Zoom in" });
     await expect(zoomIn).toBeVisible({ timeout: 15_000 });
-    // Starting playback collapses the collectibles panel into the top-right Collectibles button.
+    // Starting playback collapses the collectibles panel into the top-right Report button.
     await replay.getByRole("button", { name: "Play replay" }).click();
-    const reopen = replay.getByRole("button", { name: "Show collectibles" });
+    const reopen = replay.getByRole("button", { name: "Show activity report" });
     await expect(reopen).toBeVisible();
     expect(await boxesOverlap(zoomIn, reopen)).toBe(false);
     expect(await isUnobstructed(zoomIn)).toBe(true);
-    expect(await boxesOverlap(zoomIn, replay.locator(".activity-detail-stats"))).toBe(false);
   });
 });
 

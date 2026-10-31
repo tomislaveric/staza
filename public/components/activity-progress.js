@@ -41,7 +41,7 @@ export const ActivityProgress = (activity, progress) => {
   const percent = Math.max(0, Math.min(100, state.progressToNextLevel * 100));
   const levelUp = outcome && outcome.progression.levelsGained > 0;
   const levelText = levelUp
-    ? `Level ${formatNumber(outcome.progression.previousLevel)} \u2192 ${formatNumber(state.level)}`
+    ? `Level ${formatNumber(outcome.progression.previousLevel)} \u2192 <b class="level-up-to">${formatNumber(state.level)}</b>`
     : `Level ${formatNumber(state.level)}`;
   const distanceXp = outcome?.xp.distance ?? 0;
   return `
@@ -54,8 +54,7 @@ export const ActivityProgress = (activity, progress) => {
         ${outcome ? SkillTreeCta(outcome.progression) : ""}
       </div>
       <div class="activity-progress-level">
-        <span data-level-label${levelUp ? ' class="is-level-up"' : ""}>${levelText}</span>
-        <div class="activity-replay-reward" data-replay-reward hidden aria-live="polite"></div>
+        <span data-level-label>${levelText}</span>
         <p><strong data-level-xp>${formatNumber(state.currentLevelXp)}</strong> <em data-level-next>/ ${formatNumber(state.nextLevelXp)}</em></p>
       </div>
       <div class="activity-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="${state.nextLevelXp}" aria-valuenow="${state.currentLevelXp}">
@@ -65,7 +64,10 @@ export const ActivityProgress = (activity, progress) => {
         <p class="activity-progress-caption" data-level-caption>${formatNumber(remaining)} XP to Level ${formatNumber(state.level + 1)}</p>
         <p class="activity-progress-caption activity-progress-distance" data-replay-distance>${distanceXp > 0 ? `Distance +${formatNumber(distanceXp)} XP` : ""}</p>
       </div>
-      <p class="activity-progress-facts" data-outcome-collectibles>${factsLine(collected, revisits, flowlines)}</p>
+      <div class="activity-progress-feed" data-progress-feed>
+        <div class="activity-replay-reward" data-replay-reward hidden aria-live="polite"></div>
+        <p class="activity-progress-facts" data-outcome-collectibles>${factsLine(collected, revisits, flowlines)}</p>
+      </div>
     </section>
   `;
 };

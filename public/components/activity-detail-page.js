@@ -46,7 +46,7 @@ export const ActivityDetailPage = (activity, progress, selectedTab = "replay") =
   const replay = replayInputs(activity);
   const tabContent = selectedTab === "video"
     ? VideoTab(activity)
-    : (replay ? ReplayTab(ActivityStats(activity, { overlay: true })) : ReplayUnavailable());
+    : (replay ? ReplayTab() : ReplayUnavailable());
   const inlineStats = selectedTab === "video" || !replay ? ActivityStats(activity) : "";
   const replayLayout = selectedTab === "replay" && Boolean(replay);
   return `
@@ -94,7 +94,7 @@ export const mountActivityDetailPage = async (mountPoint, activityId, onBack, on
       const replay = replayInputs(activity);
       if (selectedTab === "replay" && replay) {
         void loadBasemap().then((config) => {
-          if (selectedTab === "replay") disposeReplay = mountReplayTab(mountPoint, replay, config);
+          if (selectedTab === "replay") disposeReplay = mountReplayTab(mountPoint, replay, config, activity);
         });
       }
       if (selectedTab === "video") {

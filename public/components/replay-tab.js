@@ -5,18 +5,18 @@ import { formatDistance, formatElapsed, formatSpeed } from "./world/fartlek-deta
 import { getAppLocale } from "../app-locales.js";
 import { replayDurationSeconds } from "../replay.js";
 import { levelStateAt } from "./activity-outcome.js";
+import { activityDistanceLabel, activityDurationLabel } from "./activity-summary.js";
 
 const REWARD_WINDOW_MS = 1_500;
 const REWARD_EXIT_MS = 160;
 const XP_ANIMATION_MS = 420;
 
 /** Ride Detail replay: the shared Staza map with an activity route, position and collection. */
-export const ReplayTab = (stats = "") => `
+export const ReplayTab = () => `
   <section class="activity-replay activity-replay-map" aria-label="Animated route replay">
-    ${stats}
     <div class="activity-replay-map-canvas staza-map" data-replay-map></div>
     <div class="activity-replay-panel" data-replay-panel hidden></div>
-    <button class="activity-replay-panel-reopen" type="button" data-replay-panel-reopen hidden aria-label="Show collectibles">COLLECTIBLES</button>
+    <button class="activity-replay-panel-reopen" type="button" data-replay-panel-reopen hidden aria-label="Show activity report">REPORT</button>
     <button class="activity-replay-play" type="button" aria-label="Play replay" aria-pressed="false" disabled>
       <img src="/assets/activity-detail-play.svg" width="16" height="16" alt="">
     </button>
@@ -238,13 +238,14 @@ export const FartlekCompletionsSection = (fartlekCompletions = []) => {
   `;
 };
 
-const mountReplayPanel = (host, replay) => {
+const mountReplayPanel = (host, replay, activity) => {
   const rows = replayPanelRows(replay);
   const total = rows.filter((row) => row.kind === "collectible").length;
   host.hidden = false;
   host.innerHTML = CollectionPanel({
     title: replayPanelTitle(replay.activity),
     description: replay.activity?.description,
+    metaLeading: activity ? `<small class="replay-panel-stats"><strong>${escapeHtml(activityDistanceLabel(activity.distanceMeters))}</strong> \u00b7 ${escapeHtml(activityDurationLabel(activity.durationSeconds))}</small>` : "",
     progress: { collected: 0, total },
     closable: true,
     ariaLabel: "Replay collection",
@@ -320,7 +321,7 @@ export const panelFitPadding = (container, panelHost) => {
   };
 };
 
-export const mountReplayTab = (mountPoint, replay, basemap) => {
+export const mountReplayTab = (mountPoint, replay, basemap, activity) => {
   const button = mountPoint.querySelector(".activity-replay-play");
   const container = mountPoint.querySelector("[data-replay-map]");
   const panelHost = mountPoint.querySelector("[data-replay-panel]");
@@ -338,7 +339,7 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
     button.setAttribute("aria-pressed", String(isPlaying));
   };
 
-  const updatePanel = panelHost ? mountReplayPanel(panelHost, replay) : () => {};
+  const updatePanel = panelHost ? mountReplayPanel(panelHost, replay, activity) : () => {};
   let visibleXp = persistedXp;
   let xpTarget = persistedXp;
   let xpFrame;
@@ -355,6 +356,7 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
     fill: mountPoint.querySelector("[data-level-fill]"),
     caption: mountPoint.querySelector("[data-level-caption]"),
     distance: mountPoint.querySelector("[data-replay-distance]"),
+    feed: mountPoint.querySelector("[data-progress-feed]"),
     skillPoint: mountPoint.querySelector("[data-skill-point-earned]")
   };
   const finalDistanceText = levelElements.distance?.textContent ?? "";
@@ -364,7 +366,6 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
     const state = levelStateAt(replay.outcome, xpGained);
     const { previousLevel } = replay.outcome.progression;
     const leveledUp = state.level > previousLevel;
-    levelElements.label.classList.toggle("is-level-up", leveledUp);
     const skillPoint = levelElements.skillPoint;
     if (skillPoint) {
       const wasPending = skillPoint.classList.contains("is-pending");
@@ -375,8 +376,8 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
         skillPoint.classList.add("is-pulsing");
       } else if (!leveledUp) skillPoint.classList.remove("is-pulsing");
     }
-    levelElements.label.textContent = leveledUp
-      ? `Level ${xpFormatter.format(previousLevel)} \u2192 ${xpFormatter.format(state.level)}`
+    levelElements.label.innerHTML = leveledUp
+      ? `Level ${xpFormatter.format(previousLevel)} \u2192 <b class="level-up-to">${xpFormatter.format(state.level)}</b>`
       : `Level ${xpFormatter.format(state.level)}`;
     levelElements.xp.textContent = xpFormatter.format(state.currentLevelXp);
     levelElements.next.textContent = `/ ${xpFormatter.format(state.nextLevelXp)}`;
@@ -503,6 +504,7 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
     onProgress: updateReplayPresentation,
     onReplayStart: () => {
       previousProgress = undefined;
+      levelElements.feed?.classList.add("is-replaying");
       setPanelOpen(false);
       setReward(undefined, true);
       if (levelElements.distance) levelElements.distance.textContent = "";
@@ -510,6 +512,8 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
     },
     onReplayComplete: () => {
       setPanelOpen(true);
+      levelElements.feed?.classList.remove("is-replaying");
+      setReward(undefined, true);
       if (levelElements.distance) levelElements.distance.textContent = finalDistanceText;
       setXpTarget(persistedXp, true);
     },

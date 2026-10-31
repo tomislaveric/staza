@@ -21,9 +21,9 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => (
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
 
-/** Distance, duration and collected count; overlaid on the replay map or shown inline elsewhere. */
-export const ActivityStats = (activity, { overlay = false } = {}) => `
-  <p class="activity-detail-stats${overlay ? " is-overlay" : ""}">
+/** Distance, duration and collected count, shown inline outside the replay map. */
+export const ActivityStats = (activity) => `
+  <p class="activity-detail-stats">
     <strong>${activityDistanceLabel(activity.distanceMeters)}</strong>
     <span>${activityDurationLabel(activity.durationSeconds)}</span>
     <span>${formatNumber(activity.collectedCount ?? 0)} collected</span>

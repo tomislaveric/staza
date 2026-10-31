@@ -46,7 +46,7 @@ describe("activity outcome", () => {
 
   it("merges level-up, facts and the Skill Tree CTA into the XP card", () => {
     const html = ActivityProgress({ replay: { outcome: outcome() } }, {});
-    expect(html).toContain("Level 4 \u2192 5");
+    expect(html).toContain('Level 4 \u2192 <b class="level-up-to">5</b>');
     expect(html).toContain("2 revisited");
     expect(html).toContain("+1 Skill Point");
     expect(html).toContain("data-outcome-open-atlas");
@@ -58,7 +58,7 @@ describe("activity outcome", () => {
   it("shows the activity's own XP and level from the outcome, not the current player state", () => {
     const html = ActivityProgress({ xpEarned: 280, collectedCount: 5, replay: { outcome: outcome() } }, { level: 9, currentLevelXp: 1, nextLevelXp: 2, progressToNextLevel: 0.5 });
     expect(html).toContain('data-activity-xp="480"');
-    expect(html).toContain("Level 4 \u2192 5");
+    expect(html).toContain('Level 4 \u2192 <b class="level-up-to">5</b>');
     expect(html).toContain("3 new collectibles");
     expect(html).not.toContain("Explorer");
   });
