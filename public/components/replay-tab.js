@@ -353,13 +353,31 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
     xp: mountPoint.querySelector("[data-level-xp]"),
     next: mountPoint.querySelector("[data-level-next]"),
     fill: mountPoint.querySelector("[data-level-fill]"),
-    caption: mountPoint.querySelector("[data-level-caption]")
+    caption: mountPoint.querySelector("[data-level-caption]"),
+    distance: mountPoint.querySelector("[data-replay-distance]"),
+    skillPoint: mountPoint.querySelector("[data-skill-point-earned]")
   };
+  const finalDistanceText = levelElements.distance?.textContent ?? "";
   // Replays the level bar from the pre-activity state so level-ups happen as XP is earned.
   const setLevelFor = (xpGained) => {
     if (!replay.outcome || !levelElements.label) return;
     const state = levelStateAt(replay.outcome, xpGained);
-    levelElements.label.textContent = `Level ${xpFormatter.format(state.level)}`;
+    const { previousLevel } = replay.outcome.progression;
+    const leveledUp = state.level > previousLevel;
+    levelElements.label.classList.toggle("is-level-up", leveledUp);
+    const skillPoint = levelElements.skillPoint;
+    if (skillPoint) {
+      const wasPending = skillPoint.classList.contains("is-pending");
+      skillPoint.classList.toggle("is-pending", !leveledUp);
+      if (leveledUp && wasPending && !reduceMotion) {
+        skillPoint.classList.remove("is-pulsing");
+        void skillPoint.offsetWidth;
+        skillPoint.classList.add("is-pulsing");
+      } else if (!leveledUp) skillPoint.classList.remove("is-pulsing");
+    }
+    levelElements.label.textContent = leveledUp
+      ? `Level ${xpFormatter.format(previousLevel)} \u2192 ${xpFormatter.format(state.level)}`
+      : `Level ${xpFormatter.format(state.level)}`;
     levelElements.xp.textContent = xpFormatter.format(state.currentLevelXp);
     levelElements.next.textContent = `/ ${xpFormatter.format(state.nextLevelXp)}`;
     levelElements.fill.style.width = `${state.progressToNextLevel * 100}%`;
@@ -447,10 +465,19 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
   const updateReplayPresentation = (timestampMs, progress) => {
     updatePanel(timestampMs);
     const state = replayRewardStateAt(rewards, timestampMs, rewardWindowMs);
+    const lastReached = (kinds) => rewards.findLast((item) => kinds.includes(item.kind) && item.timestampMs <= timestampMs);
+    // The chip holds the latest collectible/Flowline until the next one; distance only feeds the caption.
+    const chipReward = lastReached(["collectible", "flowline"]);
+    const distanceReward = lastReached(["distance"]);
+    if (levelElements.distance) {
+      levelElements.distance.textContent = distanceReward
+        ? `${distanceReward.name} \u00b7 +${xpFormatter.format(distanceReward.xpGain)} XP`
+        : "";
+    }
     const hasProgress = Number.isFinite(progress);
     const seeked = hasProgress && previousProgress !== undefined
       && (progress < previousProgress || progress - previousProgress > 0.05);
-    setReward(state.reward, seeked || (progress === 0 && previousProgress === undefined));
+    setReward(chipReward, seeked || (progress === 0 && previousProgress === undefined));
     setXpTarget(state.cumulativeXp, seeked || (progress === 0 && previousProgress === undefined));
     if (hasProgress) previousProgress = progress;
   };
@@ -478,11 +505,12 @@ export const mountReplayTab = (mountPoint, replay, basemap) => {
       previousProgress = undefined;
       setPanelOpen(false);
       setReward(undefined, true);
+      if (levelElements.distance) levelElements.distance.textContent = "";
       setXpTarget(0, true);
     },
     onReplayComplete: () => {
-      setReward(undefined, true);
       setPanelOpen(true);
+      if (levelElements.distance) levelElements.distance.textContent = finalDistanceText;
       setXpTarget(persistedXp, true);
     },
     onReady: () => button.removeAttribute("disabled")

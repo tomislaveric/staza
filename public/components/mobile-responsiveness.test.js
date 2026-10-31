@@ -33,8 +33,8 @@ describe("mobile app navigation", () => {
     expect(appShellCss).toMatch(/grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/);
   });
 
-  it("places replay collection details below the map on mobile", () => {
+  it("keeps the replay collection panel over the map on mobile", () => {
     expect(appShellCss).toMatch(/\.activity-replay-map\s*\{[^}]*height:\s*auto/s);
-    expect(appShellCss).toMatch(/\.activity-replay-panel\s*\{[^}]*position:\s*static/s);
+    expect(appShellCss).not.toMatch(/\.activity-replay-panel\s*\{[^}]*position:\s*static/s);
   });
 });

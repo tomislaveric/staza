@@ -53,11 +53,11 @@ describe("Activity detail data transformation", () => {
     expect(page).toContain("data-replay-panel");
     expect(page).toContain('data-activity-xp="25"');
     expect(page).toContain("data-replay-reward");
-    expect(page.match(/data-replay-reward/g)).toHaveLength(2);
+    expect(page.match(/data-replay-reward"/g) ?? page.match(/data-replay-reward/g)).toHaveLength(1);
     expect(page).toContain('class="activity-detail-page has-replay-layout"');
   });
 
-  it("places What Changed after the replay content", () => {
+  it("places quest results after the replay content", () => {
     const outcome = {
       progression: {
         previousTotalXp: 0,
@@ -72,7 +72,7 @@ describe("Activity detail data transformation", () => {
       collectibles: { newCount: 0, revisitCount: 0 },
       flowlines: { completedCount: 0 },
       unlockableNodes: [],
-      quests: []
+      quests: [{ result: "completed", title: "Warm up", difficulty: "easy", xp: 10 }]
     };
     const page = ActivityDetailPage({
       id: "activity-1", distanceMeters: 1_000, durationSeconds: 600, xpEarned: 0, collectedCount: 0,

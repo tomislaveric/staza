@@ -34,26 +34,32 @@ describe("activity outcome", () => {
     expect(levelStateAt(outcome(), 480)).toMatchObject({ level: 5, currentLevelXp: 380, nextLevelXp: 500 });
   });
 
-  it("explains XP sources, level-up, Skill Points, revisits and quest results", () => {
+  it("renders only quest results in the outcome card", () => {
     const html = ActivityOutcome(outcome());
-    expect(html).toContain("+480 XP");
-    expect(html).toContain("Level 4 \u2192 5");
-    expect(html).toContain("Level up!");
-    expect(html).toContain("2 revisited, no XP");
-    expect(html).toContain("data-outcome-skill-points");
-    expect(html).toContain("data-outcome-open-atlas");
-    expect(html).toContain("Now unlockable");
     expect(html).toContain('data-outcome-quest="completed"');
     expect(html).toContain('data-outcome-quest="failed"');
     expect(html).toContain("12 / 30 km");
+    expect(html).not.toContain("Now unlockable");
+    expect(ActivityOutcome(outcome({ quests: [] }))).toBe("");
     expect(ActivityOutcome(undefined)).toBe("");
+  });
+
+  it("merges level-up, facts and the Skill Tree CTA into the XP card", () => {
+    const html = ActivityProgress({ replay: { outcome: outcome() } }, {});
+    expect(html).toContain("Level 4 \u2192 5");
+    expect(html).toContain("2 revisited");
+    expect(html).toContain("+1 Skill Point");
+    expect(html).toContain("data-outcome-open-atlas");
+    expect(html).not.toContain("COLLECTED");
+    const spend = ActivityProgress({ replay: { outcome: outcome({ progression: { ...outcome().progression, skillPointsEarned: 0, unspentSkillPoints: 2 } }) } }, {});
+    expect(spend).toContain("2 Skill Points to spend");
   });
 
   it("shows the activity's own XP and level from the outcome, not the current player state", () => {
     const html = ActivityProgress({ xpEarned: 280, collectedCount: 5, replay: { outcome: outcome() } }, { level: 9, currentLevelXp: 1, nextLevelXp: 2, progressToNextLevel: 0.5 });
     expect(html).toContain('data-activity-xp="480"');
-    expect(html).toContain("Level 5");
-    expect(html).toContain("new · 2 revisited");
+    expect(html).toContain("Level 4 \u2192 5");
+    expect(html).toContain("3 new collectibles");
     expect(html).not.toContain("Explorer");
   });
 

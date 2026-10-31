@@ -1260,8 +1260,9 @@ button.home-tile,
 }
 .activity-progress-top {
     display: flex;
+    gap: 16px;
     justify-content: space-between;
-    min-height: 103px;
+    min-height: 90px;
 }
 .activity-outcome-card {
     background: rgb(255 255 255 / 3%);
@@ -1269,42 +1270,6 @@ button.home-tile,
     border-radius: var(--radius-card);
     margin-top: 16px;
     padding: 20px 24px;
-}
-.activity-outcome-grid {
-    display: grid;
-    gap: 24px;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    margin-top: 8px;
-}
-.activity-outcome-total {
-    color: var(--accent-yellow);
-    font-family: var(--font-display);
-    font-size: 32px;
-}
-.activity-outcome-card ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-.activity-outcome-breakdown li,
-.activity-outcome-criteria li {
-    display: flex;
-    font-size: 13px;
-    gap: 12px;
-    justify-content: space-between;
-    padding: 4px 0;
-}
-.activity-outcome-facts li {
-    font-size: 14px;
-    padding: 4px 0;
-}
-.activity-outcome-facts span,
-.activity-outcome-quests small {
-    color: var(--text-muted);
-}
-.activity-outcome-unlockable {
-    font-size: 13px;
-    margin: 12px 0 0;
 }
 .activity-outcome-quests {
     display: grid;
@@ -1332,11 +1297,6 @@ button.home-tile,
     padding: 0;
     text-decoration: underline;
 }
-@media (max-width: 640px) {
-    .activity-outcome-grid {
-        grid-template-columns: 1fr;
-    }
-}
 .activity-progress-label {
     color: var(--text-muted);
     font-size: 10px;
@@ -1355,35 +1315,32 @@ button.home-tile,
 .activity-progress-earned-group {
     min-width: 0;
 }
-.activity-progress-earned-row {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-}
 .activity-replay-reward {
     align-items: center;
     background: rgb(18 20 25 / 94%);
     border: 1px solid var(--border-faint);
-    border-radius: 8px;
+    border-radius: 999px;
+    box-sizing: border-box;
     display: flex;
-    gap: 12px;
-    max-width: min(360px, 100%);
+    flex: 1 1 0;
+    gap: 8px;
+    height: 28px;
+    margin: 0 12px;
+    max-width: 320px;
+    min-width: 0;
     opacity: 0;
-    padding: 12px 14px;
-    transform: translateY(5px);
-    transition: opacity 160ms ease, transform 160ms ease;
+    padding: 0 12px;
+    transition: opacity 160ms ease;
 }
 .activity-replay-reward[hidden] {
-    display: none;
+    display: flex;
+    visibility: hidden;
 }
 .activity-replay-reward.is-visible {
     opacity: 1;
-    transform: translateY(0);
 }
 .activity-replay-reward.is-exiting {
     opacity: 0;
-    transform: translateY(-4px);
 }
 .activity-replay-reward-icon {
     border: 1px solid var(--accent-yellow);
@@ -1418,56 +1375,99 @@ button.home-tile,
     color: var(--accent-yellow);
 }
 .activity-replay-reward-copy {
-    display: grid;
-    gap: 3px;
     min-width: 0;
 }
 .activity-replay-reward-type,
 .activity-replay-reward-label {
-    color: var(--text-subtle);
-    font-family: var(--font-display);
-    font-size: 9px;
-    letter-spacing: .11em;
-    line-height: 1.2;
-}
-.activity-replay-reward-type {
-    color: #5ec8c2;
-}
-.activity-replay-reward-icon--collectible + .activity-replay-reward-copy .activity-replay-reward-type {
-    color: var(--text-subtle);
+    display: none;
 }
 .activity-replay-reward-name {
     color: var(--text-primary);
+    display: block;
     font-family: var(--font-display);
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
-    line-height: 1.25;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .activity-replay-reward-xp {
     color: var(--accent-yellow);
     flex: 0 0 auto;
     font-family: var(--font-display);
-    font-size: 14px;
+    font-size: 12px;
     margin-left: auto;
     white-space: nowrap;
 }
-.activity-progress-found {
-    text-align: right;
-}
-.activity-progress-found strong {
-    color: var(--text-primary);
-    display: block;
-    font-family: var(--font-display);
-    font-size: 48px;
-    line-height: 1;
-    margin-top: 4px;
-}
-.activity-progress-found span,
 .activity-progress-caption {
     color: var(--text-subtle);
     font-family: var(--font-display);
     font-size: 10px;
+}
+.activity-progress-cta {
+    align-self: flex-start;
+    background: rgb(232 184 10 / 14%);
+    border: 1px solid var(--accent-yellow);
+    border-radius: 10px;
+    color: var(--accent-yellow);
+    cursor: pointer;
+    display: grid;
+    font-family: var(--font-display);
+    gap: 2px;
+    padding: 10px 14px;
+    text-align: right;
+}
+.activity-progress-cta span {
+    font-size: 15px;
+    font-weight: 700;
+}
+.activity-progress-cta small {
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+}
+.activity-progress-cta small::after {
+    content: " \2192";
+}
+.activity-progress-cta.is-pending {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8);
+}
+.activity-progress-cta.is-pulsing {
+    animation: skill-point-pop 480ms cubic-bezier(.2, 1.4, .4, 1), skill-point-pulse 1100ms ease-in-out 480ms 3;
+}
+@keyframes skill-point-pop {
+    from { opacity: 0; transform: scale(0.6); }
+    to { opacity: 1; transform: scale(1); }
+}
+@keyframes skill-point-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgb(232 184 10 / 0%); transform: scale(1); }
+    50% { box-shadow: 0 0 18px 4px rgb(232 184 10 / 55%); transform: scale(1.06); }
+}
+.activity-progress-level > span.is-level-up {
+    color: var(--accent-yellow);
+    font-size: 14px;
+    font-weight: 800;
+}
+.activity-progress-cta:hover {
+    background: rgb(232 184 10 / 24%);
+}
+.activity-progress-meta {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    min-height: 16px;
+}
+.activity-progress-distance {
+    text-align: right;
+}
+.activity-progress-facts {
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-size: 12px;
+    margin: 10px 0 0;
+    min-height: 16px;
 }
 .activity-progress-level {
     align-items: center;
@@ -1475,12 +1475,7 @@ button.home-tile,
     justify-content: space-between;
     margin-top: 20px;
 }
-.activity-progress-level > div {
-    align-items: center;
-    display: flex;
-    gap: 8px;
-}
-.activity-progress-level > div span {
+.activity-progress-level > span {
     color: var(--text-muted);
     font-family: var(--font-display);
     font-size: 12px;
@@ -1515,14 +1510,8 @@ button.home-tile,
     background: #1e222b;
     border-radius: 999px;
     height: 10px;
-    overflow: hidden;
-}
-.activity-progress-track-wrap {
     margin-top: 8px;
-    position: relative;
-}
-.activity-replay-reward--mobile {
-    display: none;
+    overflow: hidden;
 }
 .activity-progress-track span {
     background: var(--accent-yellow);
@@ -1531,7 +1520,7 @@ button.home-tile,
     display: block;
     height: 100%;
 }
-.activity-progress-caption {
+.activity-progress-meta .activity-progress-caption {
     margin: 6px 0 0;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2236,11 +2225,6 @@ button.home-tile,
     .activity-progress-earned {
         font-size: 64px;
     }
-    .activity-progress-level {
-        align-items: start;
-        flex-direction: column;
-        gap: 8px;
-    }
     .activity-tabs {
         overflow-x: auto;
     }
@@ -2258,30 +2242,6 @@ button.home-tile,
     .activity-detail-page.has-replay-layout > .activity-tabs { order: 3; }
     .activity-detail-page.has-replay-layout > .activity-detail-tab-content { order: 4; }
     .activity-detail-page.has-replay-layout > .activity-outcome-card { order: 5; }
-    .activity-replay-reward--desktop { display: none !important; }
-    .activity-detail-page.has-replay-layout .activity-progress-track-wrap { padding-top: 40px; }
-    .activity-replay-reward--mobile:not([hidden]) {
-        bottom: auto;
-        display: flex;
-        left: 0;
-        max-width: 100%;
-        padding: 6px 10px;
-        position: absolute;
-        top: 0;
-        transform: translateY(5px);
-        width: max-content;
-        z-index: 4;
-    }
-    .activity-replay-reward--mobile.is-visible { transform: translateY(0); }
-    .activity-replay-reward--mobile.is-exiting { transform: translateY(-4px); }
-    .activity-replay-reward--mobile .activity-replay-reward-copy { gap: 1px; }
-    .activity-replay-reward--mobile .activity-replay-reward-label { display: none; }
-    .activity-replay-reward--mobile .activity-replay-reward-name {
-        font-size: 12px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
 }
 
 @media (max-width: 720px) {
@@ -2598,16 +2558,39 @@ button.home-tile,
     }
 
     .activity-progress-top {
-        gap: 20px;
+        gap: 12px;
         min-height: 0;
     }
 
     .activity-progress-earned {
-        font-size: 52px;
+        font-size: 40px;
+        margin-top: 4px;
     }
 
-    .activity-progress-found strong {
-        font-size: 38px;
+    .activity-progress-cta {
+        padding: 6px 10px;
+    }
+
+    .activity-progress-cta span {
+        font-size: 13px;
+    }
+
+    .activity-progress-cta small {
+        display: none;
+    }
+
+    .activity-progress-level {
+        margin-top: 12px;
+    }
+
+    .activity-replay-reward {
+        margin: 0 8px;
+        padding: 0 8px;
+    }
+
+    .activity-progress-facts {
+        font-size: 11px;
+        margin-top: 6px;
     }
 
     .activity-tabs {
@@ -2650,15 +2633,12 @@ button.home-tile,
     }
 
     .activity-replay-panel {
-        backdrop-filter: none;
         bottom: auto;
-        left: auto;
-        margin: 12px;
-        max-height: none;
-        position: static;
-        right: auto;
-        top: auto;
-        width: calc(100% - 24px);
+        left: 12px;
+        max-height: calc(var(--mobile-replay-map-height) - 80px);
+        right: 12px;
+        top: 12px;
+        width: auto;
     }
 
     .video-no-highlights,
