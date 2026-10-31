@@ -216,6 +216,8 @@ export interface ActivityResult {
   /** Collectibles passed again after an earlier claim; they award no XP. */
   revisitCount?: number;
   totalPoints: number;
+  /** Flat XP for every valid activity; absent on legacy snapshots. */
+  baseXp?: number;
   distanceXp: number;
   distanceXpRewards: DistanceXpReward[];
   collectibles: Collectible[];
@@ -419,6 +421,8 @@ export interface ActivityOutcomeNode {
 export interface ActivityOutcome {
   version: 1;
   xp: {
+    /** Absent on legacy outcomes. */
+    base?: number;
     collectibles: number;
     flowlines: number;
     distance: number;

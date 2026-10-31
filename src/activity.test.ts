@@ -3,8 +3,7 @@ import {
   deriveActivity,
   deriveActivityResult,
   deriveDistanceXpRewards,
-  distanceXpForMeters,
-  DISTANCE_XP_MILESTONES,
+  distanceXpForActivity,
   MAX_NEAR_MISSES,
   NEAR_MISS_THRESHOLD_METERS
 } from "./activity.js";
@@ -30,7 +29,7 @@ describe("activity derivation", () => {
 
     expect(activity).toMatchObject({ id: "ride", source: "fit", type: "unknown", startedAt: 1_000, endedAt: 121_000, duration: 120 });
     expect(activity.distance).toBeGreaterThan(200);
-    expect(result).toMatchObject({ activityId: "ride", collectedCount: 2, totalPoints: 30 });
+    expect(result).toMatchObject({ activityId: "ride", collectedCount: 2, totalPoints: 80, baseXp: 50 });
     expect(result.events.map((event) => event.sourceId)).toEqual(["first", "later"]);
     expect(result.events.map((event) => event.collectible.name)).toEqual(["First", "Later"]);
     expect(result.events.every((event) => event.videoSecond === undefined)).toBe(true);
@@ -47,47 +46,77 @@ describe("activity derivation", () => {
 
   it("completes a zero-collectible activity", () => {
     const result = deriveActivityResult(deriveActivity("ride", route), []);
-    expect(result).toMatchObject({ collectedCount: 0, totalPoints: 0, events: [] });
+    expect(result).toMatchObject({ collectedCount: 0, totalPoints: 50, baseXp: 50, distanceXp: 0, events: [] });
   });
 
-  it("awards cumulative distance XP only when each milestone is reached", () => {
-    const expectedTotals = [0, 10, 30, 50, 75, 100];
-    const thresholds = [0, ...DISTANCE_XP_MILESTONES.map((milestone) => milestone.distanceMeters)];
+  const longitudeAtMeters = (meters: number) => meters / 6_371_000 * 180 / Math.PI;
+  const straightRoute = (meters: number) => [
+    { latitude: 0, longitude: 0, timestampMs: 1_000 },
+    { latitude: 0, longitude: longitudeAtMeters(meters), timestampMs: 1_000 + meters * 100 }
+  ];
+  const resultFor = (type: "cycling" | "running" | "hiking" | "walking" | "unknown", km: number) =>
+    deriveActivityResult(deriveActivity("a", straightRoute(km * 1_000), type), []);
 
-    thresholds.forEach((threshold, index) => {
-      expect(distanceXpForMeters(threshold)).toBe(expectedTotals[index]);
-      if (threshold > 0) expect(distanceXpForMeters(threshold - 0.01)).toBe(expectedTotals[index - 1]);
-    });
-    expect(distanceXpForMeters(1_000_000)).toBe(100);
-    expect(() => distanceXpForMeters(-1)).toThrow(RangeError);
-    expect(() => distanceXpForMeters(Number.NaN)).toThrow(RangeError);
+  it("awards base plus sport-weighted distance XP", () => {
+    expect(resultFor("cycling", 40)).toMatchObject({ baseXp: 50, distanceXp: 80, totalPoints: 130 });
+    expect(resultFor("running", 7.5)).toMatchObject({ distanceXp: 75, totalPoints: 125 });
+    expect(resultFor("hiking", 10)).toMatchObject({ distanceXp: 70, totalPoints: 120 });
+    for (const type of ["walking", "unknown"] as const) {
+      expect(resultFor(type, 40)).toMatchObject({ distanceXp: 0, totalPoints: 50, distanceXpRewards: [] });
+    }
   });
 
-  it("places every distance reward at its route-crossing timestamp for any activity type", () => {
-    const totalDistanceMeters = 160_000;
-    const endLongitude = totalDistanceMeters / 6_371_000 * 180 / Math.PI;
-    const longRoute = [
+  it("awards base XP only for short and zero-distance routes", () => {
+    expect(resultFor("running", 0)).toMatchObject({ distanceXp: 0, totalPoints: 50 });
+    const zero = deriveActivityResult(deriveActivity("z", [
       { latitude: 0, longitude: 0, timestampMs: 1_000 },
-      { latitude: 0, longitude: endLongitude, timestampMs: 161_000 }
-    ];
-    const segmentDistance = distanceMeters(0, 0, 0, endLongitude);
-    const result = deriveActivityResult(deriveActivity("long-run", longRoute, "running"), []);
+      { latitude: 0, longitude: 0, timestampMs: 2_000 }
+    ], "cycling"), []);
+    expect(zero).toMatchObject({ distanceXp: 0, totalPoints: 50 });
+    expect(zero.distanceXpRewards).toEqual([]);
+    expect(resultFor("cycling", 0.1).totalPoints).toBe(50);
+  });
 
-    expect(result.distanceXp).toBe(100);
-    expect(result.totalPoints).toBe(100);
-    expect(result.distanceXpRewards.map(({ distanceMeters: distance, xpEarned }) => [distance, xpEarned])).toEqual([
-      [10_000, 10],
-      [20_000, 20],
-      [50_000, 20],
-      [100_000, 25],
-      [150_000, 25]
-    ]);
-    result.distanceXpRewards.forEach((reward) => {
-      expect(reward.activityTimestampMs).toBeCloseTo(
-        1_000 + 160_000 * reward.distanceMeters / segmentDistance,
-        6
-      );
+  it("rounds distance XP once and rejects malformed distances", () => {
+    expect(distanceXpForActivity("hiking", 7_500)).toBe(53);
+    expect(distanceXpForActivity("running", undefined)).toBe(0);
+    expect(() => distanceXpForActivity("running", -1)).toThrow(RangeError);
+    expect(() => distanceXpForActivity("running", Number.NaN)).toThrow(RangeError);
+    expect(() => distanceXpForActivity("running", Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+
+  it("emits per-km and partial reward items that sum to distance XP", () => {
+    const meters = 7_500;
+    const result = resultFor("hiking", 7.5);
+    const segment = distanceMeters(0, 0, 0, longitudeAtMeters(meters));
+    expect(result.distanceXp).toBe(53);
+    expect(result.distanceXpRewards).toHaveLength(8);
+    expect(result.distanceXpRewards.slice(0, 7).every((reward) => reward.xpEarned === 7)).toBe(true);
+    expect(result.distanceXpRewards[7]).toMatchObject({ xpEarned: 4, activityTimestampMs: 1_000 + meters * 100 });
+    expect(result.distanceXpRewards.reduce((total, reward) => total + reward.xpEarned, 0)).toBe(53);
+    result.distanceXpRewards.slice(0, 7).forEach((reward) => {
+      expect(reward.activityTimestampMs).toBeCloseTo(1_000 + meters * 100 * reward.distanceMeters / segment, 3);
     });
+  });
+
+  it("keeps timestamps finite across zero-length segments", () => {
+    const base = longitudeAtMeters(2_500);
+    const rewards = deriveDistanceXpRewards([
+      { latitude: 0, longitude: 0, timestampMs: 0 },
+      { latitude: 0, longitude: 0, timestampMs: 10 },
+      { latitude: 0, longitude: base, timestampMs: 20 }
+    ], "running");
+    expect(rewards).toHaveLength(3);
+    rewards.forEach((reward) => expect(Number.isFinite(reward.activityTimestampMs)).toBe(true));
+  });
+
+  it("places every distance reward at its route-crossing timestamp", () => {
+    const result = resultFor("running", 3);
+    expect(result.distanceXpRewards.map(({ distanceMeters: distance, xpEarned }) => [Math.round(distance), xpEarned])).toEqual([
+      [1_000, 10],
+      [2_000, 10],
+      [3_000, 10]
+    ]);
     expect(deriveDistanceXpRewards(route)).toEqual([]);
   });
 
@@ -111,8 +140,8 @@ describe("activity derivation", () => {
 
     expect(result).toMatchObject({
       collectedCount: 1,
-      distanceXp: 10,
-      totalPoints: 20,
+      distanceXp: 22,
+      totalPoints: 82,
       events: [expect.objectContaining({ sourceId: "coin", value: 10 })]
     });
   });
@@ -169,7 +198,7 @@ describe("activity derivation", () => {
       ...extraNearMisses
     ]);
 
-    expect(result).toMatchObject({ collectedCount: 1, totalPoints: 10 });
+    expect(result).toMatchObject({ collectedCount: 1, totalPoints: 60 });
     expect(result.nearMisses).toHaveLength(MAX_NEAR_MISSES);
     expect(result.nearMisses.map((nearMiss) => nearMiss.collectibleId)).toEqual([
       "fifty",

@@ -329,6 +329,27 @@ describePersistence("ActivityRepository", () => {
     expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 50 });
     expect((await pool!.query("SELECT 1 FROM fartlek_completions WHERE player_id = $1", [playerId])).rowCount).toBe(1);
   });
+  it("persists base and fractional distance XP exactly once", async () => {
+    const id = "e".repeat(48);
+    const baseResult: ActivityResult = {
+      ...result(id, 0),
+      totalPoints: 103,
+      baseXp: 50,
+      distanceXp: 53,
+      distanceXpRewards: [],
+      collectedCount: 0,
+      collectibles: [],
+      events: [],
+      fartlekCompletions: []
+    };
+    const first = await repository!.persistCompletedActivity(playerId, activity(id), baseResult);
+    expect(first.activity.replay!.outcome).toMatchObject({ xp: { base: 50, distance: 53, total: 103 } });
+    expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 103 });
+    await expect(repository!.persistCompletedActivity(playerId, activity(id), baseResult))
+      .resolves.toMatchObject({ inserted: false });
+    expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 103 });
+  });
+
   it("claims each collectible once, labels revisits and reports what changed", async () => {
     const first = await repository!.persistCompletedActivity(playerId, { ...activity("claim-first"), startedAt: Date.parse("2026-02-02T08:00:00Z") }, result("claim-first"));
     expect(first.activity).toMatchObject({ collectedCount: 1, revisitCount: 0, xpEarned: 25, title: expect.any(String) });

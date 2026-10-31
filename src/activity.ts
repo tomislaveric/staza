@@ -7,52 +7,69 @@ import { FARTLEK_COMPLETION_XP } from "./fartlek.js";
 export const NEAR_MISS_THRESHOLD_METERS = 200;
 export const MAX_NEAR_MISSES = 5;
 
-export const DISTANCE_XP_MILESTONES = [
-  { distanceMeters: 10_000, xpEarned: 10 },
-  { distanceMeters: 20_000, xpEarned: 20 },
-  { distanceMeters: 50_000, xpEarned: 20 },
-  { distanceMeters: 100_000, xpEarned: 25 },
-  { distanceMeters: 150_000, xpEarned: 25 }
-] as const;
+export const BASE_ACTIVITY_XP = 50;
 
-export const distanceXpForMeters = (distanceMeters: number): number => {
+/** Distance XP per kilometre by sport; unknown sports and walking earn none. */
+export const DISTANCE_XP_PER_KM: Record<ActivityType, number> = {
+  cycling: 2,
+  running: 10,
+  hiking: 7,
+  walking: 0,
+  unknown: 0
+};
+
+const KM_EPSILON = 1e-9;
+
+/** Distance XP for a route length, rounded once per activity. Missing distance earns none. */
+export const distanceXpForActivity = (type: ActivityType, distanceMeters: number | undefined): number => {
+  if (distanceMeters === undefined) return 0;
   if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
     throw new RangeError("distanceMeters must be a finite, non-negative number.");
   }
-  return DISTANCE_XP_MILESTONES.reduce(
-    (total, milestone) => distanceMeters >= milestone.distanceMeters ? total + milestone.xpEarned : total,
-    0
-  );
+  return Math.round((DISTANCE_XP_PER_KM[type] ?? 0) * distanceMeters / 1_000);
 };
 
-export const deriveDistanceXpRewards = (route: TrackPoint[]): DistanceXpReward[] => {
-  const rewards: DistanceXpReward[] = [];
-  let distanceBeforeSegment = 0;
-  let milestoneIndex = 0;
+/** Timestamped distance rewards: one per completed km plus a final partial-km remainder; they sum to the rounded total. */
+export const deriveDistanceXpRewards = (route: TrackPoint[], type: ActivityType = "unknown"): DistanceXpReward[] => {
+  const rate = DISTANCE_XP_PER_KM[type] ?? 0;
+  if (rate === 0 || route.length < 2) return [];
 
-  for (let index = 1; index < route.length && milestoneIndex < DISTANCE_XP_MILESTONES.length; index += 1) {
+  const segments: Array<{ before: TrackPoint; after: TrackPoint; start: number; length: number }> = [];
+  let total = 0;
+  for (let index = 1; index < route.length; index += 1) {
     const before = route[index - 1];
     const after = route[index];
-    const segmentDistance = distanceMeters(before.latitude, before.longitude, after.latitude, after.longitude);
-    const distanceAfterSegment = distanceBeforeSegment + segmentDistance;
-
-    while (
-      milestoneIndex < DISTANCE_XP_MILESTONES.length
-      && distanceAfterSegment >= DISTANCE_XP_MILESTONES[milestoneIndex].distanceMeters
-    ) {
-      const milestone = DISTANCE_XP_MILESTONES[milestoneIndex];
-      const fraction = (milestone.distanceMeters - distanceBeforeSegment) / segmentDistance;
-      rewards.push({
-        distanceMeters: milestone.distanceMeters,
-        xpEarned: milestone.xpEarned,
-        activityTimestampMs: before.timestampMs + (after.timestampMs - before.timestampMs) * fraction
-      });
-      milestoneIndex += 1;
-    }
-
-    distanceBeforeSegment = distanceAfterSegment;
+    const length = distanceMeters(before.latitude, before.longitude, after.latitude, after.longitude);
+    segments.push({ before, after, start: total, length });
+    total += length;
   }
 
+  const totalXp = distanceXpForActivity(type, total);
+  const wholeKm = Math.floor(total / 1_000 + KM_EPSILON);
+  const rewards: DistanceXpReward[] = [];
+  let segmentIndex = 0;
+  for (let km = 1; km <= wholeKm; km += 1) {
+    const threshold = km * 1_000;
+    while (segmentIndex < segments.length - 1 && segments[segmentIndex].start + segments[segmentIndex].length < threshold) {
+      segmentIndex += 1;
+    }
+    const segment = segments[segmentIndex];
+    const fraction = segment.length > 0 ? Math.min(1, Math.max(0, (threshold - segment.start) / segment.length)) : 1;
+    rewards.push({
+      distanceMeters: threshold,
+      xpEarned: rate,
+      activityTimestampMs: segment.before.timestampMs + (segment.after.timestampMs - segment.before.timestampMs) * fraction
+    });
+  }
+
+  const remainder = totalXp - rate * wholeKm;
+  if (remainder > 0) {
+    rewards.push({
+      distanceMeters: total,
+      xpEarned: remainder,
+      activityTimestampMs: route[route.length - 1].timestampMs
+    });
+  }
   return rewards;
 };
 
@@ -139,8 +156,8 @@ export const deriveActivityResult = (
   const fartlekCompletions = activity.type === "running" || activity.type === "hiking" || activity.type === "walking"
     ? []
     : deriveFartlekCompletionDrafts(activity.route, fartleks);
-  const distanceXpRewards = deriveDistanceXpRewards(activity.route);
-  const distanceXp = distanceXpRewards.reduce((total, reward) => total + reward.xpEarned, 0);
+  const distanceXp = distanceXpForActivity(activity.type, activity.distance);
+  const distanceXpRewards = deriveDistanceXpRewards(activity.route, activity.type);
   return {
     activityId: activity.id,
     distance: activity.distance,
@@ -148,7 +165,9 @@ export const deriveActivityResult = (
     collectedCount: events.length,
     totalPoints: events.reduce((total, event) => total + event.value, 0)
       + fartlekCompletions.length * FARTLEK_COMPLETION_XP
+      + BASE_ACTIVITY_XP
       + distanceXp,
+    baseXp: BASE_ACTIVITY_XP,
     distanceXp,
     distanceXpRewards,
     collectibles,

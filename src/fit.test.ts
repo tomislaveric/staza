@@ -33,6 +33,24 @@ describe("FIT timestamp validation", () => {
   });
 });
 
+describe("FIT coordinate validation", () => {
+  it("drops non-finite and out-of-range coordinates before counting usable points", () => {
+    const at = (n: number) => `2026-01-01T00:00:0${n}Z`;
+    const good = [
+      { position_lat: 1, position_long: 2, timestamp: at(0) },
+      { position_lat: 1.1, position_long: 2.1, timestamp: at(1) }
+    ];
+    const bad = [
+      { position_lat: Number.NaN, position_long: 2, timestamp: at(2) },
+      { position_lat: 1, position_long: Number.POSITIVE_INFINITY, timestamp: at(3) },
+      { position_lat: 91, position_long: 2, timestamp: at(4) },
+      { position_lat: 1, position_long: 181, timestamp: at(5) }
+    ];
+    expect(usableFitTrackPoints([...good, ...bad])).toHaveLength(2);
+    expect(() => usableFitTrackPoints([good[0], ...bad])).toThrow();
+  });
+});
+
 describe("FIT sport mapping", () => {
   it("maps supported sports and sub-sports, keeping unrecognized values unknown", () => {
     expect(mapFitSport("cycling", "road")).toBe("cycling");

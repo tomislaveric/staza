@@ -99,6 +99,8 @@ export const flowlineStateAt = (completion, timestampMs) =>
     ? "completed"
     : "unvisited";
 
+const formatDistanceKm = (meters) => Number((meters / 1_000).toFixed(2));
+
 /** Historical reward callouts ordered independently of playback direction or frame history. */
 export const replayRewardItems = (replay, persistedXp) => {
   const activityResult = replay.activityResult;
@@ -124,18 +126,42 @@ export const replayRewardItems = (replay, persistedXp) => {
       id: `distance:${reward.distanceMeters}:${index}`,
       kind: "distance",
       timestampMs: reward.activityTimestampMs,
-      name: `${reward.distanceMeters / 1_000} km reached`,
+      name: `${formatDistanceKm(reward.distanceMeters)} km reached`,
       typeLabel: "DISTANCE",
       xpGain: reward.xpEarned,
-      eventLabel: "DISTANCE MILESTONE",
+      eventLabel: "DISTANCE REWARD",
       order: index
     }));
+  const baseXp = Number.isFinite(activityResult.baseXp) ? activityResult.baseXp : 0;
+  const questXp = Number.isFinite(replay.outcome?.xp?.quests) ? replay.outcome.xp.quests : 0;
+  const startedAt = Number.isFinite(replay.activity?.startedAt) ? replay.activity.startedAt : 0;
+  const endedAt = Number.isFinite(replay.activity?.endedAt) ? replay.activity.endedAt : Number.MAX_SAFE_INTEGER;
+  const baseItems = baseXp > 0 ? [{
+    id: "base:0",
+    kind: "base",
+    timestampMs: startedAt,
+    name: "Activity completed",
+    typeLabel: "BASE",
+    xpGain: baseXp,
+    eventLabel: "ACTIVITY BONUS",
+    order: 0
+  }] : [];
+  const questItems = questXp > 0 ? [{
+    id: "quest:0",
+    kind: "quest",
+    timestampMs: endedAt,
+    name: "Quest bonus",
+    typeLabel: "QUEST",
+    xpGain: questXp,
+    eventLabel: "QUEST COMPLETED",
+    order: 0
+  }] : [];
   const flowlines = (activityResult.fartlekCompletions ?? [])
     .filter((completion) => Number.isFinite(completion.completedAtTimestampMs));
   const totalXp = Number.isFinite(persistedXp) ? persistedXp : activityResult.totalPoints;
   // Replay snapshots persist Flowline timestamps, not per-completion XP values.
   const flowlineXp = flowlines.length > 0 && Number.isFinite(totalXp)
-    ? Math.max(0, (replay.outcome?.xp.flowlines ?? (totalXp - collectibleXp - distanceXp))) / flowlines.length
+    ? Math.max(0, (replay.outcome?.xp.flowlines ?? (totalXp - baseXp - collectibleXp - distanceXp - questXp))) / flowlines.length
     : 0;
   const flowlineItems = flowlines.map((completion, index) => ({
     id: `flowline:${completion.fartlekId}:${index}`,
@@ -148,7 +174,7 @@ export const replayRewardItems = (replay, persistedXp) => {
     order: events.length + index
   }));
 
-  return [...events, ...distanceItems, ...flowlineItems].sort((left, right) =>
+  return [...baseItems, ...events, ...distanceItems, ...flowlineItems, ...questItems].sort((left, right) =>
     left.timestampMs - right.timestampMs
     || (left.kind < right.kind ? -1 : left.kind > right.kind ? 1 : 0)
     || left.order - right.order

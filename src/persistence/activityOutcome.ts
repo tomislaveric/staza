@@ -49,6 +49,7 @@ export const buildActivityOutcome = (input: ActivityOutcomeInput): ActivityOutco
   return {
     version: 1,
     xp: {
+      base: result.baseXp ?? 0,
       collectibles: collectibleXp,
       flowlines: flowlineXp,
       distance: result.distanceXp,

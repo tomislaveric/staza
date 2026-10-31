@@ -94,6 +94,10 @@ export const usableFitTrackPoints = (records: FitRecord[]): TrackPoint[] => {
       if (
         typeof record.position_lat !== "number" ||
         typeof record.position_long !== "number" ||
+        !Number.isFinite(record.position_lat) ||
+        !Number.isFinite(record.position_long) ||
+        Math.abs(record.position_lat) > 90 ||
+        Math.abs(record.position_long) > 180 ||
         record.timestamp === undefined
       ) {
         return undefined;

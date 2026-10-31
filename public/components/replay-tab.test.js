@@ -161,6 +161,31 @@ describe("replayRewardItems / replayRewardStateAt", () => {
     expect(replayRewardStateAt(items, 3_000).cumulativeXp).toBe(140);
   });
 
+  it("reconciles base, distance, Flowline and Quest XP to the outcome total, and ignores absent legacy fields", () => {
+    const full = {
+      activity: { startedAt: 0, endedAt: 5_000 },
+      outcome: { xp: { quests: 25, flowlines: 30 } },
+      activityResult: {
+        baseXp: 50,
+        distanceXp: 53,
+        distanceXpRewards: [{ distanceMeters: 7_500, xpEarned: 53, activityTimestampMs: 4_000 }],
+        events: [{ sourceId: "coin", activityTimestamp: 1_000, value: 20, collectible: { name: "Coin", type: "coin" } }],
+        fartlekCompletions: [{ fartlekId: "f", fartlekName: "F", completedAtTimestampMs: 2_000 }]
+      }
+    };
+    const items = replayRewardItems(full, 178);
+    expect(items.map((item) => item.kind)).toEqual(["base", "collectible", "flowline", "distance", "quest"]);
+    expect(replayRewardStateAt(items, 5_000).cumulativeXp).toBe(178);
+    expect(items.find((item) => item.kind === "distance").name).toBe("7.5 km reached");
+
+    const noFlowline = replayRewardItems({ ...full, activityResult: { ...full.activityResult, fartlekCompletions: [] } }, 148);
+    expect(replayRewardStateAt(noFlowline, 5_000).cumulativeXp).toBe(148);
+
+    const legacy = replayRewardItems(replay, 110);
+    expect(legacy.some((item) => item.kind === "base" || item.kind === "quest")).toBe(false);
+    expect(replayRewardStateAt(legacy, 3_000).cumulativeXp).toBe(110);
+  });
+
   it("uses a stable order for rewards with identical timestamps", () => {
     const items = replayRewardItems({
       activityResult: {

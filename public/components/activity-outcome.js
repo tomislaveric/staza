@@ -26,6 +26,7 @@ export const levelStateAt = (outcome, gainedXp = 0) => {
 };
 
 const xpRows = (xp) => [
+  ["Activity", xp.base ?? 0],
   ["Collectibles", xp.collectibles],
   ["Flowlines", xp.flowlines],
   ["Distance", xp.distance],

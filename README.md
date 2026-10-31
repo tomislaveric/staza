@@ -169,6 +169,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Skill Tree](features/skill-tree/README.md) — interactive, animated progression
   tree where players spend Skill Points to unlock requirement-gated nodes that
   grant bounded capability access (badges/titles, quest and filter unlocks).
+- [Sport-aware Activity XP](features/sport-aware-activity-xp/README.md) — award
+  base XP for valid activities and weight distance XP by sport without
+  recalculating historical rewards.
 - [SMTP auth email delivery](features/smtp-auth-email-delivery/README.md)
   — send authentication codes and security notifications by real email via
   nodemailer SMTP against the existing mail server in production.
