@@ -879,6 +879,19 @@ export const migrations: Migration[] = [{
             CHECK (collectible_type IN ('coin', 'landmark', 'mountain_pass'));
     `);
   }
+}, {
+  id: "037_restore_wrong_sport_quest_failures",
+  async up(client) {
+    await client.query(`
+      UPDATE authored_quest_attempts
+      SET status = 'active', attempt_count = GREATEST(attempt_count - 1, 1),
+          failed_at = NULL, activity_id = NULL, result = NULL
+      WHERE status = 'failed'
+        AND jsonb_path_exists(
+          result, '$.criteria[*] ? (@.label starts with "Activity type" && @.met == false)'
+        );
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

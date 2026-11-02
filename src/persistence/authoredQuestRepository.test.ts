@@ -82,11 +82,16 @@ describePersistence("authored quests", () => {
     expect(await totalXp()).toBe(30 + 100);
   });
 
-  it("does not complete a quest for the wrong sport", async () => {
+  it("ignores an activity of the wrong sport and still counts the next matching one", async () => {
     await pool!.query("INSERT INTO skill_tree_unlocks (player_id, node_id, cost) VALUES ($1, 'endurance-i', 1)", [playerId]);
     await quests!.start(playerId, "distance-quests:1", startedBefore);
     await activities!.persistCompletedActivity(playerId, ride("c".repeat(48), 60_000, "running"), result("c".repeat(48)));
-    expect((await quests!.list(playerId)).some((quest) => quest.state === "completed")).toBe(false);
+    const afterRun = (await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!;
+    expect(afterRun.state).toBe("active");
+    expect((await outcomeOf("c".repeat(48))).quests).toEqual([]);
+
+    await activities!.persistCompletedActivity(playerId, ride("d".repeat(48), 60_000), result("d".repeat(48)));
+    expect((await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!.state).toBe("completed");
   });
 
   it("ignores an attempt started after the activity began", async () => {

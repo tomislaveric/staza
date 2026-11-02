@@ -72,8 +72,8 @@ const toNextSuggestion = (questId: string): NextQuestSuggestion | undefined => {
 
 /**
  * Resolves the open authored quest attempts against one newly persisted activity inside its
- * transaction. A quest is a one-activity attempt: the first activity that started after the attempt
- * began either completes it (XP granted exactly once) or fails it (retry required). Attempts that
+ * transaction. A quest is a one-activity attempt: the first activity of the quest's sport that
+ * started after the attempt began either completes it (XP granted exactly once) or fails it (retry required). Attempts that
  * started after the activity began are left untouched. Never looks at earlier activities.
  */
 export const resolveAuthoredQuestAttemptsWithClient = async (
@@ -96,6 +96,7 @@ export const resolveAuthoredQuestAttemptsWithClient = async (
     const quest = findAuthoredQuest(questId);
     const chain = quest ? AUTHORED_QUEST_CHAINS.find((candidate) => candidate.id === quest.chainId) : undefined;
     if (!quest || !chain || !unlocked.has(chain.nodeId)) continue;
+    if (quest.criteria.sport !== undefined && quest.criteria.sport !== metrics.sport) continue;
     const criteria = evaluateAuthoredQuestCriteria(quest.criteria, metrics);
     const passed = criteria.every((result) => result.met);
     const base = { questId, kind: "authored" as const, title: quest.title, chainTitle: chain.title, difficulty: quest.difficulty };

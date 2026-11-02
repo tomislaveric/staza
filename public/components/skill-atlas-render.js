@@ -97,9 +97,11 @@ export const nodeGlyph = (node, distant = new Set()) => {
     : "";
 
   const costChip = node.state === "unlockable"
-    ? `<g class="skill-node-cost-chip" transform="translate(${n(node.x)} ${n(node.y + r + 26)})">
-        <rect x="-26" y="-10" width="52" height="20" rx="10" />
-        <text y="0.5">${escapeHtml(formatNumber(node.cost))} SP</text>
+    ? `<g transform="translate(${n(node.x)} ${n(node.y + r + 40)})">
+        <g class="skill-node-cost-chip">
+          <rect x="-26" y="-10" width="52" height="20" rx="10" />
+          <text y="0.5">${escapeHtml(formatNumber(node.cost))} SP</text>
+        </g>
       </g>`
     : "";
 

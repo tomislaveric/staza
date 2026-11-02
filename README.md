@@ -136,6 +136,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Quest Route Exploration V1](features/quest-route-exploration-v1/README.md) —
   *planner reused by Explore this Area*; explore a quest by generating scored ride-route proposals via the standalone
   routing service, then commit the quest and selected PlannedRoute together.
+- [Quest sport-matching fix](features/quest-sport-matching-fix/README.md) —
+  ignore activities of the wrong sport when resolving authored quests so they no
+  longer fail the quest, and restore wrongly failed attempts.
 - [Quest target clarity and shared World cards](features/quest-target-clarity-and-shared-world-cards/README.md) —
   list concrete quest targets and requirements on shared World cards, and highlight
   and frame all targets when a quest is selected.

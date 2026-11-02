@@ -334,7 +334,10 @@
   dominant-baseline: middle;
 }
 
-/* Cost chip (on actionable nodes only) */
+/* Cost chip (on actionable nodes only); sits below the label and follows its scaling. */
+.skill-node-cost-chip {
+  transform: translateY(calc((var(--atlas-label-scale, 1) - 1) * 18px));
+}
 .skill-node-cost-chip rect {
   fill: rgb(232 184 10 / 16%);
   stroke: rgb(232 184 10 / 45%);
