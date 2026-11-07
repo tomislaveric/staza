@@ -345,7 +345,14 @@ export const mountReplayTab = (mountPoint, replay, basemap, activity) => {
     caption: mountPoint.querySelector("[data-level-caption]"),
     distance: mountPoint.querySelector("[data-replay-distance]"),
     feed: mountPoint.querySelector("[data-progress-feed]"),
-    skillPoint: mountPoint.querySelector("[data-skill-point-earned]")
+    skillPoint: mountPoint.querySelector("[data-skill-point-earned]"),
+    quest: mountPoint.querySelector("[data-quest-completed]")
+  };
+  const pulseOnce = (element) => {
+    if (reduceMotion) return;
+    element.classList.remove("is-pulsing");
+    void element.offsetWidth;
+    element.classList.add("is-pulsing");
   };
   const finalDistanceText = levelElements.distance?.textContent ?? "";
   // Replays the level bar from the pre-activity state so level-ups happen as XP is earned.
@@ -356,13 +363,28 @@ export const mountReplayTab = (mountPoint, replay, basemap, activity) => {
     const leveledUp = state.level > previousLevel;
     const skillPoint = levelElements.skillPoint;
     if (skillPoint) {
-      const wasPending = skillPoint.classList.contains("is-pending");
-      skillPoint.classList.toggle("is-pending", !leveledUp);
-      if (leveledUp && wasPending && !reduceMotion) {
-        skillPoint.classList.remove("is-pulsing");
-        void skillPoint.offsetWidth;
-        skillPoint.classList.add("is-pulsing");
-      } else if (!leveledUp) skillPoint.classList.remove("is-pulsing");
+      // Skill Points tick up level by level, pulsing each time one is added.
+      const earnedSoFar = replay.outcome.progression.levels
+        .filter((entry) => entry.level > previousLevel && entry.level <= state.level)
+        .reduce((total, entry) => total + entry.skillPointsAwarded, 0);
+      const shown = Number(skillPoint.dataset.shownSkillPoints ?? -1);
+      skillPoint.classList.toggle("is-pending", earnedSoFar <= 0);
+      if (earnedSoFar !== shown) {
+        skillPoint.dataset.shownSkillPoints = String(earnedSoFar);
+        const label = skillPoint.querySelector("span");
+        if (label && earnedSoFar > 0) label.textContent = `+${xpFormatter.format(earnedSoFar)} ${earnedSoFar === 1 ? "Skill Point" : "Skill Points"}`;
+        if (earnedSoFar > shown && shown >= 0 && earnedSoFar > 0) pulseOnce(skillPoint);
+        else if (earnedSoFar <= 0) skillPoint.classList.remove("is-pulsing");
+      }
+    }
+    const questChip = levelElements.quest;
+    if (questChip) {
+      // Quest bonus XP lands last, so the chip appears and pulses once the replay reaches it.
+      const reached = xpGained >= replay.outcome.xp.total - replay.outcome.xp.quests;
+      const wasPending = questChip.classList.contains("is-pending");
+      questChip.classList.toggle("is-pending", !reached);
+      if (reached && wasPending) pulseOnce(questChip);
+      else if (!reached) questChip.classList.remove("is-pulsing");
     }
     levelElements.label.innerHTML = leveledUp
       ? `Level ${xpFormatter.format(previousLevel)} \u2192 <b class="level-up-to">${xpFormatter.format(state.level)}</b>`

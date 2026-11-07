@@ -19,6 +19,13 @@ const SkillTreeCta = (progression) => {
   return `<button type="button" class="activity-progress-cta" data-outcome-open-atlas${earned > 0 ? " data-skill-point-earned" : ""}><span>${label}</span><small>Open Skill Tree</small></button>`;
 };
 
+const QuestCta = (outcome) => {
+  const completed = (outcome.quests ?? []).filter((quest) => quest.result === "completed");
+  if (completed.length === 0) return "";
+  const label = completed.length === 1 ? "Quest completed" : `${formatNumber(completed.length)} quests completed`;
+  return `<button type="button" class="activity-progress-cta activity-progress-quest" data-outcome-open-progress data-quest-completed><span>${label}</span><small>Open Progress</small></button>`;
+};
+
 const factsLine = (collected, revisits, flowlinesCompleted) => [
   plural(collected, "new collectible"),
   revisits > 0 ? `${formatNumber(revisits)} revisited` : "",
@@ -51,7 +58,7 @@ export const ActivityProgress = (activity, progress) => {
           <p class="activity-progress-label">XP EARNED</p>
           <strong class="activity-progress-earned" data-activity-xp="${earnedXp}">+${formatNumber(earnedXp)}</strong>
         </div>
-        ${outcome ? SkillTreeCta(outcome.progression) : ""}
+        ${outcome ? `<div class="activity-progress-ctas">${QuestCta(outcome)}${SkillTreeCta(outcome.progression)}</div>` : ""}
       </div>
       <div class="activity-progress-level">
         <span data-level-label>${levelText}</span>

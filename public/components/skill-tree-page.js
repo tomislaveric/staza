@@ -85,7 +85,7 @@ export const SkillNodeDetail = (node, nodesById = new Map()) => {
     ? '<p class="skill-detail-hint">This node is part of Premium (cross-sport and late-game progression).</p>'
     : "";
   const questChain = node.questChain
-    ? `<p class="skill-detail-subhead">QUESTS YOU UNLOCK</p><ul class="skill-quest-chain">${node.questChain.quests.map((quest) =>
+    ? `<p class="skill-detail-subhead">QUESTS YOU UNLOCK</p><ul class="skill-quest-chain${node.isNew ? " is-new" : ""}">${node.questChain.quests.map((quest) =>
       `<li><strong>${escapeHtml(quest.title)}</strong> <span>${escapeHtml(quest.description)}</span> <em>+${formatNumber(quest.xp)} XP</em></li>`).join("")}</ul>`
     : "";
   const footer = node.state === "unlockable"
@@ -99,10 +99,16 @@ export const SkillNodeDetail = (node, nodesById = new Map()) => {
       <span class="skill-detail-state is-${node.state}">${stateLabel[node.state] ?? ""}</span>
       <h2 id="skill-detail-name">${escapeHtml(node.name)}</h2>
       <p class="skill-detail-description">${escapeHtml(node.description)}</p>
-      <div class="skill-detail-reward">
+      ${node.isNew
+    ? `<button type="button" class="skill-detail-reward is-new" data-open-progress>
+        <span class="skill-detail-reward-head">REWARD<i class="skill-grant-tag">${GRANT_TYPE_LABEL[node.grant.type] ?? "REWARD"}</i><i class="new-reward-tag">NEW</i></span>
+        <strong>${escapeHtml(node.grant.label)}</strong>
+        <small class="skill-detail-reward-link">View on Progress &rarr;</small>
+      </button>`
+    : `<div class="skill-detail-reward">
         <span class="skill-detail-reward-head">REWARD<i class="skill-grant-tag">${GRANT_TYPE_LABEL[node.grant.type] ?? "REWARD"}</i></span>
         <strong>${escapeHtml(node.grant.label)}</strong>
-      </div>
+      </div>`}
       ${node.requirements.length
         ? `<p class="skill-detail-subhead">REQUIREMENTS</p><ul class="skill-requirements">${node.requirements.map(RequirementRow).join("")}</ul>`
         : noRequirementsNote}
@@ -134,7 +140,7 @@ const responseJson = async (response) => {
   return body;
 };
 
-export const mountSkillTreePage = async (mountPoint, initialNodeId) => {
+export const mountSkillTreePage = async (mountPoint, initialNodeId, { onOpenProgress, onViewChanged } = {}) => {
   mountPoint.innerHTML = '<section class="skill-tree-page"><p class="skill-tree-loading" role="status">Loading Skill Atlas...</p></section>';
 
   let view;
@@ -243,6 +249,7 @@ export const mountSkillTreePage = async (mountPoint, initialNodeId) => {
       renderScene({ keepView: true });
       renderDetail();
       flashUnlock(nodeId);
+      onViewChanged?.();
     } catch (error) {
       const notice = document.createElement("p");
       notice.className = "skill-detail-error";
@@ -321,6 +328,7 @@ export const mountSkillTreePage = async (mountPoint, initialNodeId) => {
 
     detailSlot.addEventListener("click", (event) => {
       if (event.target.closest("[data-skill-detail-close]")) detailSlot.classList.remove("is-open");
+      if (event.target.closest("[data-open-progress]")) onOpenProgress?.();
       const unlockButton = event.target.closest("[data-skill-unlock]");
       if (unlockButton) unlock(unlockButton.dataset.skillUnlock, unlockButton);
     });

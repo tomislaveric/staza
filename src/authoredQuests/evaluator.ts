@@ -67,14 +67,12 @@ export const nextAuthoredQuestAfter = (questId: string): AuthoredQuest | undefin
   return undefined;
 };
 
-export type AuthoredQuestState = "completed" | "active" | "failed" | "available" | "locked";
+export type AuthoredQuestState = "completed" | "active" | "locked";
 
-/** Open or failed attempt of an authored quest, as persisted. */
-export interface AuthoredQuestAttemptView {
-  status: "active" | "failed";
+/** The most recent activity that fell short of an active quest; the quest stays active afterwards. */
+export interface AuthoredQuestFailureView {
   attemptCount: number;
-  startedAt: string;
-  failedAt?: string;
+  failedAt: string;
   criteria?: QuestCriterionResult[];
 }
 
@@ -89,19 +87,28 @@ export interface AuthoredQuestView {
   difficulty: QuestDifficulty;
   xp: number;
   state: AuthoredQuestState;
-  attempt?: AuthoredQuestAttemptView;
+  /** Active quests only: only activities that started at or after this instant can resolve the quest. */
+  availableSince?: string;
+  /** Active or newly completed quests: true until the player has opened Progress. */
+  isNew?: boolean;
+  lastFailure?: AuthoredQuestFailureView;
   requiredNode?: { id: string; name: string; premium: boolean };
   requiredQuestTitle?: string;
   completedAt?: string;
 }
 
+/**
+ * A quest is active as soon as its chain node is unlocked and the previous step is completed.
+ * It becomes available at the later of those two moments.
+ */
 export const buildAuthoredQuestViews = (
-  unlockedNodeIds: ReadonlySet<string>,
+  unlockedAtByNodeId: ReadonlyMap<string, string>,
   completedAtByQuestId: ReadonlyMap<string, string>,
-  attemptsByQuestId: ReadonlyMap<string, AuthoredQuestAttemptView> = new Map()
+  failuresByQuestId: ReadonlyMap<string, AuthoredQuestFailureView> = new Map(),
+  rewardsSeenAt?: string
 ): AuthoredQuestView[] => AUTHORED_QUEST_CHAINS.flatMap((chain) => {
   const node = findSkillTreeNode(chain.nodeId);
-  const nodeUnlocked = unlockedNodeIds.has(chain.nodeId);
+  const nodeUnlockedAt = unlockedAtByNodeId.get(chain.nodeId);
   return chain.quests.map((quest, index): AuthoredQuestView => {
     const completedAt = completedAtByQuestId.get(quest.id);
     const previous = index > 0 ? chain.quests[index - 1] : undefined;
@@ -116,19 +123,33 @@ export const buildAuthoredQuestViews = (
       difficulty: quest.difficulty,
       xp: quest.xp
     };
-    if (completedAt) return { ...base, state: "completed", completedAt };
-    if (!nodeUnlocked) {
+    if (completedAt) {
+      return {
+        ...base,
+        state: "completed",
+        completedAt,
+        isNew: rewardsSeenAt === undefined || Date.parse(completedAt) > Date.parse(rewardsSeenAt)
+      };
+    }
+    if (nodeUnlockedAt === undefined) {
       return {
         ...base,
         state: "locked",
         requiredNode: { id: chain.nodeId, name: node?.name ?? chain.nodeId, premium: node?.premium ?? false }
       };
     }
-    if (previous && !completedAtByQuestId.has(previous.id)) {
-      return { ...base, state: "locked", requiredQuestTitle: previous.title };
-    }
-    const attempt = attemptsByQuestId.get(quest.id);
-    if (attempt) return { ...base, state: attempt.status, attempt };
-    return { ...base, state: "available" };
+    const previousCompletedAt = previous ? completedAtByQuestId.get(previous.id) : undefined;
+    if (previous && previousCompletedAt === undefined) return { ...base, state: "locked", requiredQuestTitle: previous.title };
+    const availableSince = previousCompletedAt && Date.parse(previousCompletedAt) > Date.parse(nodeUnlockedAt)
+      ? previousCompletedAt
+      : nodeUnlockedAt;
+    const lastFailure = failuresByQuestId.get(quest.id);
+    return {
+      ...base,
+      state: "active",
+      availableSince,
+      isNew: rewardsSeenAt === undefined || Date.parse(availableSince) > Date.parse(rewardsSeenAt),
+      ...(lastFailure ? { lastFailure } : {})
+    };
   });
 });

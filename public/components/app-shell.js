@@ -39,6 +39,10 @@ export const mountAppShell = (mountPoint, onScreenChange, locale = "en") => {
     content: shell.querySelector(".main-content"),
     setScreen(screen) {
       setSidebarScreen(shell, screen);
+    },
+    setNewRewards({ hasNew, hasNewProgress } = {}) {
+      shell.querySelectorAll('[data-screen="skill-tree"]').forEach((item) => item.toggleAttribute("data-has-new", Boolean(hasNew)));
+      shell.querySelectorAll('[data-screen="progress"]').forEach((item) => item.toggleAttribute("data-has-new", Boolean(hasNewProgress)));
     }
   };
 };

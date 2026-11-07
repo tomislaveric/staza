@@ -186,6 +186,13 @@ describe("Skill node detail", () => {
     expect(detail).toContain("QUEST");
   });
 
+  it("highlights a new reward and links it to Progress", () => {
+    const fresh = SkillNodeDetail({ ...view.nodes[1], state: "unlocked", isNew: true });
+    expect(fresh).toContain('class="skill-detail-reward is-new" data-open-progress');
+    expect(fresh).toContain("NEW");
+    expect(SkillNodeDetail({ ...view.nodes[1], state: "unlocked" })).not.toContain("data-open-progress");
+  });
+
   it("renders a fulfilled requirement as completed without exceeding the bar", () => {
     const detail = SkillNodeDetail(view.nodes[1]);
     expect(detail).toContain("Completed");

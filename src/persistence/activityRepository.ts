@@ -323,7 +323,8 @@ export class ActivityRepository {
       }
       const activityStartedAt = new Date(activity.startedAt);
       const authoredOutcomes = await resolveAuthoredQuestAttemptsWithClient(
-        client, playerId, activity.id, activityStartedAt, buildActivityQuestMetrics(activity, result, categoriesBySourceId)
+        client, playerId, activity.id, activityStartedAt, buildActivityQuestMetrics(activity, result, categoriesBySourceId),
+        this.skipStravaJourneyCutoff
       );
       const explorationOutcomes = await resolveExplorationAttemptsWithClient(client, playerId, activity.id, activityStartedAt, {
         collectibles: result.events.map((event) => {

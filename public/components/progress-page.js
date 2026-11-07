@@ -152,51 +152,60 @@ const criteriaList = (criteria = []) => criteria.length
   ? `<ul class="authored-quest-criteria">${criteria.map((criterion) => `<li class="${criterion.met ? "is-met" : "is-missed"}"><span data-user-content>${escapeHtml(criterion.label)}</span> <b>${formatNumber(criterion.current)} / ${formatNumber(criterion.required)}${criterion.unit ? ` ${escapeHtml(criterion.unit)}` : ""}</b></li>`).join("")}</ul>`
   : "";
 
-const questAction = (quest) => {
-  if (quest.state === "available") return `<button type="button" class="authored-quest-action" data-start-quest="${escapeHtml(quest.id)}">Start</button>`;
-  if (quest.state === "failed") return `<button type="button" class="authored-quest-action" data-start-quest="${escapeHtml(quest.id)}">Retry</button>`;
-  return "";
-};
-
 const questStatus = (quest) => {
-  if (quest.state === "available") return "Available";
   if (quest.state === "completed") return "Done";
   if (quest.state === "active") return "Active · your next activity decides";
-  if (quest.state === "failed") return "Not completed · retry any time";
   return "";
 };
 
+const failureHint = (quest) => quest.lastFailure
+  ? `<small class="authored-quest-failure">Last activity fell short · try again</small>${criteriaList(quest.lastFailure.criteria)}`
+  : "";
+
 const AuthoredQuest = (quest) => `
-  <li class="quest-instance-card authored-quest is-${quest.state}" data-authored-quest="${escapeHtml(quest.id)}">
+  <li class="quest-instance-card authored-quest is-${quest.state}${quest.isNew ? " is-new" : ""}" data-authored-quest="${escapeHtml(quest.id)}">
     <article>
-      <span class="quest-card-head"><strong data-user-content>${escapeHtml(quest.title)}</strong></span>
+      <span class="quest-card-head"><strong data-user-content>${escapeHtml(quest.title)}</strong>${quest.isNew ? '<i class="new-reward-tag">NEW</i>' : ""}</span>
       <span class="quest-card-description" data-user-content>${escapeHtml(quest.description)}</span>
       <span class="quest-card-progress">
-        <small class="authored-quest-meta"><span>${escapeHtml(difficultyLabel(quest.difficulty))}</span> · +${formatNumber(quest.xp)} XP${questStatus(quest) ? ` · ${quest.state === "available" ? `<span class="authored-quest-state">${questStatus(quest)}</span>` : `<span>${questStatus(quest)}</span>`}` : ""}</small>
-        ${quest.state === "failed" ? criteriaList(quest.attempt?.criteria) : ""}
+        <small class="authored-quest-meta"><span>${escapeHtml(difficultyLabel(quest.difficulty))}</span> · +${formatNumber(quest.xp)} XP${questStatus(quest) ? ` · <span>${questStatus(quest)}</span>` : ""}</small>
+        ${quest.state === "active" ? failureHint(quest) : ""}
         ${quest.state === "locked" ? `<small class="authored-quest-lock">${escapeHtml(questRequirement(quest))}</small>` : ""}
       </span>
-      ${questAction(quest)}
     </article>
   </li>
 `;
 
 export const AuthoredQuests = (quests = []) => {
-  const open = quests.filter((quest) => ["active", "failed", "available"].includes(quest.state));
+  const open = quests.filter((quest) => quest.state === "active");
   const locked = quests.filter((quest) => quest.state === "locked");
   const completed = quests.filter((quest) => quest.state === "completed");
+  const justCompleted = completed.filter((quest) => quest.isNew);
   return `
   <section class="authored-quests" aria-labelledby="authored-quests-title">
     <h2 id="authored-quests-title">QUESTS</h2>
-    <p class="authored-quests-rule">Start a quest, then your next activity decides it. Quests pay bonus XP by difficulty.</p>
-    <p class="authored-quests-error" role="alert" hidden></p>
+    <p class="authored-quests-rule">Unlocked quests are active right away. Your next activity decides them. Quests pay bonus XP by difficulty.</p>
+    ${justCompleted.length ? `<ol class="home-quest-list authored-quests-just-completed">${justCompleted.map(AuthoredQuest).join("")}</ol>` : ""}
     ${open.length
     ? `<ol class="home-quest-list">${open.map(AuthoredQuest).join("")}</ol>`
-    : '<p class="authored-quests-empty">Unlock quest nodes in the Skill Atlas to start quest chains.</p>'}
+    : ""}
     ${completed.length ? `<p class="authored-quests-done">${formatNumber(completed.length)} completed</p>` : ""}
     ${locked.length ? `<details class="authored-quests-locked"><summary>Locked quests (${formatNumber(locked.length)})</summary><ol class="home-quest-list">${locked.map(AuthoredQuest).join("")}</ol></details>` : ""}
   </section>
 `;
+};
+
+export const QuestBadges = (quests = []) => {
+  const finished = quests.filter((quest) => quest.state === "completed");
+  return finished.length ? `
+  <section class="quest-badges-section" aria-labelledby="quest-badges-title">
+    <h2 id="quest-badges-title">FINISHED QUESTS</h2>
+    <ul class="quest-badges">${finished.map((quest) => `<li class="quest-badge${quest.isNew ? " is-new" : ""}" data-quest-badge="${escapeHtml(quest.id)}">
+      <b data-user-content>${escapeHtml(quest.title)}</b>
+      <small data-user-content>${escapeHtml(quest.description)}</small>
+    </li>`).join("")}</ul>
+  </section>
+` : "";
 };
 
 export const QuestHistory = (history = []) => history.length ? `
@@ -223,6 +232,7 @@ export const ProgressPage = (model) => `
     </header>
     ${LevelCard(model.progress)}
     ${AuthoredQuests(model.authoredQuests)}
+    ${QuestBadges(model.authoredQuests)}
     ${ProgressSummary(model)}
     ${Trophies(model.capabilities)}
     ${PersonalRecords(model.sportRecords)}
@@ -239,7 +249,7 @@ export const responseJson = async (response) => {
   return body;
 };
 
-export const mountProgressPage = async (mountPoint) => {
+export const mountProgressPage = async (mountPoint, { onRewardsSeen } = {}) => {
   mountPoint.innerHTML = '<section class="progress-page"><p class="progress-loading" role="status">Loading Progress...</p></section>';
   try {
     const [dashboard, authored, capabilities] = await Promise.all([
@@ -247,28 +257,9 @@ export const mountProgressPage = async (mountPoint) => {
       fetch("/api/authored-quests").then(responseJson).catch(() => ({ quests: [] })),
       fetch("/api/player/capabilities").then(responseJson).catch(() => ({}))
     ]);
-    const render = (quests) => {
-      mountPoint.innerHTML = ProgressPage({ ...progressViewModel(dashboard), capabilities, authoredQuests: quests });
-      mountPoint.querySelectorAll("[data-start-quest]").forEach((button) => {
-        button.addEventListener("click", async () => {
-          button.disabled = true;
-          try {
-            await fetch(`/api/authored-quests/${encodeURIComponent(button.dataset.startQuest)}/start`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" }
-            }).then(responseJson);
-            const refreshed = await fetch("/api/authored-quests").then(responseJson);
-            render(refreshed.quests);
-          } catch (error) {
-            button.disabled = false;
-            const host = mountPoint.querySelector(".authored-quests-error");
-            host.textContent = error instanceof Error ? error.message : "Unable to start the quest.";
-            host.hidden = false;
-          }
-        });
-      });
-    };
-    render(authored.quests);
+    mountPoint.innerHTML = ProgressPage({ ...progressViewModel(dashboard), capabilities, authoredQuests: authored.quests });
+    // Opening Progress is what clears the "new" highlights; this render still shows them.
+    fetch("/api/rewards/seen", { method: "POST" }).then(() => onRewardsSeen?.()).catch(() => undefined);
   } catch (error) {
     mountPoint.innerHTML = `<section class="progress-page"><p class="progress-load-error" role="alert">Unable to load Progress: ${escapeHtml(error.message)}</p></section>`;
   }

@@ -512,6 +512,20 @@
   border: 1px solid rgb(232 184 10 / 32%);
   margin: 0 0 18px;
 }
+button.skill-detail-reward {
+  appearance: none;
+  box-sizing: border-box;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+.skill-detail-reward-link {
+  color: var(--accent-yellow-bright);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
 .skill-detail-reward-head {
   display: flex;
   align-items: center;

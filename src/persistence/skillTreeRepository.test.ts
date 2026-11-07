@@ -53,6 +53,16 @@ describePersistence("SkillTreeRepository", () => {
     expect(Number(rows.rows[0].c)).toBe(1);
   });
 
+  it("flags an unlocked node as new until rewards are marked seen", async () => {
+    await seedPlayer(100, false);
+    await seedActivity("a1", "cycling", 1000);
+    const { view } = await repository!.unlockNode(playerId, "cyclist");
+    expect(view.nodes.find((node) => node.id === "cyclist")?.isNew).toBe(true);
+    expect(view.nodes.filter((node) => node.isNew)).toHaveLength(1);
+    await repository!.markRewardsSeen(playerId);
+    expect((await repository!.getView(playerId)).nodes.some((node) => node.isNew)).toBe(false);
+  });
+
   it("rejects unlocking without enough skill points", async () => {
     await seedPlayer(0, false); // level 1 => 1 SP
     await seedActivity("a1", "cycling", 1000);
@@ -94,7 +104,7 @@ describePersistence("SkillTreeRepository", () => {
     await repository!.unlockNode(playerId, "cyclist");
 
     const capabilities = await repository!.getUnlockedCapabilities(playerId);
-    expect(capabilities).toEqual([{ type: "tree_access", value: "cycling-branches", label: expect.any(String) }]);
+    expect(capabilities).toEqual([{ type: "quest_unlock", value: "cycling-onboarding", label: expect.any(String) }]);
 
     await pool!.query("DELETE FROM players WHERE id = $1", [playerId]);
     const rows = await pool!.query("SELECT count(*) AS c FROM skill_tree_unlocks WHERE player_id = $1", [playerId]);

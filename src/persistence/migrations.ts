@@ -892,6 +892,15 @@ export const migrations: Migration[] = [{
         );
     `);
   }
+}, {
+  id: "038_auto_started_quests_and_reward_seen",
+  async up(client) {
+    await client.query(`
+      DELETE FROM authored_quest_attempts WHERE status = 'active';
+      ALTER TABLE players ADD COLUMN rewards_seen_at TIMESTAMPTZ;
+      UPDATE players SET rewards_seen_at = now();
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

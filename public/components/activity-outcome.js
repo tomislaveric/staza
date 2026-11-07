@@ -41,7 +41,7 @@ const QuestResult = (quest) => quest.result === "completed"
   : `
     <li class="outcome-quest is-failed" data-outcome-quest="failed">
       <strong>Quest not completed: <span data-user-content>${escapeHtml(quest.title)}</span></strong>
-      <small>This activity decided the attempt. You can retry from Quests.</small>
+      <small>This activity fell short. The quest stays active for your next activity.</small>
       <ul class="outcome-criteria">${quest.criteria.map(criterionLine).join("")}</ul>
     </li>`;
 

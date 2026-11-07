@@ -21,7 +21,7 @@ describe("authored quest catalog", () => {
     const grantNodes = SKILL_TREE_NODES.filter((node) => node.grant.type === "quest_unlock");
     expect(AUTHORED_QUEST_CHAINS.map((chain) => chain.nodeId).sort()).toEqual(grantNodes.map((node) => node.id).sort());
     for (const chain of AUTHORED_QUEST_CHAINS) {
-      expect(chain.quests.length).toBeGreaterThanOrEqual(2);
+      expect(chain.quests.length).toBeGreaterThanOrEqual(1);
       for (const quest of chain.quests) expect(quest.xp).toBe(QUEST_XP_BY_DIFFICULTY[quest.difficulty]);
     }
   });
@@ -57,26 +57,34 @@ describe("authored quest evaluation", () => {
     expect(QUEST_XP_BY_DIFFICULTY).toEqual({ easy: 100, medium: 250, hard: 500, prestige: 1000 });
   });
 
-  it("marks active and failed attempts in the quest views", () => {
-    const attempt = { status: "failed" as const, attemptCount: 2, startedAt: "2026-01-01T00:00:00.000Z" };
-    const views = buildAuthoredQuestViews(new Set([rusher]), new Map(), new Map([[firstId, attempt]]));
-    expect(views.find((quest) => quest.id === firstId)).toMatchObject({ state: "failed", attempt });
+  const unlockedAt = "2026-01-01T00:00:00.000Z";
+  const unlocks = new Map([[rusher, unlockedAt]]);
+
+  it("activates quests when available, with the last failure and the new flag", () => {
+    const failure = { attemptCount: 2, failedAt: "2026-01-02T00:00:00.000Z" };
+    const views = buildAuthoredQuestViews(unlocks, new Map(), new Map([[firstId, failure]]), "2025-12-01T00:00:00.000Z");
+    expect(views.find((quest) => quest.id === firstId)).toMatchObject({
+      state: "active", availableSince: unlockedAt, isNew: true, lastFailure: failure
+    });
+    const seen = buildAuthoredQuestViews(unlocks, new Map(), new Map(), "2026-02-01T00:00:00.000Z");
+    expect(seen.find((quest) => quest.id === firstId)?.isNew).toBe(false);
   });
 
   it("shows locked quests with the node that unlocks them and gates later steps", () => {
-    const locked = buildAuthoredQuestViews(new Set(), new Map()).find((quest) => quest.id === firstId)!;
+    const locked = buildAuthoredQuestViews(new Map(), new Map()).find((quest) => quest.id === firstId)!;
     expect(locked).toMatchObject({ state: "locked", requiredNode: { id: rusher } });
-    const unlocked = buildAuthoredQuestViews(new Set([rusher]), new Map());
-    expect(unlocked.find((quest) => quest.id === firstId)?.state).toBe("available");
+    const unlocked = buildAuthoredQuestViews(unlocks, new Map());
+    expect(unlocked.find((quest) => quest.id === firstId)?.state).toBe("active");
     expect(unlocked.find((quest) => quest.id === "flow-quests:2")).toMatchObject({ state: "locked", requiredQuestTitle: expect.any(String) });
-    const done = buildAuthoredQuestViews(new Set([rusher]), new Map([[firstId, "2026-01-01T00:00:00.000Z"]]));
+    const completedAt = "2026-03-01T00:00:00.000Z";
+    const done = buildAuthoredQuestViews(unlocks, new Map([[firstId, completedAt]]));
     expect(done.find((quest) => quest.id === firstId)?.state).toBe("completed");
-    expect(done.find((quest) => quest.id === "flow-quests:2")?.state).toBe("available");
+    expect(done.find((quest) => quest.id === "flow-quests:2")).toMatchObject({ state: "active", availableSince: completedAt });
   });
 });
 
 describe("Atlas grant consumers", () => {
-  it("every non-hub node of a sport transitively requires that sport's tree_access hub", () => {
+  it("every non-hub node of a sport transitively requires that sport's hub", () => {
     const byId = new Map(SKILL_TREE_NODES.map((node) => [node.id, node]));
     const requires = (id: string, hubId: string, seen = new Set<string>()): boolean => {
       if (id === hubId) return true;
@@ -84,7 +92,7 @@ describe("Atlas grant consumers", () => {
       seen.add(id);
       return (byId.get(id)?.prerequisites ?? []).some((pre) => requires(pre, hubId, seen));
     };
-    for (const hub of SKILL_TREE_NODES.filter((node) => node.grant.type === "tree_access")) {
+    for (const hub of SKILL_TREE_NODES.filter((node) => node.branch === "root")) {
       for (const node of SKILL_TREE_NODES.filter((item) => item.sport === hub.sport && item.id !== hub.id)) {
         expect(requires(node.id, hub.id), `${node.id} -> ${hub.id}`).toBe(true);
       }

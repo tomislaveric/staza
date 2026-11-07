@@ -40,12 +40,11 @@ describe("Home data transformation", () => {
 });
 
 describe("Home next action", () => {
-  it("prioritises Skill Points, failed, active, available quests, then exploration", () => {
+  it("prioritises Skill Points, active quests, then exploration", () => {
     const quest = (state) => ({ title: "Q", chainTitle: "C", xp: 100, state });
-    expect(homeNextAction({ skillPoints: 2, authoredQuests: [quest("failed")] }).id).toBe("spend-skill-points");
-    expect(homeNextAction({ authoredQuests: [quest("available"), quest("failed")] }).id).toBe("retry-quest");
-    expect(homeNextAction({ authoredQuests: [quest("active")] }).id).toBe("active-quest");
-    expect(homeNextAction({ authoredQuests: [quest("available")] }).id).toBe("start-quest");
+    expect(homeNextAction({ skillPoints: 2, authoredQuests: [quest("active")] }).id).toBe("spend-skill-points");
+    expect(homeNextAction({ authoredQuests: [quest("locked"), quest("active")] }).id).toBe("active-quest");
+    expect(homeNextAction({ authoredQuests: [{ ...quest("active"), lastFailure: { attemptCount: 1 } }] }).body).toContain("fell short");
     expect(homeNextAction({ instances: [{ status: "active", title: "E" }] })).toMatchObject({ id: "active-exploration", target: "world" });
     expect(homeNextAction({}).target).toBe("world");
     expect(HomeNextAction(homeNextAction({ skillPoints: 1 }))).toContain('data-home-action-target="skill-tree"');

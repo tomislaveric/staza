@@ -100,21 +100,17 @@ export const HomeRecentActivity = (activity) => {
 };
 
 /**
- * One recommended next step. Priority: spend Skill Points, resolve a failed attempt, wait on an
- * active one, start the next quest, otherwise plan an exploration.
+ * One recommended next step. Priority: spend Skill Points, go for an active quest (quests start
+ * automatically), wait on an exploration, otherwise plan an exploration.
  */
 export const homeNextAction = ({ skillPoints = 0, authoredQuests = [], instances = [] } = {}) => {
   if (skillPoints > 0) {
     return { id: "spend-skill-points", title: `Spend ${skillPoints} Skill Point${skillPoints === 1 ? "" : "s"}`, body: "Unlock new sports, filters and quest chains in the Skill Atlas.", cta: "Open Skill Atlas", target: "skill-tree" };
   }
-  const failed = authoredQuests.find((quest) => quest.state === "failed");
-  if (failed) return { id: "retry-quest", title: `Retry ${failed.title}`, body: "Your last attempt didn't meet every criterion. Start it again and your next activity decides.", cta: "Open Quests", target: "progress" };
   const active = authoredQuests.find((quest) => quest.state === "active");
-  if (active) return { id: "active-quest", title: `${active.title} is active`, body: "Go for your next ride, run or hike. That activity decides the attempt.", cta: "View Quests", target: "progress" };
+  if (active) return { id: "active-quest", title: `${active.title} is active`, body: active.lastFailure ? "Your last activity fell short. Your next activity decides again." : "Go for your next ride, run or hike. That activity decides the attempt.", cta: "View Quests", target: "progress" };
   const exploration = instances.find((instance) => instance.status === "active");
   if (exploration) return { id: "active-exploration", title: `${exploration.title} is active`, body: "Go for your next ride, run or hike. That activity decides the attempt.", cta: "Open World", target: "world" };
-  const available = authoredQuests.find((quest) => quest.state === "available");
-  if (available) return { id: "start-quest", title: `Start ${available.title}`, body: `${available.chainTitle ?? "Quest"} · +${formatNumber(available.xp)} XP when your next activity completes it.`, cta: "Open Quests", target: "progress" };
   return { id: "plan-exploration", title: "Plan an exploration", body: "Pick an area in World and turn it into a route with targets to collect.", cta: "Open World", target: "world" };
 };
 
@@ -210,7 +206,7 @@ const loadAchievements = async () => {
       totalNodes: tree.nodes.length,
       titles: capabilities.titles,
       badges: capabilities.badges,
-      nextQuest: quests.quests.find((quest) => quest.state === "available"),
+      nextQuest: quests.quests.find((quest) => quest.state === "active"),
       authoredQuests: quests.quests
     };
   } catch {

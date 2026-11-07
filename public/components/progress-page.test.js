@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AuthoredQuests,
+  QuestBadges,
   ProgressPage,
   ProgressSummary,
   QuestHistory,
@@ -107,9 +108,9 @@ describe("Progress page", () => {
 describe("Authored quests on Progress", () => {
   const quest = (overrides) => ({ id: "q:1", title: "Quest I", description: "Do it.", xp: 60, difficulty: "easy", state: "available", ...overrides });
 
-  it("lists available quests and shows the required node for locked ones", () => {
+  it("lists active quests and shows the required node for locked ones", () => {
     const html = AuthoredQuests([
-      quest(),
+      quest({ state: "active" }),
       quest({ id: "q:2", title: "Locked <b>", state: "locked", requiredNode: { id: "n", name: "Rusher I", premium: true } }),
       quest({ id: "q:3", state: "locked", requiredQuestTitle: "Quest I" }),
       quest({ id: "q:4", state: "completed" })
@@ -122,16 +123,29 @@ describe("Authored quests on Progress", () => {
     expect(html).not.toContain("<b>");
   });
 
-  it("offers Start, active copy and Retry with the missed criteria", () => {
-    const html = AuthoredQuests([
-      quest(),
-      quest({ id: "q:5", state: "active", attempt: { status: "active", attemptCount: 1, startedAt: "2026-01-01T00:00:00Z" } }),
-      quest({ id: "q:6", state: "failed", attempt: { status: "failed", attemptCount: 1, startedAt: "x", criteria: [{ label: "Distance", current: 12, required: 30, met: false, unit: "km" }] } })
+  it("lists only finished quests as badges with title and goal", () => {
+    const html = QuestBadges([
+      quest({ title: "Flow Quest I", description: "Complete 1 Flowline.", state: "completed", isNew: true }),
+      quest({ id: "q:2", title: "Flow Quest II", state: "locked" })
     ]);
-    expect(html).toContain('data-start-quest="q:1">Start<');
-    expect(html).toContain('class="authored-quest-state">Available</span>');
+    expect(html).toContain("FINISHED QUESTS");
+    expect(html).toContain('quest-badge is-new" data-quest-badge="q:1"');
+    expect(html).toContain("Complete 1 Flowline.");
+    expect(html).not.toContain("Flow Quest II");
+    expect(QuestBadges([quest({ state: "active" })])).toBe("");
+  });
+
+  it("has no Start or Retry control, shows the last failure and flags new quests", () => {
+    const html = AuthoredQuests([
+      quest({ state: "active", isNew: true }),
+      quest({ id: "q:6", state: "active", lastFailure: { attemptCount: 1, failedAt: "x", criteria: [{ label: "Distance", current: 12, required: 30, met: false, unit: "km" }] } })
+    ]);
+    expect(html).not.toContain("data-start-quest");
+    expect(html).not.toContain("<button");
     expect(html).toContain("Active · your next activity decides");
-    expect(html).toContain('data-start-quest="q:6">Retry<');
+    expect(html).toContain('authored-quest is-active is-new"');
+    expect(html).toContain('class="new-reward-tag">NEW<');
+    expect(html).toContain("Last activity fell short");
     expect(html).toContain("12 / 30 km");
     expect(html).toContain("Easy</span> · +60 XP");
   });
@@ -148,7 +162,7 @@ describe("Authored quests on Progress", () => {
     expect(ProgressSummary(progressViewModel(dashboard))).toContain("3 Flowlines");
   });
 
-  it("points to the Skill Atlas when nothing is available", () => {
-    expect(AuthoredQuests([])).toContain("Unlock quest nodes in the Skill Atlas");
+  it("shows no hint when there are no quests", () => {
+    expect(AuthoredQuests([])).not.toContain("Unlock quest nodes");
   });
 });

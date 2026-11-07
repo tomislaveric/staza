@@ -31,73 +31,73 @@ describePersistence("authored quests", () => {
   });
   afterAll(async () => { await pool?.end(); });
 
-  const startedBefore = new Date("2026-05-01T00:00:00Z");
+  const unlock = (nodeId: string, at: string) =>
+    pool!.query("INSERT INTO skill_tree_unlocks (player_id, node_id, cost, unlocked_at) VALUES ($1, $2, 1, $3)", [playerId, nodeId, at]);
   const outcomeOf = async (id: string) => (await activities!.getActivity(playerId, id))!.replay!.outcome!;
+  const quest = async (id: string) => (await quests!.list(playerId)).find((entry) => entry.id === id)!;
 
-  it("completes an explicitly started step on the next activity, once, with difficulty XP", async () => {
+  it("completes an unlocked step on the next activity, once, with difficulty XP", async () => {
     // endurance-i: 30 km ride (easy), then 50 km ride
     await activities!.persistCompletedActivity(playerId, ride("a".repeat(48), 60_000), result("a".repeat(48)));
     expect(await totalXp()).toBe(10);
 
-    await pool!.query("INSERT INTO skill_tree_unlocks (player_id, node_id, cost) VALUES ($1, 'endurance-i', 1)", [playerId]);
-    // Nothing completes without starting, and earlier activities never count.
+    // Activities that started before the node was unlocked never count.
+    await unlock("endurance-i", "2026-06-02T00:00:00Z");
+    expect((await quest("distance-quests:1")).state).toBe("active");
     await activities!.persistCompletedActivity(playerId, ride("e".repeat(48), 60_000), result("e".repeat(48)));
-    expect((await quests!.list(playerId)).filter((quest) => quest.state === "completed")).toEqual([]);
+    expect((await quests!.list(playerId)).filter((entry) => entry.state === "completed")).toEqual([]);
 
-    await quests!.start(playerId, "distance-quests:1", startedBefore);
-    await expect(quests!.start(playerId, "distance-quests:1")).rejects.toThrow("already active");
-    await expect(quests!.start(playerId, "distance-quests:2")).rejects.toThrow("previous quest");
+    await pool!.query("UPDATE skill_tree_unlocks SET unlocked_at = '2026-05-01T00:00:00Z'");
     await activities!.persistCompletedActivity(playerId, ride("b".repeat(48), 35_000), result("b".repeat(48)));
-    const completed = (await quests!.list(playerId)).filter((quest) => quest.state === "completed");
-    expect(completed.map((quest) => quest.id)).toEqual(["distance-quests:1"]);
+    const completed = (await quests!.list(playerId)).filter((entry) => entry.state === "completed");
+    expect(completed.map((entry) => entry.id)).toEqual(["distance-quests:1"]);
     expect(completed[0].xp).toBe(100);
     expect(await totalXp()).toBe(30 + completed[0].xp);
     expect((await outcomeOf("b".repeat(48))).quests).toMatchObject([
       { questId: "distance-quests:1", result: "completed", xp: 100, next: { id: "distance-quests:2" } }
     ]);
+    // The same activity never also completes the next step.
+    expect((await quest("distance-quests:2")).state).toBe("active");
 
-    // Same activity returned again awards nothing more.
     await activities!.persistCompletedActivity(playerId, ride("b".repeat(48), 35_000), result("b".repeat(48)));
     expect(await totalXp()).toBe(30 + completed[0].xp);
   });
 
-  it("fails the attempt on the next activity that falls short and allows a retry", async () => {
-    await pool!.query("INSERT INTO skill_tree_unlocks (player_id, node_id, cost) VALUES ($1, 'endurance-i', 1)", [playerId]);
-    await quests!.start(playerId, "distance-quests:1", startedBefore);
+  it("records a failure, keeps the quest active and completes it on a later activity", async () => {
+    await unlock("endurance-i", "2026-05-01T00:00:00Z");
     await activities!.persistCompletedActivity(playerId, ride("f".repeat(48), 10_000), result("f".repeat(48)));
-    const failed = (await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!;
-    expect(failed).toMatchObject({ state: "failed", attempt: { attemptCount: 1 } });
-    expect(failed.attempt!.criteria!.filter((criterion) => !criterion.met).map((criterion) => criterion.label)).toEqual(["Distance"]);
+    const failed = await quest("distance-quests:1");
+    expect(failed).toMatchObject({ state: "active", lastFailure: { attemptCount: 1 } });
+    expect(failed.lastFailure!.criteria!.filter((criterion) => !criterion.met).map((criterion) => criterion.label)).toEqual(["Distance"]);
     expect(await totalXp()).toBe(10);
     expect((await outcomeOf("f".repeat(48))).quests[0]).toMatchObject({ result: "failed", xp: 0 });
 
-    // A failed attempt does not resolve again until it is retried.
-    await activities!.persistCompletedActivity(playerId, ride("g".repeat(48), 60_000), result("g".repeat(48)));
-    expect((await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!.state).toBe("failed");
-
-    await quests!.start(playerId, "distance-quests:1", startedBefore);
     await activities!.persistCompletedActivity(playerId, ride("h".repeat(48), 60_000), result("h".repeat(48)));
-    const done = (await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!;
-    expect(done.state).toBe("completed");
-    expect(await totalXp()).toBe(30 + 100);
+    expect((await quest("distance-quests:1")).state).toBe("completed");
+    expect(await totalXp()).toBe(20 + 100);
   });
 
   it("ignores an activity of the wrong sport and still counts the next matching one", async () => {
-    await pool!.query("INSERT INTO skill_tree_unlocks (player_id, node_id, cost) VALUES ($1, 'endurance-i', 1)", [playerId]);
-    await quests!.start(playerId, "distance-quests:1", startedBefore);
+    await unlock("endurance-i", "2026-05-01T00:00:00Z");
     await activities!.persistCompletedActivity(playerId, ride("c".repeat(48), 60_000, "running"), result("c".repeat(48)));
-    const afterRun = (await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!;
-    expect(afterRun.state).toBe("active");
+    expect((await quest("distance-quests:1")).state).toBe("active");
     expect((await outcomeOf("c".repeat(48))).quests).toEqual([]);
 
     await activities!.persistCompletedActivity(playerId, ride("d".repeat(48), 60_000), result("d".repeat(48)));
-    expect((await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!.state).toBe("completed");
+    expect((await quest("distance-quests:1")).state).toBe("completed");
   });
 
-  it("ignores an attempt started after the activity began", async () => {
-    await pool!.query("INSERT INTO skill_tree_unlocks (player_id, node_id, cost) VALUES ($1, 'endurance-i', 1)", [playerId]);
-    await quests!.start(playerId, "distance-quests:1", new Date("2026-07-01T00:00:00Z"));
-    await activities!.persistCompletedActivity(playerId, ride("i".repeat(48), 5_000), result("i".repeat(48)));
-    expect((await quests!.list(playerId)).find((quest) => quest.id === "distance-quests:1")!.state).toBe("active");
+  it("lets historic activities resolve quests when dev tools are on", async () => {
+    await unlock("endurance-i", "2026-07-01T00:00:00Z");
+    const dev = new ActivityRepository(pool!, true);
+    await dev.persistCompletedActivity(playerId, ride("j".repeat(48), 60_000), result("j".repeat(48)));
+    expect((await quest("distance-quests:1")).state).toBe("completed");
+  });
+
+  it("flags quests as new until the player's rewards are marked seen", async () => {
+    await unlock("endurance-i", new Date().toISOString());
+    expect((await quest("distance-quests:1")).isNew).toBe(true);
+    await pool!.query("UPDATE players SET rewards_seen_at = now() + interval '1 minute' WHERE id = $1", [playerId]);
+    expect((await quest("distance-quests:1")).isNew).toBe(false);
   });
 });

@@ -91,6 +91,7 @@ export const mountActivityDetailPage = async (mountPoint, activityId, onBack, on
         tab.addEventListener("click", () => render(tab.dataset.activityTab));
       });
       mountPoint.querySelector("[data-outcome-open-atlas]")?.addEventListener("click", () => onNavigate?.("skill-tree"));
+      mountPoint.querySelector("[data-outcome-open-progress]")?.addEventListener("click", () => onNavigate?.("progress"));
       const replay = replayInputs(activity);
       if (selectedTab === "replay" && replay) {
         void loadBasemap().then((config) => {

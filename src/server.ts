@@ -29,11 +29,7 @@ import {
   QuestInstanceNotFoundError,
   QuestInstanceStateError
 } from "./persistence/questInstanceRepository.js";
-import {
-  AuthoredQuestNotFoundError,
-  AuthoredQuestRepository,
-  AuthoredQuestStateError
-} from "./persistence/authoredQuestRepository.js";
+import { AuthoredQuestRepository } from "./persistence/authoredQuestRepository.js";
 import { SkillTreeRepository, SkillTreeUnlockError } from "./persistence/skillTreeRepository.js";
 import { validateSkillTreeCatalog } from "./skillTree/catalog.js";
 import { withQuestChains } from "./authoredQuests/skillTreeView.js";
@@ -1336,20 +1332,25 @@ app.get("/api/authored-quests", requirePlayer, async (request: UploadRequest, re
   }
 });
 
-// Starting a quest (or retrying a failed one) opens a one-activity attempt.
-app.post("/api/authored-quests/:questId/start", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+// New rewards are unlocked Atlas nodes and quests the player has not opened on Progress yet.
+app.get("/api/rewards/new", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
-    await authoredQuestRepository.start(request.user!.playerId, String(request.params.questId));
+    const playerId = request.user!.playerId;
+    const [tree, quests] = await Promise.all([skillTreeRepository.getView(playerId), authoredQuestRepository.list(playerId)]);
+    response.json({
+      hasNew: tree.nodes.some((node) => node.isNew) || quests.some((quest) => quest.state === "active" && quest.isNew),
+      hasNewProgress: quests.some((quest) => quest.state === "completed" && quest.isNew)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/rewards/seen", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  try {
+    await skillTreeRepository.markRewardsSeen(request.user!.playerId);
     response.status(204).end();
   } catch (error) {
-    if (error instanceof AuthoredQuestNotFoundError) {
-      response.status(404).json({ error: error.message });
-      return;
-    }
-    if (error instanceof AuthoredQuestStateError) {
-      response.status(409).json({ error: error.message });
-      return;
-    }
     next(error);
   }
 });

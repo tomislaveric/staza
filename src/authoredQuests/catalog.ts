@@ -45,8 +45,12 @@ export interface AuthoredQuestChain {
 
 /** Quest steps per unlocking Atlas node, in chain order. */
 const CHAIN_STEPS: Record<string, AuthoredQuestCriteria[]> = {
+  // Hub nodes onboard the player with a single, self-explanatory first quest.
+  "cyclist": [{ sport: "cycling", minFlowlines: 1 }],
+  "runner": [{ sport: "running", minDistanceKm: 2 }],
+  "hiker": [{ sport: "hiking", minCollectibles: 1 }],
   // Cycling
-  "rusher-i": [{ sport: "cycling", minFlowlines: 1 }, { sport: "cycling", minFlowlines: 3 }],
+  "rusher-i": [{ sport: "cycling", minFlowlines: 3 }, { sport: "cycling", minFlowlines: 4 }],
   "flow-hunter": [{ sport: "cycling", minFlowlines: 4 }, { sport: "cycling", minFlowlines: 6 }],
   "cycling-breakaway-rider": [
     { sport: "cycling", minFlowlines: 6, minDistanceKm: 40 },
@@ -175,6 +179,9 @@ const DIFFICULTY_BY_TIER: Record<string, QuestDifficulty> = { "1": "easy", "2": 
 
 const ROMAN = ["I", "II", "III", "IV"];
 
+/** Chains that continue a numbered series started by an earlier chain (the hub's first quest is "I"). */
+const TITLE_NUMBER_OFFSET: Record<string, number> = { "rusher-i": 1 };
+
 const SPORT_NOUN: Record<string, string> = { cycling: "ride", running: "run", hiking: "hike" };
 
 export const describeAuthoredQuestCriteria = (criteria: AuthoredQuestCriteria): string => {
@@ -204,7 +211,7 @@ const buildChain = (node: SkillTreeNode, steps: AuthoredQuestCriteria[]): Author
       id: `${node.grant.value}:${index + 1}`,
       chainId: node.grant.value,
       step: index + 1,
-      title: `${title} ${ROMAN[index] ?? index + 1}`,
+      title: `${title} ${ROMAN[index + (TITLE_NUMBER_OFFSET[node.id] ?? 0)] ?? index + 1}`,
       description: describeAuthoredQuestCriteria(criteria),
       difficulty,
       xp: QUEST_XP_BY_DIFFICULTY[difficulty],

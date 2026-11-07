@@ -16,6 +16,21 @@ export interface SkillTreeUnlockOutcome {
   view: SkillTreeView;
 }
 
+const rewardsSeenAt = async (client: Pick<Pool, "query">, playerId: string): Promise<Date | null> =>
+  (await client.query<{ rewards_seen_at: Date | null }>(
+    "SELECT rewards_seen_at FROM players WHERE id = $1",
+    [playerId]
+  )).rows[0]?.rewards_seen_at ?? null;
+
+/** Flags unlocked nodes whose reward the player has not yet opened on Progress. */
+const markNewRewards = (view: SkillTreeView, unlockedAt: ReadonlyMap<string, Date>, seenAt: Date | null): SkillTreeView => ({
+  ...view,
+  nodes: view.nodes.map((node) => {
+    const at = unlockedAt.get(node.id);
+    return at && (!seenAt || at > seenAt) ? { ...node, isNew: true } : node;
+  })
+});
+
 export class SkillTreeRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -28,15 +43,20 @@ export class SkillTreeRepository {
         "SELECT is_premium FROM players WHERE id = $1",
         [playerId]
       );
-      const unlocks = await client.query<{ node_id: string }>(
-        "SELECT node_id FROM skill_tree_unlocks WHERE player_id = $1",
+      const unlocks = await client.query<{ node_id: string; unlocked_at: Date }>(
+        "SELECT node_id, unlocked_at FROM skill_tree_unlocks WHERE player_id = $1",
         [playerId]
       );
+      const seenAt = await rewardsSeenAt(client, playerId);
       await client.query("COMMIT");
-      return buildSkillTreeView(
-        stats,
-        unlocks.rows.map((row) => row.node_id),
-        premium.rows[0]?.is_premium ?? false
+      return markNewRewards(
+        buildSkillTreeView(
+          stats,
+          unlocks.rows.map((row) => row.node_id),
+          premium.rows[0]?.is_premium ?? false
+        ),
+        new Map(unlocks.rows.map((row) => [row.node_id, row.unlocked_at])),
+        seenAt
       );
     } catch (error) {
       await client.query("ROLLBACK");
@@ -76,7 +96,7 @@ export class SkillTreeRepository {
 
       if (unlockedIds.has(nodeId)) {
         await client.query("COMMIT");
-        return { created: false, view: buildSkillTreeView(stats, unlockedIds, isPremium) };
+        return { created: false, view: await this.getView(playerId) };
       }
 
       const earned = earnedPoints(stats);
@@ -99,7 +119,7 @@ export class SkillTreeRepository {
 
       const created = inserted.rowCount === 1;
       if (created) unlockedIds.add(nodeId);
-      return { created, view: buildSkillTreeView(stats, unlockedIds, isPremium) };
+      return { created, view: await this.getView(playerId) };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
@@ -127,5 +147,10 @@ export class SkillTreeRepository {
     return unlockedIds
       .map((id) => findSkillTreeNode(id)?.grant)
       .filter((grant): grant is SkillTreeGrant => grant !== undefined);
+  }
+
+  /** Marks every reward unlocked so far as seen; used when the player opens Progress. */
+  async markRewardsSeen(playerId: string): Promise<void> {
+    await this.pool.query("UPDATE players SET rewards_seen_at = now() WHERE id = $1", [playerId]);
   }
 }

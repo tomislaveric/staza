@@ -111,7 +111,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     tier: 1,
     cost: 1,
     req: [["cyclingActivityCount", 1, "Rides completed"]],
-    grant: ["tree_access", "cycling-branches", "Opens the cycling branches"],
+    grant: ["quest_unlock", "cycling-onboarding", "Unlocks Flow Quest"],
     layout: { col: 1, row: 0 }
   }),
 
@@ -126,7 +126,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     cost: 1,
     req: [["flowlines", 3, "Flowlines"]],
     pre: ["cyclist"],
-    grant: ["quest_unlock", "flow-quests", "Unlocks Flow quests"],
+    grant: ["quest_unlock", "flow-quests", "Unlocks Flow Quest"],
     layout: { col: 0, row: 1 }
   }),
   node({
@@ -415,7 +415,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     tier: 1,
     cost: 1,
     req: [["runningActivityCount", 1, "Runs completed"]],
-    grant: ["tree_access", "running-branches", "Opens the running branches"]
+    grant: ["quest_unlock", "running-onboarding", "Unlocks Run Quest"]
   }),
 
   // Running · SPEED
@@ -697,7 +697,7 @@ export const SKILL_TREE_NODES: readonly SkillTreeNode[] = [
     tier: 1,
     cost: 1,
     req: [["hikingActivityCount", 1, "Hikes completed"]],
-    grant: ["tree_access", "hiking-branches", "Opens the hiking branches"]
+    grant: ["quest_unlock", "hiking-onboarding", "Unlocks Hike Quest"]
   }),
 
   // Hiking · SUMMIT

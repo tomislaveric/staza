@@ -700,13 +700,105 @@ button.home-tile,
     border-color: var(--accent-yellow);
     box-shadow: 0 0 0 1px rgb(232 184 10 / 35%);
 }
-.authored-quest.is-failed article {
-    border-color: #ff9a9a;
+.authored-quest-failure {
+    color: #ff9a9a;
+    font-family: var(--font-display);
+    font-size: 12px;
+}
+.new-reward-tag {
+    background: var(--accent-yellow);
+    border-radius: 999px;
+    color: #111;
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    margin-left: 8px;
+    padding: 3px 7px;
+    vertical-align: middle;
+}
+.authored-quest.is-new article,
+.skill-detail-reward.is-new {
+    animation: skill-point-pulse 1100ms ease-in-out infinite;
+}
+.skill-quest-chain.is-new li strong,
+.skill-quest-chain.is-new li em {
+    animation: new-text-pulse 1100ms ease-in-out infinite;
+}
+@keyframes new-text-pulse {
+    0%, 100% { text-shadow: 0 0 0 rgb(232 184 10 / 0%); }
+    50% { text-shadow: 0 0 10px rgb(232 184 10 / 65%); }
+}
+.sidebar-nav-item[data-has-new]::after,
+.mobile-nav-item[data-has-new]::after {
+    animation: skill-point-pulse 1100ms ease-in-out infinite;
+    background: var(--accent-yellow);
+    border-radius: 50%;
+    content: "";
+    height: 8px;
+    margin-left: 6px;
+    width: 8px;
+}
+.mobile-nav-item[data-has-new] {
+    position: relative;
+}
+.mobile-nav-item[data-has-new]::after {
+    margin: 0;
+    position: absolute;
+    right: 28%;
+    top: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .authored-quest.is-new article,
+    .skill-detail-reward.is-new,
+    .skill-quest-chain.is-new li strong,
+    .skill-quest-chain.is-new li em,
+    .sidebar-nav-item[data-has-new]::after,
+    .mobile-nav-item[data-has-new]::after {
+        animation: none;
+    }
 }
 .authored-quest-lock {
     color: var(--accent-yellow);
 }
-.authored-quests-empty,
+.quest-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+}
+.quest-badge {
+    align-items: center;
+    background: rgb(232 184 10 / 12%);
+    border: 1px solid var(--accent-yellow);
+    border-radius: 12px;
+    color: var(--accent-yellow);
+    display: grid;
+    font-family: var(--font-display);
+    max-width: 260px;
+    min-width: 110px;
+    padding: 8px 12px;
+    text-align: center;
+}
+.quest-badge b {
+    font-size: 13px;
+}
+.quest-badges-section {
+    margin-top: 24px;
+}
+.quest-badge small {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 2px;
+}
+.quest-badge.is-new {
+    animation: skill-point-pulse 1100ms ease-in-out 3;
+}
 .authored-quests-done,
 .authored-quests-locked summary,
 .authored-quests-rule,
@@ -716,15 +808,6 @@ button.home-tile,
     font-family: var(--font-display);
     font-size: 12px;
     margin: 0;
-}
-.authored-quest-state {
-    border: 1px solid rgb(232 184 10 / 45%);
-    border-radius: 999px;
-    color: var(--accent-yellow);
-    display: inline-flex;
-    font-size: 10px;
-    line-height: 1;
-    padding: 3px 7px;
 }
 .authored-quests-locked summary {
     cursor: pointer;
@@ -739,13 +822,6 @@ button.home-tile,
 .authored-quest-criteria li.is-missed b {
     color: #ff9a9a;
 }
-.authored-quests-error {
-    color: #ff9a9a;
-    font-family: var(--font-display);
-    font-size: 12px;
-    margin: 0;
-}
-.authored-quest-action,
 .home-next-action-cta {
     background: var(--accent-yellow);
     border: 0;
@@ -759,13 +835,6 @@ button.home-tile,
     margin-left: auto;
     padding: 8px 14px;
     white-space: nowrap;
-}
-.authored-quests .authored-quest-action {
-    justify-self: start;
-    margin-left: 0;
-}
-.authored-quest-action:disabled {
-    opacity: 0.5;
 }
 .quest-history {
     margin-top: 32px;
@@ -1388,6 +1457,13 @@ button.home-tile,
     color: var(--text-subtle);
     font-family: var(--font-display);
     font-size: 10px;
+}
+.activity-progress-ctas {
+    align-items: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
 }
 .activity-progress-cta {
     align-self: flex-start;
