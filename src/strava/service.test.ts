@@ -109,6 +109,17 @@ describe("StravaService activities", () => {
     expect(regularList.activities[0].beforeJourneyStart).toBe(true);
   });
 
+  it("lists up to the configured limit and never flags pre-account activities when the cutoff is ignored", async () => {
+    const { client, connections, activities, process } = setup();
+    const service = new StravaService(client as never, connections as never, activities as never, process, 30, true);
+    activities.getJourneyStartedAt.mockResolvedValue(new Date("2026-05-15T00:00:00Z"));
+    activities.getActivityCount.mockResolvedValue(10);
+    client.listRecentActivities.mockResolvedValueOnce(Array.from({ length: 30 }, (_, index) => ({ ...summary, id: 3000 + index })) as never);
+    const list = await service.listRecent("player");
+    expect(list.activities).toHaveLength(30);
+    expect(list.activities.every((activity) => !activity.beforeJourneyStart)).toBe(true);
+  });
+
   it("returns an existing import without calling Strava", async () => {
     const { service, client, activities } = setup();
     activities.getActivityByImportKey.mockResolvedValueOnce({ id: "staza-1" } as PersistedActivity);

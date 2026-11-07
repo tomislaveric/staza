@@ -79,6 +79,18 @@ describePersistence("Strava import persistence", () => {
     expect(await playerState()).toMatchObject({ count: "4" });
   });
 
+  it("skips the account cutoff for Strava (not FIT) when the dev option is on", async () => {
+    const dev = new ActivityRepository(pool!, true);
+    for (let index = 0; index < 5; index += 1) {
+      const item = activity(`2026-05-0${index + 1}T08:00:00Z`, "strava", index * 0.05);
+      await dev.persistCompletedActivity(playerId, item, result(item.id), `300${index}`);
+    }
+    expect(await playerState()).toMatchObject({ count: "5" });
+    const fit = activity("2026-04-01T08:00:00Z");
+    await expect(dev.persistCompletedActivity(playerId, fit, result(fit.id)))
+      .rejects.toMatchObject({ code: "before_journey_start" });
+  });
+
   it("persists mountain-pass collectible events from Strava", async () => {
     const item = activity("2026-05-10T08:00:00Z", "strava");
     const submitted = result(item.id);

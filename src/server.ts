@@ -72,7 +72,7 @@ let busy = false;
 if (!config.databaseUrl) throw new Error("DATABASE_URL is required.");
 const databasePool = createDatabasePool(config.databaseUrl);
 await migrate(databasePool);
-const activityRepository = new ActivityRepository(databasePool);
+const activityRepository = new ActivityRepository(databasePool, config.devTools);
 const collectibleRepository = new CollectibleRepository(databasePool);
 const fartlekRepository = new FartlekRepository(databasePool);
 const fartlekCompletionRepository = new FartlekCompletionRepository(databasePool);
@@ -104,7 +104,8 @@ const stravaService = config.strava
       new StravaConnectionRepository(databasePool, new TokenCipher(config.strava.tokenEncryptionKey)),
       activityRepository,
       processActivity,
-      config.strava.recentActivityLimit
+      config.devTools ? 30 : config.strava.recentActivityLimit,
+      config.devTools
     )
   : undefined;
 

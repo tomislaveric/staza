@@ -64,7 +64,8 @@ export class StravaService {
     private readonly connections: StravaConnectionRepository,
     private readonly activities: ActivityRepository,
     private readonly process: CanonicalActivityProcessor,
-    private readonly recentLimit: number
+    private readonly recentLimit: number,
+    private readonly ignoreJourneyCutoff = false
   ) {}
 
   get limit(): number {
@@ -112,7 +113,7 @@ export class StravaService {
       this.activities.getJourneyStartedAt(playerId),
       this.activities.getActivityCount(playerId)
     ]);
-    const isStravaOnboarding = activityCount < STRAVA_ONBOARDING_IMPORT_LIMIT;
+    const isStravaOnboarding = this.ignoreJourneyCutoff || activityCount < STRAVA_ONBOARDING_IMPORT_LIMIT;
     return {
       limit: this.recentLimit,
       journeyStartedAt: journeyStartedAt.toISOString(),

@@ -182,7 +182,8 @@ const mapVideo = (row: VideoRow): ActivityVideo => ({
 export class ActivityRepository {
   private readonly fartlekCompletionRepository: FartlekCompletionRepository;
 
-  constructor(private readonly pool: Pool) {
+  /** `skipStravaJourneyCutoff` is for dev stages only: Strava imports may predate the account. */
+  constructor(private readonly pool: Pool, private readonly skipStravaJourneyCutoff = false) {
     this.fartlekCompletionRepository = new FartlekCompletionRepository(pool);
   }
 
@@ -232,7 +233,7 @@ export class ActivityRepository {
       // Allow Strava imports among the first three accepted activities to seed the journey.
       const journeyStartedAt = player.rows[0].created_at;
       const isStravaOnboardingImport = activity.source === "strava"
-        && activityCount.rows[0].activity_count < STRAVA_ONBOARDING_IMPORT_LIMIT;
+        && (this.skipStravaJourneyCutoff || activityCount.rows[0].activity_count < STRAVA_ONBOARDING_IMPORT_LIMIT);
       if (activity.startedAt < journeyStartedAt.getTime() && !isStravaOnboardingImport) {
         throw new ActivityImportRejectedError(
           "before_journey_start",
