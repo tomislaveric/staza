@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   CollectionPanel,
   CollectionRow,
-  collectionProgressLabel,
-  collectionProgressPercent,
   collectionStateLabel
 } from "./collection-panel.js";
 
@@ -14,12 +12,6 @@ describe("collection panel vocabulary", () => {
     expect(collectionStateLabel("unvisited")).toBe("Unvisited");
   });
 
-  it("reports progress as a completed count and percentage", () => {
-    expect(collectionProgressLabel({ collected: 2, total: 4 })).toBe("2 / 4 completed");
-    expect(collectionProgressPercent({ collected: 2, total: 4 })).toBe("50%");
-    expect(collectionProgressLabel({ collected: 0, total: 0 })).toBe("No collectibles yet");
-    expect(collectionProgressPercent({ collected: 0, total: 0 })).toBe("0%");
-  });
 });
 
 describe("collection rows", () => {
@@ -44,25 +36,23 @@ describe("collection panel", () => {
     { id: "b", name: "Bravo", state: "nearby-miss" }
   ];
 
-  it("shows a creator attribution and completed progress when provided", () => {
+  it("shows a creator attribution when provided", () => {
     const markup = CollectionPanel({
       title: "Ridge Loop",
       creator: "Ada",
       description: "A loop",
-      progress: { collected: 1, total: 2 },
       closable: true,
       rows
     });
     expect(markup).toContain("Ridge Loop");
     expect(markup).toContain("by Ada");
     expect(markup).toContain("A loop");
-    expect(markup).toContain("1 / 2 completed");
     expect(markup).toContain("Nearby miss");
     expect(markup).toContain("data-world-close");
   });
 
   it("hides the creator attribution and close affordance on the ActivityDetail overlay", () => {
-    const markup = CollectionPanel({ title: "Ride", progress: { collected: 0, total: 1 }, rows });
+    const markup = CollectionPanel({ title: "Ride", rows });
     expect(markup).not.toContain("<small>by ");
     expect(markup).not.toContain("data-world-close");
     expect(markup).toContain("Ride");

@@ -1,5 +1,5 @@
 import { mountReplayMap, mountReplayStill } from "./activity-replay-map.js";
-import { CollectionPanel, collectionProgressLabel, collectionProgressPercent, collectionStateLabel } from "./shared/collection-panel.js";
+import { CollectionPanel, collectionStateLabel } from "./shared/collection-panel.js";
 import { escapeHtml } from "./collected-list.js";
 import { formatDistance, formatElapsed, formatSpeed } from "./world/fartlek-detail.js";
 import { getAppLocale } from "../app-locales.js";
@@ -16,7 +16,7 @@ export const ReplayTab = () => `
   <section class="activity-replay activity-replay-map" aria-label="Animated route replay">
     <div class="activity-replay-map-canvas staza-map" data-replay-map></div>
     <div class="activity-replay-panel" data-replay-panel hidden></div>
-    <button class="activity-replay-panel-reopen" type="button" data-replay-panel-reopen hidden aria-label="Show activity report">REPORT</button>
+    <button class="activity-replay-panel-reopen" type="button" data-replay-panel-reopen hidden aria-label="Show collectibles">COLLECTIBLES</button>
     <button class="activity-replay-play" type="button" aria-label="Play replay" aria-pressed="false" disabled>
       <img src="/assets/activity-detail-play.svg" width="16" height="16" alt="">
     </button>
@@ -206,8 +206,6 @@ export const replayRewardStateAt = (items, timestampMs, windowMs = REWARD_WINDOW
   };
 };
 
-const replayPanelTitle = (activity) => activity?.title || "Collectibles on this route";
-
 /**
  * Completed Fartleks for this activity: name, length, elapsed time, average speed/pace, and
  * optional max speed. Rendered inside the existing REPLAY panel (no new tab, no map overlay),
@@ -240,16 +238,11 @@ export const FartlekCompletionsSection = (fartlekCompletions = []) => {
 
 const mountReplayPanel = (host, replay, activity) => {
   const rows = replayPanelRows(replay);
-  const total = rows.filter((row) => row.kind === "collectible").length;
   host.hidden = false;
   host.innerHTML = CollectionPanel({
-    title: replayPanelTitle(replay.activity),
-    description: replay.activity?.description,
     metaLeading: activity ? `<small class="replay-panel-stats"><strong>${escapeHtml(activityDistanceLabel(activity.distanceMeters))}</strong> \u00b7 ${escapeHtml(activityDurationLabel(activity.durationSeconds))}</small>` : "",
-    progress: { collected: 0, total },
     closable: true,
     ariaLabel: "Replay collection",
-    progressNoun: "discovered",
     emptyMessage: "No collectibles on this activity.",
     rows: rows.map((row) => ({ id: row.id, name: row.name, state: "unvisited" })),
     footer: FartlekCompletionsSection(replay.activityResult.fartlekCompletions)
@@ -259,16 +252,11 @@ const mountReplayPanel = (host, replay, activity) => {
   const flowlineCompletions = replay.activityResult.fartlekCompletions ?? [];
   const flowlineCompletionsById = new Map(flowlineCompletions.map((completion) => [completion.fartlekId, completion]));
   const flowlineRows = [...host.querySelectorAll("[data-flowline-row]")];
-  const labelElement = host.querySelector("[data-collection-progress-label]");
-  const percentElement = host.querySelector("[data-collection-progress-percent]");
-  const barElement = host.querySelector("[data-collection-progress-bar]");
 
   return (timestampMs) => {
-    let collected = 0;
     rowElements.forEach((element, index) => {
       const row = rows[index];
       const state = rowStateAt(row, timestampMs);
-      if (row.kind === "collectible" && state === "completed") collected += 1;
       element.classList.toggle("is-found", state === "completed");
       const swatch = element.querySelector(".collectible-swatch");
       if (swatch) {
@@ -288,11 +276,6 @@ const mountReplayPanel = (host, replay, activity) => {
         swatch.classList.toggle("is-unvisited", state !== "completed");
       }
     });
-    const progress = { collected, total };
-    const percent = collectionProgressPercent(progress);
-    if (labelElement) labelElement.textContent = collectionProgressLabel(progress, "discovered");
-    if (percentElement) percentElement.textContent = percent;
-    if (barElement) barElement.style.width = percent;
   };
 };
 
@@ -324,8 +307,13 @@ export const panelFitPadding = (container, panelHost) => {
 export const mountReplayTab = (mountPoint, replay, basemap, activity) => {
   const button = mountPoint.querySelector(".activity-replay-play");
   const container = mountPoint.querySelector("[data-replay-map]");
-  const panelHost = mountPoint.querySelector("[data-replay-panel]");
-  const reopenButton = mountPoint.querySelector("[data-replay-panel-reopen]");
+  const hasPanelContent = replayPanelRows(replay).length > 0 || (replay.activityResult.fartlekCompletions ?? []).length > 0;
+  if (!hasPanelContent) {
+    mountPoint.querySelector("[data-replay-panel]")?.remove();
+    mountPoint.querySelector("[data-replay-panel-reopen]")?.remove();
+  }
+  const panelHost = mountPoint.querySelector("[data-replay-panel]") ?? undefined;
+  const reopenButton = mountPoint.querySelector("[data-replay-panel-reopen]") ?? undefined;
   const xpElement = mountPoint.querySelector(".activity-progress-earned");
   const rewardHosts = [...mountPoint.querySelectorAll("[data-replay-reward]")];
   const persistedXp = Number(xpElement?.dataset.activityXp ?? replay.activityResult.totalPoints ?? 0);

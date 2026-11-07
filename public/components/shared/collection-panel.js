@@ -8,12 +8,6 @@ export const collectionStateLabel = (state) => {
   return "Unvisited";
 };
 
-export const collectionProgressPercent = ({ collected = 0, total = 0 } = {}) =>
-  total === 0 ? "0%" : `${Math.round((collected / total) * 100)}%`;
-
-export const collectionProgressLabel = ({ collected = 0, total = 0 } = {}, noun = "completed") =>
-  total === 0 ? "No collectibles yet" : `${collected} / ${total} ${noun}`;
-
 /**
  * One collectible row. `interactive` rows render a `data-world-marker` button so the World map
  * can focus the marker; non-interactive rows (the replay overlay) render static content that is
@@ -42,22 +36,19 @@ export const CollectionPanel = ({
   title,
   creator,
   description,
-  progress = { collected: 0, total: 0 },
   closable = false,
   rows = [],
   ariaLabel = "Collection detail",
   metaLeading = "",
   metaTrailing = "",
   footer = "",
-  emptyMessage = "No collectibles yet.",
-  progressNoun = "completed"
+  emptyMessage = "No collectibles yet."
 }) => {
-  const percent = collectionProgressPercent(progress);
   return `
     <section class="world-detail collection-panel" aria-label="${escapeHtml(ariaLabel)}">
       <header>
         <div>
-          <h2 data-user-content>${escapeHtml(title ?? "")}</h2>
+          ${title ? `<h2 data-user-content>${escapeHtml(title)}</h2>` : ""}
           <p class="world-detail-meta">
             ${metaLeading}
             ${creator ? `<small data-user-content>by ${escapeHtml(creator)}</small>` : ""}
@@ -67,13 +58,6 @@ export const CollectionPanel = ({
         ${closable ? '<button class="world-detail-close" type="button" data-world-close aria-label="Close">\u00d7</button>' : ""}
       </header>
       ${description ? `<p class="quest-detail-description" data-user-content>${escapeHtml(description)}</p>` : ""}
-      <p class="quest-detail-progress">
-        <span class="quest-progress-track" aria-hidden="true">
-          <i style="width: ${escapeHtml(percent)};" data-collection-progress-bar></i>
-        </span>
-        <strong data-collection-progress-label>${escapeHtml(collectionProgressLabel(progress, progressNoun))}</strong>
-        <small data-collection-progress-percent>${escapeHtml(percent)}</small>
-      </p>
       ${rows.length
         ? `<ol class="quest-collectibles">${rows.map(CollectionRow).join("")}</ol>`
         : `<p class="world-detail-empty">${escapeHtml(emptyMessage)}</p>`}

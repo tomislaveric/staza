@@ -525,7 +525,7 @@ const germanCopy = {
   "Primary navigation": "Hauptnavigation",
   "More destinations": "Weitere Bereiche",
   More: "Mehr",
-  "Show activity report": "Aktivitätsbericht anzeigen",
+  "Show collectibles": "Sammelobjekte anzeigen",
   "Play replay": "Wiedergabe starten",
   "Pause replay": "Wiedergabe pausieren",
   "Animated route replay": "Animierte Routenwiedergabe",

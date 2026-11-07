@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   closestApproachTimestamp,
   FartlekCompletionsSection,
+  mountReplayTab,
   flowlineStateAt,
   replayPanelRows,
   replayRewardItems,
@@ -206,5 +207,35 @@ describe("replayRewardItems / replayRewardStateAt", () => {
       activity: { startedAt: 0, endedAt: 3_600_000 },
       activityResult: { duration: 3_600 }
     })).toBe(180_000);
+  });
+});
+
+vi.mock("./activity-replay-map.js", () => ({
+  mountReplayMap: () => new Promise(() => {}),
+  mountReplayStill: () => new Promise(() => {})
+}));
+
+describe("mountReplayTab panel", () => {
+  const fakeMountPoint = () => {
+    const elements = {
+      ".activity-replay-play": { classList: { toggle() {}, add() {}, remove() {} }, setAttribute() {}, addEventListener() {}, removeAttribute() {} },
+      "[data-replay-map]": {},
+      "[data-replay-panel]": { hidden: false, remove() { delete elements["[data-replay-panel]"]; }, querySelector: () => null },
+      "[data-replay-panel-reopen]": { hidden: true, remove() { delete elements["[data-replay-panel-reopen]"]; }, addEventListener() {} }
+    };
+    return { elements, querySelector: (selector) => elements[selector] ?? null, querySelectorAll: () => [] };
+  };
+  const emptyReplay = { activity: { route: [] }, activityResult: { collectibles: [], events: [], nearMisses: [], fartlekCompletions: [], totalPoints: 0 } };
+
+  it("removes the panel and reopen button when there is nothing to list", () => {
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: true }), addEventListener() {}, requestAnimationFrame() {}, setTimeout() {} });
+    const mountPoint = fakeMountPoint();
+    try {
+      mountReplayTab(mountPoint, emptyReplay, undefined, {});
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(mountPoint.elements["[data-replay-panel]"]).toBeUndefined();
+    expect(mountPoint.elements["[data-replay-panel-reopen]"]).toBeUndefined();
   });
 });
