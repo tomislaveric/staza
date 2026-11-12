@@ -901,6 +901,18 @@ export const migrations: Migration[] = [{
       UPDATE players SET rewards_seen_at = now();
     `);
   }
+}, {
+  id: "039_native_sessions",
+  async up(client) {
+    await client.query(`
+      ALTER TABLE sessions
+        ADD COLUMN kind TEXT NOT NULL DEFAULT 'web' CHECK (kind IN ('web', 'native')),
+        ADD COLUMN refresh_token_hash TEXT,
+        ADD COLUMN previous_refresh_token_hash TEXT;
+      CREATE UNIQUE INDEX sessions_refresh_token_index ON sessions (refresh_token_hash) WHERE refresh_token_hash IS NOT NULL;
+      CREATE INDEX sessions_previous_refresh_token_index ON sessions (previous_refresh_token_hash) WHERE previous_refresh_token_hash IS NOT NULL;
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

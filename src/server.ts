@@ -54,13 +54,15 @@ import { ExplorationSessionStore } from "./exploration/sessionStore.js";
 import { ExplorationError, ExplorationService } from "./exploration/service.js";
 import { mediaDirectoryFor } from "./persistence/mediaCleanup.js";
 import { resetPlayerData } from "./persistence/resetPlayerData.js";
-import { AuthService, EmailSender, type SessionUser } from "./auth.js";
+import { AuthService, AuthenticationError, EmailSender, type SessionResult, type SessionUser } from "./auth.js";
+import { androidAssetLinks, appleAppSiteAssociation } from "./nativeAssociation.js";
 
 interface UploadRequest extends Request {
   job?: Job;
   jobDir?: string;
   user?: SessionUser;
   sessionToken?: string;
+  bearerAuth?: boolean;
 }
 
 let busy = false;
@@ -90,6 +92,7 @@ const authService = new AuthService(databasePool, {
   rpId: config.webauthnRpId,
   rpName: config.webauthnRpName,
   origin: config.webauthnOrigin,
+  extraOrigins: config.webauthnExtraOrigins,
   production: config.nodeEnv === "production"
 }, new EmailSender(config.nodeEnv === "production", smtpConfig));
 await activityRepository.markInterruptedActivityVideos();
@@ -581,9 +584,31 @@ const clearSession = (response: Response): void => {
     httpOnly: true, secure: config.nodeEnv === "production", sameSite: "lax", path: "/"
   });
 };
+/** Native clients opt in to bearer credentials explicitly; web requests keep the cookie flow. */
+const isNativeClient = (request: Request): boolean => request.header("X-Staza-Client")?.toLowerCase() === "native";
+const bearerToken = (request: Request): string | undefined => {
+  const match = /^Bearer\s+(\S+)$/i.exec(request.header("Authorization") ?? "");
+  return match?.[1];
+};
+const sendSession = (
+  request: Request, response: Response, session: SessionResult, body: Record<string, unknown>, status = 200
+): void => {
+  if (isNativeClient(request) && session.native) {
+    response.status(status).json({ ...body, credentials: session.native });
+    return;
+  }
+  setSession(response, session.sessionToken);
+  response.status(status).json(body);
+};
 const optionalUser = async (request: UploadRequest, _response: Response, next: NextFunction): Promise<void> => {
   try {
-    request.sessionToken = cookieValue(request, sessionCookieName);
+    // A presented bearer credential is authoritative and never falls back to the cookie.
+    if (request.header("Authorization") !== undefined) {
+      request.bearerAuth = true;
+      request.sessionToken = bearerToken(request);
+    } else {
+      request.sessionToken = cookieValue(request, sessionCookieName);
+    }
     request.user = await authService.getSessionUser(request.sessionToken);
     next();
   } catch (error) {
@@ -599,6 +624,10 @@ const requireUser = (request: UploadRequest, response: Response, next: NextFunct
 };
 const requirePlayer = requireUser;
 const requireCsrf = (request: UploadRequest, response: Response, next: NextFunction): void => {
+  if (request.bearerAuth && request.user) {
+    next();
+    return;
+  }
   if (!request.user || request.header("X-CSRF-Token") !== request.user.csrfToken || request.header("Origin") !== expectedOrigin) {
     response.status(403).json({ error: "The request could not be verified." });
     return;
@@ -615,9 +644,8 @@ app.post("/api/auth/register/code", authLimiter, async (request, response, next)
 });
 app.post("/api/auth/register/verify", authLimiter, async (request, response, next) => {
   try {
-    const session = await authService.register(request.body?.email, request.body?.code);
-    setSession(response, session.sessionToken);
-    response.status(201).json({ user: { email: session.user.email, emailVerified: session.user.emailVerified }, csrfToken: session.user.csrfToken, passkeySetupRequired: true });
+    const session = await authService.register(request.body?.email, request.body?.code, { native: isNativeClient(request) });
+    sendSession(request, response, session, { user: { email: session.user.email, emailVerified: session.user.emailVerified }, csrfToken: session.user.csrfToken, passkeySetupRequired: true }, 201);
   } catch (error) { next(error); }
 });
 app.post("/api/auth/email-code/request", authLimiter, async (request, response, next) => {
@@ -628,13 +656,16 @@ app.post("/api/auth/email-code/request", authLimiter, async (request, response, 
 });
 app.post("/api/auth/email-code/verify", authLimiter, async (request, response, next) => {
   try {
-    const session = await authService.emailLogin(request.body?.email, request.body?.code);
-    if (session.sessionToken && session.user) setSession(response, session.sessionToken);
-    response.json(session.user ? {
-      authenticated: true,
-      user: { email: session.user.email, emailVerified: session.user.emailVerified },
-      csrfToken: session.user.csrfToken
-    } : { authenticated: false });
+    const session = await authService.emailLogin(request.body?.email, request.body?.code, { native: isNativeClient(request) });
+    if (session.sessionToken && session.user) {
+      sendSession(request, response, session as SessionResult, {
+        authenticated: true,
+        user: { email: session.user.email, emailVerified: session.user.emailVerified },
+        csrfToken: session.user.csrfToken
+      });
+    } else {
+      response.json({ authenticated: false });
+    }
   } catch (error) { next(error); }
 });
 app.post("/api/auth/passkeys/login/options", authLimiter, async (_request, response, next) => {
@@ -642,9 +673,13 @@ app.post("/api/auth/passkeys/login/options", authLimiter, async (_request, respo
 });
 app.post("/api/auth/passkeys/login/verify", authLimiter, async (request, response, next) => {
   try {
-    const session = await authService.verifyLogin(request.body as AuthenticationResponseJSON);
-    setSession(response, session.sessionToken);
-    response.json({ user: { email: session.user.email, emailVerified: session.user.emailVerified }, csrfToken: session.user.csrfToken });
+    const session = await authService.verifyLogin(request.body as AuthenticationResponseJSON, { native: isNativeClient(request) });
+    sendSession(request, response, session, { user: { email: session.user.email, emailVerified: session.user.emailVerified }, csrfToken: session.user.csrfToken });
+  } catch (error) { next(error); }
+});
+app.post("/api/auth/native/refresh", authLimiter, async (request, response, next) => {
+  try {
+    response.json({ credentials: await authService.refreshNativeSession(request.body?.refreshToken) });
   } catch (error) { next(error); }
 });
 app.use("/api", optionalUser);
@@ -775,6 +810,11 @@ app.post("/api/integrations/strava/activities/:id/import", requireUser, requireC
     response.status(result.inserted ? 201 : 200).json(result);
   } catch (error) { next(error); }
 });
+const sendWellKnown = (document: () => unknown) => (_request: Request, response: Response): void => {
+  response.type("application/json").set("Cache-Control", "public, max-age=300").send(JSON.stringify(document()));
+};
+app.get("/.well-known/apple-app-site-association", sendWellKnown(() => appleAppSiteAssociation(config)));
+app.get("/.well-known/assetlinks.json", sendWellKnown(() => androidAssetLinks(config)));
 app.get("/shared/progression.js", (_request, response) => {
   response.sendFile(path.resolve("dist/progression.js"));
 });
@@ -1468,8 +1508,16 @@ app.get("/api/jobs/:token/download", requirePlayer, async (request: UploadReques
   }
 });
 
+app.use("/api", (_request, response) => {
+  response.status(404).json({ error: "Not found." });
+});
+
 app.use((error: Error, request: UploadRequest, response: Response, _next: NextFunction) => {
   if (request.jobDir) void cleanupReservation(request);
+  if (error instanceof AuthenticationError) {
+    response.status(401).json({ error: error.message });
+    return;
+  }
   if (error instanceof StravaError) {
     if (error.status >= 500) console.error("Strava request failed:", error.code);
     if (error.retryAfterSeconds !== undefined) response.set("Retry-After", String(error.retryAfterSeconds));
