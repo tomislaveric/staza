@@ -1,0 +1,25 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "tab.home" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Home" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Start" } } } },
+    "tab.world" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "World" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Welt" } } } },
+    "tab.skillAtlas" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Skill Atlas" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Skill-Atlas" } } } },
+    "tab.progress" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Progress" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Fortschritt" } } } },
+    "tab.more" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Profile" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Profil" } } } },
+    "action.addActivity" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Activity" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktivität hinzufügen" } } } },
+    "action.close" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Close" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Schließen" } } } },
+    "placeholder.comingSoon" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This screen is coming soon." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Bildschirm folgt bald." } } } },
+    "home.sample.title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sample activity" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Beispielaktivität" } } } },
+    "home.sample.subtitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Numbers, dates and distances follow your locale." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Zahlen, Datum und Distanzen folgen deiner Region." } } } },
+    "home.sample.distance" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Distance" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Distanz" } } } },
+    "home.sample.xp" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "XP" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "XP" } } } },
+    "home.sample.date" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Date" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Datum" } } } },
+    "home.auth.signedIn" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You are signed in." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Du bist angemeldet." } } } },
+    "home.auth.signedOut" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You are signed out." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Du bist abgemeldet." } } } },
+    "more.profile.header" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Account" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Konto" } } } },
+    "more.profile.loading" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading profile…" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Profil wird geladen …" } } } },
+    "more.profile.signedOut" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Not signed in" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Nicht angemeldet" } } } },
+    "more.settings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Einstellungen" } } } }
+  },
+  "version" : "1.0"
+}
