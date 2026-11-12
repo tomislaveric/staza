@@ -306,6 +306,44 @@ export class AuthService {
     await this.event(user.id, "passkey_registered", true);
   }
 
+  async rotateNativeSession(user: SessionUser, rawAccessToken: string | undefined): Promise<NativeCredentials> {
+    if (!rawAccessToken) throw new AuthenticationError("Sign in is required.");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query<{ refresh_token_hash: string | null; absolute_expires_at: Date }>(
+        `SELECT refresh_token_hash, absolute_expires_at FROM sessions
+         WHERE id = $1 AND user_id = $2 AND token_hash = $3 AND kind = 'native'
+           AND revoked_at IS NULL AND expires_at > now() AND absolute_expires_at > now()
+         FOR UPDATE`,
+        [user.sessionId, user.id, opaqueTokenHash(rawAccessToken)]
+      );
+      const row = current.rows[0];
+      if (!row) throw new AuthenticationError("Sign in is required.");
+
+      const generated = this.nativeCredentials();
+      const accessExpiresAt = new Date(Math.min(generated.accessTokenExpiresAt.getTime(), row.absolute_expires_at.getTime()));
+      const credentials: NativeCredentials = {
+        ...generated,
+        accessTokenExpiresAt: accessExpiresAt.toISOString(),
+        refreshTokenExpiresAt: row.absolute_expires_at.toISOString()
+      };
+      await client.query(
+        `UPDATE sessions SET token_hash = $2, previous_refresh_token_hash = refresh_token_hash,
+                refresh_token_hash = $3, expires_at = $4, last_seen_at = now()
+         WHERE id = $1`,
+        [user.sessionId, opaqueTokenHash(credentials.accessToken), opaqueTokenHash(credentials.refreshToken), accessExpiresAt]
+      );
+      await client.query("COMMIT");
+      return credentials;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async loginOptions(): Promise<unknown> {
     const config = this.webauthnConfig();
     const options = await generateAuthenticationOptions({ rpID: config.rpId, userVerification: "required" });

@@ -708,7 +708,14 @@ app.post("/api/auth/passkeys/register/options", requireUser, requireCsrf, async 
   try { response.json(await authService.registrationOptions(request.user!)); } catch (error) { next(error); }
 });
 app.post("/api/auth/passkeys/register/verify", requireUser, requireCsrf, async (request: UploadRequest, response, next) => {
-  try { await authService.verifyRegistration(request.user!, request.body as RegistrationResponseJSON, request.body?.name); response.status(204).end(); } catch (error) { next(error); }
+  try {
+    await authService.verifyRegistration(request.user!, request.body as RegistrationResponseJSON, request.body?.name);
+    if (request.bearerAuth) {
+      response.json({ credentials: await authService.rotateNativeSession(request.user!, request.sessionToken) });
+      return;
+    }
+    response.status(204).end();
+  } catch (error) { next(error); }
 });
 app.get("/api/auth/passkeys", requireUser, async (request: UploadRequest, response, next) => {
   try { response.json(await authService.listPasskeys(request.user!.id)); } catch (error) { next(error); }

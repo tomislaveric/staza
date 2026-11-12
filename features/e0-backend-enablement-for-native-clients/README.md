@@ -17,7 +17,7 @@ the web application, without changing web cookie authentication behavior.
   versioning; document the resulting decisions.
 - Document native-consumed auth, account, activities, world/game, player, and
   integration endpoints, including methods, auth requirements, and consumed
-  request/response fields.
+  request/response fields in [`api-spec.md`](api-spec.md).
 - Expose a MapLibre Native-compatible style and basemap source, reusing the web
   map style and documenting required keys/configuration.
 
@@ -25,6 +25,9 @@ the web application, without changing web cookie authentication behavior.
 
 - Native authentication responses are explicitly opted into with a request
   header. Existing web requests continue to use their current cookie flow.
+- After successful native passkey registration, rotate the current native
+  access/refresh credentials and return them; keep the web registration
+  response (`204`) unchanged.
 - Use a short-lived access credential and refresh-token rotation for native
   sessions. Refresh credentials must be persisted securely, expire, rotate on
   use, and reject replay; logout revokes the presenting session and logout-all
@@ -65,6 +68,8 @@ the web application, without changing web cookie authentication behavior.
   invalid, expired, revoked, or replayed credentials are rejected.
 - Native passkey and email-code registration/login return usable credentials
   only for explicitly opted-in native requests; web behavior is unchanged.
+- Native passkey registration returns rotated access/refresh credentials, and
+  the previous native credentials no longer authenticate.
 - Refresh rotates credentials, and logout/logout-all prevent subsequent use as
   specified.
 - Both association files are served at the required paths over HTTPS with
@@ -87,8 +92,9 @@ the web application, without changing web cookie authentication behavior.
 ## Validation
 
 - Add unit/integration coverage for bearer authentication, native-vs-web auth
-  response behavior, refresh rotation/replay/revocation, association-file
-  delivery, API error/versioning behavior, and MapLibre style/source access.
+  response behavior (including native passkey credential rotation),
+  refresh/replay/revocation, association-file delivery, API error/versioning
+  behavior, and MapLibre style/source access.
 - Run the existing targeted backend tests and the broader backend test command
   if targeted checks reveal cross-cutting changes.
 - Verify association endpoints' status, content type, and redirect behavior,

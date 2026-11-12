@@ -138,6 +138,26 @@ describeAuth("AuthService", () => {
     await expect(auth!.refreshNativeSession(rotated.refreshToken)).rejects.toThrow(AuthenticationError);
   });
 
+  it("rotates native credentials without invalidating an independent web session", async () => {
+    const { native } = await nativeLogin("passkey-rotation@example.test");
+    await pool!.query(
+      `INSERT INTO email_codes (id, email, purpose, code_hash, expires_at)
+       VALUES ($1, 'passkey-rotation@example.test', 'login', $2, now() + interval '10 minutes')`,
+      [randomUUID(), codeHash("654321")]
+    );
+    const web = await auth!.emailLogin("passkey-rotation@example.test", "654321");
+    const user = await auth!.getSessionUser(native!.accessToken);
+    const rotated = await auth!.rotateNativeSession(user!, native!.accessToken);
+
+    expect(await auth!.getSessionUser(native!.accessToken)).toBeUndefined();
+    expect((await auth!.getSessionUser(rotated.accessToken))?.email).toBe("passkey-rotation@example.test");
+    expect(await auth!.getSessionUser(web.sessionToken)).toBeDefined();
+    expect(rotated.refreshToken).not.toBe(native!.refreshToken);
+    await expect(auth!.refreshNativeSession(native!.refreshToken)).rejects.toThrow(AuthenticationError);
+    expect(await auth!.getSessionUser(rotated.accessToken)).toBeUndefined();
+    expect(await auth!.getSessionUser(web.sessionToken)).toBeDefined();
+  });
+
   it("rejects expired access credentials and logout revokes native sessions", async () => {
     const { native } = await nativeLogin("expiry@example.test");
     await pool!.query("UPDATE sessions SET expires_at = now() - interval '1 minute' WHERE kind = 'native'");
