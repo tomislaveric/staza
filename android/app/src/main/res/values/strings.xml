@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Staza</string>
+
+    <string name="nav_home">Home</string>
+    <string name="nav_world">World</string>
+    <string name="nav_atlas">Skill Atlas</string>
+    <string name="nav_progress">Progress</string>
+    <string name="nav_more">More</string>
+    <string name="add_activity">Add activity</string>
+
+    <string name="placeholder_title">%1$s</string>
+    <string name="placeholder_body">This screen is coming soon.</string>
+    <string name="add_activity_placeholder_title">Add activity</string>
+    <string name="back">Back</string>
+
+    <string name="foundations_title">Foundations</string>
+    <string name="foundations_theme_heading">Theme</string>
+    <string name="foundations_theme_body">Material 3 colors, typography and shapes. Text follows your system font size.</string>
+    <string name="foundations_localization_heading">Localization</string>
+    <string name="foundations_number_label">Number</string>
+    <string name="foundations_date_label">Date</string>
+    <string name="foundations_distance_label">Distance</string>
+    <string name="foundations_session_heading">Session</string>
+    <string name="session_signed_out">Signed out</string>
+    <string name="session_signed_in">Signed in</string>
+    <string name="session_signed_in_as">Signed in as %1$s</string>
+    <string name="session_unknown">Checking session…</string>
+</resources>
