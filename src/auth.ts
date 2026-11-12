@@ -15,8 +15,30 @@ export interface AuthConfig {
   rpId?: string;
   rpName?: string;
   origin?: string;
+  /** Additional WebAuthn origins accepted for native clients (e.g. android:apk-key-hash:...). */
+  extraOrigins?: string[];
   production: boolean;
 }
+
+/** Short-lived access credential plus a rotating refresh credential, issued to opted-in native clients. */
+export interface NativeCredentials {
+  tokenType: "Bearer";
+  accessToken: string;
+  accessTokenExpiresAt: string;
+  refreshToken: string;
+  refreshTokenExpiresAt: string;
+}
+
+export interface SessionOptions {
+  native?: boolean;
+}
+
+export type SessionResult = { sessionToken: string; user: SessionUser; native?: NativeCredentials };
+
+export class AuthenticationError extends Error {}
+
+const NATIVE_ACCESS_TTL_MS = 15 * 60_000;
+const SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60_000;
 
 export interface SessionUser {
   id: string;
@@ -125,7 +147,7 @@ export class AuthService {
     await this.emailSender.sendAuthenticationCode(email, code);
   }
 
-  async register(rawEmail: unknown, code: unknown): Promise<{ sessionToken: string; user: SessionUser }> {
+  async register(rawEmail: unknown, code: unknown, options: SessionOptions = {}): Promise<SessionResult> {
     const email = canonicalEmail(rawEmail);
     await this.verifyEmailCode(email, code, "register");
     const client = await this.pool.connect();
@@ -154,12 +176,12 @@ export class AuthService {
           [randomUUID(), email.split("@")[0], user.rows[0].id]
         );
       }
-      const session = await this.createSessionWithClient(client, user.rows[0].id);
+      const session = await this.createSessionWithClient(client, user.rows[0].id, false, options.native);
       const sessionUser = await this.sessionUserWithClient(client, session.tokenHash);
       await this.eventWithClient(client, user.rows[0].id, "registration", true);
       await client.query("COMMIT");
       if (!sessionUser) throw new Error("A player could not be created for the new account.");
-      return { sessionToken: session.token, user: sessionUser };
+      return { sessionToken: session.token, user: sessionUser, ...(session.native ? { native: session.native } : {}) };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -168,7 +190,7 @@ export class AuthService {
     }
   }
 
-  async emailLogin(rawEmail: unknown, code: unknown): Promise<{ sessionToken?: string; user?: SessionUser }> {
+  async emailLogin(rawEmail: unknown, code: unknown, options: SessionOptions = {}): Promise<Partial<SessionResult>> {
     const email = canonicalEmail(rawEmail);
     await this.verifyEmailCode(email, code, "login");
     const user = await this.pool.query<{ id: string }>(
@@ -176,11 +198,11 @@ export class AuthService {
     );
     if (user.rowCount !== 1) return {};
     await this.ensurePlayer(user.rows[0].id);
-    const session = await this.createSession(user.rows[0].id);
+    const session = await this.createSession(user.rows[0].id, false, options.native);
     await this.event(user.rows[0].id, "email_login", true);
     const sessionUser = await this.getSessionUser(session.token);
     if (!sessionUser) throw new Error("A player could not be created for the account.");
-    return { sessionToken: session.token, user: sessionUser };
+    return { sessionToken: session.token, user: sessionUser, ...(session.native ? { native: session.native } : {}) };
   }
 
   async getSessionUser(rawToken: string | undefined): Promise<SessionUser | undefined> {
@@ -194,6 +216,51 @@ export class AuthService {
       [hash]
     );
     return user;
+  }
+
+  /** Rotates a native session's access and refresh credentials; replaying a rotated refresh credential revokes the session. */
+  async refreshNativeSession(rawRefreshToken: unknown): Promise<NativeCredentials> {
+    if (typeof rawRefreshToken !== "string" || !rawRefreshToken) throw new AuthenticationError("The refresh credential is invalid or expired.");
+    const hash = opaqueTokenHash(rawRefreshToken);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const found = await client.query<{
+        id: string; user_id: string; refresh_token_hash: string | null; revoked_at: Date | null; valid: boolean;
+      }>(
+        `SELECT sessions.id, sessions.user_id, sessions.refresh_token_hash, sessions.revoked_at,
+                (sessions.absolute_expires_at > now() AND users.deleted_at IS NULL) AS valid
+         FROM sessions INNER JOIN users ON users.id = sessions.user_id
+         WHERE sessions.kind = 'native' AND (sessions.refresh_token_hash = $1 OR sessions.previous_refresh_token_hash = $1)
+         FOR UPDATE OF sessions`,
+        [hash]
+      );
+      const row = found.rows[0];
+      if (!row || row.revoked_at || !row.valid) {
+        await client.query("COMMIT");
+        throw new AuthenticationError("The refresh credential is invalid or expired.");
+      }
+      if (row.refresh_token_hash !== hash) {
+        await client.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [row.id]);
+        await this.eventWithClient(client, row.user_id, "refresh_replay", false);
+        await client.query("COMMIT");
+        throw new AuthenticationError("The refresh credential is invalid or expired.");
+      }
+      const credentials = this.nativeCredentials();
+      const updated = await client.query<{ absolute_expires_at: Date }>(
+        `UPDATE sessions SET token_hash = $2, refresh_token_hash = $3, previous_refresh_token_hash = $4,
+                expires_at = $5, last_seen_at = now()
+         WHERE id = $1 RETURNING absolute_expires_at`,
+        [row.id, opaqueTokenHash(credentials.accessToken), opaqueTokenHash(credentials.refreshToken), hash, credentials.accessTokenExpiresAt]
+      );
+      await client.query("COMMIT");
+      return { ...credentials, accessTokenExpiresAt: credentials.accessTokenExpiresAt.toISOString(), refreshTokenExpiresAt: updated.rows[0].absolute_expires_at.toISOString() };
+    } catch (error) {
+      if (!(error instanceof AuthenticationError)) await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async logout(rawToken: string | undefined): Promise<void> {
@@ -225,7 +292,7 @@ export class AuthService {
     const challenge = await this.consumeChallenge(user.id, "passkey_registration");
     const config = this.webauthnConfig();
     const verification = await verifyRegistrationResponse({
-      response, expectedChallenge: challenge, expectedOrigin: config.origin, expectedRPID: config.rpId, requireUserVerification: true
+      response, expectedChallenge: challenge, expectedOrigin: this.origins(config), expectedRPID: config.rpId, requireUserVerification: true
     });
     if (!verification.verified || !verification.registrationInfo) throw new Error("Passkey registration could not be verified.");
     const credential = verification.registrationInfo.credential;
@@ -246,7 +313,7 @@ export class AuthService {
     return options;
   }
 
-  async verifyLogin(response: AuthenticationResponseJSON): Promise<{ sessionToken: string; user: SessionUser }> {
+  async verifyLogin(response: AuthenticationResponseJSON, options: SessionOptions = {}): Promise<SessionResult> {
     const credentialId = response.id;
     const passkey = await this.pool.query<PasskeyRow>("SELECT * FROM passkeys WHERE credential_id = $1", [credentialId]);
     if (passkey.rowCount !== 1) throw new Error("Passkey login could not be verified.");
@@ -254,7 +321,7 @@ export class AuthService {
     const config = this.webauthnConfig();
     const credential = passkey.rows[0];
     const verification = await verifyAuthenticationResponse({
-      response, expectedChallenge: challenge, expectedOrigin: config.origin, expectedRPID: config.rpId,
+      response, expectedChallenge: challenge, expectedOrigin: this.origins(config), expectedRPID: config.rpId,
       credential: { id: credential.credential_id, publicKey: new Uint8Array(credential.public_key), counter: credential.counter, transports: this.transports(credential.transports) },
       requireUserVerification: true
     });
@@ -264,11 +331,11 @@ export class AuthService {
       [credential.id, verification.authenticationInfo.newCounter]
     );
     await this.ensurePlayer(credential.user_id);
-    const session = await this.createSession(credential.user_id, true);
+    const session = await this.createSession(credential.user_id, true, options.native);
     await this.event(credential.user_id, "passkey_login", true);
     const sessionUser = await this.getSessionUser(session.token);
     if (!sessionUser) throw new Error("A player could not be created for the account.");
-    return { sessionToken: session.token, user: sessionUser };
+    return { sessionToken: session.token, user: sessionUser, ...(session.native ? { native: session.native } : {}) };
   }
 
   async listPasskeys(userId: string): Promise<Array<{ id: string; name: string; createdAt: string; lastUsedAt?: string }>> {
@@ -374,6 +441,10 @@ export class AuthService {
     }
   }
 
+  private origins(config: { origin: string }): string[] {
+    return [config.origin, ...(this.settings.extraOrigins ?? [])];
+  }
+
   private webauthnConfig(): Required<Pick<AuthConfig, "rpId" | "rpName" | "origin">> {
     if (this.settings.rpId && this.settings.rpName && this.settings.origin) return this.settings as Required<Pick<AuthConfig, "rpId" | "rpName" | "origin">>;
     if (this.settings.production) throw new Error("WebAuthn is not configured.");
@@ -403,11 +474,11 @@ export class AuthService {
     if (consumed.rowCount !== 1) throw new Error("The code is invalid or expired.");
   }
 
-  private async createSession(userId: string, steppedUp = false): Promise<{ token: string; tokenHash: string }> {
+  private async createSession(userId: string, steppedUp = false, native = false): Promise<{ token: string; tokenHash: string; native?: NativeCredentials }> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const result = await this.createSessionWithClient(client, userId, steppedUp);
+      const result = await this.createSessionWithClient(client, userId, steppedUp, native);
       await client.query("COMMIT");
       return result;
     } catch (error) {
@@ -429,16 +500,30 @@ export class AuthService {
     );
   }
 
-  private async createSessionWithClient(client: import("pg").PoolClient, userId: string, steppedUp = false): Promise<{ token: string; tokenHash: string }> {
-    await client.query("UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [userId]);
-    const value = token();
+  private nativeCredentials(): Omit<NativeCredentials, "accessTokenExpiresAt" | "refreshTokenExpiresAt"> & { accessTokenExpiresAt: Date } {
+    return { tokenType: "Bearer", accessToken: token(), accessTokenExpiresAt: new Date(Date.now() + NATIVE_ACCESS_TTL_MS), refreshToken: token() };
+  }
+
+  private async createSessionWithClient(
+    client: import("pg").PoolClient, userId: string, steppedUp = false, native = false
+  ): Promise<{ token: string; tokenHash: string; native?: NativeCredentials }> {
+    // Web sign-in keeps its single-session behavior for web sessions; native sessions are independent.
+    if (!native) await client.query("UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND kind = 'web' AND revoked_at IS NULL", [userId]);
+    const nativeCredentials = native ? this.nativeCredentials() : undefined;
+    const value = nativeCredentials?.accessToken ?? token();
     const hash = opaqueTokenHash(value);
+    const absoluteExpiresAt = new Date(Date.now() + SESSION_ABSOLUTE_TTL_MS);
     await client.query(
-      `INSERT INTO sessions (id, user_id, token_hash, csrf_token, expires_at, absolute_expires_at, step_up_at)
-       VALUES ($1, $2, $3, $4, now() + interval '7 days', now() + interval '30 days', $5)`,
-      [randomUUID(), userId, hash, token(), steppedUp ? new Date() : null]
+      `INSERT INTO sessions (id, user_id, token_hash, csrf_token, expires_at, absolute_expires_at, step_up_at, kind, refresh_token_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [randomUUID(), userId, hash, token(),
+        nativeCredentials?.accessTokenExpiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60_000), absoluteExpiresAt,
+        steppedUp ? new Date() : null, native ? "native" : "web", nativeCredentials ? opaqueTokenHash(nativeCredentials.refreshToken) : null]
     );
-    return { token: value, tokenHash: hash };
+    return {
+      token: value, tokenHash: hash,
+      ...(nativeCredentials ? { native: { ...nativeCredentials, accessTokenExpiresAt: nativeCredentials.accessTokenExpiresAt.toISOString(), refreshTokenExpiresAt: absoluteExpiresAt.toISOString() } } : {})
+    };
   }
 
   private async sessionUser(tokenHash: string): Promise<SessionUser | undefined> {

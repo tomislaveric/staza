@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { AuthService, EmailSender } from "./auth.js";
+import { AuthenticationError, AuthService, EmailSender } from "./auth.js";
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 
@@ -99,5 +99,62 @@ describeAuth("AuthService", () => {
        VALUES ($1, $2, 'fit', now(), 0, 0)`,
       [activityId, otherPlayerId]
     );
+  });
+  const nativeLogin = async (email: string) => {
+    await pool!.query("INSERT INTO users (id, email, email_verified_at) VALUES ($1, $2, now())", [randomUUID(), email]);
+    await pool!.query(
+      `INSERT INTO email_codes (id, email, purpose, code_hash, expires_at)
+       VALUES ($1, $2, 'login', $3, now() + interval '10 minutes')`,
+      [randomUUID(), email, codeHash("123456")]
+    );
+    return auth!.emailLogin(email, "123456", { native: true });
+  };
+
+  it("issues native credentials only when opted in, without disturbing web sessions", async () => {
+    const native = await nativeLogin("native@example.test");
+    expect(native.native).toMatchObject({ tokenType: "Bearer", accessToken: native.sessionToken });
+    expect((await auth!.getSessionUser(native.native!.accessToken))?.email).toBe("native@example.test");
+
+    await pool!.query(
+      `INSERT INTO email_codes (id, email, purpose, code_hash, expires_at)
+       VALUES ($1, 'native@example.test', 'login', $2, now() + interval '10 minutes')`,
+      [randomUUID(), codeHash("654321")]
+    );
+    const web = await auth!.emailLogin("native@example.test", "654321");
+    expect(web.native).toBeUndefined();
+    expect(await auth!.getSessionUser(native.native!.accessToken)).toBeDefined();
+    expect(await auth!.getSessionUser(web.sessionToken)).toBeDefined();
+  });
+
+  it("rotates refresh credentials, rejects replay, and revokes the session on replay", async () => {
+    const { native } = await nativeLogin("refresh@example.test");
+    const rotated = await auth!.refreshNativeSession(native!.refreshToken);
+    expect(rotated.refreshToken).not.toBe(native!.refreshToken);
+    expect(await auth!.getSessionUser(native!.accessToken)).toBeUndefined();
+    expect((await auth!.getSessionUser(rotated.accessToken))?.email).toBe("refresh@example.test");
+
+    await expect(auth!.refreshNativeSession(native!.refreshToken)).rejects.toThrow(AuthenticationError);
+    expect(await auth!.getSessionUser(rotated.accessToken)).toBeUndefined();
+    await expect(auth!.refreshNativeSession(rotated.refreshToken)).rejects.toThrow(AuthenticationError);
+  });
+
+  it("rejects expired access credentials and logout revokes native sessions", async () => {
+    const { native } = await nativeLogin("expiry@example.test");
+    await pool!.query("UPDATE sessions SET expires_at = now() - interval '1 minute' WHERE kind = 'native'");
+    expect(await auth!.getSessionUser(native!.accessToken)).toBeUndefined();
+    const refreshed = await auth!.refreshNativeSession(native!.refreshToken);
+    expect(await auth!.getSessionUser(refreshed.accessToken)).toBeDefined();
+
+    await auth!.logout(refreshed.accessToken);
+    expect(await auth!.getSessionUser(refreshed.accessToken)).toBeUndefined();
+    await expect(auth!.refreshNativeSession(refreshed.refreshToken)).rejects.toThrow(AuthenticationError);
+  });
+
+  it("logout-all revokes every native session", async () => {
+    const first = await nativeLogin("all@example.test");
+    const user = (await auth!.getSessionUser(first.native!.accessToken))!;
+    await auth!.logoutAll(user.id);
+    expect(await auth!.getSessionUser(first.native!.accessToken)).toBeUndefined();
+    await expect(auth!.refreshNativeSession(first.native!.refreshToken)).rejects.toThrow(AuthenticationError);
   });
 });

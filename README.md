@@ -25,6 +25,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   Flowline challenges; track and cancel started quests independently of the map.
 - [Dev data reset](features/dev-data-reset/README.md) — dev/localhost-only Profile button that wipes a user's activities, XP, points and quests while keeping the login.
 - [Dev mock Strava import](features/dev-mock-strava-import/README.md) — on dev/localhost, lift the account-creation cutoff for Strava imports and list the last 30 activities so real data can be imported in any order.
+- [E0 — Backend enablement for native clients](features/e0-backend-enablement-for-native-clients/README.md) — add bearer-token sessions, native authentication, app association files, API documentation, and native MapLibre basemap access.
 - [Explore Area v2 polish](features/explore-area-v2-polish/README.md) — constrain routes to the selected area, reuse the last Locate Me position, and add arbitrary map points as route-only destinations.
 - [Explore this Area](features/explore-this-area/README.md) — route-first exploration:
   choose start and ride length, pick one of several generated routes from the frozen map

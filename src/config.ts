@@ -127,6 +127,9 @@ const stravaEnv = (): StravaConfig | undefined => {
   return { clientId, clientSecret, redirectUri: redirect.toString(), tokenEncryptionKey, recentActivityLimit };
 };
 
+const listEnv = (name: string): string[] =>
+  (process.env[name]?.trim() || "").split(",").map((value) => value.trim()).filter((value) => value !== "");
+
 export const config = {
   port: integerEnv("PORT", 3000),
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data/jobs"),
@@ -182,6 +185,12 @@ export const config = {
   webauthnRpId: process.env.WEBAUTHN_RP_ID?.trim(),
   webauthnRpName: process.env.WEBAUTHN_RP_NAME?.trim(),
   webauthnOrigin: optionalUrlEnv("WEBAUTHN_ORIGIN"),
+  /** Extra WebAuthn origins accepted for native clients, e.g. android:apk-key-hash:<base64url>. */
+  webauthnExtraOrigins: listEnv("WEBAUTHN_EXTRA_ORIGINS"),
+  /** Apple app IDs ("<TeamID>.<bundle id>") allowed to use Associated Domains / passkeys. */
+  appleAppIds: listEnv("APPLE_APP_IDS"),
+  androidPackageName: process.env.ANDROID_PACKAGE_NAME?.trim() || undefined,
+  androidSha256CertFingerprints: listEnv("ANDROID_SHA256_CERT_FINGERPRINTS"),
   devAuthEmail: process.env.DEV_AUTH_EMAIL?.trim().toLowerCase(),
   devAuthPlayerId: process.env.DEV_AUTH_PLAYER_ID?.trim(),
   devAuthPlayerName: process.env.DEV_AUTH_PLAYER_NAME?.trim() || "Development player",
