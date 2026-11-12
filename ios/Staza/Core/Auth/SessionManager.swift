@@ -59,15 +59,21 @@ actor SessionManager: TokenProvider {
         }
     }
 
-    /// Called by a future auth UI after a successful native sign-in.
+    /// Called by the auth flows after a successful native sign-in.
     func signIn(credentials: NativeCredentials, user: SessionUser?) async throws {
         try store.save(credentials)
         self.credentials = credentials
         await publish(.signedIn, user: user)
     }
 
-    func logout(using client: APIClient) async {
-        let _: EmptyResponse? = try? await client.post("/api/auth/logout")
+    /// Replaces stored credentials without changing the signed-in state (e.g. after server-side rotation).
+    func replaceCredentials(_ credentials: NativeCredentials) async throws {
+        try store.save(credentials)
+        self.credentials = credentials
+    }
+
+    func logout(using client: APIClient, everywhere: Bool = false) async {
+        let _: EmptyResponse? = try? await client.post(everywhere ? "/api/auth/logout-all" : "/api/auth/logout")
         await clearSession()
     }
 

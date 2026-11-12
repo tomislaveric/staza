@@ -7,6 +7,7 @@ struct StazaApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(container)
                 .environment(container.authState)
                 .tint(StazaColor.accent)
                 .task { await container.bootstrap() }

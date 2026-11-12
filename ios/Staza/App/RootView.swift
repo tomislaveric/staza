@@ -1,9 +1,22 @@
 import SwiftUI
 
-/// Authentication UI is out of scope; the shell is shown in every auth state
-/// and reacts to `AuthState` where features need it.
+/// Gates the app shell behind authentication and offers passkey setup after registration.
 struct RootView: View {
+    @Environment(AuthState.self) private var authState
+    @Environment(AppContainer.self) private var container
+
     var body: some View {
-        AppShellView()
+        @Bindable var auth = container.authService
+        Group {
+            switch authState.status {
+            case .restoring:
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).background(StazaColor.canvas)
+            case .signedOut:
+                AuthView()
+            case .signedIn:
+                AppShellView()
+            }
+        }
+        .sheet(isPresented: $auth.passkeySetupPending) { PasskeySetupSheet() }
     }
 }

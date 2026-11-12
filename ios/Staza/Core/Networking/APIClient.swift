@@ -41,6 +41,10 @@ final class APIClient: Sendable {
         try await perform(method: "POST", path: path, query: [], body: Optional<EmptyResponse>.none, authenticated: true)
     }
 
+    func delete(_ path: String) async throws {
+        let _: EmptyResponse = try await perform(method: "DELETE", path: path, query: [], body: Optional<EmptyResponse>.none, authenticated: true)
+    }
+
     private func perform<Body: Encodable, Response: Decodable>(
         method: String,
         path: String,
