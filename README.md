@@ -131,6 +131,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Persistent activities player state v1](features/persistent-activities-player-state-v1/README.md)
   — persist compact activity/event history and single-player XP in PostgreSQL
   with transaction-safe exactly-once progression.
+- [Prepare for mobile apps](features/prepare-for-mobile-apps/README.md) — plan and
+  scope native iOS (SwiftUI) and Android (Compose) clients over the server API,
+  reflected as epics and small issues on the GitHub board.
 - [Progression V1](features/progression-v1/README.md) — make each completed ride
   contribute XP toward a derived player level without adding persistence or rewards.
 - [Reduce unnecessary detours in generated routes](features/reduce-unnecessary-detours-in-generated-routes/README.md)
