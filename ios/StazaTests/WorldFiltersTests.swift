@@ -40,4 +40,11 @@ final class WorldFiltersTests: XCTestCase {
         XCTAssertEqual(WorldFilters.flowlines(lines, selected: [.highFlow]).map(\.id), ["flow"])
         XCTAssertEqual(WorldFilters.flowlines(lines, selected: [.longEndurance]).map(\.id), ["long"])
     }
+
+    func testMapIconNamesFollowCategoryAndFoundState() {
+        XCTAssertEqual(CollectibleMapIcons.imageName(category: "peak", found: true), "collectible-peak")
+        XCTAssertEqual(CollectibleMapIcons.imageName(category: "mountain_pass", found: false), "collectible-mountain_pass-muted")
+        XCTAssertNil(CollectibleMapIcons.imageName(category: "coin", found: true))
+        XCTAssertNil(CollectibleMapIcons.imageName(category: nil, found: false))
+    }
 }

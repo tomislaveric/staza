@@ -64,6 +64,12 @@ final class ReplayTimelineTests: XCTestCase {
         XCTAssertEqual(timeline.revealed(atMs: 3000).map(\.id), ["early", "late"])
     }
 
+    func testEventCategoryPrefersStoredCategoryOverType() throws {
+        let json = #"[{"id":"e1","collectible":{"name":"Rigi","type":"landmark"},"collectibleCategory":"peak","value":1,"latitude":1,"longitude":2,"activityTimestamp":3},{"id":"e2","collectible":{"name":"Gotthard","type":"mountain_pass"},"value":1,"latitude":1,"longitude":2,"activityTimestamp":4}]"#
+        let events = try JSONDecoder().decode([ActivityDetailEvent].self, from: Data(json.utf8))
+        XCTAssertEqual(events.map(\.category), ["peak", "mountain_pass"])
+    }
+
     func testTraveledEndsAtCurrentPosition() {
         let path = timeline.traveled(atMs: 2000)
         XCTAssertEqual(path.count, 3)

@@ -8,6 +8,7 @@ struct ActivityDetailEvent: Decodable, Equatable, Identifiable, Sendable {
     let longitude: Double?
     let activityTimestamp: Double?
     let repeatClaim: Bool?
+    var collectibleCategory: String? = nil
 
     struct Collectible: Decodable, Equatable, Sendable {
         let name: String
@@ -15,11 +16,13 @@ struct ActivityDetailEvent: Decodable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, collectible, value, latitude, longitude, activityTimestamp
+        case id, collectible, value, latitude, longitude, activityTimestamp, collectibleCategory
         case repeatClaim = "repeat"
     }
 
     var isRepeat: Bool { repeatClaim ?? false }
+    /// Map category: the stored collectible category, else the collectible type (e.g. `mountain_pass`).
+    var category: String { collectibleCategory ?? collectible.type }
 }
 
 struct ActivityNearMiss: Decodable, Equatable, Identifiable, Sendable {

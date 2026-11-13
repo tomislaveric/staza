@@ -41,6 +41,7 @@ struct WorldMapView: UIViewRepresentable {
     let flowlines: [WorldFlowline]
     let questTargets: QuestTargets
     var route: [CLLocationCoordinate2D] = []
+    var selectedCollectibleId: String? = nil
     let onViewportChange: (WorldBounds) -> Void
     let onSelect: (WorldSelectionKind, String) -> Void
     var onUserLocation: (GeoPoint?) -> Void = { _ in }
@@ -80,7 +81,7 @@ struct WorldMapView: UIViewRepresentable {
         coordinator.onUserLocation = onUserLocation
         coordinator.onTrackingChange = { tracking = $0 }
         coordinator.onLocationDenied = onLocationDenied
-        coordinator.data = (collectibles, flowlines, questTargets)
+        coordinator.data = (collectibles, flowlines, questTargets, selectedCollectibleId)
         if abs(coordinator.appliedInset - bottomInset) > 0.5 {
             coordinator.appliedInset = bottomInset
             map.setContentInset(UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0), animated: true, completionHandler: nil)
@@ -101,12 +102,11 @@ struct WorldMapView: UIViewRepresentable {
         private var focus: [CLLocationCoordinate2D] = []
         var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
-        var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets) = ([], [], .empty)
+        var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selectedId: String?) = ([], [], .empty, nil)
 
         private let locationManager = CLLocationManager()
         private var collectibleSource: MLNShapeSource?
         private var flowlineSource: MLNShapeSource?
-        private var questSource: MLNShapeSource?
         private var questFlowlineSource: MLNShapeSource?
         private var routeSource: MLNShapeSource?
         private var route: [CLLocationCoordinate2D] = []
@@ -138,8 +138,6 @@ struct WorldMapView: UIViewRepresentable {
 
         func mapView(_ map: MLNMapView, didFinishLoading style: MLNStyle) {
             let accent = UIColor(StazaColor.accent)
-            let foundColor = UIColor(StazaColor.success)
-            let unfoundColor = UIColor(StazaColor.textMuted)
             let flowline = UIColor(StazaColor.rarityRare)
             let proposed = UIColor(StazaColor.rarityEpic)
             let canvas = UIColor(StazaColor.canvas)
@@ -163,28 +161,6 @@ struct WorldMapView: UIViewRepresentable {
             questFlowlineLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(questFlowlineLayer)
 
-            let collectibles = MLNShapeSource(identifier: "world-collectibles", shape: nil, options: nil)
-            style.addSource(collectibles)
-            for (id, found, color) in [("unfound", false, unfoundColor), ("found", true, foundColor)] {
-                let layer = MLNCircleStyleLayer(identifier: "world-collectibles-\(id)", source: collectibles)
-                layer.predicate = NSPredicate(format: "found == %@", NSNumber(value: found))
-                layer.circleRadius = NSExpression(forConstantValue: found ? 6 : 7)
-                layer.circleColor = NSExpression(forConstantValue: color)
-                layer.circleOpacity = NSExpression(forConstantValue: found ? 0.9 : 1)
-                layer.circleStrokeColor = NSExpression(forConstantValue: canvas)
-                layer.circleStrokeWidth = NSExpression(forConstantValue: 2)
-                style.addLayer(layer)
-            }
-
-            let quest = MLNShapeSource(identifier: "world-quest-collectibles", shape: nil, options: nil)
-            style.addSource(quest)
-            let questLayer = MLNCircleStyleLayer(identifier: "world-quest-collectibles-circle", source: quest)
-            questLayer.circleRadius = NSExpression(forConstantValue: 9)
-            questLayer.circleColor = NSExpression(forConstantValue: accent)
-            questLayer.circleStrokeColor = NSExpression(forConstantValue: canvas)
-            questLayer.circleStrokeWidth = NSExpression(forConstantValue: 3)
-            style.addLayer(questLayer)
-
             let routeSource = MLNShapeSource(identifier: "explore-route", shape: nil, options: nil)
             style.addSource(routeSource)
             let casing = MLNLineStyleLayer(identifier: "explore-route-casing", source: routeSource)
@@ -201,9 +177,57 @@ struct WorldMapView: UIViewRepresentable {
             style.addLayer(routeLayer)
             self.routeSource = routeSource
 
+            // Collectibles draw above routes: fallback circles, highlight rings, then category icons.
+            let collectibles = MLNShapeSource(identifier: "world-collectibles", shape: nil, options: nil)
+            style.addSource(collectibles)
+            CollectibleMapIcons.register(on: style)
+
+            let circle = MLNCircleStyleLayer(identifier: Self.circleLayer, source: collectibles)
+            circle.predicate = NSPredicate(format: "icon == ''")
+            circle.circleRadius = CollectibleMapIcons.circleRadius
+            circle.circleColor = NSExpression(format: "TERNARY(found == YES, %@, %@)", CollectibleMapIcons.foundColor, CollectibleMapIcons.unfoundFill)
+            circle.circleOpacity = NSExpression(format: "TERNARY(found == YES, 1, 0.88)")
+            circle.circleStrokeWidth = CollectibleMapIcons.zoomStops([9: 1, 12: 1.4, 15: 1.8, 17: 2])
+            circle.circleStrokeColor = NSExpression(format: "TERNARY(found == YES, %@, %@)", UIColor(StazaColor.map), CollectibleMapIcons.mutedColor)
+            circle.circleStrokeOpacity = NSExpression(forConstantValue: 0.95)
+            style.addLayer(circle)
+
+            let highlights: [(id: String, predicate: String, color: UIColor, scale: Double, emphasis: Double)] = [
+                ("quest", "questTarget == YES AND selected == NO", accent, 1, 0),
+                ("selected", "selected == YES", CollectibleMapIcons.selectedColor, 1.15, 1)
+            ]
+            for highlight in highlights {
+                let glow = MLNCircleStyleLayer(identifier: "world-collectibles-\(highlight.id)-glow", source: collectibles)
+                glow.predicate = NSPredicate(format: highlight.predicate)
+                glow.circleRadius = CollectibleMapIcons.zoomStops([9: 17, 12: 21, 15: 25, 17: 29], scale: highlight.scale)
+                glow.circleColor = NSExpression(forConstantValue: highlight.color)
+                glow.circleOpacity = NSExpression(forConstantValue: 0.08 + 0.12 * highlight.emphasis)
+                glow.circleStrokeWidth = NSExpression(forConstantValue: 1)
+                glow.circleStrokeColor = NSExpression(forConstantValue: highlight.color)
+                glow.circleStrokeOpacity = NSExpression(forConstantValue: 0.28 + 0.52 * highlight.emphasis)
+                style.addLayer(glow)
+                let ring = MLNCircleStyleLayer(identifier: "world-collectibles-\(highlight.id)-ring", source: collectibles)
+                ring.predicate = NSPredicate(format: highlight.predicate)
+                ring.circleRadius = CollectibleMapIcons.zoomStops([9: 12.5, 12: 15, 15: 17, 17: 19.5], scale: highlight.scale)
+                ring.circleColor = NSExpression(forConstantValue: highlight.color)
+                ring.circleOpacity = NSExpression(forConstantValue: 0.14 + 0.14 * highlight.emphasis)
+                ring.circleStrokeWidth = NSExpression(forConstantValue: 2 + highlight.emphasis)
+                ring.circleStrokeColor = NSExpression(forConstantValue: highlight.color)
+                ring.circleStrokeOpacity = NSExpression(forConstantValue: 0.95)
+                style.addLayer(ring)
+            }
+
+            let icons = MLNSymbolStyleLayer(identifier: Self.iconLayer, source: collectibles)
+            icons.predicate = NSPredicate(format: "icon != ''")
+            icons.iconImageName = NSExpression(forKeyPath: "icon")
+            icons.iconScale = CollectibleMapIcons.iconScale
+            icons.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            icons.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+            icons.iconOpacity = NSExpression(format: "TERNARY(found == YES, 1, 0.88)")
+            style.addLayer(icons)
+
             collectibleSource = collectibles
             flowlineSource = flowlines
-            questSource = quest
             questFlowlineSource = questFlowlines
             refresh()
             applyRoute(on: map)
@@ -215,7 +239,7 @@ struct WorldMapView: UIViewRepresentable {
             let point = gesture.location(in: map)
             let hitArea = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
             let groups: [(WorldSelectionKind, Set<String>)] = [
-                (.collectible, ["world-quest-collectibles-circle", "world-collectibles-unfound", "world-collectibles-found"]),
+                (.collectible, [Self.iconLayer, Self.circleLayer]),
                 (.flowline, ["world-quest-flowlines-line", "world-flowlines-line"])
             ]
             for (kind, layers) in groups {
@@ -233,9 +257,8 @@ struct WorldMapView: UIViewRepresentable {
         }
 
         func refresh() {
-            guard let collectibleSource, let flowlineSource, let questSource, let questFlowlineSource else { return }
-            collectibleSource.shape = Self.points(data.collectibles)
-            questSource.shape = Self.points(data.quest.collectibles)
+            guard let collectibleSource, let flowlineSource, let questFlowlineSource else { return }
+            collectibleSource.shape = Self.points(data.collectibles, quest: data.quest.collectibles, selectedId: data.selectedId)
             flowlineSource.shape = Self.lines(data.flowlines)
             questFlowlineSource.shape = Self.lines(data.quest.flowlines)
         }
@@ -296,12 +319,25 @@ struct WorldMapView: UIViewRepresentable {
             onViewportChange(WorldBounds(west: bounds.sw.longitude, south: bounds.sw.latitude, east: bounds.ne.longitude, north: bounds.ne.latitude))
         }
 
-        private static func points(_ items: [WorldCollectible]) -> MLNShape? {
-            guard !items.isEmpty else { return nil }
-            return MLNShapeCollectionFeature(shapes: items.map { item in
+        private static let circleLayer = "world-collectibles-circle"
+        private static let iconLayer = "world-collectibles-icon"
+
+        /// One feature per collectible; quest targets missing from the viewport list are appended.
+        private static func points(_ items: [WorldCollectible], quest: [WorldCollectible], selectedId: String?) -> MLNShape? {
+            let questIds = Set(quest.map(\.id))
+            let itemIds = Set(items.map(\.id))
+            let all = items + quest.filter { !itemIds.contains($0.id) }
+            guard !all.isEmpty else { return nil }
+            return MLNShapeCollectionFeature(shapes: all.map { item in
                 let point = MLNPointFeature()
                 point.coordinate = CLLocationCoordinate2D(latitude: item.latitude, longitude: item.longitude)
-                point.attributes = ["id": item.id, "found": item.found]
+                point.attributes = [
+                    "id": item.id,
+                    "found": item.found,
+                    "questTarget": questIds.contains(item.id),
+                    "selected": item.id == selectedId,
+                    "icon": CollectibleMapIcons.imageName(category: WorldCategory.of(item), found: item.found) ?? ""
+                ]
                 return point
             })
         }

@@ -24,6 +24,7 @@ struct ReplayReveal: Equatable, Identifiable, Sendable {
     let isRepeat: Bool
     let timestampMs: Double
     let coordinate: ReplayCoordinate?
+    var category: String? = nil
 }
 
 /// Timestamp-driven replay state derived from the activity track and its events.
@@ -49,7 +50,7 @@ struct ReplayTimeline: Equatable, Sendable {
             var coordinate: ReplayCoordinate?
             if let lat = event.latitude, let lon = event.longitude { coordinate = ReplayCoordinate(latitude: lat, longitude: lon) }
             return ReplayReveal(id: event.id, name: event.collectible.name, kind: .collectible,
-                                isRepeat: event.isRepeat, timestampMs: ts, coordinate: coordinate)
+                                isRepeat: event.isRepeat, timestampMs: ts, coordinate: coordinate, category: event.category)
         }
         let flowlines = (detail.replay?.activityResult?.fartlekCompletions ?? []).enumerated().map { index, item in
             ReplayReveal(id: "flowline-\(index)", name: item.fartlekName, kind: .flowline,

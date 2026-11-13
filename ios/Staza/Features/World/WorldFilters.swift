@@ -99,6 +99,7 @@ enum WorldCategory {
         case "castle": "building.columns.fill"
         case "waterfall": "drop.fill"
         case "mountain_pass": "road.lanes"
+        case "place": "mappin.and.ellipse"
         default: "mappin"
         }
     }

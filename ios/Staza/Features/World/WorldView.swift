@@ -49,6 +49,10 @@ struct WorldView: View {
                     flowlines: model.visibleFlowlines,
                     questTargets: model.mapQuestTargets,
                     route: explore.displayedRoute,
+                    selectedCollectibleId: model.selection.flatMap { selection -> String? in
+                        if case .collectible(let item) = selection { return item.id }
+                        return nil
+                    },
                     onViewportChange: { model.viewportChanged($0) },
                     onSelect: { model.select($0, id: $1) },
                     onUserLocation: { userLocation = $0 },

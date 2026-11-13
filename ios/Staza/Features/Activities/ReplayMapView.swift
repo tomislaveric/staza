@@ -38,7 +38,6 @@ struct ReplayMapView: UIViewRepresentable {
             let accent = UIColor(StazaColor.route)
             let untravelled = UIColor(StazaColor.textSubtle)
             let outline = UIColor(StazaColor.canvas)
-            let found = UIColor(StazaColor.success)
 
             let routeSource = MLNShapeSource(identifier: "replay-route", shape: MLNPolyline(coordinates: coords, count: UInt(coords.count)), options: nil)
             style.addSource(routeSource)
@@ -60,19 +59,37 @@ struct ReplayMapView: UIViewRepresentable {
 
             let itemSource = MLNShapeSource(identifier: "replay-items", shape: nil, options: nil)
             style.addSource(itemSource)
+            CollectibleMapIcons.register(on: style)
+            let gold = CollectibleMapIcons.foundColor
+            let haloLayer = MLNCircleStyleLayer(identifier: "replay-items-halo", source: itemSource)
+            haloLayer.circleRadius = CollectibleMapIcons.zoomStops([9: 13, 12: 16, 15: 19, 17: 22])
+            haloLayer.circleColor = NSExpression(forConstantValue: gold)
+            haloLayer.circleOpacity = NSExpression(forConstantValue: 0.12)
+            haloLayer.circleStrokeWidth = NSExpression(forConstantValue: 1.5)
+            haloLayer.circleStrokeColor = NSExpression(forConstantValue: gold)
+            haloLayer.circleStrokeOpacity = NSExpression(forConstantValue: 0.6)
+            style.addLayer(haloLayer)
             let itemLayer = MLNCircleStyleLayer(identifier: "replay-items-circle", source: itemSource)
-            itemLayer.circleRadius = NSExpression(forConstantValue: 7)
-            itemLayer.circleColor = NSExpression(forConstantValue: found)
+            itemLayer.predicate = NSPredicate(format: "icon == ''")
+            itemLayer.circleRadius = CollectibleMapIcons.circleRadius
+            itemLayer.circleColor = NSExpression(forConstantValue: gold)
             itemLayer.circleStrokeColor = NSExpression(forConstantValue: outline)
-            itemLayer.circleStrokeWidth = NSExpression(forConstantValue: 2.5)
+            itemLayer.circleStrokeWidth = CollectibleMapIcons.zoomStops([9: 1, 12: 1.4, 15: 1.8, 17: 2])
             style.addLayer(itemLayer)
+            let iconLayer = MLNSymbolStyleLayer(identifier: "replay-items-icon", source: itemSource)
+            iconLayer.predicate = NSPredicate(format: "icon != ''")
+            iconLayer.iconImageName = NSExpression(forKeyPath: "icon")
+            iconLayer.iconScale = CollectibleMapIcons.iconScale
+            iconLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            iconLayer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+            style.addLayer(iconLayer)
 
             let headSource = MLNShapeSource(identifier: "replay-head", shape: nil, options: nil)
             style.addSource(headSource)
-            let haloLayer = MLNCircleStyleLayer(identifier: "replay-head-halo", source: headSource)
-            haloLayer.circleRadius = NSExpression(forConstantValue: 18)
-            haloLayer.circleColor = NSExpression(forConstantValue: accent.withAlphaComponent(0.25))
-            style.addLayer(haloLayer)
+            let headHalo = MLNCircleStyleLayer(identifier: "replay-head-halo", source: headSource)
+            headHalo.circleRadius = NSExpression(forConstantValue: 18)
+            headHalo.circleColor = NSExpression(forConstantValue: accent.withAlphaComponent(0.25))
+            style.addLayer(headHalo)
             let headLayer = MLNCircleStyleLayer(identifier: "replay-head-circle", source: headSource)
             headLayer.circleRadius = NSExpression(forConstantValue: 8)
             headLayer.circleColor = NSExpression(forConstantValue: accent)
@@ -114,6 +131,7 @@ struct ReplayMapView: UIViewRepresentable {
                 items.shape = MLNShapeCollectionFeature(shapes: located.map { reveal in
                     let point = MLNPointFeature()
                     point.coordinate = CLLocationCoordinate2D(latitude: reveal.coordinate!.latitude, longitude: reveal.coordinate!.longitude)
+                    point.attributes = ["icon": CollectibleMapIcons.imageName(category: reveal.category, found: true) ?? ""]
                     return point
                 })
             }
