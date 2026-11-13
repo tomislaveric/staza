@@ -4,7 +4,7 @@ Native SwiftUI app shell. Open `Staza.xcodeproj` in Xcode 16+.
 
 - **Minimum iOS:** 17.0 (Observation framework, `.xcstrings` catalogs)
 - **Bundle identifier:** `world.staza.app` (tests: `world.staza.app.tests`)
-- **Dependencies:** none (Swift Package Manager ready; nothing to resolve yet)
+- **Dependencies:** MapLibre Native (SPM, `maplibre-gl-native-distribution` 6.31.0) for the activity replay map
 
 ## Layout
 

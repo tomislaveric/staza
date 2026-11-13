@@ -74,10 +74,11 @@ struct ActivityDetailView: View {
 
         switch model.section {
         case .replay:
-            StazaCard {
-                Text("activityDetail.replay.placeholder").font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
+            if ReplayTimeline(detail: detail) != nil {
+                ReplayView(detail: detail)
+            } else {
+                emptyCard("activityDetail.replay.unavailable", id: "activityDetailReplay")
             }
-            .accessibilityIdentifier("activityDetailReplay")
         case .collected:
             if detail.events.isEmpty {
                 emptyCard("activityDetail.collected.empty", id: "activityDetailCollectedEmpty")

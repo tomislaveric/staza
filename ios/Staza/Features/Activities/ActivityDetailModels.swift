@@ -4,6 +4,9 @@ struct ActivityDetailEvent: Decodable, Equatable, Identifiable, Sendable {
     let id: String
     let collectible: Collectible
     let value: Double
+    let latitude: Double?
+    let longitude: Double?
+    let activityTimestamp: Double?
     let repeatClaim: Bool?
 
     struct Collectible: Decodable, Equatable, Sendable {
@@ -12,7 +15,7 @@ struct ActivityDetailEvent: Decodable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, collectible, value
+        case id, collectible, value, latitude, longitude, activityTimestamp
         case repeatClaim = "repeat"
     }
 
@@ -45,10 +48,16 @@ struct ActivityDetail: Decodable, Equatable, Identifiable, Sendable {
     let replay: Replay?
 
     struct Replay: Decodable, Equatable, Sendable {
+        let activity: Route?
         let activityResult: Result?
+
+        struct Route: Decodable, Equatable, Sendable {
+            let route: [ReplayTrackPoint]
+        }
 
         struct Result: Decodable, Equatable, Sendable {
             let nearMisses: [ActivityNearMiss]?
+            let fartlekCompletions: [ReplayFlowline]?
         }
     }
 

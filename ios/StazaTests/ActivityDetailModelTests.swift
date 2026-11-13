@@ -41,3 +41,32 @@ final class ActivityDetailModelTests: XCTestCase {
         XCTAssertEqual(model.state, .failed("Activity not found."))
     }
 }
+
+final class ReplayTimelineTests: XCTestCase {
+    private func pt(_ lat: Double, _ t: Double) -> ReplayTrackPoint { .init(latitude: lat, longitude: 0, timestampMs: t) }
+
+    private var timeline: ReplayTimeline {
+        ReplayTimeline(route: [pt(0, 0), pt(10, 1000), pt(20, 3000)], reveals: [
+            .init(id: "late", name: "B", kind: .flowline, isRepeat: false, timestampMs: 2500, coordinate: nil),
+            .init(id: "early", name: "A", kind: .collectible, isRepeat: false, timestampMs: 500, coordinate: nil)
+        ])
+    }
+
+    func testInterpolatesPositionByTimestamp() {
+        XCTAssertEqual(timeline.position(atMs: 500)?.latitude ?? -1, 5, accuracy: 0.001)
+        XCTAssertEqual(timeline.position(atMs: 2000)?.latitude ?? -1, 15, accuracy: 0.001)
+        XCTAssertEqual(timeline.position(atMs: 9999)?.latitude, 20)
+    }
+
+    func testRevealsItemsOnlyOnceTimestampReached() {
+        XCTAssertTrue(timeline.revealed(atMs: 100).isEmpty)
+        XCTAssertEqual(timeline.revealed(atMs: 1000).map(\.id), ["early"])
+        XCTAssertEqual(timeline.revealed(atMs: 3000).map(\.id), ["early", "late"])
+    }
+
+    func testTraveledEndsAtCurrentPosition() {
+        let path = timeline.traveled(atMs: 2000)
+        XCTAssertEqual(path.count, 3)
+        XCTAssertEqual(path.last?.latitude ?? -1, 15, accuracy: 0.001)
+    }
+}

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A10000000000000000000062 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* MapLibre */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		A10000000000000000000010 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -39,6 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000062 /* MapLibre in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +94,9 @@
 				A10000000000000000000004 /* Staza */,
 			);
 			name = Staza;
+			packageProductDependencies = (
+				A10000000000000000000061 /* MapLibre */,
+			);
 			productName = Staza;
 			productReference = A10000000000000000000002 /* Staza.app */;
 			productType = "com.apple.product-type.application";
@@ -143,6 +151,9 @@
 			);
 			mainGroup = A10000000000000000000006;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A10000000000000000000060 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A10000000000000000000007 /* Products */;
 			projectDirPath = "";
@@ -359,6 +370,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A10000000000000000000060 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = exactVersion;
+				version = 6.31.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A10000000000000000000061 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000060 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A10000000000000000000001 /* Project object */;
 }
