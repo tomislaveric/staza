@@ -63,6 +63,14 @@ struct WorldMapView: UIViewRepresentable {
             }
         }
 
+        /// Line width interpolated by zoom, matching the web Fartlek line stops so lines stay thin when zoomed out.
+        static func zoomWidth(_ stops: [Double: Double]) -> NSExpression {
+            NSExpression(
+                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+                stops.reduce(into: [NSNumber: NSNumber]()) { $0[NSNumber(value: $1.key)] = NSNumber(value: $1.value) }
+            )
+        }
+
         func mapView(_ map: MLNMapView, didFinishLoading style: MLNStyle) {
             let accent = UIColor(StazaColor.accent)
             let foundColor = UIColor(StazaColor.success)
@@ -75,7 +83,7 @@ struct WorldMapView: UIViewRepresentable {
             style.addSource(flowlines)
             let flowlineLayer = MLNLineStyleLayer(identifier: "world-flowlines-line", source: flowlines)
             flowlineLayer.lineColor = NSExpression(forConstantValue: flowline)
-            flowlineLayer.lineWidth = NSExpression(forConstantValue: 3)
+            flowlineLayer.lineWidth = Self.zoomWidth([9: 1.2, 12: 1.8, 15: 2.6, 17: 3.4])
             flowlineLayer.lineOpacity = NSExpression(forConstantValue: 0.85)
             flowlineLayer.lineCap = NSExpression(forConstantValue: "round")
             flowlineLayer.lineJoin = NSExpression(forConstantValue: "round")
@@ -85,7 +93,7 @@ struct WorldMapView: UIViewRepresentable {
             style.addSource(questFlowlines)
             let questFlowlineLayer = MLNLineStyleLayer(identifier: "world-quest-flowlines-line", source: questFlowlines)
             questFlowlineLayer.lineColor = NSExpression(forConstantValue: accent)
-            questFlowlineLayer.lineWidth = NSExpression(forConstantValue: 5)
+            questFlowlineLayer.lineWidth = Self.zoomWidth([9: 1.8, 12: 2.6, 15: 3.6, 17: 4.6])
             questFlowlineLayer.lineCap = NSExpression(forConstantValue: "round")
             questFlowlineLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(questFlowlineLayer)

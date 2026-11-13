@@ -52,6 +52,9 @@ Out of scope:
 - The Collected-tab horizontal SVG timeline is **left as-is** this milestone.
 - One canonical Staza map theme (`staza-map-theme.js`) remains the single source of truth for
   both screens.
+  - **Later change:** the theme moved to the server (`src/basemapTheme.ts`), which serves
+    it as `/api/world/basemap/style.json`. The web and native apps now load the same themed
+    style; `staza-map-theme.js` and `staza-map-style.js` were removed.
 - Presentation-only feature properties `activityCollected` / `activityPending` are added for
   activity collection transitions; they must not mutate domain state or the global
   visited/unvisited meaning.

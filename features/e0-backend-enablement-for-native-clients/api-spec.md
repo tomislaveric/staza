@@ -90,6 +90,7 @@ listed in `WEBAUTHN_EXTRA_ORIGINS`.
 | Method | Path | Auth | Request | Response |
 | --- | --- | --- | --- | --- |
 | GET | `/api/world/basemap` | bearer | – | `{ styleUrl, attribution }` (see MapLibre) |
+| GET | `/api/world/basemap/style.json` | public | – | Staza-themed MapLibre style JSON |
 | GET | `/api/world?bbox=west,south,east,north` | bearer | Optional `bbox`, `collectibleBbox`, `skipCollectibles=1` | Viewport collectibles, stats, and Fartleks |
 | GET | `/api/world/quest-targets` | bearer | Repeated `collectibleId` and/or `flowlineId` query fields | `{ collectibles, flowlines }` |
 | GET | `/api/quest-instances` | bearer | – | `{ instances: QuestInstance[] }` |
@@ -302,11 +303,21 @@ No identifiers are committed; **placeholders to replace in deployment config**:
 
 ## MapLibre Native
 
-`GET /api/world/basemap` (bearer) returns `{ styleUrl, attribution }`. The style
-is the same one the web map uses, `BASEMAP_STYLE_URL` (default keyless
-OpenFreeMap Liberty: `https://tiles.openfreemap.org/styles/liberty`), a standard
-MapLibre style JSON with vector tile, sprite, and glyph sources that MapLibre
-Native loads directly over HTTPS. No API key is required for the default; a
-keyed provider must embed its key in the configured style URL. Show
-`attribution` in the app UI. No extra hosting settings are needed besides
+`GET /api/world/basemap` (bearer) returns `{ styleUrl, attribution }`. The
+`styleUrl` is the absolute URL of `GET /api/world/basemap/style.json` on the
+requesting origin. That endpoint is public, so MapLibre can load it without
+credentials.
+
+The server fetches the provider style, applies the Staza dark theme
+(`src/basemapTheme.ts`), makes the sprite, glyph and source URLs absolute, and
+caches the result for an hour. The provider style is `BASEMAP_STYLE_URL`
+(default: keyless OpenFreeMap Liberty, `https://tiles.openfreemap.org/styles/liberty`).
+If the provider cannot be reached, the endpoint redirects to the untouched
+provider style.
+
+Web and native clients pass `styleUrl` straight to MapLibre and must not theme
+the style themselves. Tiles, sprites and glyphs are still loaded directly from
+the provider over HTTPS. No API key is required for the default; a keyed
+provider must embed its key in the configured style URL. Show `attribution` in
+the app UI. No extra hosting settings are needed besides
 `BASEMAP_EXTRA_ORIGINS` for the web CSP when the style uses other hosts.

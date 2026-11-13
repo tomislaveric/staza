@@ -1,9 +1,26 @@
 /**
- * Staza map theme. Turns a provider basemap style into a muted Staza surface so that
+ * Staza map theme, applied server-side so web and native clients render the same basemap.
+ * Turns a provider basemap style into a muted Staza surface so that
  * collectibles, quests and routes lead visually. The transform is pure and category
  * driven: unknown provider layers pass through untouched, so a provider style update can
  * only under-theme the map, never break it.
  */
+
+export interface MapLayer {
+  id: string;
+  type: string;
+  "source-layer"?: string;
+  layout?: Record<string, unknown>;
+  paint?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface MapStyle {
+  layers: MapLayer[];
+  [key: string]: unknown;
+}
+
+export type MapPalette = typeof STAZA_DARK_PALETTE;
 
 export const STAZA_DARK_PALETTE = {
   background: "#0f1114",
@@ -61,14 +78,14 @@ const BOUNDARY_LAYERS = new Set(["boundary_2", "boundary_3", "boundary_disputed"
 const MAJOR_ROAD_SUFFIXES = ["motorway", "motorway_link", "trunk_primary"];
 const PATH_SUFFIXES = ["path_pedestrian"];
 
-const withoutPrefix = (id) => id.replace(/^(road|bridge|tunnel)_/, "");
+const withoutPrefix = (id: string) => id.replace(/^(road|bridge|tunnel)_/, "");
 
-const isRoadLayer = (layer) => layer["source-layer"] === "transportation" && layer.type === "line";
-const isCasing = (id) => id.endsWith("_casing");
-const isRail = (id) => id.includes("_rail");
+const isRoadLayer = (layer: MapLayer) => layer["source-layer"] === "transportation" && layer.type === "line";
+const isCasing = (id: string) => id.endsWith("_casing");
+const isRail = (id: string) => id.includes("_rail");
 
 /** Buckets a provider layer into the small set of categories the Staza palette knows. */
-export const classifyLayer = (layer) => {
+export const classifyLayer = (layer: MapLayer): string => {
   const id = layer.id;
   if (HIDDEN_LAYERS.has(id)) return "hidden";
   if (id === "background") return "background";
@@ -94,14 +111,14 @@ export const classifyLayer = (layer) => {
   return "other";
 };
 
-const labelPaint = (palette, id) => ({
+const labelPaint = (palette: MapPalette, id: string) => ({
   "text-color": PRIMARY_PLACE_LABELS.has(id) ? palette.labelPrimary : palette.labelSecondary,
   "text-halo-color": palette.labelHalo,
   "text-halo-width": 1.2,
   "text-halo-blur": 0.4
 });
 
-const paintFor = (category, layer, palette) => {
+const paintFor = (category: string, layer: MapLayer, palette: MapPalette): Record<string, unknown> | undefined => {
   switch (category) {
     case "background":
       return { "background-color": palette.background };
@@ -113,9 +130,10 @@ const paintFor = (category, layer, palette) => {
       return { "line-color": palette.waterLine };
     case "water-label":
       return { ...labelPaint(palette, layer.id), "text-color": palette.waterLabel };
-    case "nature":
+    case "nature": {
       const natureColor = layer.id === "park" ? palette.natureAlt : palette.nature;
       return { "fill-color": natureColor, "fill-outline-color": natureColor, "fill-opacity": 0.85 };
+    }
     case "landuse":
       return { "fill-color": palette.landuse, "fill-opacity": 0.8 };
     case "building":
@@ -142,7 +160,7 @@ const paintFor = (category, layer, palette) => {
   }
 };
 
-const themeLayer = (layer, palette) => {
+const themeLayer = (layer: MapLayer, palette: MapPalette): MapLayer => {
   const category = classifyLayer(layer);
   if (category === "hidden") {
     return { ...layer, layout: { ...layer.layout, visibility: "none" } };
@@ -152,11 +170,14 @@ const themeLayer = (layer, palette) => {
   return { ...layer, paint: { ...layer.paint, ...paint } };
 };
 
+const isMapStyle = (style: unknown): style is MapStyle =>
+  typeof style === "object" && style !== null && Array.isArray((style as MapStyle).layers);
+
 /**
  * Returns a Staza-themed copy of a provider style. Sources, sprite, glyphs, layer order,
  * filters and zoom ranges are preserved so the provider stays replaceable.
  */
-export const applyStazaMapTheme = (style, palette = STAZA_DARK_PALETTE) => {
-  if (!style || !Array.isArray(style.layers)) throw new Error("A basemap style with layers is required.");
+export const applyStazaMapTheme = (style: unknown, palette: MapPalette = STAZA_DARK_PALETTE): MapStyle => {
+  if (!isMapStyle(style)) throw new Error("A basemap style with layers is required.");
   return { ...style, layers: style.layers.map((layer) => themeLayer(layer, palette)) };
 };

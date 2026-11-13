@@ -13,7 +13,6 @@ import {
 import { createStazaMap, DEFAULT_CENTER, DEFAULT_ZOOM } from "../shared/map/staza-map.js";
 import { stazaRouteLayers, stazaSubduedRouteLayers } from "../shared/map/staza-route-layers.js";
 import { boundsToParameter, pointsToBounds, readBounds, routeToGeoJson } from "../shared/map/staza-map-utils.js";
-import { loadStazaStyle } from "../shared/map/staza-map-style.js";
 
 /** Width reserved on the right for the detail panel so framing never hides the subject. */
 const DETAIL_PANEL_INSET = 368;
@@ -74,8 +73,7 @@ export {
   DEFAULT_ZOOM,
   boundsToParameter,
   readBounds,
-  routeToGeoJson,
-  loadStazaStyle
+  routeToGeoJson
 };
 
 /** Zoom at which the metric scale control rounds to a 5 km label. */

@@ -46,7 +46,7 @@ import { StravaService } from "./strava/service.js";
 import { TokenCipher } from "./strava/tokenCipher.js";
 import { toWorldFartlek } from "./fartlek.js";
 import { createWorldSnapshot } from "./world.js";
-import { getBasemapConfig, getBasemapOrigins } from "./basemap.js";
+import { THEMED_STYLE_PATH, createThemedStyleLoader, getBasemapConfig, getBasemapOrigins } from "./basemap.js";
 import { ProposalStore } from "./routePlanning/proposalStore.js";
 import { RoutingClient } from "./routePlanning/routingClient.js";
 import { buildGpx, gpxFilename } from "./exploration/gpx.js";
@@ -1012,8 +1012,21 @@ app.get("/api/activities/summary", requirePlayer, async (request: UploadRequest,
   }
 });
 
-app.get("/api/world/basemap", requirePlayer, (_request: UploadRequest, response) => {
-  response.json(getBasemapConfig());
+const themedStyleLoader = createThemedStyleLoader();
+
+app.get("/api/world/basemap", requirePlayer, (request: UploadRequest, response) => {
+  response.json(getBasemapConfig(`${request.protocol}://${request.get("host")}`));
+});
+
+// Public so MapLibre on every client can fetch it without session credentials.
+app.get(THEMED_STYLE_PATH, async (_request, response) => {
+  try {
+    const style = await themedStyleLoader.getStyle();
+    response.set("Cache-Control", "public, max-age=3600").json(style);
+  } catch (error) {
+    console.warn("Serving the untouched provider basemap style:", error instanceof Error ? error.message : error);
+    response.set("Cache-Control", "no-store").redirect(302, themedStyleLoader.providerStyleUrl);
+  }
 });
 
 const worldFartleksForPlayer = async (playerId: string, fartleks: Fartlek[]): Promise<WorldFartlek[]> => {

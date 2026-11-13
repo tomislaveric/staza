@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { STAZA_DARK_PALETTE, applyStazaMapTheme, classifyLayer } from "./staza-map-theme.js";
+import { STAZA_DARK_PALETTE, applyStazaMapTheme, classifyLayer, type MapLayer, type MapStyle } from "./basemapTheme.js";
 
-const providerStyle = () => ({
+const providerStyle = (): MapStyle => ({
   version: 8,
   name: "Liberty",
   sprite: "https://tiles.example/sprite",
@@ -25,7 +25,9 @@ const providerStyle = () => ({
   ]
 });
 
-const layerById = (style, id) => style.layers.find((layer) => layer.id === id);
+type ThemedLayer = MapLayer & { paint: Record<string, unknown>; layout: Record<string, unknown> };
+
+const layerById = (style: MapStyle, id: string) => style.layers.find((layer) => layer.id === id) as ThemedLayer;
 
 describe("applyStazaMapTheme", () => {
   it("repaints the basemap with the Staza palette", () => {
@@ -88,8 +90,8 @@ describe("applyStazaMapTheme", () => {
 
     applyStazaMapTheme(original);
 
-    expect(original.layers[0].paint["background-color"]).toBe("#f8f4f0");
-    expect(original.layers.find((layer) => layer.id === "poi_r1").layout.visibility).toBeUndefined();
+    expect(original.layers[0].paint!["background-color"]).toBe("#f8f4f0");
+    expect(original.layers.find((layer) => layer.id === "poi_r1")!.layout!.visibility).toBeUndefined();
   });
 
   it("accepts an alternative palette so future map themes need no World changes", () => {

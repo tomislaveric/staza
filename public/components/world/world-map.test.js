@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   ALTERNATES_SOURCE_ID,
   ROUTE_SOURCE_ID,
@@ -6,43 +6,10 @@ import {
   alternateRoutesToGeoJson,
   createHomeMarkerElement,
   homeScaleZoom,
-  loadStazaStyle,
   routeLayers,
   routeToGeoJson,
   worldMapInitialView
 } from "./world-map.js";
-import { STAZA_DARK_PALETTE } from "./staza-map-theme.js";
-
-const providerStyle = () => ({
-  version: 8,
-  sources: { openmaptiles: { type: "vector", url: "https://tiles.example/planet" } },
-  layers: [{ id: "background", type: "background", paint: { "background-color": "#f8f4f0" } }]
-});
-
-describe("loadStazaStyle", () => {
-  it("themes the fetched provider style", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => providerStyle() });
-
-    const style = await loadStazaStyle("https://tiles.example/styles/liberty", fetchImpl);
-
-    expect(fetchImpl).toHaveBeenCalledWith("https://tiles.example/styles/liberty");
-    expect(style.layers[0].paint["background-color"]).toBe(STAZA_DARK_PALETTE.background);
-  });
-
-  it("falls back to the provider url when the style cannot be fetched", async () => {
-    const failing = vi.fn().mockRejectedValue(new Error("offline"));
-
-    await expect(loadStazaStyle("https://tiles.example/styles/liberty", failing))
-      .resolves.toBe("https://tiles.example/styles/liberty");
-  });
-
-  it("falls back to the provider url on a non-ok response", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
-
-    await expect(loadStazaStyle("https://tiles.example/styles/liberty", fetchImpl))
-      .resolves.toBe("https://tiles.example/styles/liberty");
-  });
-});
 
 describe("quest route layers", () => {
   it("draws glow, casing and line in that order from one source", () => {
