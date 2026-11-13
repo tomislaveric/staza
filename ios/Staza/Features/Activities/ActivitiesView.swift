@@ -30,6 +30,7 @@ struct ActivitiesView: View {
             .padding(StazaSpacing.md)
         }
         .background(StazaColor.canvas)
+        .navigationDestination(for: ActivityHistoryItem.self) { ActivityDetailView(activity: $0) }
         .task {
             let model = self.model ?? ActivitiesModel(api: container.apiClient)
             self.model = model
@@ -50,8 +51,12 @@ struct ActivitiesView: View {
         .accessibilityElement(children: .combine)
     }
 
-    // Navigation to the detail view is added with the detail feature.
     private func row(_ activity: ActivityHistoryItem) -> some View {
+        NavigationLink(value: activity) { rowCard(activity) }
+            .buttonStyle(.plain)
+    }
+
+    private func rowCard(_ activity: ActivityHistoryItem) -> some View {
         StazaCard {
             VStack(alignment: .leading, spacing: StazaSpacing.xs) {
                 HStack(alignment: .firstTextBaseline) {

@@ -1,6 +1,6 @@
 import Foundation
 
-struct ActivityHistoryItem: Decodable, Equatable, Identifiable, Sendable {
+struct ActivityHistoryItem: Decodable, Hashable, Identifiable, Sendable {
     let id: String
     let type: String
     let title: String
