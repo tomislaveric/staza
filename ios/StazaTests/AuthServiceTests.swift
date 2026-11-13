@@ -63,10 +63,53 @@ final class AuthServiceTests: XCTestCase {
     }
 
     func testEmailRegistrationVerifyRequestsPasskeySetup() async throws {
-        let (service, _, state, _) = makeService([.init(status: 200, body: credentialsJSON(access: "acc", refresh: "ref"))])
+        let (service, transport, state, _) = makeService([
+            .init(status: 202, body: #"{"message":"If the address can receive a code, it will arrive shortly."}"#),
+            .init(status: 201, body: credentialsJSON(access: "acc", refresh: "ref"))
+        ])
+        try await service.requestCode(email: "a@b.c", registering: true)
         try await service.verifyCode(email: "a@b.c", code: "123456", registering: true)
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/auth/register/code", "/api/auth/register/verify"])
+        XCTAssertNil(transport.authorization(at: 0))
+        XCTAssertNil(transport.authorization(at: 1))
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: XCTUnwrap(transport.requests[0].httpBody)) as? [String: String], ["email": "a@b.c"])
         XCTAssertEqual(state.status, .signedIn)
         XCTAssertTrue(service.passkeySetupPending)
+    }
+
+    func testEmailSignInRequestsCodeAndStoresVerifiedSession() async throws {
+        let body = #"{"authenticated":true,"user":{"email":"a@b.c","emailVerified":true},"credentials":"#
+            + credentialsJSON(access: "acc", refresh: "ref").dropFirst(#"{"credentials":"#.count)
+        let (service, transport, state, store) = makeService([
+            .init(status: 202, body: #"{"message":"If the address can receive a code, it will arrive shortly."}"#),
+            .init(status: 200, body: String(body))
+        ])
+        try await service.requestCode(email: "a@b.c", registering: false)
+        try await service.verifyCode(email: "a@b.c", code: "123456", registering: false)
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/auth/email-code/request", "/api/auth/email-code/verify"])
+        XCTAssertNil(transport.authorization(at: 0))
+        XCTAssertNil(transport.authorization(at: 1))
+        XCTAssertEqual(state.status, .signedIn)
+        XCTAssertEqual(state.user?.email, "a@b.c")
+        XCTAssertEqual(store.load()?.accessToken, "acc")
+        XCTAssertFalse(service.passkeySetupPending)
+    }
+
+    func testStepUpRequestsAndVerifiesCodeUsingSignedInSession() async throws {
+        let store = MemoryCredentialStore(makeCredentials())
+        let (service, transport, _, _) = makeService([
+            .init(status: 202, body: #"{"message":"A verification code has been sent."}"#),
+            .init(status: 204, body: "")
+        ], store: store)
+        try await service.requestStepUp()
+        try await service.verifyStepUp(code: "123456")
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/auth/step-up/email/request", "/api/auth/step-up/email/verify"])
+        XCTAssertEqual(transport.authorization(at: 0), "Bearer access-1")
+        XCTAssertEqual(transport.authorization(at: 1), "Bearer access-1")
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: XCTUnwrap(transport.requests[1].httpBody)) as? [String: String],
+            ["code": "123456"]
+        )
     }
 
     func testBase64URLRoundTrip() {

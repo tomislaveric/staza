@@ -31,6 +31,7 @@ private struct AuthForm: View {
                     Text("auth.register").tag(AuthFlowModel.Mode.register)
                 }
                 .pickerStyle(.segmented)
+                .disabled(model.isBusy)
 
                 if model.mode == .signIn {
                     Button { Task { await model.signInWithPasskey() } } label: {
@@ -74,6 +75,7 @@ private struct AuthForm: View {
                 .focused($focused)
                 .submitLabel(.send)
                 .onSubmit { Task { await model.requestCode() } }
+                .disabled(model.isBusy)
                 .accessibilityIdentifier("emailField")
             Button { Task { await model.requestCode() } } label: {
                 Group {
@@ -96,6 +98,7 @@ private struct AuthForm: View {
                 .keyboardType(.numberPad)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
+                .disabled(model.isBusy)
                 .accessibilityIdentifier("codeField")
             Button { Task { await model.verifyCode() } } label: {
                 Group {
@@ -182,13 +185,17 @@ struct StepUpSheet: View {
             Form {
                 Section { Text("stepup.body").font(StazaFont.body) }
                 if codeRequested {
+                    Section { Text("stepup.codeSent").font(StazaFont.body) }
                     Section {
                         TextField("auth.code", text: $code)
                             .textContentType(.oneTimeCode)
                             .keyboardType(.numberPad)
                             .accessibilityIdentifier("stepUpCodeField")
+                            .disabled(isBusy)
                         Button("stepup.verify") { Task { await verify() } }
                             .disabled(code.count < 4 || isBusy)
+                        Button("auth.resend") { Task { await requestCode() } }
+                            .disabled(isBusy)
                     }
                 } else {
                     Section {
@@ -205,7 +212,11 @@ struct StepUpSheet: View {
     }
 
     private func requestCode() async {
-        await run { try await container.authService.requestStepUp(); codeRequested = true }
+        await run {
+            try await container.authService.requestStepUp()
+            code = ""
+            codeRequested = true
+        }
     }
 
     private func verify() async {
