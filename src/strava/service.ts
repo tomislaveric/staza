@@ -72,8 +72,8 @@ export class StravaService {
     return this.recentLimit;
   }
 
-  async startAuthorization(playerId: string, sessionId: string, locale: StravaReturnLocale): Promise<string> {
-    return this.client.authorizationUrl(await this.connections.createOAuthState(playerId, sessionId, locale));
+  async startAuthorization(playerId: string, sessionId: string, locale: StravaReturnLocale, native = false): Promise<string> {
+    return this.client.authorizationUrl(await this.connections.createOAuthState(playerId, sessionId, locale, native));
   }
 
   /** Validates the returning session and state before exchanging the authorization code. */
@@ -86,14 +86,28 @@ export class StravaService {
     }
     const state = await this.connections.consumeOAuthState(query.state, user.playerId, user.sessionId);
     if (!state) return { outcome: "invalid_state", locale: "en" };
-    const { locale } = state;
+    return this.finishAuthorization(user.playerId, state.locale, query);
+  }
+
+  /** Completes a native-client flow, whose callback arrives without a session. Undefined when the state is not a native one. */
+  async completeNativeAuthorization(query: StravaCallbackQuery): Promise<{ outcome: StravaCallbackOutcome; locale: StravaReturnLocale } | undefined> {
+    if (typeof query.state !== "string" || query.state.length === 0 || query.state.length > 200) return undefined;
+    const state = await this.connections.consumeNativeOAuthState(query.state);
+    return state ? this.finishAuthorization(state.playerId, state.locale, query) : undefined;
+  }
+
+  private async finishAuthorization(
+    playerId: string,
+    locale: StravaReturnLocale,
+    query: StravaCallbackQuery
+  ): Promise<{ outcome: StravaCallbackOutcome; locale: StravaReturnLocale }> {
     if (query.error !== undefined) return { outcome: "denied", locale };
     const scopes = typeof query.scope === "string" ? query.scope.split(",").map((scope) => scope.trim()) : [];
     if (!scopes.includes(STRAVA_SCOPE)) return { outcome: "missing_scope", locale };
     if (typeof query.code !== "string" || query.code.length === 0 || query.code.length > 200) return { outcome: "error", locale };
     try {
       const authorization = await this.client.exchangeCode(query.code);
-      await this.connections.saveConnection(user.playerId, authorization, STRAVA_SCOPE);
+      await this.connections.saveConnection(playerId, authorization, STRAVA_SCOPE);
       return { outcome: "connected", locale };
     } catch (error) {
       console.error("Strava authorization failed:", error instanceof StravaError ? error.code : "unexpected error");

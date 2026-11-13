@@ -27,6 +27,7 @@ const setup = () => {
   const connections = {
     createOAuthState: vi.fn(async () => "state"),
     consumeOAuthState: vi.fn(async () => ({ locale: "de" as const })),
+    consumeNativeOAuthState: vi.fn(async (): Promise<{ playerId: string; locale: "de" } | undefined> => ({ playerId: "player", locale: "de" })),
     saveConnection: vi.fn(async () => undefined),
     getStatus: vi.fn(async () => ({ status: "connected" as const })),
     getAccessToken: vi.fn(async () => "access"),
@@ -70,6 +71,14 @@ describe("StravaService authorization", () => {
     const { service, connections } = setup();
     expect(await service.completeAuthorization(user, { state: "s", code: "c", scope: "read,activity:read_all" })).toEqual({ outcome: "connected", locale: "de" });
     expect(connections.saveConnection).toHaveBeenCalledWith("player", expect.objectContaining({ athleteId: 7 }), "activity:read_all");
+  });
+
+  it("completes a native callback from its state alone, and ignores non-native states", async () => {
+    const { service, connections } = setup();
+    expect(await service.completeNativeAuthorization({ state: "s", code: "c", scope: "read,activity:read_all" })).toEqual({ outcome: "connected", locale: "de" });
+    expect(connections.saveConnection).toHaveBeenCalledWith("player", expect.anything(), "activity:read_all");
+    connections.consumeNativeOAuthState.mockResolvedValueOnce(undefined);
+    expect(await service.completeNativeAuthorization({ state: "s", code: "c" })).toBeUndefined();
   });
 });
 

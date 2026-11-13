@@ -261,7 +261,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XA7W2473SC;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Staza-Info.plist;
+				INFOPLIST_FILE = "Staza-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Staza;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Staza shows your position on the World map.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -291,7 +291,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XA7W2473SC;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Staza-Info.plist;
+				INFOPLIST_FILE = "Staza-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Staza;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Staza shows your position on the World map.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

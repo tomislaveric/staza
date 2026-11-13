@@ -66,6 +66,13 @@ struct AddActivityView: View {
                             .accessibilityIdentifier("chooseFitButton")
                     }
                 }
+                StazaCard {
+                    NavigationLink { StravaImportView() } label: {
+                        Label("addActivity.strava", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(model.isBusy)
+                    .accessibilityIdentifier("stravaImportLink")
+                }
                 if hasFile(model.state) {
                     StazaCard {
                         Picker("addActivity.sport", selection: $model.sport) {

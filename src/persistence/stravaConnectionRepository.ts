@@ -32,16 +32,16 @@ export class StravaConnectionRepository {
   constructor(private readonly pool: Pool, private readonly cipher: TokenCipher) {}
 
   /** Creates a random, short-lived, single-use OAuth state bound to the player and session. */
-  async createOAuthState(playerId: string, sessionId: string, locale: StravaReturnLocale): Promise<string> {
+  async createOAuthState(playerId: string, sessionId: string, locale: StravaReturnLocale, native = false): Promise<string> {
     const state = randomBytes(32).toString("base64url");
     await this.pool.query(
       "DELETE FROM strava_oauth_states WHERE player_id = $1 AND (expires_at <= now() OR used_at IS NOT NULL)",
       [playerId]
     );
     await this.pool.query(
-      `INSERT INTO strava_oauth_states (id, state_hash, player_id, session_id, return_locale, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [randomUUID(), stateHash(state), playerId, sessionId, locale, new Date(Date.now() + STRAVA_OAUTH_STATE_TTL_MS)]
+      `INSERT INTO strava_oauth_states (id, state_hash, player_id, session_id, return_locale, expires_at, native)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [randomUUID(), stateHash(state), playerId, sessionId, locale, new Date(Date.now() + STRAVA_OAUTH_STATE_TTL_MS), native]
     );
     return state;
   }
@@ -50,11 +50,25 @@ export class StravaConnectionRepository {
   async consumeOAuthState(state: string, playerId: string, sessionId: string): Promise<{ locale: StravaReturnLocale } | undefined> {
     const result = await this.pool.query<{ return_locale: StravaReturnLocale }>(
       `UPDATE strava_oauth_states SET used_at = now()
-       WHERE state_hash = $1 AND player_id = $2 AND session_id = $3 AND used_at IS NULL AND expires_at > now()
+       WHERE state_hash = $1 AND player_id = $2 AND session_id = $3 AND native = false AND used_at IS NULL AND expires_at > now()
        RETURNING return_locale`,
       [stateHash(state), playerId, sessionId]
     );
     return result.rowCount === 1 ? { locale: result.rows[0].return_locale } : undefined;
+  }
+
+  /**
+   * Consumes a native-client state. The system browser that completes the OAuth redirect has no
+   * session, so the unguessable single-use state itself identifies the player.
+   */
+  async consumeNativeOAuthState(state: string): Promise<{ playerId: string; locale: StravaReturnLocale } | undefined> {
+    const result = await this.pool.query<{ player_id: string; return_locale: StravaReturnLocale }>(
+      `UPDATE strava_oauth_states SET used_at = now()
+       WHERE state_hash = $1 AND native = true AND used_at IS NULL AND expires_at > now()
+       RETURNING player_id, return_locale`,
+      [stateHash(state)]
+    );
+    return result.rowCount === 1 ? { playerId: result.rows[0].player_id, locale: result.rows[0].return_locale } : undefined;
   }
 
   async saveConnection(playerId: string, authorization: StravaAuthorization, scope: string): Promise<void> {

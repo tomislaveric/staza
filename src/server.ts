@@ -781,13 +781,20 @@ app.post("/api/integrations/strava/authorize", requireUser, requireCsrf, require
     const authorizationUrl = await stravaService!.startAuthorization(
       request.user!.playerId,
       request.user!.sessionId,
-      stravaReturnLocale(request.body?.locale)
+      stravaReturnLocale(request.body?.locale),
+      request.bearerAuth === true && request.body?.client === "native"
     );
     response.json({ authorizationUrl });
   } catch (error) { next(error); }
 });
 app.get("/api/integrations/strava/callback", requireStrava, async (request: UploadRequest, response, next) => {
   try {
+    // Native flows complete in a system browser without a session and hand the outcome back via a custom scheme.
+    const native = await stravaService!.completeNativeAuthorization(request.query);
+    if (native) {
+      response.set("Cache-Control", "no-store").redirect(303, `staza://strava?outcome=${native.outcome}`);
+      return;
+    }
     if (!request.user) {
       response.redirect(303, "/sign-in");
       return;

@@ -913,6 +913,11 @@ export const migrations: Migration[] = [{
       CREATE INDEX sessions_previous_refresh_token_index ON sessions (previous_refresh_token_hash) WHERE previous_refresh_token_hash IS NOT NULL;
     `);
   }
+}, {
+  id: "040_strava_oauth_native_state",
+  async up(client) {
+    await client.query("ALTER TABLE strava_oauth_states ADD COLUMN native BOOLEAN NOT NULL DEFAULT false");
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */
