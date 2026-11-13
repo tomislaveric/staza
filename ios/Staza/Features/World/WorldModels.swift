@@ -50,3 +50,17 @@ struct WorldBounds: Equatable, Sendable {
             .map { String(format: "%.5f", $0) }.joined(separator: ",")
     }
 }
+
+enum WorldSelectionKind: Sendable { case collectible, flowline }
+
+enum WorldSelection: Equatable, Identifiable, Sendable {
+    case collectible(WorldCollectible)
+    case flowline(WorldFlowline)
+
+    var id: String {
+        switch self {
+        case .collectible(let item): "collectible:\(item.id)"
+        case .flowline(let item): "flowline:\(item.id)"
+        }
+    }
+}

@@ -11,6 +11,7 @@ final class WorldModel {
     private(set) var questTargets = QuestTargets.empty
     private(set) var truncated = false
     private(set) var viewportFailed = false
+    var selection: WorldSelection?
 
     private let api: APIClient
     private var viewportTask: Task<Void, Never>?
@@ -50,6 +51,22 @@ final class WorldModel {
             return
         } catch {
             viewportFailed = true
+        }
+    }
+
+    func select(_ kind: WorldSelectionKind, id: String) {
+        switch kind {
+        case .collectible:
+            if let item = (questTargets.collectibles + collectibles).first(where: { $0.id == id }) { selection = .collectible(item) }
+        case .flowline:
+            if let item = (questTargets.flowlines + flowlines).first(where: { $0.id == id }) { selection = .flowline(item) }
+        }
+    }
+
+    func isQuestTarget(_ selection: WorldSelection) -> Bool {
+        switch selection {
+        case .collectible(let item): questTargets.collectibles.contains { $0.id == item.id }
+        case .flowline(let item): questTargets.flowlines.contains { $0.id == item.id }
         }
     }
 

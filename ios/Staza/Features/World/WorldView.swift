@@ -27,7 +27,8 @@ struct WorldView: View {
                 collectibles: model.collectibles,
                 flowlines: model.flowlines,
                 questTargets: model.questTargets,
-                onViewportChange: { model.viewportChanged($0) }
+                onViewportChange: { model.viewportChanged($0) },
+                onSelect: { model.select($0, id: $1) }
             )
             .ignoresSafeArea(edges: .top)
             .overlay(alignment: .bottom) {
@@ -38,6 +39,11 @@ struct WorldView: View {
                         .background(.regularMaterial, in: Capsule())
                         .padding(StazaSpacing.md)
                 }
+            }
+            .sheet(item: Binding(get: { model.selection }, set: { model.selection = $0 })) { selection in
+                WorldDetailSheet(selection: selection, isQuestTarget: model.isQuestTarget(selection))
+                    .presentationDetents([.height(260), .medium])
+                    .presentationDragIndicator(.visible)
             }
             .accessibilityIdentifier("worldMap")
         } else {

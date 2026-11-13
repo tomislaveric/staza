@@ -14,6 +14,7 @@ struct MoreView: View {
                 }
             } header: { Text("more.profile.header") }
             Section {
+                NavigationLink("more.quests") { QuestListView() }
                 NavigationLink("more.settings") { PlaceholderScreen(title: "more.settings", systemImage: "gearshape") }
             }
         }

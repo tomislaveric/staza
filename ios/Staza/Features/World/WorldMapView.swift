@@ -9,6 +9,7 @@ struct WorldMapView: UIViewRepresentable {
     let flowlines: [WorldFlowline]
     let questTargets: QuestTargets
     let onViewportChange: (WorldBounds) -> Void
+    let onSelect: (WorldSelectionKind, String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -21,6 +22,11 @@ struct WorldMapView: UIViewRepresentable {
         map.showsUserLocation = true
         map.userTrackingMode = .follow
         map.zoomLevel = 12
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        for recognizer in map.gestureRecognizers ?? [] where (recognizer as? UITapGestureRecognizer)?.numberOfTapsRequired == 2 {
+            tap.require(toFail: recognizer)
+        }
+        map.addGestureRecognizer(tap)
         context.coordinator.requestLocationAccess()
         return map
     }
@@ -28,12 +34,14 @@ struct WorldMapView: UIViewRepresentable {
     func updateUIView(_ map: MLNMapView, context: Context) {
         let coordinator = context.coordinator
         coordinator.onViewportChange = onViewportChange
+        coordinator.onSelect = onSelect
         coordinator.data = (collectibles, flowlines, questTargets)
         coordinator.refresh()
     }
 
     final class Coordinator: NSObject, MLNMapViewDelegate {
         var onViewportChange: (WorldBounds) -> Void = { _ in }
+        var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
         var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets) = ([], [], .empty)
 
         private let locationManager = CLLocationManager()
@@ -98,6 +106,24 @@ struct WorldMapView: UIViewRepresentable {
             questFlowlineSource = questFlowlines
             refresh()
             reportViewport(map)
+        }
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let map = gesture.view as? MLNMapView else { return }
+            let point = gesture.location(in: map)
+            let hitArea = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
+            let groups: [(WorldSelectionKind, Set<String>)] = [
+                (.collectible, ["world-quest-collectibles-circle", "world-collectibles-unfound", "world-collectibles-found"]),
+                (.flowline, ["world-quest-flowlines-line", "world-flowlines-line"])
+            ]
+            for (kind, layers) in groups {
+                let hit = map.visibleFeatures(in: hitArea, styleLayerIdentifiers: layers)
+                    .compactMap { $0.attribute(forKey: "id") as? String }.first
+                if let hit {
+                    onSelect(kind, hit)
+                    return
+                }
+            }
         }
 
         func mapView(_ map: MLNMapView, regionDidChangeAnimated animated: Bool) {

@@ -30,4 +30,15 @@ final class WorldModelTests: XCTestCase {
     func testBoundsClampedToValidRange() {
         XCTAssertEqual(WorldBounds(west: -200, south: -95, east: 200, north: 95).queryValue, "-180.00000,-90.00000,180.00000,90.00000")
     }
+
+    func testSelectResolvesCollectibleById() async {
+        let model = WorldModel(api: APIClient(baseURL: baseURL, transport: PathTransport(responses: ["/api/world": (200, world)])))
+        await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
+        model.select(.collectible, id: "c1")
+        XCTAssertEqual(model.selection?.id, "collectible:c1")
+        model.select(.flowline, id: "f1")
+        XCTAssertEqual(model.selection?.id, "flowline:f1")
+        model.select(.collectible, id: "missing")
+        XCTAssertEqual(model.selection?.id, "flowline:f1")
+    }
 }
