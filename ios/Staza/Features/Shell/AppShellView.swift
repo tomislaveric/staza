@@ -49,7 +49,7 @@ struct AppShellView: View {
                 .tag(tab)
             }
         }
-        .sheet(isPresented: $isAddingActivity) { AddActivityPlaceholderView() }
+        .sheet(isPresented: $isAddingActivity) { AddActivityView() }
     }
 
     @ViewBuilder
@@ -60,23 +60,6 @@ struct AppShellView: View {
         case .skillAtlas: SkillAtlasView()
         case .progress: ProgressView_()
         case .more: MoreView()
-        }
-    }
-}
-
-struct AddActivityPlaceholderView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            PlaceholderScreen(title: "action.addActivity", systemImage: "plus.circle")
-                .navigationTitle("action.addActivity")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("action.close") { dismiss() }
-                    }
-                }
         }
     }
 }
