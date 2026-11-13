@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Bottom panel for "Explore this Area": configure, pick a proposal, tweak, confirm.
+/// World sheet content for "Explore this Area": configure, pick a proposal, tweak, confirm.
 struct ExplorePanel: View {
     let model: ExploreModel
     @Environment(\.locale) private var locale
@@ -19,11 +19,9 @@ struct ExplorePanel: View {
                     .foregroundStyle(StazaColor.danger)
             }
         }
-        .padding(StazaSpacing.md)
+        .padding(.horizontal, StazaSpacing.md)
+        .padding(.bottom, StazaSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .stazaGlass()
-        .padding(.horizontal, StazaSpacing.sm)
-        .padding(.bottom, StazaSpacing.sm)
         .accessibilityIdentifier("explorePanel")
     }
 
@@ -31,10 +29,6 @@ struct ExplorePanel: View {
 
     private var configure: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
-            HStack(spacing: StazaSpacing.sm) {
-                Image(systemName: "location.north.line.fill").foregroundStyle(StazaColor.accent).accessibilityHidden(true)
-                OverlineText("explore.title").accessibilityAddTraits(.isHeader)
-            }
             VStack(alignment: .leading, spacing: StazaSpacing.sm) {
                 if model.userLocation != nil {
                     Picker("explore.start", selection: Binding(get: { model.useUserLocation }, set: { model.useUserLocation = $0 })) {
@@ -94,7 +88,6 @@ struct ExplorePanel: View {
 
     private var proposals: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
-            OverlineText("explore.title").accessibilityAddTraits(.isHeader)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: StazaSpacing.sm) {
                     ForEach(model.proposals) { proposalCard($0) }
@@ -250,6 +243,39 @@ struct ExplorePanel: View {
         case .noRoute: "explore.error.noRoute"
         case .reroute: "explore.error.reroute"
         case .confirm: "explore.error.confirm"
+        }
+    }
+}
+
+/// Sheet header while exploring: title, current step and a close button that cancels.
+struct ExploreSheetHeader: View {
+    let model: ExploreModel
+
+    var body: some View {
+        HStack(spacing: StazaSpacing.md) {
+            IconBadge(systemImage: "location.north.line.fill", tint: StazaColor.accent, size: 40)
+            VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                Text("explore.title")
+                    .font(StazaFont.title3)
+                    .foregroundStyle(StazaColor.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                Text(step)
+                    .font(StazaFont.footnote)
+                    .foregroundStyle(StazaColor.textMuted)
+            }
+            Spacer(minLength: StazaSpacing.sm)
+            SheetCloseButton { model.cancel() }
+                .disabled(model.phase == .confirming)
+        }
+        .padding(.horizontal, StazaSpacing.md)
+        .padding(.bottom, StazaSpacing.md)
+    }
+
+    private var step: LocalizedStringKey {
+        switch model.phase {
+        case .idle, .configure: "explore.step.configure"
+        case .generating: "explore.step.generating"
+        case .proposals, .confirming: "explore.step.proposals"
         }
     }
 }

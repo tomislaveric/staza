@@ -180,6 +180,12 @@ final class ExploreModel {
 
     func clearPlannedRoute() { plannedRoute = nil }
 
+    /// Shows an already loaded planned route unless an exploration is being planned.
+    func showPlannedRoute(_ route: PlannedRoute?) {
+        guard !isActive else { return }
+        plannedRoute = route
+    }
+
     private func base(of id: String) -> RouteProposal? { original[baseIds[id] ?? id] }
 
     private func replace(_ id: String, with proposal: RouteProposal) {

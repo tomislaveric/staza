@@ -3,6 +3,38 @@ import MapLibre
 import SwiftUI
 import UIKit
 
+/// How the map follows the user, cycled by the World locate button.
+enum WorldTracking: Equatable, Sendable {
+    case none, follow, heading
+
+    /// Apple Maps order: start following, then add heading, then back to following.
+    var next: WorldTracking { self == .follow ? .heading : .follow }
+
+    var systemImage: String {
+        switch self {
+        case .none: "location"
+        case .follow: "location.fill"
+        case .heading: "location.north.line.fill"
+        }
+    }
+
+    fileprivate var mapMode: MLNUserTrackingMode {
+        switch self {
+        case .none: .none
+        case .follow: .follow
+        case .heading: .followWithHeading
+        }
+    }
+
+    fileprivate init(_ mode: MLNUserTrackingMode) {
+        switch mode {
+        case .follow: self = .follow
+        case .followWithHeading, .followWithCourse: self = .heading
+        default: self = .none
+        }
+    }
+}
+
 struct WorldMapView: UIViewRepresentable {
     let styleURL: URL
     let collectibles: [WorldCollectible]
@@ -12,6 +44,12 @@ struct WorldMapView: UIViewRepresentable {
     let onViewportChange: (WorldBounds) -> Void
     let onSelect: (WorldSelectionKind, String) -> Void
     var onUserLocation: (GeoPoint?) -> Void = { _ in }
+    @Binding var tracking: WorldTracking
+    /// Height covered by the bottom sheet; the map keeps its focus above it.
+    var bottomInset: CGFloat = 0
+    /// Coordinates to fit into view, e.g. a highlighted exploration's targets.
+    var focus: [CLLocationCoordinate2D] = []
+    var onLocationDenied: (Bool) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -22,8 +60,10 @@ struct WorldMapView: UIViewRepresentable {
         map.automaticallyAdjustsContentInset = false
         map.logoView.isHidden = false
         map.showsUserLocation = true
-        map.userTrackingMode = .follow
         map.zoomLevel = 12
+        map.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+        map.userTrackingMode = tracking.mapMode
+        context.coordinator.appliedInset = bottomInset
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         for recognizer in map.gestureRecognizers ?? [] where (recognizer as? UITapGestureRecognizer)?.numberOfTapsRequired == 2 {
             tap.require(toFail: recognizer)
@@ -38,13 +78,27 @@ struct WorldMapView: UIViewRepresentable {
         coordinator.onViewportChange = onViewportChange
         coordinator.onSelect = onSelect
         coordinator.onUserLocation = onUserLocation
+        coordinator.onTrackingChange = { tracking = $0 }
+        coordinator.onLocationDenied = onLocationDenied
         coordinator.data = (collectibles, flowlines, questTargets)
+        if abs(coordinator.appliedInset - bottomInset) > 0.5 {
+            coordinator.appliedInset = bottomInset
+            map.setContentInset(UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0), animated: true, completionHandler: nil)
+        }
+        if WorldTracking(map.userTrackingMode) != tracking {
+            map.setUserTrackingMode(tracking.mapMode, animated: true, completionHandler: nil)
+        }
         coordinator.setRoute(route, on: map)
+        coordinator.setFocus(focus, on: map)
         coordinator.refresh()
     }
 
-    final class Coordinator: NSObject, MLNMapViewDelegate {
+    final class Coordinator: NSObject, MLNMapViewDelegate, CLLocationManagerDelegate {
         var onViewportChange: (WorldBounds) -> Void = { _ in }
+        var onTrackingChange: (WorldTracking) -> Void = { _ in }
+        var onLocationDenied: (Bool) -> Void = { _ in }
+        var appliedInset: CGFloat = 0
+        private var focus: [CLLocationCoordinate2D] = []
         var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
         var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets) = ([], [], .empty)
@@ -58,9 +112,20 @@ struct WorldMapView: UIViewRepresentable {
         private var route: [CLLocationCoordinate2D] = []
 
         func requestLocationAccess() {
+            locationManager.delegate = self
             if locationManager.authorizationStatus == .notDetermined {
                 locationManager.requestWhenInUseAuthorization()
             }
+        }
+
+        func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+            let denied = manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted
+            DispatchQueue.main.async { [onLocationDenied] in onLocationDenied(denied) }
+        }
+
+        func mapView(_ map: MLNMapView, didChange mode: MLNUserTrackingMode, animated: Bool) {
+            let tracking = WorldTracking(mode)
+            DispatchQueue.main.async { [onTrackingChange] in onTrackingChange(tracking) }
         }
 
         /// Line width interpolated by zoom, matching the web Fartlek line stops so lines stay thin when zoomed out.
@@ -192,8 +257,27 @@ struct WorldMapView: UIViewRepresentable {
                 return
             }
             routeSource.shape = MLNPolylineFeature(coordinates: route, count: UInt(route.count))
+            fit(route, on: map)
+        }
+
+        func setFocus(_ coordinates: [CLLocationCoordinate2D], on map: MLNMapView) {
+            let same = coordinates.count == focus.count && zip(coordinates, focus).allSatisfy {
+                $0.latitude == $1.latitude && $0.longitude == $1.longitude
+            }
+            guard !same else { return }
+            focus = coordinates
+            if !coordinates.isEmpty { fit(coordinates, on: map) }
+        }
+
+        /// Fits coordinates into the part of the map not covered by the sheet (the content inset).
+        private func fit(_ coordinates: [CLLocationCoordinate2D], on map: MLNMapView) {
+            guard let first = coordinates.first else { return }
+            if coordinates.count == 1 {
+                map.setCenter(first, zoomLevel: max(map.zoomLevel, 13), animated: true)
+                return
+            }
             var minLat = 90.0, maxLat = -90.0, minLon = 180.0, maxLon = -180.0
-            for point in route {
+            for point in coordinates {
                 minLat = min(minLat, point.latitude); maxLat = max(maxLat, point.latitude)
                 minLon = min(minLon, point.longitude); maxLon = max(maxLon, point.longitude)
             }
@@ -201,7 +285,7 @@ struct WorldMapView: UIViewRepresentable {
                 sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
                 ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon)
             )
-            map.setVisibleCoordinateBounds(bounds, edgePadding: UIEdgeInsets(top: 80, left: 40, bottom: 380, right: 40), animated: true, completionHandler: nil)
+            map.setVisibleCoordinateBounds(bounds, edgePadding: UIEdgeInsets(top: 80, left: 40, bottom: 40, right: 40), animated: true, completionHandler: nil)
         }
 
         private func reportViewport(_ map: MLNMapView) {

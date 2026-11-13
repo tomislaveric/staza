@@ -8,6 +8,7 @@ struct WorldCollectible: Decodable, Equatable, Identifiable, Sendable {
     let longitude: Double
     let found: Bool
     let primaryCategory: String?
+    var visibility: String? = nil
 }
 
 struct WorldFlowline: Decodable, Equatable, Identifiable, Sendable {
@@ -18,16 +19,51 @@ struct WorldFlowline: Decodable, Equatable, Identifiable, Sendable {
     let name: String
     let geometry: Geometry
     let completed: Bool
+    var lengthMeters: Double? = nil
+    var flowScore: Double? = nil
 
     var coordinates: [CLLocationCoordinate2D] {
         geometry.coordinates.compactMap { $0.count >= 2 ? CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) : nil }
     }
 }
 
+struct WorldStats: Decodable, Equatable, Sendable {
+    let totalCollectibles: Int
+    let discoveredCount: Int
+    let remainingCount: Int
+}
+
 struct WorldViewport: Decodable, Equatable, Sendable {
     let collectibles: [WorldCollectible]?
     let fartleks: [WorldFlowline]?
     let truncated: Bool?
+    var stats: WorldStats? = nil
+}
+
+/// The World-relevant part of `GET /api/player/capabilities`.
+struct WorldCapabilities: Decodable, Equatable, Sendable {
+    struct LockedFilter: Decodable, Equatable, Sendable {
+        let id: String
+        let nodeId: String
+        let nodeName: String
+    }
+    var worldFilters: [String] = []
+    var lockedWorldFilters: [LockedFilter] = []
+
+    static let empty = WorldCapabilities()
+
+    init(worldFilters: [String] = [], lockedWorldFilters: [LockedFilter] = []) {
+        self.worldFilters = worldFilters
+        self.lockedWorldFilters = lockedWorldFilters
+    }
+
+    private enum CodingKeys: String, CodingKey { case worldFilters, lockedWorldFilters }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        worldFilters = try container.decodeIfPresent([String].self, forKey: .worldFilters) ?? []
+        lockedWorldFilters = try container.decodeIfPresent([LockedFilter].self, forKey: .lockedWorldFilters) ?? []
+    }
 }
 
 struct QuestTargets: Decodable, Equatable, Sendable {
@@ -62,5 +98,19 @@ enum WorldSelection: Equatable, Identifiable, Sendable {
         case .collectible(let item): "collectible:\(item.id)"
         case .flowline(let item): "flowline:\(item.id)"
         }
+    }
+}
+
+extension QuestInstance {
+    /// Progress as the web counts it: per target when every objective targets collectibles,
+    /// otherwise per completed objective.
+    var targetProgress: (completed: Int, total: Int) {
+        let byTarget = !objectives.isEmpty && objectives.allSatisfy { $0.objective?.type != "flowline_rule" }
+        if byTarget {
+            let completed = objectives.reduce(0) { $0 + min($1.progress.completed, $1.progress.required) }
+            let total = objectives.reduce(0) { $0 + $1.progress.required }
+            return (Int(completed), Int(total))
+        }
+        return (objectives.filter(\.progress.complete).count, objectives.count)
     }
 }

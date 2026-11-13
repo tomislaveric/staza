@@ -51,6 +51,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   Actions while keeping PostgreSQL private on the VPS.
 - [iOS app foundations and shell](features/ios-app-foundations-shell/README.md) — establish the SwiftUI app, native networking and session foundations, design tokens, localization, and OS-native navigation shell.
 - [iOS Figma redesign](features/ios-figma-redesign/README.md) — design a dark, brand-aligned iOS UX in Figma with one frame per SwiftUI view, then restyle the SwiftUI app to match.
+- [iOS World improvements](features/ios-world-improvements/README.md) — native iOS World tab with a locate control, web-parity filters, and a persistent bottom sheet for stats, Explore, explorations, and item details.
 - [HUD](features/hud/README.md) — replace physical-scene Coin visuals with a
   compact, camera-independent route and event overlay.
 - [Job lifecycle operational robustness](features/job-lifecycle-operational-robustness/README.md)
