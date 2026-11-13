@@ -17,7 +17,13 @@ struct QuestInstance: Decodable, Equatable, Identifiable, Sendable {
             let required: Double
             let complete: Bool
         }
+        struct Spec: Decodable, Equatable, Sendable {
+            struct Target: Decodable, Equatable, Sendable { let id: String }
+            let type: String
+            let targets: [Target]?
+        }
         let progress: Progress
+        let objective: Spec?
     }
 
     let id: String
