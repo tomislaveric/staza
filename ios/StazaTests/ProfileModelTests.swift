@@ -24,13 +24,46 @@ final class ProfileModelTests: XCTestCase {
         let (model, transport, _, _) = makeModel([
             .init(status: 200, body: profileJSON),
             .init(status: 200, body: #"{"titles":[{"id":"t","label":"Scout"}],"badges":[]}"#),
-            .init(status: 200, body: #"[{"id":"p1","name":"Phone","createdAt":"2026-01-01T00:00:00Z","lastUsedAt":null}]"#)
+            .init(status: 200, body: #"[{"id":"p1","name":"Phone","createdAt":"2026-01-01T00:00:00Z","lastUsedAt":null}]"#),
+            .init(status: 200, body: #"{"authenticated":true,"user":{"email":"a@b.c","emailVerified":true},"devTools":true}"#)
         ])
         await model.load()
         XCTAssertEqual(model.profile?.displayName, "Ada")
         XCTAssertEqual(model.capabilities?.titles.map(\.label), ["Scout"])
         XCTAssertEqual(model.passkeys.map(\.id), ["p1"])
-        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/player/profile", "/api/player/capabilities", "/api/auth/passkeys"])
+        XCTAssertTrue(model.devTools)
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/player/profile", "/api/player/capabilities", "/api/auth/passkeys", "/api/auth/session"])
+    }
+
+    func testDevToolsHiddenWhenSessionOmitsFlag() async {
+        let (model, _, _, _) = makeModel([
+            .init(status: 200, body: profileJSON),
+            .init(status: 200, body: #"{"titles":[],"badges":[]}"#),
+            .init(status: 200, body: "[]"),
+            .init(status: 200, body: #"{"authenticated":true,"user":{"email":"a@b.c","emailVerified":true}}"#)
+        ])
+        await model.load()
+        XCTAssertFalse(model.devTools)
+    }
+
+    func testResetGameDataPostsAndReloadsProfile() async {
+        let (model, transport, _, store) = makeModel([
+            .init(status: 200, body: #"{"deletedActivities":2}"#),
+            .init(status: 200, body: profileJSON)
+        ])
+        let succeeded = await model.resetGameData()
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(transport.requests.first?.httpMethod, "POST")
+        XCTAssertEqual(transport.requests.map { $0.url?.path }.prefix(2), ["/api/dev/reset-data", "/api/player/profile"])
+        XCTAssertNotNil(store.load())
+    }
+
+    func testResetGameDataFailureSurfacesError() async {
+        let (model, transport, _, _) = makeModel([.init(status: 404, body: #"{"error":"Not found."}"#)])
+        let succeeded = await model.resetGameData()
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(model.actionError, "Not found.")
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/dev/reset-data"])
     }
 
     func testDeleteAccountUsesIntentTokenAndSignsOut() async {

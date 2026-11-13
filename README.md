@@ -492,6 +492,8 @@ Account & Security shows a DEVELOPMENT section with "Reset my game data". It cal
 `POST /api/dev/reset-data` and deletes the signed-in player's activities, XP,
 quests, progress and media while keeping the login, passkeys and Strava connection.
 The endpoint is not registered in production.
+The iOS app shows the same DEVELOPMENT section in Profile when
+`GET /api/auth/session` reports `devTools: true`.
 
 ## API
 

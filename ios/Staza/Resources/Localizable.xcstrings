@@ -1991,6 +1991,102 @@
         }
       }
     },
+    "profile.dev.confirm" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spieldaten zurücksetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset game data"
+          }
+        }
+      }
+    },
+    "profile.dev.confirmBody" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle deine Aktivitäten, XP, Punkte und Quests löschen? Das kann nicht rückgängig gemacht werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete all your activities, XP, points and quests? This cannot be undone."
+          }
+        }
+      }
+    },
+    "profile.dev.confirmTitle" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spieldaten zurücksetzen?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset game data?"
+          }
+        }
+      }
+    },
+    "profile.dev.footer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur in der Entwicklungsumgebung und auf localhost verfügbar. Löscht alle deine Aktivitäten, XP, Punkte, Quests und Medien. Login, Passkeys und Strava-Verbindung bleiben erhalten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only available on development and localhost. Deletes all your activities, XP, points, quests and media. Your login, passkeys and Strava connection stay."
+          }
+        }
+      }
+    },
+    "profile.dev.header" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entwicklung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Development"
+          }
+        }
+      }
+    },
+    "profile.dev.reset" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meine Spieldaten zurücksetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset my game data"
+          }
+        }
+      }
+    },
     "profile.distance" : {
       "localizations" : {
         "de" : {

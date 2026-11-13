@@ -17,6 +17,8 @@ final class ProfileModel {
     private(set) var failed = false
     private(set) var isBusy = false
     private(set) var exportURL: URL?
+    /// Development tools (game data reset) are offered only when the server reports a non-production stage.
+    private(set) var devTools = false
     var actionError: String?
 
     private let api: APIClient
@@ -41,6 +43,8 @@ final class ProfileModel {
         // Capabilities and passkeys are supplementary; the screen works without them.
         capabilities = try? await api.get("/api/player/capabilities")
         await reloadPasskeys()
+        let session: SessionResponse? = try? await api.get("/api/auth/session")
+        devTools = session?.devTools ?? false
     }
 
     func reloadPasskeys() async {
@@ -82,6 +86,18 @@ final class ProfileModel {
             )
             await auth.logout(everywhere: false)
         }
+    }
+
+    /// Development only: deletes the player's activities, XP, quests and media but keeps the login.
+    /// Returns true on success so the caller can refresh other screens.
+    func resetGameData() async -> Bool {
+        var succeeded = false
+        await perform {
+            let _: EmptyResponse = try await api.post("/api/dev/reset-data")
+            succeeded = true
+        }
+        if succeeded { await load() }
+        return succeeded
     }
 
     func logout(everywhere: Bool) async {

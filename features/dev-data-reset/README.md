@@ -7,6 +7,7 @@ On localhost and the DEV stage only, let a signed-in user wipe all of their game
 - Deleted: activities, videos and media files, XP, points, achievements, quests and quest instances, and other player-owned progress.
 - Kept: user, passkeys, sessions, Strava connection, settings.
 - Not available in production.
+- iOS: Profile shows a DEVELOPMENT section with the same reset when the session reports `devTools`.
 - Out of scope: manual per-activity deletion, because XP and achievements cannot be cleanly reversed.
 
 ## Decisions

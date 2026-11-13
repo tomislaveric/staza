@@ -8,6 +8,7 @@ struct ProfileView: View {
     @State private var stepUpAction: ProfileModel.SensitiveAction?
     @State private var confirmingDelete = false
     @State private var confirmingLogoutAll = false
+    @State private var confirmingReset = false
     @State private var showingExport = false
 
     var body: some View {
@@ -31,6 +32,7 @@ struct ProfileView: View {
             passkeySection(model)
             dataSection(model)
             sessionSection(model)
+            if model.devTools { developmentSection }
             if let error = model.actionError {
                 Section {
                     Label { Text(verbatim: error) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
@@ -65,6 +67,11 @@ struct ProfileView: View {
         .confirmationDialog("profile.logoutAll.confirmTitle", isPresented: $confirmingLogoutAll, titleVisibility: .visible) {
             Button("profile.logoutAll", role: .destructive) { Task { await model.logout(everywhere: true) } }
         }
+        .confirmationDialog("profile.dev.confirmTitle", isPresented: $confirmingReset, titleVisibility: .visible) {
+            Button("profile.dev.confirm", role: .destructive) {
+                Task { if await model.resetGameData() { container.playerDataChanged() } }
+            }
+        } message: { Text("profile.dev.confirmBody") }
     }
 
     @ViewBuilder
@@ -207,6 +214,18 @@ struct ProfileView: View {
             Button(role: .destructive) { confirmingLogoutAll = true } label: {
                 MoreIconRow(title: "profile.logoutAll", systemImage: "iphone.slash", tint: StazaColor.danger, titleColor: StazaColor.danger)
             }
+        }
+        .listRowBackground(StazaColor.surface)
+    }
+
+    private var developmentSection: some View {
+        Section {
+            Button(role: .destructive) { confirmingReset = true } label: {
+                MoreIconRow(title: "profile.dev.reset", systemImage: "arrow.counterclockwise", tint: StazaColor.danger, titleColor: StazaColor.danger)
+            }
+            .accessibilityIdentifier("resetGameDataButton")
+        } header: { OverlineText("profile.dev.header") } footer: {
+            Text("profile.dev.footer").font(StazaFont.footnote).foregroundStyle(StazaColor.textSubtle)
         }
         .listRowBackground(StazaColor.surface)
     }

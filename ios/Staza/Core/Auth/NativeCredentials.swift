@@ -70,6 +70,8 @@ struct SessionUser: Codable, Equatable, Sendable {
 struct SessionResponse: Decodable, Sendable {
     let authenticated: Bool
     let user: SessionUser?
+    /// True on localhost and the DEV stage, where destructive development tools are available.
+    var devTools: Bool? = nil
 }
 
 struct RefreshRequest: Encodable, Sendable { let refreshToken: String }
