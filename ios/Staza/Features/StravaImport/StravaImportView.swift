@@ -15,6 +15,9 @@ struct StravaImportView: View {
         }
         .navigationTitle("strava.title")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: model?.imported) { _, imported in
+            if imported != nil { container.playerDataChanged() }
+        }
         .task {
             if model == nil {
                 let model = StravaImportModel(api: container.apiClient, authenticator: SystemStravaWebAuthenticator())
@@ -65,7 +68,7 @@ struct StravaImportView: View {
             VStack(alignment: .leading, spacing: StazaSpacing.sm) {
                 Text("strava.connect.hint").font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
                 if let message {
-                    Text(LocalizedStringKey(messageKey(message))).font(StazaFont.caption).foregroundStyle(.red)
+                    Text(messageKey(message)).font(StazaFont.caption).foregroundStyle(.red)
                 }
                 Button { Task { await model?.connect() } } label: {
                     Label("strava.connect", systemImage: "link")
@@ -76,7 +79,7 @@ struct StravaImportView: View {
         }
     }
 
-    private func messageKey(_ message: StravaImportModel.StravaMessage) -> String {
+    private func messageKey(_ message: StravaImportModel.StravaMessage) -> LocalizedStringKey {
         switch message {
         case .denied: "strava.message.denied"
         case .missingScope: "strava.message.missingScope"

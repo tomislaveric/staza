@@ -436,6 +436,22 @@
         }
       }
     },
+    "addActivity.inspectFailed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir konnten die Sportart dieser Datei nicht erkennen. Bitte wähle sie vor dem Hochladen aus."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't detect the sport of this file. Please choose it before uploading."
+          }
+        }
+      }
+    },
     "addActivity.processing" : {
       "localizations" : {
         "de" : {
@@ -484,11 +500,7 @@
         }
       }
     },
-    "addActivity.sport.%@" : {
-
-    },
     "addActivity.sport.cycling" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -505,7 +517,6 @@
       }
     },
     "addActivity.sport.hiking" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -522,7 +533,6 @@
       }
     },
     "addActivity.sport.running" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1402,8 +1412,7 @@
         }
       }
     },
-    "home.level" : {
-      "extractionState" : "stale",
+    "home.level %@" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1418,9 +1427,6 @@
           }
         }
       }
-    },
-    "home.level %@" : {
-
     },
     "home.loading" : {
       "localizations" : {
@@ -1470,8 +1476,7 @@
         }
       }
     },
-    "home.quest.reward" : {
-      "extractionState" : "stale",
+    "home.quest.reward %@" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1486,9 +1491,6 @@
           }
         }
       }
-    },
-    "home.quest.reward %@" : {
-
     },
     "home.quests.empty" : {
       "localizations" : {
@@ -1538,56 +1540,34 @@
         }
       }
     },
-    "home.remaining" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ XP bis Level %@"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ XP to Level %@"
-          }
-        }
-      }
-    },
     "home.remaining %@ %@" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "home.remaining %1$@ %2$@"
-          }
-        }
-      }
-    },
-    "home.xp" : {
-      "extractionState" : "stale",
-      "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ / %@ XP"
+            "value" : "%1$@ XP bis Level %2$@"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ / %@ XP"
+            "value" : "%1$@ XP to Level %2$@"
           }
         }
       }
     },
     "home.xp %@ %@" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$@ XP"
+          }
+        },
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "home.xp %1$@ %2$@"
+            "state" : "translated",
+            "value" : "%1$@ / %2$@ XP"
           }
         }
       }
@@ -1609,7 +1589,6 @@
       }
     },
     "more.profile.loading" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2762,7 +2741,6 @@
       }
     },
     "strava.message.denied" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2779,7 +2757,6 @@
       }
     },
     "strava.message.error" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2796,7 +2773,6 @@
       }
     },
     "strava.message.missingScope" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {

@@ -2,8 +2,9 @@ import Foundation
 import Observation
 
 struct PendingFitImport: Equatable, Sendable {
+    let id = UUID()
     let fileName: String
-    let data: Data
+    let fileURL: URL
 }
 
 /// Composition root. The refresh client is unauthenticated and the main client
@@ -18,6 +19,8 @@ final class AppContainer {
     let authService: AuthService
     /// A .fit handed to the app from the share sheet / "Open in"; consumed by Add Activity.
     var pendingImport: PendingFitImport?
+    /// Bumped whenever player data changes (import, unlock, exploration confirm) so tabs can reload.
+    private(set) var dataRevision = 0
 
     init(
         baseURL: URL = APIEnvironment.resolvedBaseURL(),
@@ -35,10 +38,14 @@ final class AppContainer {
 
     func receive(fileURL url: URL) {
         guard url.pathExtension.lowercased() == "fit" else { return }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else { return }
-        pendingImport = PendingFitImport(fileName: url.lastPathComponent, data: data)
+        guard let staged = try? FitFileStaging.stage(url) else { return }
+        // A newer share replaces one that has not been picked up yet.
+        if let previous = pendingImport { FitFileStaging.discard(previous.fileURL) }
+        pendingImport = PendingFitImport(fileName: url.lastPathComponent, fileURL: staged)
+    }
+
+    func playerDataChanged() {
+        dataRevision += 1
     }
 
     func bootstrap() async {

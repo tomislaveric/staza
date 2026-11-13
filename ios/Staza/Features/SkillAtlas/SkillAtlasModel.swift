@@ -45,20 +45,24 @@ final class SkillAtlasModel {
 
     func name(ofNode id: String) -> String { atlas?.nodes.first { $0.id == id }?.name ?? id }
 
-    func unlock(_ node: SkillAtlasView_.Node) async {
-        guard unlockingNodeId == nil else { return }
+    /// Returns whether the node was unlocked.
+    @discardableResult
+    func unlock(_ node: SkillAtlasView_.Node) async -> Bool {
+        guard unlockingNodeId == nil else { return false }
         unlockingNodeId = node.id
         unlockError = nil
         defer { unlockingNodeId = nil }
         do {
             atlas = try await api.post("/api/skill-tree/unlock", body: SkillUnlockRequest(nodeId: node.id))
+            return true
         } catch is CancellationError {
-            return
+            return false
         } catch let APIError.server(_, message, _) {
             unlockError = message
             await load()
         } catch {
             unlockError = error.localizedDescription
         }
+        return false
     }
 }

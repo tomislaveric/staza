@@ -28,6 +28,8 @@ struct StravaRecentActivitiesResponse: Decodable, Equatable, Sendable {
 
 private struct AuthorizeRequest: Encodable { let locale: String; let client = "native" }
 private struct AuthorizeResponse: Decodable { let authorizationUrl: String }
+private struct NativeCompleteRequest: Encodable { let code: String; let state: String; let scope: String? }
+private struct NativeCompleteResponse: Decodable { let outcome: String }
 
 enum StravaAuthError: Error, Equatable {
     case cancelled
@@ -124,8 +126,18 @@ final class StravaImportModel {
             )
             guard let url = URL(string: authorize.authorizationUrl) else { throw APIError.invalidResponse }
             let callback = try await authenticator.authenticate(url: url, callbackScheme: Self.callbackScheme)
-            let outcome = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
-                .queryItems?.first { $0.name == "outcome" }?.value
+            let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+            var outcome = value("outcome")
+            // The browser only hands the code back; this session completes the link so it cannot be
+            // finished on behalf of another account.
+            if outcome == nil, let code = value("code"), let state = value("state") {
+                let completion: NativeCompleteResponse = try await api.post(
+                    "/api/integrations/strava/native/complete",
+                    body: NativeCompleteRequest(code: code, state: state, scope: value("scope"))
+                )
+                outcome = completion.outcome
+            }
             switch outcome {
             case "connected": await loadActivities()
             case "denied": state = .disconnected(message: .denied)
@@ -157,9 +169,7 @@ final class StravaImportModel {
         defer { importingID = nil }
         do {
             let response: ImportedActivityResponse = try await api.post("/api/integrations/strava/activities/\(activity.id)/import", as: ImportedActivityResponse.self)
-            let history: [ActivityHistoryItem] = try await api.get("/api/activities")
-            guard let item = history.first(where: { $0.id == response.activity.id }) else { throw APIError.invalidResponse }
-            imported = item
+            imported = try await api.get("/api/activities/\(response.activity.id)", as: ActivityHistoryItem.self)
             await loadActivities()
         } catch {
             importError = describe(error)

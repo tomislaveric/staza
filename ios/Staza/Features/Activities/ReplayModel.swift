@@ -47,9 +47,10 @@ final class ReplayModel {
         isPlaying = true
         task = Task { [weak self] in
             let step = 1.0 / 30.0
-            while let self, self.isPlaying, !Task.isCancelled {
+            // Re-acquire self after each sleep so the loop never keeps the model alive.
+            while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(step))
-                guard self.isPlaying else { return }
+                guard let self, self.isPlaying, !Task.isCancelled else { return }
                 self.advance(by: step / Self.playbackSeconds)
             }
         }

@@ -27,7 +27,8 @@ const setup = () => {
   const connections = {
     createOAuthState: vi.fn(async () => "state"),
     consumeOAuthState: vi.fn(async () => ({ locale: "de" as const })),
-    consumeNativeOAuthState: vi.fn(async (): Promise<{ playerId: string; locale: "de" } | undefined> => ({ playerId: "player", locale: "de" })),
+    isPendingNativeOAuthState: vi.fn(async () => true),
+    consumeNativeOAuthState: vi.fn(async (): Promise<{ locale: "de" } | undefined> => ({ locale: "de" })),
     saveConnection: vi.fn(async () => undefined),
     getStatus: vi.fn(async () => ({ status: "connected" as const })),
     getAccessToken: vi.fn(async () => "access"),
@@ -73,12 +74,48 @@ describe("StravaService authorization", () => {
     expect(connections.saveConnection).toHaveBeenCalledWith("player", expect.objectContaining({ athleteId: 7 }), "activity:read_all");
   });
 
-  it("completes a native callback from its state alone, and ignores non-native states", async () => {
+  it("hands a native callback's code back to the app without exchanging it", async () => {
+    const { service, client, connections } = setup();
+    const redirect = await service.nativeCallbackRedirect({ state: "s/+", code: "c", scope: "read,activity:read_all" });
+    expect(redirect).toBe("staza://strava?code=c&state=s%2F%2B&scope=read%2Cactivity%3Aread_all");
+    expect(connections.isPendingNativeOAuthState).toHaveBeenCalledWith("s/+");
+    expect(connections.consumeNativeOAuthState).not.toHaveBeenCalled();
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+  });
+
+  it("redirects denied, missing-scope and malformed native callbacks with an outcome only", async () => {
+    const { service, client } = setup();
+    expect(await service.nativeCallbackRedirect({ state: "s", error: "access_denied" })).toBe("staza://strava?outcome=denied");
+    expect(await service.nativeCallbackRedirect({ state: "s", code: "c", scope: "read,activity:read" })).toBe("staza://strava?outcome=missing_scope");
+    expect(await service.nativeCallbackRedirect({ state: "s", scope: "activity:read_all" })).toBe("staza://strava?outcome=error");
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+  });
+
+  it("leaves non-native or unknown states to the web callback", async () => {
     const { service, connections } = setup();
-    expect(await service.completeNativeAuthorization({ state: "s", code: "c", scope: "read,activity:read_all" })).toEqual({ outcome: "connected", locale: "de" });
+    expect(await service.nativeCallbackRedirect({ code: "c" })).toBeUndefined();
+    connections.isPendingNativeOAuthState.mockResolvedValueOnce(false);
+    expect(await service.nativeCallbackRedirect({ state: "s", code: "c", scope: "activity:read_all" })).toBeUndefined();
+  });
+
+  it("completes a native authorization only for the player and session that started it", async () => {
+    const { service, client, connections } = setup();
+    expect(await service.completeNativeAuthorization(user, { state: "s", code: "c", scope: "read,activity:read_all" })).toEqual({ outcome: "connected" });
+    expect(connections.consumeNativeOAuthState).toHaveBeenCalledWith("s", "player", "session");
     expect(connections.saveConnection).toHaveBeenCalledWith("player", expect.anything(), "activity:read_all");
+
     connections.consumeNativeOAuthState.mockResolvedValueOnce(undefined);
-    expect(await service.completeNativeAuthorization({ state: "s", code: "c" })).toBeUndefined();
+    const other = { playerId: "victim", sessionId: "victim-session" };
+    expect(await service.completeNativeAuthorization(other, { state: "s", code: "c", scope: "activity:read_all" })).toEqual({ outcome: "invalid_state" });
+    expect(await service.completeNativeAuthorization(user, { code: "c", scope: "activity:read_all" })).toEqual({ outcome: "invalid_state" });
+    expect(client.exchangeCode).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports native denial and missing scope without storing tokens", async () => {
+    const { service, connections } = setup();
+    expect(await service.completeNativeAuthorization(user, { state: "s", error: "access_denied" })).toEqual({ outcome: "denied" });
+    expect(await service.completeNativeAuthorization(user, { state: "s", code: "c", scope: "read" })).toEqual({ outcome: "missing_scope" });
+    expect(connections.saveConnection).not.toHaveBeenCalled();
   });
 });
 

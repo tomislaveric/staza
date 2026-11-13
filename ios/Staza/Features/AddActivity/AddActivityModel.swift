@@ -4,6 +4,14 @@ import Observation
 enum ImportSport: String, CaseIterable, Identifiable, Sendable {
     case cycling, running, hiking
     var id: String { rawValue }
+
+    var titleKey: LocalizedStringResource {
+        switch self {
+        case .cycling: "addActivity.sport.cycling"
+        case .running: "addActivity.sport.running"
+        case .hiking: "addActivity.sport.hiking"
+        }
+    }
 }
 
 struct ImportedActivityResponse: Decodable, Sendable {
@@ -27,10 +35,13 @@ final class AddActivityModel {
 
     private(set) var state: State = .idle
     var sport: ImportSport = .cycling
-    private var file: Data?
+    /// Set when the server could not inspect the file; the user must confirm the sport manually.
+    private(set) var sportDetectionFailed = false
+    private var file: URL?
     private(set) var fileName = ""
     private let api: APIClient
-    private let idempotencyKey = UUID().uuidString
+    /// One key per selected file so a retry of the same file is deduplicated but a new file is not.
+    private(set) var idempotencyKey = UUID().uuidString
 
     init(api: APIClient) { self.api = api }
 
@@ -43,15 +54,35 @@ final class AddActivityModel {
         }
     }
 
-    func select(fileName: String, data: Data) async {
+    /// Selects a staged `.fit` file. The model takes ownership and discards the previous file.
+    func select(fileName: String, fileURL: URL) async {
+        if let file, file != fileURL { FitFileStaging.discard(file) }
         self.fileName = fileName
-        file = data
+        file = fileURL
+        idempotencyKey = UUID().uuidString
+        sportDetectionFailed = false
         state = .ready(fileName: fileName)
-        let inspected: InspectResponse? = try? await api.upload(
-            "/api/activities/inspect",
-            file: MultipartFile(fieldName: "fit", fileName: fileName, mimeType: "application/octet-stream", data: data)
-        )
-        if let declared = inspected?.sport.flatMap(ImportSport.init(rawValue:)) { sport = declared }
+        do {
+            let inspected: InspectResponse = try await api.upload(
+                "/api/activities/inspect",
+                file: MultipartFile(fieldName: "fit", fileName: fileName, mimeType: "application/octet-stream", fileURL: fileURL)
+            )
+            guard self.file == fileURL else { return }
+            if let declared = inspected.sport.flatMap(ImportSport.init(rawValue:)) { sport = declared }
+        } catch {
+            guard self.file == fileURL else { return }
+            sportDetectionFailed = true
+        }
+    }
+
+    /// Imports a file shared to the app. While an upload runs the share stays queued in the container.
+    @discardableResult
+    func importPending(from container: AppContainer) async -> Bool {
+        guard !isBusy, let pending = container.pendingImport else { return false }
+        container.pendingImport = nil
+        await select(fileName: pending.fileName, fileURL: pending.fileURL)
+        await upload()
+        return true
     }
 
     func selectionFailed(_ error: Error) {
@@ -64,7 +95,7 @@ final class AddActivityModel {
         do {
             let response: ImportedActivityResponse = try await api.upload(
                 "/api/activities/import",
-                file: MultipartFile(fieldName: "fit", fileName: fileName, mimeType: "application/octet-stream", data: file),
+                file: MultipartFile(fieldName: "fit", fileName: fileName, mimeType: "application/octet-stream", fileURL: file),
                 fields: ["sport": sport.rawValue],
                 headers: ["Idempotency-Key": idempotencyKey],
                 progress: { [weak self] fraction in
@@ -72,10 +103,9 @@ final class AddActivityModel {
                 }
             )
             state = .processing
-            let activities: [ActivityHistoryItem] = try await api.get("/api/activities")
-            guard let item = activities.first(where: { $0.id == response.activity.id }) else {
-                throw APIError.invalidResponse
-            }
+            let item: ActivityHistoryItem = try await api.get("/api/activities/\(response.activity.id)")
+            FitFileStaging.discard(file)
+            self.file = nil
             state = .imported(item)
         } catch {
             state = .failed((error as? APIError)?.errorDescription ?? error.localizedDescription)

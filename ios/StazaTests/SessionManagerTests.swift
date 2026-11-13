@@ -77,6 +77,49 @@ final class SessionManagerTests: XCTestCase {
         XCTAssertEqual(state.user, SessionUser(email: "a@b.c", emailVerified: true))
     }
 
+    func testLogoutFailureStillClearsLocalSession() async throws {
+        let store = MemoryCredentialStore(makeCredentials())
+        let (transport, client, manager, state) = makeStack([.init(status: 500, body: #"{"error":"down"}"#)], store: store)
+        try await manager.signIn(credentials: makeCredentials(), user: nil)
+        await manager.logout(using: client)
+        XCTAssertEqual(transport.requests.count, 1)
+        XCTAssertNil(store.load())
+        XCTAssertEqual(state.status, .signedOut)
+    }
+
+    func testConcurrentUnauthorizedRequestsShareOneRefresh() async throws {
+        final class RotatingTransport: HTTPTransport, @unchecked Sendable {
+            private let lock = NSLock()
+            private(set) var refreshCount = 0
+            func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+                let path = request.url!.path
+                func respond(_ status: Int, _ body: String) -> (Data, HTTPURLResponse) {
+                    (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+                }
+                if path == "/api/auth/native/refresh" {
+                    lock.withLock { refreshCount += 1 }
+                    try await Task.sleep(for: .milliseconds(50))
+                    return respond(200, credentialsJSON(access: "access-2", refresh: "refresh-2"))
+                }
+                if request.value(forHTTPHeaderField: "Authorization") == "Bearer access-2" { return respond(200, #"{"ok":true}"#) }
+                // Keep both stale requests in flight together before either is rejected.
+                try await Task.sleep(for: .milliseconds(20))
+                return respond(401, #"{"error":"expired"}"#)
+            }
+        }
+        let transport = RotatingTransport()
+        let store = MemoryCredentialStore(makeCredentials())
+        let manager = SessionManager(store: store, refreshClient: APIClient(baseURL: baseURL, transport: transport), authState: AuthState())
+        let client = APIClient(baseURL: baseURL, transport: transport, tokenProvider: manager)
+
+        async let first: Ping = client.get("/api/a")
+        async let second: Ping = client.get("/api/b")
+        let results = try await [first, second]
+        XCTAssertEqual(results, [Ping(ok: true), Ping(ok: true)])
+        XCTAssertEqual(transport.refreshCount, 1)
+        XCTAssertEqual(store.load()?.refreshToken, "refresh-2")
+    }
+
     func testLogoutClearsSession() async throws {
         let store = MemoryCredentialStore(makeCredentials())
         let (transport, client, manager, state) = makeStack([.init(status: 204, body: "")], store: store)

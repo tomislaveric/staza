@@ -148,8 +148,10 @@ final class ExploreModel {
         }
     }
 
-    func confirm() async {
-        guard let selected, phase == .proposals, !isRerouting else { return }
+    /// Returns whether the exploration was confirmed.
+    @discardableResult
+    func confirm() async -> Bool {
+        guard let selected, phase == .proposals, !isRerouting else { return false }
         phase = .confirming
         failure = nil
         do {
@@ -157,9 +159,11 @@ final class ExploreModel {
             plannedRoute = response.plannedRoute
             discardProposals()
             phase = .idle
+            return true
         } catch {
             failure = .confirm
             phase = .proposals
+            return false
         }
     }
 

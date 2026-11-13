@@ -50,13 +50,18 @@ final class APIClient: Sendable {
         progress: (@Sendable (Double) -> Void)? = nil,
         as type: Response.Type = Response.self
     ) async throws -> Response {
-        let multipart = MultipartBody(file: file, fields: fields)
+        let multipart: MultipartBody
+        do {
+            multipart = try MultipartBody(file: file, fields: fields)
+        } catch {
+            throw APIError.transport(error.localizedDescription)
+        }
+        defer { multipart.remove() }
         func attempt(token: String?) async throws -> Response {
             var request = try makeRequest(method: "POST", path: path, query: [], body: Optional<EmptyResponse>.none, token: token)
             request.setValue(multipart.contentType, forHTTPHeaderField: "Content-Type")
             for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
-            request.httpBody = multipart.data
-            return try await execute(request, progress: progress)
+            return try await execute(request, uploadFrom: multipart.fileURL, progress: progress)
         }
         let token = await tokenProvider.accessToken()
         do {
@@ -127,11 +132,19 @@ final class APIClient: Sendable {
         return request
     }
 
-    private func execute<Response: Decodable>(_ request: URLRequest, progress: (@Sendable (Double) -> Void)? = nil) async throws -> Response {
+    private func execute<Response: Decodable>(
+        _ request: URLRequest,
+        uploadFrom fileURL: URL? = nil,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> Response {
         let data: Data
         let http: HTTPURLResponse
         do {
-            (data, http) = try await transport.send(request, progress: progress)
+            if let fileURL {
+                (data, http) = try await transport.upload(request, fromFile: fileURL, progress: progress)
+            } else {
+                (data, http) = try await transport.send(request, progress: progress)
+            }
         } catch let error as APIError {
             throw error
         } catch {

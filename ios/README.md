@@ -9,7 +9,9 @@ Native SwiftUI app shell. Open `Staza.xcodeproj` in Xcode 16+.
 ## Layout
 
 - `Staza/App` – entry point and composition root (`AppContainer`)
-- `Staza/Features` – per-tab placeholder screens and the `TabView` shell
+- `Staza/Features` – feature screens: `Shell` (`TabView`), `Auth`, `Home`, `World` (map, Explore), `Quests`,
+  `SkillAtlas`, `Progress`, `Activities` (detail, replay), `AddActivity` (`.fit` import), `StravaImport`,
+  `Profile`, and `More`
 - `Staza/Core/Networking` – async/await `APIClient`, `TokenProvider` boundary
 - `Staza/Core/Auth` – Keychain credentials, `SessionManager`, observable `AuthState`
 - `Staza/Core/Formatting` – locale-aware number/date/distance formatting
@@ -20,6 +22,19 @@ Native SwiftUI app shell. Open `Staza.xcodeproj` in Xcode 16+.
 
 Debug builds use `http://localhost:3000`, release builds `https://play.staza.world`.
 Override with the `STAZA_API_BASE_URL` environment variable.
+
+## URL scheme and document types
+
+- **Strava:** `ASWebAuthenticationSession` uses the `staza` callback scheme (`staza://strava`). The
+  scheme does not need to be registered in `Info.plist`. The app finishes linking with
+  `POST /api/integrations/strava/native/complete`.
+- **`.fit` files:** `Staza-Info.plist` declares the imported type `world.staza.app.fit`
+  (extension `fit`, MIME `application/vnd.ant.fit`) and a viewer document type. Files from
+  open-with and the share sheet arrive through `onOpenURL` and are staged by `AppContainer.receive`.
+  Picked and shared files are copied to `tmp/fit-imports` and uploaded as a streamed multipart file
+  (`URLSession.upload(fromFile:)`), using one `Idempotency-Key` per selected file.
+- **Data refresh:** mutations call `AppContainer.playerDataChanged()`, and screens reload with
+  `.task(id: container.dataRevision)`.
 
 ## Auth notes
 
@@ -32,5 +47,5 @@ publishes signed-out state.
 
 ```
 xcodebuild test -project Staza.xcodeproj -scheme Staza \
-  -destination 'platform=iOS Simulator,name=iPhone 16'
+  -destination 'platform=iOS Simulator,name=<available iPhone simulator>'
 ```

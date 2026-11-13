@@ -58,17 +58,31 @@ export class StravaConnectionRepository {
   }
 
   /**
-   * Consumes a native-client state. The system browser that completes the OAuth redirect has no
-   * session, so the unguessable single-use state itself identifies the player.
+   * Whether a native-client state is pending. The system browser that receives the OAuth redirect
+   * has no session, so it may only check the state and hand the code back to the app; it never
+   * consumes the state or exchanges the code.
    */
-  async consumeNativeOAuthState(state: string): Promise<{ playerId: string; locale: StravaReturnLocale } | undefined> {
-    const result = await this.pool.query<{ player_id: string; return_locale: StravaReturnLocale }>(
-      `UPDATE strava_oauth_states SET used_at = now()
-       WHERE state_hash = $1 AND native = true AND used_at IS NULL AND expires_at > now()
-       RETURNING player_id, return_locale`,
+  async isPendingNativeOAuthState(state: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "SELECT 1 FROM strava_oauth_states WHERE state_hash = $1 AND native = true AND used_at IS NULL AND expires_at > now()",
       [stateHash(state)]
     );
-    return result.rowCount === 1 ? { playerId: result.rows[0].player_id, locale: result.rows[0].return_locale } : undefined;
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Atomically consumes a native-client state only for the authenticated player and session that
+   * created it, so an authorization started by one account cannot be completed by another. The
+   * caller's session is authenticated, which also rules out revoked sessions.
+   */
+  async consumeNativeOAuthState(state: string, playerId: string, sessionId: string): Promise<{ locale: StravaReturnLocale } | undefined> {
+    const result = await this.pool.query<{ return_locale: StravaReturnLocale }>(
+      `UPDATE strava_oauth_states SET used_at = now()
+       WHERE state_hash = $1 AND player_id = $2 AND session_id = $3 AND native = true AND used_at IS NULL AND expires_at > now()
+       RETURNING return_locale`,
+      [stateHash(state), playerId, sessionId]
+    );
+    return result.rowCount === 1 ? { locale: result.rows[0].return_locale } : undefined;
   }
 
   async saveConnection(playerId: string, authorization: StravaAuthorization, scope: string): Promise<void> {

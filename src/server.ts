@@ -789,10 +789,11 @@ app.post("/api/integrations/strava/authorize", requireUser, requireCsrf, require
 });
 app.get("/api/integrations/strava/callback", requireStrava, async (request: UploadRequest, response, next) => {
   try {
-    // Native flows complete in a system browser without a session and hand the outcome back via a custom scheme.
-    const native = await stravaService!.completeNativeAuthorization(request.query);
-    if (native) {
-      response.set("Cache-Control", "no-store").redirect(303, `staza://strava?outcome=${native.outcome}`);
+    // Native flows return to a sessionless system browser. It only hands the code back to the app,
+    // which completes the link with its own bearer session (see /native/complete).
+    const nativeRedirect = await stravaService!.nativeCallbackRedirect(request.query);
+    if (nativeRedirect) {
+      response.set("Cache-Control", "no-store").redirect(303, nativeRedirect);
       return;
     }
     if (!request.user) {
@@ -808,6 +809,18 @@ app.get("/api/integrations/strava/callback", requireStrava, async (request: Uplo
       maxAge: 365 * 24 * 60 * 60 * 1000
     });
     response.redirect(303, `/add-activity?strava=${outcome}`);
+  } catch (error) { next(error); }
+});
+app.post("/api/integrations/strava/native/complete", requireUser, requireStrava, stravaLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    if (request.bearerAuth !== true) {
+      response.status(403).json({ error: "The request could not be verified." });
+      return;
+    }
+    const body = request.body ?? {};
+    response.set("Cache-Control", "no-store").json(await stravaService!.completeNativeAuthorization(request.user!, {
+      state: body.state, code: body.code, scope: body.scope, error: body.error
+    }));
   } catch (error) { next(error); }
 });
 app.delete("/api/integrations/strava", requireUser, requireCsrf, requireStrava, async (request: UploadRequest, response, next) => {

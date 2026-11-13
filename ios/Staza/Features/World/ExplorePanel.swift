@@ -4,6 +4,7 @@ import SwiftUI
 struct ExplorePanel: View {
     let model: ExploreModel
     @Environment(\.locale) private var locale
+    @Environment(AppContainer.self) private var container
 
     var body: some View {
         StazaCard {
@@ -79,7 +80,7 @@ struct ExplorePanel: View {
                     Button("explore.reset") { model.reset() }.buttonStyle(.bordered).disabled(model.isRerouting)
                 }
                 Button {
-                    Task { await model.confirm() }
+                    Task { if await model.confirm() { container.playerDataChanged() } }
                 } label: {
                     if model.phase == .confirming { SwiftUI.ProgressView() } else { Text("explore.confirm") }
                 }

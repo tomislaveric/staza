@@ -10,7 +10,11 @@ struct MoreView: View {
                     NavigationLink {
                         ProfileView()
                     } label: {
-                        Text(authState.user?.email ?? "more.profile.loading")
+                        if let email = authState.user?.email {
+                            Text(verbatim: email)
+                        } else {
+                            Text("more.profile.loading")
+                        }
                     }
                     .accessibilityIdentifier("profileLink")
                 } else {

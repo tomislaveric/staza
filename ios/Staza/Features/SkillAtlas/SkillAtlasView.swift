@@ -10,7 +10,7 @@ struct SkillAtlasView: View {
             if let model { content(model) } else { Color.clear }
         }
         .background(StazaColor.canvas)
-        .task {
+        .task(id: container.dataRevision) {
             if model == nil { model = SkillAtlasModel(api: container.apiClient) }
             await model?.load()
         }
@@ -95,7 +95,7 @@ struct SkillAtlasView: View {
                 }
                 if node.state == .unlockable {
                     Button {
-                        Task { await model.unlock(node) }
+                        Task { if await model.unlock(node) { container.playerDataChanged() } }
                     } label: {
                         if model.unlockingNodeId == node.id { SwiftUI.ProgressView() } else { Text("atlas.unlock") }
                     }

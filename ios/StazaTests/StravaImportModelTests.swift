@@ -25,15 +25,37 @@ final class StravaImportModelTests: XCTestCase {
         XCTAssertEqual(model.state, .connected(try! JSONDecoder().decode(StravaRecentActivitiesResponse.self, from: Data(#"{"activities":[\#(activity)]}"#.utf8)).activities))
     }
 
-    func testConnectRunsBrowserFlowThenLoadsActivities() async {
+    func testConnectCompletesCodeWithOwnSessionThenLoadsActivities() async throws {
         let (model, transport) = model([
             .init(status: 200, body: #"{"authorizationUrl":"https://strava.test/authorize"}"#),
+            .init(status: 200, body: #"{"outcome":"connected"}"#),
             .init(status: 200, body: #"{"activities":[]}"#)
-        ], auth: .success(URL(string: "staza://strava?outcome=connected")!))
+        ], auth: .success(URL(string: "staza://strava?code=c1&state=s%2F1&scope=read,activity:read_all")!))
         await model.connect()
         XCTAssertEqual(model.state, .connected([]))
         XCTAssertEqual(transport.requests[0].url?.path, "/api/integrations/strava/authorize")
         XCTAssertTrue(String(decoding: transport.requests[0].httpBody ?? Data(), as: UTF8.self).contains(#""client":"native""#))
+        XCTAssertEqual(transport.requests[1].url?.path, "/api/integrations/strava/native/complete")
+        let body = try JSONSerialization.jsonObject(with: transport.requests[1].httpBody ?? Data()) as? [String: String]
+        XCTAssertEqual(body, ["code": "c1", "state": "s/1", "scope": "read,activity:read_all"])
+    }
+
+    func testRejectedNativeCompletionShowsError() async {
+        let (model, _) = model([
+            .init(status: 200, body: #"{"authorizationUrl":"https://strava.test/authorize"}"#),
+            .init(status: 200, body: #"{"outcome":"invalid_state"}"#)
+        ], auth: .success(URL(string: "staza://strava?code=c1&state=s1&scope=activity:read_all")!))
+        await model.connect()
+        XCTAssertEqual(model.state, .disconnected(message: .error))
+    }
+
+    func testMissingScopeOutcomeFromCallback() async {
+        let (model, transport) = model([
+            .init(status: 200, body: #"{"authorizationUrl":"https://strava.test/authorize"}"#)
+        ], auth: .success(URL(string: "staza://strava?outcome=missing_scope")!))
+        await model.connect()
+        XCTAssertEqual(model.state, .disconnected(message: .missingScope))
+        XCTAssertEqual(transport.requests.count, 1)
     }
 
     func testDeniedAndCancelledStayDisconnected() async {
@@ -48,13 +70,14 @@ final class StravaImportModelTests: XCTestCase {
     func testImportLoadsProcessedActivity() async {
         let (model, transport) = model([
             .init(status: 201, body: #"{"activity":{"id":"a1"},"inserted":true}"#),
-            .init(status: 200, body: "[\(history)]"),
+            .init(status: 200, body: history),
             .init(status: 200, body: #"{"activities":[]}"#)
         ])
         let item = try! JSONDecoder().decode(StravaRecentActivity.self, from: Data(activity.utf8))
         await model.importActivity(item)
         XCTAssertEqual(model.imported?.id, "a1")
         XCTAssertEqual(transport.requests[0].url?.path, "/api/integrations/strava/activities/1001/import")
+        XCTAssertEqual(transport.requests[1].url?.path, "/api/activities/a1")
     }
 
     func testReconnectRequiredReturnsToDisconnected() async {

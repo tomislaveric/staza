@@ -95,7 +95,7 @@ listed in `WEBAUTHN_EXTRA_ORIGINS`.
 | GET | `/api/quest-instances` | bearer | – | `{ instances: QuestInstance[] }` |
 | POST | `/api/quest-instances/:id/retry` | bearer | No body | `204` |
 | DELETE | `/api/quest-instances/:id` | bearer | No body | `204` |
-| POST | `/api/explorations/generate` | bearer | `{ area: { bbox: { west, south, east, north }, center: { lat, lon }, zoom }, start: { lat, lon }, sport? (cycling/running/hiking), routeType? (round_trip/point_to_point), constraint? ({ type: distance, meters } or { type: duration, seconds }), destinationId? }` | Generated exploration: `{ explorationId, proposals, catalog, truncated, limits, warnings }` |
+| POST | `/api/explorations/generate` | bearer | `{ area: { bbox: "west,south,east,north", center: { lat, lon }, zoom }, start: { lat, lon }, sport? (cycling/running/hiking), routeType? (round_trip/point_to_point), constraint? ({ type: distance, meters } or { type: duration, seconds }), destinationId? }` | Generated exploration: `{ explorationId, proposals, catalog, truncated, limits, warnings }` |
 | POST | `/api/explorations/:explorationId/reroute` | bearer | `{ proposalId, targetIds, waypoints? }` | `{ proposal }` |
 | POST | `/api/explorations/confirm` | bearer | `{ proposalId }` | `{ instance, plannedRoute }` |
 | GET | `/api/quest-instances/:id/planned-route` | bearer | – | `PlannedRoute` |
@@ -122,14 +122,20 @@ Disabled unless configured server-side (`503`-style `{ error }` otherwise).
 | Method | Path | Auth | Request | Response |
 | --- | --- | --- | --- | --- |
 | GET | `/api/integrations/strava` | bearer | – | `{ enabled, recentLimit?, status, connectedAt? }` |
-| POST | `/api/integrations/strava/authorize` | bearer | `{ locale?: "en" \| "de" }` | `{ authorizationUrl }`; open in a system browser |
+| POST | `/api/integrations/strava/authorize` | bearer | `{ locale?: "en" \| "de", client?: "native" }` | `{ authorizationUrl }`; open with `ASWebAuthenticationSession` (callback scheme `staza`) when `client: "native"` |
+| POST | `/api/integrations/strava/native/complete` | bearer only | `{ code, state, scope? }` from the `staza://strava` callback | `{ outcome }`: `connected`, `denied`, `missing_scope`, `invalid_state`, or `error`; `403` for cookie sessions |
 | DELETE | `/api/integrations/strava` | bearer | No body | Updated `{ status, connectedAt? }` |
 | GET | `/api/integrations/strava/activities` | bearer | – | `StravaRecentActivities` |
 | POST | `/api/integrations/strava/activities/:id/import` | bearer | No body; Strava activity id in path | `ActivityImportResult` |
 
-The OAuth callback (`/api/integrations/strava/callback`) is a browser redirect
-that relies on the cookie session, so native apps must complete it in a browser
-session that is signed in on the web, or re-authenticate there.
+The OAuth callback (`/api/integrations/strava/callback`) is a browser redirect.
+For web states it completes the link using the cookie session. For native states
+(`client: "native"`) it never exchanges the code: it redirects to
+`staza://strava?code=…&state=…&scope=…`, or to `staza://strava?outcome=denied|missing_scope|error`
+when Strava reports a failure. The app then calls
+`POST /api/integrations/strava/native/complete` with its bearer session. The state is
+bound to the player and session that requested `authorize`, so a callback started
+by another account or session, or an expired or reused state, returns `outcome: "invalid_state"`.
 
 ## Data response fields
 

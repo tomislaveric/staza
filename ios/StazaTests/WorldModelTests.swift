@@ -27,6 +27,22 @@ final class WorldModelTests: XCTestCase {
         XCTAssertTrue(model.viewportFailed)
     }
 
+    func testStaleViewportResponseDoesNotOverwriteNewerOne() async {
+        let newer = world.replacingOccurrences(of: #""id":"c1""#, with: #""id":"c2""#)
+        let older = WorldBounds(west: 7, south: 46, east: 9, north: 48)
+        let transport = GatedTransport(
+            gate: { $0.url?.query?.contains(older.queryValue) == true },
+            [.init(status: 200, body: newer), .init(status: 200, body: world)]
+        )
+        let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
+        let slow = Task { await model.loadViewport(older) }
+        while !transport.isHolding { await Task.yield() }
+        await model.loadViewport(WorldBounds(west: 10, south: 46, east: 12, north: 48))
+        transport.open()
+        await slow.value
+        XCTAssertEqual(model.collectibles.map(\.id), ["c2"])
+    }
+
     func testBoundsClampedToValidRange() {
         XCTAssertEqual(WorldBounds(west: -200, south: -95, east: 200, north: 95).queryValue, "-180.00000,-90.00000,180.00000,90.00000")
     }

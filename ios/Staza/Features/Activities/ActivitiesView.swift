@@ -31,7 +31,7 @@ struct ActivitiesView: View {
         }
         .background(StazaColor.canvas)
         .navigationDestination(for: ActivityHistoryItem.self) { ActivityDetailView(activity: $0) }
-        .task {
+        .task(id: container.dataRevision) {
             let model = self.model ?? ActivitiesModel(api: container.apiClient)
             self.model = model
             await model.load()

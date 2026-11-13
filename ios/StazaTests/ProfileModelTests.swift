@@ -46,6 +46,19 @@ final class ProfileModelTests: XCTestCase {
         XCTAssertNotEqual(state.status, .signedIn)
     }
 
+    func testDeleteWithExpiredStepUpKeepsAccountAndSession() async {
+        let (model, transport, state, store) = makeModel([
+            .init(status: 400, body: #"{"error":"Recent step-up authentication is required."}"#)
+        ])
+        state.update(status: .signedIn, user: nil)
+        await model.deleteAccount()
+        XCTAssertEqual(model.actionError, "Recent step-up authentication is required.")
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/account/deletion-intent"])
+        XCTAssertNotNil(store.load())
+        XCTAssertEqual(state.status, .signedIn)
+        XCTAssertFalse(model.isBusy)
+    }
+
     func testExportRequiresStepUpErrorSurfacedAndWritesFileOnSuccess() async throws {
         let (failing, _, _, _) = makeModel([.init(status: 400, body: #"{"error":"Recent step-up authentication is required."}"#)])
         await failing.exportData()

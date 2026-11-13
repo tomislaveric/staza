@@ -165,6 +165,32 @@ describePersistence("StravaConnectionRepository", () => {
     expect(JSON.stringify(stored.rows)).not.toContain(state);
   });
 
+  it("persists the native flag (migration 040) with web states defaulting to non-native", async () => {
+    const column = await pool!.query<{ column_default: string; is_nullable: string }>(
+      "SELECT column_default, is_nullable FROM information_schema.columns WHERE table_name = 'strava_oauth_states' AND column_name = 'native'"
+    );
+    expect(column.rows[0]).toEqual({ column_default: "false", is_nullable: "NO" });
+    await connections!.createOAuthState(playerId, sessionId, "en");
+    await connections!.createOAuthState(playerId, sessionId, "de", true);
+    const flags = await pool!.query<{ native: boolean }>("SELECT native FROM strava_oauth_states ORDER BY native");
+    expect(flags.rows.map((row) => row.native)).toEqual([false, true]);
+  });
+
+  it("keeps native and web states apart and binds native states to the creating session", async () => {
+    const native = await connections!.createOAuthState(playerId, sessionId, "de", true);
+    const web = await connections!.createOAuthState(playerId, sessionId, "en");
+    expect(await connections!.isPendingNativeOAuthState(native)).toBe(true);
+    expect(await connections!.isPendingNativeOAuthState(web)).toBe(false);
+    expect(await connections!.consumeOAuthState(native, playerId, sessionId)).toBeUndefined();
+    expect(await connections!.consumeNativeOAuthState(web, playerId, sessionId)).toBeUndefined();
+
+    expect(await connections!.consumeNativeOAuthState(native, playerId, randomUUID())).toBeUndefined();
+    expect(await connections!.consumeNativeOAuthState(native, randomUUID(), sessionId)).toBeUndefined();
+    expect(await connections!.consumeNativeOAuthState(native, playerId, sessionId)).toEqual({ locale: "de" });
+    expect(await connections!.consumeNativeOAuthState(native, playerId, sessionId)).toBeUndefined();
+    expect(await connections!.isPendingNativeOAuthState(native)).toBe(false);
+  });
+
   it("rejects expired OAuth state", async () => {
     const state = await connections!.createOAuthState(playerId, sessionId, "en");
     await pool!.query("UPDATE strava_oauth_states SET expires_at = now() - interval '1 second'");

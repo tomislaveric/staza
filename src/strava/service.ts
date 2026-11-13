@@ -58,6 +58,19 @@ const hasRoute = (summary: StravaActivitySummary): boolean =>
 const finite = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 
+export const NATIVE_STRAVA_CALLBACK = "staza://strava";
+
+const isValidState = (state: unknown): state is string => typeof state === "string" && state.length > 0 && state.length <= 200;
+
+/** The outcome of a callback that cannot be exchanged for tokens, or undefined when it can. */
+const callbackFailure = (query: StravaCallbackQuery): Exclude<StravaCallbackOutcome, "connected" | "invalid_state"> | undefined => {
+  if (query.error !== undefined) return "denied";
+  const scopes = typeof query.scope === "string" ? query.scope.split(",").map((scope) => scope.trim()) : [];
+  if (!scopes.includes(STRAVA_SCOPE)) return "missing_scope";
+  if (typeof query.code !== "string" || query.code.length === 0 || query.code.length > 200) return "error";
+  return undefined;
+};
+
 export class StravaService {
   constructor(
     private readonly client: StravaClient,
@@ -89,11 +102,29 @@ export class StravaService {
     return this.finishAuthorization(user.playerId, state.locale, query);
   }
 
-  /** Completes a native-client flow, whose callback arrives without a session. Undefined when the state is not a native one. */
-  async completeNativeAuthorization(query: StravaCallbackQuery): Promise<{ outcome: StravaCallbackOutcome; locale: StravaReturnLocale } | undefined> {
-    if (typeof query.state !== "string" || query.state.length === 0 || query.state.length > 200) return undefined;
-    const state = await this.connections.consumeNativeOAuthState(query.state);
-    return state ? this.finishAuthorization(state.playerId, state.locale, query) : undefined;
+  /**
+   * For a pending native-client state, returns the app URL the sessionless browser callback redirects to.
+   * Successful authorizations hand `code`, `state` and `scope` to the app, which completes them with
+   * {@link completeNativeAuthorization}. Undefined when the state is not a pending native one.
+   */
+  async nativeCallbackRedirect(query: StravaCallbackQuery): Promise<string | undefined> {
+    if (!isValidState(query.state) || !(await this.connections.isPendingNativeOAuthState(query.state))) return undefined;
+    const outcome = callbackFailure(query);
+    if (outcome) return `${NATIVE_STRAVA_CALLBACK}?outcome=${outcome}`;
+    const params = new URLSearchParams({ code: query.code as string, state: query.state, scope: query.scope as string });
+    return `${NATIVE_STRAVA_CALLBACK}?${params.toString()}`;
+  }
+
+  /** Completes a native-client flow for the authenticated player and session that started it. */
+  async completeNativeAuthorization(
+    user: { playerId: string; sessionId: string },
+    query: StravaCallbackQuery
+  ): Promise<{ outcome: StravaCallbackOutcome }> {
+    if (!isValidState(query.state)) return { outcome: "invalid_state" };
+    const state = await this.connections.consumeNativeOAuthState(query.state, user.playerId, user.sessionId);
+    if (!state) return { outcome: "invalid_state" };
+    const { outcome } = await this.finishAuthorization(user.playerId, state.locale, query);
+    return { outcome };
   }
 
   private async finishAuthorization(
@@ -101,12 +132,10 @@ export class StravaService {
     locale: StravaReturnLocale,
     query: StravaCallbackQuery
   ): Promise<{ outcome: StravaCallbackOutcome; locale: StravaReturnLocale }> {
-    if (query.error !== undefined) return { outcome: "denied", locale };
-    const scopes = typeof query.scope === "string" ? query.scope.split(",").map((scope) => scope.trim()) : [];
-    if (!scopes.includes(STRAVA_SCOPE)) return { outcome: "missing_scope", locale };
-    if (typeof query.code !== "string" || query.code.length === 0 || query.code.length > 200) return { outcome: "error", locale };
+    const failure = callbackFailure(query);
+    if (failure) return { outcome: failure, locale };
     try {
-      const authorization = await this.client.exchangeCode(query.code);
+      const authorization = await this.client.exchangeCode(query.code as string);
       await this.connections.saveConnection(playerId, authorization, STRAVA_SCOPE);
       return { outcome: "connected", locale };
     } catch (error) {

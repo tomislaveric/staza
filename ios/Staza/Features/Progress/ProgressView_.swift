@@ -12,7 +12,7 @@ struct ProgressView_: View {
         }
         .background(StazaColor.canvas)
         .navigationDestination(for: ActivityHistoryItem.self) { ActivityDetailView(activity: $0) }
-        .task {
+        .task(id: container.dataRevision) {
             if model == nil { model = ProgressDashboardModel(api: container.apiClient) }
             await model?.load()
         }

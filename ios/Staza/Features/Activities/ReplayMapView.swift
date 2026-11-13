@@ -81,7 +81,8 @@ struct ReplayMapView: UIViewRepresentable {
                 b.sw = CLLocationCoordinate2D(latitude: min(b.sw.latitude, c.latitude), longitude: min(b.sw.longitude, c.longitude))
                 b.ne = CLLocationCoordinate2D(latitude: max(b.ne.latitude, c.latitude), longitude: max(b.ne.longitude, c.longitude))
             }
-            map.setVisibleCoordinateBounds(bounds, edgePadding: UIEdgeInsets(top: 40, left: 40, bottom: 40, right: 40), animated: false)
+            let camera = map.cameraThatFitsCoordinateBounds(bounds, edgePadding: UIEdgeInsets(top: 40, left: 40, bottom: 40, right: 40))
+            map.setCamera(camera, animated: false)
 
             if let pending { update(map: map, currentMs: pending.0, revealed: pending.1) }
         }
@@ -97,6 +98,8 @@ struct ReplayMapView: UIViewRepresentable {
                 let point = MLNPointFeature()
                 point.coordinate = last
                 head.shape = point
+            } else {
+                head.shape = nil
             }
             let located = revealed.filter { $0.coordinate != nil }
             if located.count != lastItemCount {

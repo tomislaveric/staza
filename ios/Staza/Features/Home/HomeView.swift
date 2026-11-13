@@ -24,7 +24,7 @@ struct HomeView: View {
             .padding(StazaSpacing.md)
         }
         .background(StazaColor.canvas)
-        .task {
+        .task(id: container.dataRevision) {
             let model = self.model ?? HomeModel(api: container.apiClient)
             self.model = model
             await model.load()

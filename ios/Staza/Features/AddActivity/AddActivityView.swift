@@ -38,18 +38,23 @@ struct AddActivityView: View {
         .onChange(of: container.pendingImport) {
             Task { await consumePendingImport() }
         }
+        // A file shared while an upload is running stays queued until the upload ends.
+        .onChange(of: model?.isBusy) { _, busy in
+            if busy == false { Task { await consumePendingImport() } }
+        }
         .onChange(of: model?.state) { _, state in
-            if case .imported(let item) = state { importedActivity = item }
+            if case .imported(let item) = state {
+                importedActivity = item
+                container.playerDataChanged()
+            }
         }
         .interactiveDismissDisabled(model?.isBusy ?? false)
     }
 
     private func consumePendingImport() async {
-        guard let model, !model.isBusy, let pending = container.pendingImport else { return }
-        container.pendingImport = nil
+        guard let model, !model.isBusy, container.pendingImport != nil else { return }
         importedActivity = nil
-        await model.select(fileName: pending.fileName, data: pending.data)
-        await model.upload()
+        await model.importPending(from: container)
     }
 
     private func form(_ model: AddActivityModel) -> some View {
@@ -76,10 +81,16 @@ struct AddActivityView: View {
                 if hasFile(model.state) {
                     StazaCard {
                         Picker("addActivity.sport", selection: $model.sport) {
-                            ForEach(ImportSport.allCases) { Text(LocalizedStringKey("addActivity.sport.\($0.rawValue)")).tag($0) }
+                            ForEach(ImportSport.allCases) { Text($0.titleKey).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         .disabled(model.isBusy)
+                    }
+                    if model.sportDetectionFailed {
+                        Text("addActivity.inspectFailed")
+                            .font(StazaFont.caption)
+                            .foregroundStyle(StazaColor.textMuted)
+                            .accessibilityIdentifier("sportDetectionFailed")
                     }
                     status(model.state)
                     if case .failed(let message) = model.state {
@@ -137,10 +148,10 @@ struct AddActivityView: View {
         case .failure(let error):
             model.selectionFailed(error)
         case .success(let url):
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
-                await model.select(fileName: url.lastPathComponent, data: try Data(contentsOf: url))
+                let staged = try FitFileStaging.stage(url)
+                importedActivity = nil
+                await model.select(fileName: url.lastPathComponent, fileURL: staged)
             } catch {
                 model.selectionFailed(error)
             }

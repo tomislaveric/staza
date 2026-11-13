@@ -17,6 +17,7 @@ final class WorldModel {
 
     private let api: APIClient
     private var viewportTask: Task<Void, Never>?
+    private var viewportGeneration = 0
 
     init(api: APIClient) { self.api = api }
 
@@ -44,8 +45,12 @@ final class WorldModel {
     }
 
     func loadViewport(_ bounds: WorldBounds) async {
+        viewportGeneration += 1
+        let generation = viewportGeneration
         do {
             let viewport: WorldViewport = try await api.get("/api/world", query: [URLQueryItem(name: "bbox", value: bounds.queryValue)])
+            // A newer viewport request started meanwhile; its response wins.
+            guard generation == viewportGeneration else { return }
             collectibles = viewport.collectibles ?? []
             flowlines = viewport.fartleks ?? []
             truncated = viewport.truncated ?? false
@@ -53,6 +58,7 @@ final class WorldModel {
         } catch is CancellationError {
             return
         } catch {
+            guard generation == viewportGeneration else { return }
             viewportFailed = true
         }
     }
