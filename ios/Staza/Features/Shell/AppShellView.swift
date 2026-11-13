@@ -55,7 +55,7 @@ struct AppShellView: View {
     @ViewBuilder
     private func content(for tab: AppTab) -> some View {
         switch tab {
-        case .home: HomeView()
+        case .home: HomeView(onOpenWorld: { selection = .world })
         case .world: WorldView()
         case .skillAtlas: SkillAtlasView()
         case .progress: ProgressView_()
