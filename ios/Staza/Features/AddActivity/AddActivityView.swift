@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let fitFile = UTType(filenameExtension: "fit") ?? .data
+    static let fitFile = UTType("world.staza.app.fit") ?? UTType(filenameExtension: "fit") ?? .data
 }
 
 struct AddActivityView: View {
@@ -33,11 +33,23 @@ struct AddActivityView: View {
         }
         .task {
             if model == nil { model = AddActivityModel(api: container.apiClient) }
+            await consumePendingImport()
+        }
+        .onChange(of: container.pendingImport) {
+            Task { await consumePendingImport() }
         }
         .onChange(of: model?.state) { _, state in
             if case .imported(let item) = state { importedActivity = item }
         }
         .interactiveDismissDisabled(model?.isBusy ?? false)
+    }
+
+    private func consumePendingImport() async {
+        guard let model, !model.isBusy, let pending = container.pendingImport else { return }
+        container.pendingImport = nil
+        importedActivity = nil
+        await model.select(fileName: pending.fileName, data: pending.data)
+        await model.upload()
     }
 
     private func form(_ model: AddActivityModel) -> some View {

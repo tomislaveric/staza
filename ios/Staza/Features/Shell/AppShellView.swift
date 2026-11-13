@@ -27,6 +27,7 @@ enum AppTab: Hashable, CaseIterable {
 /// System `TabView`; each tab owns a `NavigationStack` with an Add Activity action.
 struct AppShellView: View {
     @State private var selection: AppTab = .home
+    @Environment(AppContainer.self) private var container
     @State private var isAddingActivity = false
 
     var body: some View {
@@ -50,6 +51,9 @@ struct AppShellView: View {
             }
         }
         .sheet(isPresented: $isAddingActivity) { AddActivityView() }
+        .onChange(of: container.pendingImport, initial: true) { _, pending in
+            if pending != nil { isAddingActivity = true }
+        }
     }
 
     @ViewBuilder
@@ -64,4 +68,4 @@ struct AppShellView: View {
     }
 }
 
-#Preview { AppShellView() }
+#Preview { AppShellView().environment(AppContainer()) }
