@@ -49,6 +49,102 @@
         }
       }
     },
+    "activities.empty" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Aktivitäten. Füge deine erste Aktivität hinzu."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No activities yet. Add your first activity to see it here."
+          }
+        }
+      }
+    },
+    "activities.error.title" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktivitäten konnten nicht geladen werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load activities"
+          }
+        }
+      }
+    },
+    "activities.loading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktivitäten werden geladen …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading activities…"
+          }
+        }
+      }
+    },
+    "activities.row.xp %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ XP"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ XP"
+          }
+        }
+      }
+    },
+    "activities.summary.count %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Aktivitäten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ activities"
+          }
+        }
+      }
+    },
+    "activities.summary.totals %@ %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@ XP"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@ XP"
+          }
+        }
+      }
+    },
     "auth.changeEmail" : {
       "localizations" : {
         "de" : {
@@ -338,9 +434,7 @@
         }
       }
     },
-    "home.level %@" : {
-
-    },
+    "home.level %@" : {},
     "home.loading" : {
       "localizations" : {
         "de" : {
@@ -406,9 +500,7 @@
         }
       }
     },
-    "home.quest.reward %@" : {
-
-    },
+    "home.quest.reward %@" : {},
     "home.quests.empty" : {
       "localizations" : {
         "de" : {
