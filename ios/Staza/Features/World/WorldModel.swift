@@ -11,6 +11,8 @@ final class WorldModel {
     private(set) var questTargets = QuestTargets.empty
     private(set) var truncated = false
     private(set) var viewportFailed = false
+    private(set) var bounds: WorldBounds?
+    private(set) var activeInstanceIds: [String] = []
     var selection: WorldSelection?
 
     private let api: APIClient
@@ -32,6 +34,7 @@ final class WorldModel {
 
     /// Debounced so panning the map issues one request once the camera settles.
     func viewportChanged(_ bounds: WorldBounds) {
+        self.bounds = bounds
         viewportTask?.cancel()
         viewportTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -73,6 +76,7 @@ final class WorldModel {
     func loadQuestTargets() async {
         do {
             let quests: QuestInstancesResponse = try await api.get("/api/quest-instances")
+            activeInstanceIds = quests.instances.filter(\.isActive).map(\.id)
             let ids = Self.targetIds(in: quests.instances.filter(\.isActive))
             guard !ids.collectibles.isEmpty || !ids.flowlines.isEmpty else {
                 questTargets = .empty

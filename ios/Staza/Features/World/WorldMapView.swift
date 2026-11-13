@@ -8,8 +8,10 @@ struct WorldMapView: UIViewRepresentable {
     let collectibles: [WorldCollectible]
     let flowlines: [WorldFlowline]
     let questTargets: QuestTargets
+    var route: [CLLocationCoordinate2D] = []
     let onViewportChange: (WorldBounds) -> Void
     let onSelect: (WorldSelectionKind, String) -> Void
+    var onUserLocation: (GeoPoint?) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -35,13 +37,16 @@ struct WorldMapView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onViewportChange = onViewportChange
         coordinator.onSelect = onSelect
+        coordinator.onUserLocation = onUserLocation
         coordinator.data = (collectibles, flowlines, questTargets)
+        coordinator.setRoute(route, on: map)
         coordinator.refresh()
     }
 
     final class Coordinator: NSObject, MLNMapViewDelegate {
         var onViewportChange: (WorldBounds) -> Void = { _ in }
         var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
+        var onUserLocation: (GeoPoint?) -> Void = { _ in }
         var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets) = ([], [], .empty)
 
         private let locationManager = CLLocationManager()
@@ -49,6 +54,8 @@ struct WorldMapView: UIViewRepresentable {
         private var flowlineSource: MLNShapeSource?
         private var questSource: MLNShapeSource?
         private var questFlowlineSource: MLNShapeSource?
+        private var routeSource: MLNShapeSource?
+        private var route: [CLLocationCoordinate2D] = []
 
         func requestLocationAccess() {
             if locationManager.authorizationStatus == .notDetermined {
@@ -100,11 +107,28 @@ struct WorldMapView: UIViewRepresentable {
             questLayer.circleStrokeWidth = NSExpression(forConstantValue: 3)
             style.addLayer(questLayer)
 
+            let routeSource = MLNShapeSource(identifier: "explore-route", shape: nil, options: nil)
+            style.addSource(routeSource)
+            let casing = MLNLineStyleLayer(identifier: "explore-route-casing", source: routeSource)
+            casing.lineColor = NSExpression(forConstantValue: UIColor.white)
+            casing.lineWidth = NSExpression(forConstantValue: 8)
+            casing.lineCap = NSExpression(forConstantValue: "round")
+            casing.lineJoin = NSExpression(forConstantValue: "round")
+            style.addLayer(casing)
+            let routeLayer = MLNLineStyleLayer(identifier: "explore-route-line", source: routeSource)
+            routeLayer.lineColor = NSExpression(forConstantValue: UIColor.systemPurple)
+            routeLayer.lineWidth = NSExpression(forConstantValue: 5)
+            routeLayer.lineCap = NSExpression(forConstantValue: "round")
+            routeLayer.lineJoin = NSExpression(forConstantValue: "round")
+            style.addLayer(routeLayer)
+            self.routeSource = routeSource
+
             collectibleSource = collectibles
             flowlineSource = flowlines
             questSource = quest
             questFlowlineSource = questFlowlines
             refresh()
+            applyRoute(on: map)
             reportViewport(map)
         }
 
@@ -138,7 +162,39 @@ struct WorldMapView: UIViewRepresentable {
             questFlowlineSource.shape = Self.lines(data.quest.flowlines)
         }
 
+        func setRoute(_ coordinates: [CLLocationCoordinate2D], on map: MLNMapView) {
+            let changed = coordinates.count != route.count
+                || coordinates.first?.latitude != route.first?.latitude
+                || coordinates.last?.latitude != route.last?.latitude
+                || coordinates.count > 1 && coordinates[coordinates.count / 2].longitude != route[route.count / 2].longitude
+            guard changed else { return }
+            route = coordinates
+            applyRoute(on: map)
+        }
+
+        private func applyRoute(on map: MLNMapView) {
+            guard let routeSource else { return }
+            guard route.count >= 2 else {
+                routeSource.shape = nil
+                return
+            }
+            routeSource.shape = MLNPolylineFeature(coordinates: route, count: UInt(route.count))
+            var minLat = 90.0, maxLat = -90.0, minLon = 180.0, maxLon = -180.0
+            for point in route {
+                minLat = min(minLat, point.latitude); maxLat = max(maxLat, point.latitude)
+                minLon = min(minLon, point.longitude); maxLon = max(maxLon, point.longitude)
+            }
+            let bounds = MLNCoordinateBounds(
+                sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
+                ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon)
+            )
+            map.setVisibleCoordinateBounds(bounds, edgePadding: UIEdgeInsets(top: 80, left: 40, bottom: 380, right: 40), animated: true, completionHandler: nil)
+        }
+
         private func reportViewport(_ map: MLNMapView) {
+            let location = locationManager.location?.coordinate
+            let point = location.flatMap { CLLocationCoordinate2DIsValid($0) ? GeoPoint(lat: $0.latitude, lon: $0.longitude) : nil }
+            DispatchQueue.main.async { [onUserLocation] in onUserLocation(point) }
             let bounds = map.visibleCoordinateBounds
             onViewportChange(WorldBounds(west: bounds.sw.longitude, south: bounds.sw.latitude, east: bounds.ne.longitude, north: bounds.ne.latitude))
         }
