@@ -6,11 +6,15 @@ struct MoreView: View {
     var body: some View {
         List {
             Section {
-                if let email = authState.user?.email {
-                    Text(email)
+                if authState.isSignedIn {
+                    NavigationLink {
+                        ProfileView()
+                    } label: {
+                        Text(authState.user?.email ?? "more.profile.loading")
+                    }
+                    .accessibilityIdentifier("profileLink")
                 } else {
-                    Text(authState.isSignedIn ? "more.profile.loading" : "more.profile.signedOut")
-                        .foregroundStyle(StazaColor.textMuted)
+                    Text("more.profile.signedOut").foregroundStyle(StazaColor.textMuted)
                 }
             } header: { Text("more.profile.header") }
             Section {
