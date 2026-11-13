@@ -388,6 +388,90 @@
         }
       }
     },
+    "progress.allActivities" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alle Aktivitäten" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "All activities" } }
+      }
+    },
+    "progress.error" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Der Fortschritt konnte nicht geladen werden." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn't load your progress." } }
+      }
+    },
+    "progress.newRewards" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neue Belohnungen!" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New rewards!" } }
+      }
+    },
+    "progress.level %lld" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Level %lld" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Level %lld" } }
+      }
+    },
+    "progress.xpToNext %@ %lld" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Noch %1$@ XP bis Level %2$lld" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ XP to level %2$lld" } }
+      }
+    },
+    "progress.totalXp %@" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ XP gesamt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ XP total" } }
+      }
+    },
+    "progress.lifetime" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gesamtstrecke" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lifetime" } }
+      }
+    },
+    "progress.collectibles %lld %lld" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%1$lld Sammelobjekte · %2$lld Flowlines" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$lld collectibles · %2$lld Flowlines" } }
+      }
+    },
+    "progress.milestones %lld %lld %lld" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%1$lld Orte · %2$lld Gipfel · %3$lld Pässe" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$lld places · %2$lld peaks · %3$lld passes" } }
+      }
+    },
+    "progress.records" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bestleistungen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Personal bests" } }
+      }
+    },
+    "progress.recordDetail %lld %@" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%1$lld Aktivitäten · längste %2$@" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$lld activities · longest %2$@" } }
+      }
+    },
+    "progress.recent" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zuletzt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recent activities" } }
+      }
+    },
+    "progress.quests" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abgeschlossene Quests" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Completed quests" } }
+      }
+    },
+    "progress.xp %@" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ XP" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ XP" } }
+      }
+    },
     "atlas.error" : {
       "localizations" : {
         "de" : {
