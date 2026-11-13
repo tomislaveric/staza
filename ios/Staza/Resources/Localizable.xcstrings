@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "" : {
+
+    },
     "action.addActivity" : {
       "localizations" : {
         "de" : {
@@ -365,6 +368,166 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Replay"
+          }
+        }
+      }
+    },
+    "atlas.cost %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kosten: %lld Skillpunkte"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cost: %lld skill points"
+          }
+        }
+      }
+    },
+    "atlas.error" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Skill-Atlas konnte nicht geladen werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load the Skill Atlas."
+          }
+        }
+      }
+    },
+    "atlas.nextPoint %lld %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächster Skillpunkt auf Level %1$lld (noch %2$@ XP)"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next skill point at level %1$lld (%2$@ XP to go)"
+          }
+        }
+      }
+    },
+    "atlas.points %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Skillpunkte verfügbar"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld skill points available"
+          }
+        }
+      }
+    },
+    "atlas.pointsDetail %lld %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld verdient · %2$lld ausgegeben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld earned · %2$lld spent"
+          }
+        }
+      }
+    },
+    "atlas.requiresNode %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benötigt: %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Requires: %@"
+          }
+        }
+      }
+    },
+    "atlas.state.premium" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premium"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premium"
+          }
+        }
+      }
+    },
+    "atlas.state.unlockable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready"
+          }
+        }
+      }
+    },
+    "atlas.state.unlocked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Freigeschaltet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlocked"
+          }
+        }
+      }
+    },
+    "atlas.unlock" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Freischalten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlock"
           }
         }
       }
@@ -1042,7 +1205,9 @@
         }
       }
     },
-    "home.level %@" : {},
+    "home.level %@" : {
+
+    },
     "home.loading" : {
       "localizations" : {
         "de" : {
@@ -1108,7 +1273,9 @@
         }
       }
     },
-    "home.quest.reward %@" : {},
+    "home.quest.reward %@" : {
+
+    },
     "home.quests.empty" : {
       "localizations" : {
         "de" : {
