@@ -10,26 +10,25 @@ struct ActivitiesView: View {
             LazyVStack(alignment: .leading, spacing: StazaSpacing.md) {
                 switch model?.state ?? .loading {
                 case .loading:
-                    ProgressView("activities.loading")
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, StazaSpacing.xl)
+                    StazaLoadingView(title: "activities.loading")
                 case .failed(let message):
-                    errorCard(message)
+                    StazaErrorView(title: "activities.error.title", message: message) {
+                        Task { await model?.load() }
+                    }
                 case .loaded(let content):
                     if content.activities.isEmpty {
-                        StazaCard {
-                            Text("activities.empty").font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
-                        }
-                        .accessibilityIdentifier("activitiesEmpty")
+                        StazaStateView(systemImage: "figure.outdoor.cycle", tint: StazaColor.accent, title: Text("activities.empty"))
+                            .accessibilityIdentifier("activitiesEmpty")
                     } else {
-                        summaryCard(content.summary)
+                        summaryRow(content.summary)
                         ForEach(content.activities) { activity in row(activity) }
                     }
                 }
             }
-            .padding(StazaSpacing.md)
+            .padding(.horizontal, StazaSpacing.md)
+            .padding(.vertical, StazaSpacing.sm)
         }
-        .background(StazaColor.canvas)
+        .stazaScreen()
         .navigationDestination(for: ActivityHistoryItem.self) { ActivityDetailView(activity: $0) }
         .task(id: container.dataRevision) {
             let model = self.model ?? ActivitiesModel(api: container.apiClient)
@@ -39,13 +38,12 @@ struct ActivitiesView: View {
         .refreshable { await model?.load() }
     }
 
-    private func summaryCard(_ summary: ActivityHistorySummary) -> some View {
+    private func summaryRow(_ summary: ActivityHistorySummary) -> some View {
         StazaCard {
-            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                Text("activities.summary.count \(StazaFormat.number(Double(summary.count), locale: locale))")
-                    .font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                Text("activities.summary.totals \(StazaFormat.distance(meters: summary.distanceMeters, locale: locale)) \(StazaFormat.number(summary.xp, locale: locale))")
-                    .font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+            HStack(alignment: .top, spacing: StazaSpacing.md) {
+                StatTile(label: "profile.activities", value: StazaFormat.number(Double(summary.count), locale: locale))
+                StatTile(label: "profile.distance", value: StazaFormat.distance(meters: summary.distanceMeters, locale: locale))
+                StatTile(label: "profile.xp", value: StazaFormat.number(summary.xp, locale: locale), tint: StazaColor.accent)
             }
         }
         .accessibilityElement(children: .combine)
@@ -58,33 +56,34 @@ struct ActivitiesView: View {
 
     private func rowCard(_ activity: ActivityHistoryItem) -> some View {
         StazaCard {
-            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(activity.title).font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                    Spacer()
-                    Text("activities.row.xp \(StazaFormat.number(activity.xpEarned, locale: locale))")
-                        .font(StazaFont.caption.weight(.semibold))
-                        .foregroundStyle(StazaColor.accent)
+            HStack(alignment: .center, spacing: StazaSpacing.md) {
+                VStack(alignment: .leading, spacing: StazaSpacing.xs) {
+                    if let date = activity.startedDate {
+                        OverlineText(verbatim: ActivityStyle.overlineDate(date, locale: locale))
+                    }
+                    Text(activity.title)
+                        .font(StazaFont.headline)
+                        .foregroundStyle(StazaColor.textPrimary)
+                        .lineLimit(2)
+                    ActivityDistanceLine(meters: activity.distanceMeters, seconds: activity.durationSeconds)
                 }
-                HStack {
-                    if let date = activity.startedDate { Text(StazaFormat.date(date, locale: locale)) }
-                    if let meters = activity.distanceMeters { Text(StazaFormat.distance(meters: meters, locale: locale)) }
-                }
-                .font(StazaFont.caption)
-                .foregroundStyle(StazaColor.textMuted)
+                Spacer(minLength: StazaSpacing.sm)
+                XPValue(xp: activity.xpEarned)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(StazaColor.textSubtle)
+                    .accessibilityHidden(true)
             }
         }
+        .contentShape(RoundedRectangle(cornerRadius: StazaRadius.card, style: .continuous))
         .accessibilityElement(children: .combine)
     }
+}
 
-    private func errorCard(_ message: String) -> some View {
-        StazaCard {
-            VStack(alignment: .leading, spacing: StazaSpacing.sm) {
-                Text("activities.error.title").font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                Text(message).font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
-                Button("home.error.retry") { Task { await model?.load() } }
-                    .buttonStyle(.bordered)
-            }
-        }
+#Preview {
+    NavigationStack {
+        ActivitiesView().navigationTitle("progress.allActivities")
     }
+    .environment(AppContainer())
+    .preferredColorScheme(.dark)
 }

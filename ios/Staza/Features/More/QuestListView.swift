@@ -11,7 +11,7 @@ struct QuestListView: View {
         }
         .navigationTitle("quests.title")
         .navigationBarTitleDisplayMode(.inline)
-        .background(StazaColor.canvas)
+        .stazaScreen()
         .task {
             if model == nil { model = QuestListModel(api: container.apiClient) }
             await model?.load()
@@ -22,67 +22,104 @@ struct QuestListView: View {
     @ViewBuilder
     private func content(_ model: QuestListModel) -> some View {
         if model.quests.isEmpty {
-            VStack(spacing: StazaSpacing.md) {
-                if model.isLoading {
-                    SwiftUI.ProgressView()
-                } else {
-                    Text(model.failed ? "quests.error" : "quests.empty")
-                        .font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
-                        .multilineTextAlignment(.center)
-                    if model.failed {
-                        Button("quests.retry") { Task { await model.load() } }.buttonStyle(.bordered)
+            ScrollView {
+                Group {
+                    if model.isLoading {
+                        StazaLoadingView(title: "quests.loading")
+                    } else if model.failed {
+                        StazaStateView(systemImage: "exclamationmark.triangle.fill", tint: StazaColor.danger, title: Text("quests.error")) {
+                            Button("quests.retry") { Task { await model.load() } }.buttonStyle(.stazaSecondary)
+                        }
+                    } else {
+                        StazaStateView(systemImage: "flag.checkered", tint: StazaColor.accent, title: Text("quests.empty"))
                     }
                 }
+                .padding(StazaSpacing.md)
+                .padding(.top, StazaSpacing.xl)
             }
-            .padding(StazaSpacing.md)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .refreshable { await model.load() }
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: StazaSpacing.lg) {
                     ForEach(model.chains) { chain in
                         VStack(alignment: .leading, spacing: StazaSpacing.sm) {
-                            Text(verbatim: chain.title).font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
+                            chainHeader(chain)
                             ForEach(chain.quests) { questCard($0) }
                         }
                     }
                 }
-                .padding(StazaSpacing.md)
+                .padding(.horizontal, StazaSpacing.md)
+                .padding(.vertical, StazaSpacing.md)
             }
             .refreshable { await model.load() }
         }
     }
 
+    private func chainHeader(_ chain: QuestChain) -> some View {
+        let completed = chain.quests.filter { $0.state == .completed }.count
+        return HStack(alignment: .firstTextBaseline) {
+            OverlineText(verbatim: chain.title)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: StazaSpacing.sm)
+            Text(verbatim: "\(completed)/\(chain.quests.count)")
+                .font(StazaFont.metricSmall)
+                .foregroundStyle(completed == chain.quests.count ? StazaColor.success : StazaColor.textSubtle)
+                .accessibilityHidden(true)
+        }
+        .padding(.top, StazaSpacing.sm)
+    }
+
     private func questCard(_ quest: AuthoredQuest) -> some View {
-        StazaCard {
-            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                HStack {
-                    Text(verbatim: quest.title).font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                    Spacer()
-                    Text(stateLabel(quest.state))
-                        .font(StazaFont.caption.weight(.semibold))
-                        .foregroundStyle(stateColor(quest.state))
+        let tint = stateColor(quest.state)
+        return StazaCard(tint: tint) {
+            VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+                HStack(spacing: StazaSpacing.sm) {
+                    StazaChip(verbatim: "\(quest.step)/\(quest.totalSteps)", tint: StazaColor.textMuted)
+                        .accessibilityLabel(Text("quests.step \(quest.step) \(quest.totalSteps)"))
+                    StazaChip(stateLabel(quest.state), systemImage: stateIcon(quest.state), tint: tint)
+                    Spacer(minLength: StazaSpacing.sm)
+                    Text("home.quest.reward \(StazaFormat.number(quest.xp, locale: locale))")
+                        .font(StazaFont.metric.weight(.semibold))
+                        .foregroundStyle(quest.state == .locked ? StazaColor.textSubtle : StazaColor.accent)
                 }
-                Text("quests.step \(quest.step) \(quest.totalSteps)")
-                    .font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
-                Text(verbatim: quest.description).font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
-                Text("home.quest.reward \(StazaFormat.number(quest.xp, locale: locale))")
-                    .font(StazaFont.caption.weight(.semibold)).foregroundStyle(StazaColor.accent)
+                VStack(alignment: .leading, spacing: StazaSpacing.xs) {
+                    Text(verbatim: quest.title)
+                        .font(StazaFont.headline)
+                        .foregroundStyle(quest.state == .locked ? StazaColor.textMuted : StazaColor.textPrimary)
+                    Text(verbatim: quest.description)
+                        .font(StazaFont.subheadline)
+                        .foregroundStyle(StazaColor.textMuted)
+                }
                 if quest.state == .locked {
                     if let node = quest.requiredNode {
-                        Text("quests.requiresNode \(node.name)").font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+                        Label("quests.requiresNode \(node.name)", systemImage: "lock.fill")
+                            .font(StazaFont.footnote).foregroundStyle(StazaColor.textSubtle)
                     } else if let previous = quest.requiredQuestTitle {
-                        Text("quests.requiresQuest \(previous)").font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+                        Label("quests.requiresQuest \(previous)", systemImage: "lock.fill")
+                            .font(StazaFont.footnote).foregroundStyle(StazaColor.textSubtle)
                     }
                 }
                 if quest.state == .active, let failure = quest.lastFailure {
-                    Text("quests.lastAttempt \(failure.attemptCount)").font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
-                    ForEach((failure.criteria ?? []).filter { !$0.met }, id: \.label) { criterion in
-                        Label(criterion.label, systemImage: "xmark.circle").font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+                    VStack(alignment: .leading, spacing: StazaSpacing.xs) {
+                        Text("quests.lastAttempt \(failure.attemptCount)")
+                            .font(StazaFont.footnote.weight(.medium))
+                            .foregroundStyle(StazaColor.textMuted)
+                        ForEach(failure.criteria ?? [], id: \.label) { criterion in
+                            Label {
+                                Text(verbatim: criterion.label).foregroundStyle(criterion.met ? StazaColor.textMuted : StazaColor.textPrimary)
+                            } icon: {
+                                Image(systemName: criterion.met ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundStyle(criterion.met ? StazaColor.success : StazaColor.danger)
+                            }
+                            .font(StazaFont.footnote)
+                        }
                     }
+                    .padding(StazaSpacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(StazaColor.surfaceRaised, in: RoundedRectangle(cornerRadius: StazaRadius.chip, style: .continuous))
                 }
             }
         }
-        .opacity(quest.state == .locked ? 0.6 : 1)
         .accessibilityElement(children: .combine)
     }
 
@@ -94,11 +131,19 @@ struct QuestListView: View {
         }
     }
 
+    private func stateIcon(_ state: AuthoredQuest.State) -> String {
+        switch state {
+        case .active: "flag.fill"
+        case .completed: "checkmark"
+        case .locked: "lock.fill"
+        }
+    }
+
     private func stateColor(_ state: AuthoredQuest.State) -> Color {
         switch state {
         case .active: StazaColor.accent
         case .completed: StazaColor.success
-        case .locked: StazaColor.textMuted
+        case .locked: StazaColor.textSubtle
         }
     }
 }

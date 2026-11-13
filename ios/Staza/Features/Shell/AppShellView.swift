@@ -15,11 +15,11 @@ enum AppTab: Hashable, CaseIterable {
 
     var systemImage: String {
         switch self {
-        case .home: "house"
-        case .world: "map"
+        case .home: "house.fill"
+        case .world: "map.fill"
         case .skillAtlas: "point.3.connected.trianglepath.dotted"
         case .progress: "chart.line.uptrend.xyaxis"
-        case .more: "person.crop.circle"
+        case .more: "person.crop.circle.fill"
         }
     }
 }
@@ -36,12 +36,17 @@ struct AppShellView: View {
                 NavigationStack {
                     content(for: tab)
                         .navigationTitle(tab.title)
+                        .toolbarBackground(StazaColor.canvas, for: .navigationBar)
                         .toolbar {
                             ToolbarItem(placement: .primaryAction) {
                                 Button { isAddingActivity = true } label: {
-                                    Label("action.addActivity", systemImage: "plus.circle.fill")
-                                        .font(.title3)
+                                    Label("action.addActivity", systemImage: "plus")
+                                        .fontWeight(.semibold)
                                 }
+                                .buttonStyle(.borderedProminent)
+                                .buttonBorderShape(.circle)
+                                .tint(StazaColor.accent)
+                                .foregroundStyle(StazaColor.onAccent)
                                 .accessibilityIdentifier("addActivityButton")
                             }
                         }
@@ -50,7 +55,12 @@ struct AppShellView: View {
                 .tag(tab)
             }
         }
-        .sheet(isPresented: $isAddingActivity) { AddActivityView() }
+        .tint(StazaColor.accent)
+        .sheet(isPresented: $isAddingActivity) {
+            AddActivityView()
+                .presentationBackground(StazaColor.canvas)
+                .presentationCornerRadius(StazaRadius.panel)
+        }
         .onChange(of: container.pendingImport, initial: true) { _, pending in
             if pending != nil { isAddingActivity = true }
         }
@@ -68,4 +78,4 @@ struct AppShellView: View {
     }
 }
 
-#Preview { AppShellView().environment(AppContainer()) }
+#Preview { AppShellView().environment(AppContainer()).preferredColorScheme(.dark) }

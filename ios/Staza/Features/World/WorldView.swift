@@ -39,37 +39,61 @@ struct WorldView: View {
             )
             .ignoresSafeArea(edges: .top)
             .overlay(alignment: .bottom) {
-                if explore.isActive {
-                    ExplorePanel(model: explore)
-                } else if !model.viewportFailed, let bounds = model.bounds {
-                    Button {
-                        explore.begin(bounds: bounds, userLocation: userLocation)
-                    } label: {
-                        Label("explore.start.button", systemImage: "location.north.line")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding(StazaSpacing.md)
-                    .accessibilityIdentifier("exploreThisArea")
-                } else if model.viewportFailed {
-                    Text("world.viewportFailed")
-                        .font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
-                        .padding(StazaSpacing.sm)
-                        .background(.regularMaterial, in: Capsule())
+                Group {
+                    if explore.isActive {
+                        ExplorePanel(model: explore)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if !model.viewportFailed, let bounds = model.bounds {
+                        Button {
+                            explore.begin(bounds: bounds, userLocation: userLocation)
+                        } label: {
+                            Label("explore.start.button", systemImage: "location.north.line.fill")
+                        }
+                        .buttonStyle(.stazaPrimary)
+                        .shadow(color: StazaColor.canvas.opacity(0.5), radius: 12, y: 4)
                         .padding(StazaSpacing.md)
+                        .accessibilityIdentifier("exploreThisArea")
+                        .transition(.scale(scale: 0.9).combined(with: .opacity))
+                    } else if model.viewportFailed {
+                        mapNotice("world.viewportFailed", systemImage: "exclamationmark.triangle.fill", tint: StazaColor.danger)
+                            .padding(StazaSpacing.md)
+                    }
                 }
+                .animation(.snappy, value: explore.isActive)
             }
             .sheet(item: Binding(get: { model.selection }, set: { model.selection = $0 })) { selection in
                 WorldDetailSheet(selection: selection, isQuestTarget: model.isQuestTarget(selection))
                     .presentationDetents([.height(260), .medium])
                     .presentationDragIndicator(.visible)
+                    .presentationBackground(StazaColor.canvas)
             }
             .accessibilityIdentifier("worldMap")
         } else {
-            StazaCard {
-                Text(model.basemapFailed ? "world.mapUnavailable" : "world.loading")
-                    .font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
+            ZStack {
+                StazaColor.map.ignoresSafeArea()
+                if model.basemapFailed {
+                    mapNotice("world.mapUnavailable", systemImage: "map", tint: StazaColor.danger)
+                } else {
+                    HStack(spacing: StazaSpacing.sm) {
+                        SwiftUI.ProgressView().tint(StazaColor.accent)
+                        Text("world.loading").font(StazaFont.subheadline).foregroundStyle(StazaColor.textMuted)
+                    }
+                    .padding(.horizontal, StazaSpacing.md)
+                    .padding(.vertical, StazaSpacing.sm + StazaSpacing.xs)
+                    .stazaGlass(cornerRadius: StazaRadius.card)
+                }
             }
-            .padding(StazaSpacing.md)
         }
+    }
+
+    private func mapNotice(_ title: LocalizedStringKey, systemImage: String, tint: Color) -> some View {
+        Label {
+            Text(title).font(StazaFont.subheadline).foregroundStyle(StazaColor.textPrimary)
+        } icon: {
+            Image(systemName: systemImage).foregroundStyle(tint)
+        }
+        .padding(.horizontal, StazaSpacing.md)
+        .padding(.vertical, StazaSpacing.sm + StazaSpacing.xs)
+        .stazaGlass(cornerRadius: StazaRadius.card)
     }
 }

@@ -1,33 +1,46 @@
 import SwiftUI
-import UIKit
 
-/// Design tokens aligned with the web palette (`public` CSS), adapted for light
-/// and dark appearance. Dark values match the web canvas.
+/// Design tokens mirroring the Figma `Staza iOS / Color` and `Staza iOS / Layout`
+/// variable collections. The app is dark only, matching the web canvas.
 enum StazaColor {
-    static let canvas = dynamic(light: 0xF6F4EF, dark: 0x0D0E10)
-    static let surface = dynamic(light: 0xFFFFFF, dark: 0x111318)
-    static let surfaceRaised = dynamic(light: 0xEEEAE2, dark: 0x171A20)
-    static let textPrimary = dynamic(light: 0x1B1C1F, dark: 0xEDE9E2)
-    static let textMuted = dynamic(light: 0x5F636B, dark: 0x9AA0AA)
-    static let accent = dynamic(light: 0xB88A00, dark: 0xF5C823)
-    static let onAccent = dynamic(light: 0xFFFFFF, dark: 0x0D0E10)
-    static let success = dynamic(light: 0x1E9B53, dark: 0x34C76F)
-    static let border = dynamic(light: 0xD8D3C8, dark: 0x2A2D34)
+    static let canvas = hex(0x0D0E10)
+    static let surface = hex(0x111318)
+    static let surfaceRaised = hex(0x171A20)
+    static let track = hex(0x1F232B)
+    static let map = hex(0x0B0C0F)
 
-    private static func dynamic(light: UInt32, dark: UInt32) -> Color {
-        Color(uiColor: UIColor { traits in
-            let hex = traits.userInterfaceStyle == .dark ? dark : light
-            return UIColor(
-                red: CGFloat((hex >> 16) & 0xFF) / 255,
-                green: CGFloat((hex >> 8) & 0xFF) / 255,
-                blue: CGFloat(hex & 0xFF) / 255,
-                alpha: 1
-            )
-        })
+    static let textPrimary = hex(0xEDE9E2)
+    static let textMuted = hex(0x9AA0AA)
+    static let textSubtle = hex(0x737880)
+    static let onAccent = hex(0x0D0E10)
+
+    static let accent = hex(0xF5C823)
+    static let accentPressed = hex(0xE8B80A)
+    static let success = hex(0x34C76F)
+    static let danger = hex(0xFF5C5C)
+
+    static let border = hex(0x2A2D34)
+    static let borderStrong = hex(0x3C3F48)
+
+    static let rarityCommon = hex(0x8C919A)
+    static let rarityRare = hex(0x5B9BD5)
+    static let rarityEpic = hex(0x9B6BFF)
+    static let rarityLegendary = accent
+
+    static let route = accent
+    static let markerRing = hex(0x7FBAD0)
+
+    private static func hex(_ value: UInt32) -> Color {
+        Color(
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255
+        )
     }
 }
 
 enum StazaSpacing {
+    static let xxs: CGFloat = 2
     static let xs: CGFloat = 4
     static let sm: CGFloat = 8
     static let md: CGFloat = 16
@@ -36,16 +49,26 @@ enum StazaSpacing {
 }
 
 enum StazaRadius {
-    static let card: CGFloat = 12
-    static let panel: CGFloat = 16
+    static let chip: CGFloat = 8
+    static let card: CGFloat = 16
+    static let panel: CGFloat = 24
 }
 
 /// Text styles map to system text styles so they scale with Dynamic Type.
+/// Metric styles use tabular digits so changing numbers don't jitter.
 enum StazaFont {
-    static let display = Font.system(.largeTitle, design: .rounded).weight(.bold)
-    static let title = Font.system(.title2, design: .rounded).weight(.semibold)
+    static let display = Font.largeTitle.weight(.bold)
+    static let title = Font.title2.weight(.bold)
+    static let title3 = Font.title3.weight(.semibold)
     static let headline = Font.headline
     static let body = Font.body
+    static let callout = Font.callout
+    static let subheadline = Font.subheadline
+    static let footnote = Font.footnote
     static let caption = Font.caption
-    static let metric = Font.system(.title3, design: .monospaced).weight(.medium)
+    static let overline = Font.caption2.weight(.semibold)
+    static let hero = Font.system(size: 72, weight: .bold).width(.condensed).monospacedDigit()
+    static let metricLarge = Font.system(.largeTitle).weight(.semibold).width(.condensed).monospacedDigit()
+    static let metric = Font.subheadline.weight(.medium).monospacedDigit()
+    static let metricSmall = Font.caption.weight(.medium).monospacedDigit()
 }

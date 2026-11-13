@@ -32,48 +32,44 @@ struct StravaImportView: View {
             VStack(alignment: .leading, spacing: StazaSpacing.md) {
                 switch model?.state ?? .loading {
                 case .loading:
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, StazaSpacing.xl)
+                    StazaLoadingView(title: "strava.loading")
                 case .disabled:
-                    card { Text("strava.disabled").font(StazaFont.body).foregroundStyle(StazaColor.textMuted) }
+                    StazaStateView(systemImage: "bolt.horizontal.circle", title: Text("strava.disabled"))
                 case .disconnected(let message):
                     connectCard(message)
                 case .connecting:
-                    HStack(spacing: StazaSpacing.sm) {
-                        ProgressView()
-                        Text("strava.connecting").font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
-                    }
+                    StazaLoadingView(title: "strava.connecting")
                 case .connected(let activities):
                     activityList(activities)
                 case .failed(let message):
-                    card {
-                        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
-                            Text(message).font(StazaFont.body).foregroundStyle(.red)
-                            Button("action.retry") { Task { await model?.load() } }.buttonStyle(.bordered)
-                        }
+                    StazaErrorView(title: "strava.title", message: message, retryTitle: "action.retry") {
+                        Task { await model?.load() }
                     }
                 }
             }
             .padding(StazaSpacing.md)
         }
-        .background(StazaColor.canvas)
+        .stazaScreen()
         .refreshable { await model?.loadActivities() }
     }
 
-    private func card<C: View>(@ViewBuilder _ content: () -> C) -> some View {
-        StazaCard { content() }
-    }
-
     private func connectCard(_ message: StravaImportModel.StravaMessage?) -> some View {
-        card {
-            VStack(alignment: .leading, spacing: StazaSpacing.sm) {
-                Text("strava.connect.hint").font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
+        StazaCard(padding: StazaSpacing.lg) {
+            VStack(alignment: .leading, spacing: StazaSpacing.md) {
+                IconBadge(systemImage: "figure.outdoor.cycle", size: 56)
+                VStack(alignment: .leading, spacing: StazaSpacing.xs) {
+                    Text("strava.title").font(StazaFont.title).foregroundStyle(StazaColor.textPrimary)
+                    Text("strava.connect.hint").font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
+                }
                 if let message {
-                    Text(messageKey(message)).font(StazaFont.caption).foregroundStyle(.red)
+                    Label(messageKey(message), systemImage: "exclamationmark.triangle.fill")
+                        .font(StazaFont.subheadline)
+                        .foregroundStyle(StazaColor.danger)
                 }
                 Button { Task { await model?.connect() } } label: {
                     Label("strava.connect", systemImage: "link")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.stazaPrimaryWide)
                 .accessibilityIdentifier("connectStravaButton")
             }
         }
@@ -90,49 +86,68 @@ struct StravaImportView: View {
     @ViewBuilder
     private func activityList(_ activities: [StravaRecentActivity]) -> some View {
         if let error = model?.importError {
-            Text(error).font(StazaFont.caption).foregroundStyle(.red)
+            StazaCard(tint: StazaColor.danger) {
+                Label { Text(verbatim: error) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
+                    .font(StazaFont.subheadline)
+                    .foregroundStyle(StazaColor.danger)
+            }
         }
         if activities.isEmpty {
-            card { Text("strava.empty").font(StazaFont.body).foregroundStyle(StazaColor.textMuted) }
+            StazaStateView(systemImage: "point.topleft.down.to.point.bottomright.curvepath", title: Text("strava.empty"))
+        } else {
+            SectionHeader("strava.title")
+            ForEach(activities) { activity in row(activity) }
         }
-        ForEach(activities) { activity in row(activity) }
         Button("strava.disconnect", role: .destructive) { Task { await model?.disconnect() } }
+            .buttonStyle(.stazaDestructive)
             .disabled(model?.isBusy ?? false)
             .accessibilityIdentifier("disconnectStravaButton")
+            .padding(.top, StazaSpacing.md)
     }
 
     private func row(_ activity: StravaRecentActivity) -> some View {
-        StazaCard {
-            HStack(spacing: StazaSpacing.sm) {
+        StazaCard(tint: activity.isImported ? StazaColor.success : nil) {
+            HStack(alignment: .center, spacing: StazaSpacing.md) {
                 VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                    Text(activity.name).font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                    if let caption = caption(activity) {
-                        Text(caption).font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+                    if let date = date(activity) {
+                        OverlineText(verbatim: date)
                     }
+                    Text(activity.name)
+                        .font(StazaFont.headline)
+                        .foregroundStyle(StazaColor.textPrimary)
+                        .lineLimit(2)
+                    let metrics = metrics(activity)
+                    if !metrics.isEmpty { MetricLine(items: metrics) }
                 }
-                Spacer()
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: StazaSpacing.sm)
                 if model?.importingID == activity.id {
-                    ProgressView()
+                    ProgressView().tint(StazaColor.accent)
                 } else if activity.isImported {
-                    Label("strava.imported", systemImage: "checkmark.circle.fill")
-                        .font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+                    StazaChip("strava.imported", systemImage: "checkmark", tint: StazaColor.success)
                 } else {
                     Button("strava.import") { Task { await model?.importActivity(activity) } }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.stazaSecondary)
                         .disabled(activity.beforeJourneyStart || (model?.isBusy ?? false))
                 }
             }
         }
+        .opacity(activity.beforeJourneyStart && !activity.isImported ? 0.6 : 1)
     }
 
-    private func caption(_ activity: StravaRecentActivity) -> String? {
+    private func date(_ activity: StravaRecentActivity) -> String? {
+        guard let start = activity.startDate, let date = ISO8601DateFormatter().date(from: start) else { return nil }
+        return StazaFormat.date(date, locale: locale)
+    }
+
+    private func metrics(_ activity: StravaRecentActivity) -> [String] {
         var parts: [String] = []
-        if let start = activity.startDate, let date = ISO8601DateFormatter().date(from: start) {
-            parts.append(StazaFormat.date(date, locale: locale))
-        }
         if let meters = activity.distanceMeters {
             parts.append(StazaFormat.distance(meters: meters, locale: locale))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        if let seconds = activity.movingTimeSeconds, seconds > 0 {
+            parts.append(Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated)))
+        }
+        return parts
     }
 }

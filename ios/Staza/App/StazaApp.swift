@@ -10,6 +10,7 @@ struct StazaApp: App {
                 .environment(container)
                 .environment(container.authState)
                 .tint(StazaColor.accent)
+                .preferredColorScheme(.dark)
                 .task { await container.bootstrap() }
                 .onOpenURL { container.receive(fileURL: $0) }
         }

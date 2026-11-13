@@ -20,7 +20,7 @@ struct AddActivityView: View {
                 } else if let model {
                     form(model)
                 } else {
-                    ProgressView()
+                    ProgressView().tint(StazaColor.accent).frame(maxWidth: .infinity, maxHeight: .infinity).stazaScreen()
                 }
             }
             .navigationTitle("action.addActivity")
@@ -49,6 +49,7 @@ struct AddActivityView: View {
             }
         }
         .interactiveDismissDisabled(model?.isBusy ?? false)
+        .presentationBackground(StazaColor.canvas)
     }
 
     private func consumePendingImport() async {
@@ -61,54 +62,78 @@ struct AddActivityView: View {
         @Bindable var model = model
         return ScrollView {
             VStack(alignment: .leading, spacing: StazaSpacing.md) {
-                StazaCard {
-                    VStack(alignment: .leading, spacing: StazaSpacing.sm) {
-                        Text("addActivity.fit.title").font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                        Text(fileCaption()).font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
-                        Button { isPicking = true } label: { Label("addActivity.choose", systemImage: "doc.badge.plus") }
-                            .buttonStyle(.bordered)
-                            .disabled(model.isBusy)
-                            .accessibilityIdentifier("chooseFitButton")
-                    }
+                Button { isPicking = true } label: {
+                    AddActivityOptionCard(
+                        systemImage: model.hasFile ? "doc.fill" : "doc.badge.plus",
+                        title: "addActivity.fit.title",
+                        caption: fileCaption(),
+                        isSelected: hasFile(model.state)
+                    )
                 }
-                StazaCard {
-                    NavigationLink { StravaImportView() } label: {
-                        Label("addActivity.strava", systemImage: "arrow.down.circle")
-                    }
-                    .disabled(model.isBusy)
-                    .accessibilityIdentifier("stravaImportLink")
+                .buttonStyle(AddActivityCardButtonStyle())
+                .disabled(model.isBusy)
+                .accessibilityHint(Text("addActivity.choose"))
+                .accessibilityIdentifier("chooseFitButton")
+
+                NavigationLink { StravaImportView() } label: {
+                    AddActivityOptionCard(
+                        systemImage: "arrow.down.circle",
+                        title: "addActivity.strava",
+                        caption: "strava.connect.hint",
+                        isSelected: false
+                    )
                 }
+                .buttonStyle(AddActivityCardButtonStyle())
+                .disabled(model.isBusy)
+                .accessibilityIdentifier("stravaImportLink")
+
                 if hasFile(model.state) {
-                    StazaCard {
-                        Picker("addActivity.sport", selection: $model.sport) {
-                            ForEach(ImportSport.allCases) { Text($0.titleKey).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(model.isBusy)
+                    SectionHeader("addActivity.sport")
+                    Picker("addActivity.sport", selection: $model.sport) {
+                        ForEach(ImportSport.allCases) { Text($0.titleKey).tag($0) }
                     }
+                    .pickerStyle(.segmented)
+                    .disabled(model.isBusy)
                     if model.sportDetectionFailed {
-                        Text("addActivity.inspectFailed")
-                            .font(StazaFont.caption)
+                        Label("addActivity.inspectFailed", systemImage: "info.circle")
+                            .font(StazaFont.footnote)
                             .foregroundStyle(StazaColor.textMuted)
                             .accessibilityIdentifier("sportDetectionFailed")
                     }
                     status(model.state)
-                    if case .failed(let message) = model.state {
-                        Text(message).font(StazaFont.caption).foregroundStyle(.red)
+                }
+                if case .failed(let message) = model.state {
+                    StazaCard(tint: StazaColor.danger) {
+                        HStack(alignment: .firstTextBaseline, spacing: StazaSpacing.sm) {
+                            Image(systemName: "exclamationmark.triangle.fill").accessibilityHidden(true)
+                            Text(verbatim: message).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .font(StazaFont.subheadline)
+                        .foregroundStyle(StazaColor.danger)
                     }
-                    Button { Task { await model.upload() } } label: {
-                        Text("addActivity.upload").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.isBusy)
-                    .accessibilityIdentifier("uploadFitButton")
-                } else if case .failed(let message) = model.state {
-                    Text(message).font(StazaFont.caption).foregroundStyle(.red)
+                    .accessibilityElement(children: .combine)
                 }
             }
-            .padding(StazaSpacing.md)
+            .padding(.horizontal, StazaSpacing.md)
+            .padding(.vertical, StazaSpacing.md)
+            .animation(.snappy, value: hasFile(model.state))
         }
-        .background(StazaColor.canvas)
+        .stazaScreen()
+        .safeAreaInset(edge: .bottom) {
+            if hasFile(model.state) {
+                Button { Task { await model.upload() } } label: {
+                    Label("addActivity.upload", systemImage: "arrow.up.circle.fill")
+                }
+                .buttonStyle(.stazaPrimaryWide)
+                .disabled(model.isBusy)
+                .accessibilityIdentifier("uploadFitButton")
+                .padding(.horizontal, StazaSpacing.md)
+                .padding(.top, StazaSpacing.sm)
+                .padding(.bottom, StazaSpacing.sm)
+                .background(StazaColor.canvas.opacity(0.94).ignoresSafeArea())
+                .overlay(alignment: .top) { Rectangle().fill(StazaColor.border).frame(height: 1) }
+            }
+        }
         .fileImporter(isPresented: $isPicking, allowedContentTypes: [.fitFile]) { result in
             Task { await handle(result, model: model) }
         }
@@ -130,15 +155,27 @@ struct AddActivityView: View {
     private func status(_ state: AddActivityModel.State) -> some View {
         switch state {
         case .uploading(let progress):
-            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                ProgressView(value: progress)
-                Text("addActivity.uploading").font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+            StazaCard {
+                VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+                    HStack {
+                        Text("addActivity.uploading").font(StazaFont.subheadline).foregroundStyle(StazaColor.textPrimary)
+                        Spacer()
+                        Text(progress, format: .percent.precision(.fractionLength(0)))
+                            .font(StazaFont.metric)
+                            .foregroundStyle(StazaColor.accent)
+                    }
+                    StazaProgressBar(value: progress)
+                }
             }
+            .accessibilityElement(children: .combine)
         case .processing:
-            HStack(spacing: StazaSpacing.sm) {
-                ProgressView()
-                Text("addActivity.processing").font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+            StazaCard {
+                HStack(spacing: StazaSpacing.sm) {
+                    ProgressView().tint(StazaColor.accent)
+                    Text("addActivity.processing").font(StazaFont.subheadline).foregroundStyle(StazaColor.textPrimary)
+                }
             }
+            .accessibilityElement(children: .combine)
         default: EmptyView()
         }
     }

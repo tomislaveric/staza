@@ -10,7 +10,7 @@ struct RootView: View {
         Group {
             switch authState.status {
             case .restoring:
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).background(StazaColor.canvas)
+                ProgressView().tint(StazaColor.accent).frame(maxWidth: .infinity, maxHeight: .infinity).stazaScreen()
             case .signedOut:
                 AuthView()
             case .signedIn:

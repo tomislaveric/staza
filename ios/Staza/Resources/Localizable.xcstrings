@@ -133,6 +133,7 @@
       }
     },
     "activities.summary.count %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -149,6 +150,7 @@
       }
     },
     "activities.summary.totals %@ %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -384,6 +386,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Replay"
+          }
+        }
+      }
+    },
+    "activityDetail.xpEarned" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XP verdient"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XP earned"
           }
         }
       }
@@ -628,6 +646,22 @@
         }
       }
     },
+    "atlas.loading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skill-Atlas wird geladen…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading Skill Atlas…"
+          }
+        }
+      }
+    },
     "atlas.nextPoint %lld %@" : {
       "localizations" : {
         "de" : {
@@ -661,6 +695,7 @@
       }
     },
     "atlas.pointsDetail %lld %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -688,6 +723,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Requires: %@"
+          }
+        }
+      }
+    },
+    "atlas.stat.earned" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verdient"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earned"
+          }
+        }
+      }
+    },
+    "atlas.stat.spent" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgegeben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spent"
           }
         }
       }
@@ -1248,6 +1315,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ride length"
+          }
+        }
+      }
+    },
+    "explore.recommended" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empfohlen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommended"
           }
         }
       }
@@ -2149,6 +2232,7 @@
       }
     },
     "progress.collectibles %lld %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2181,6 +2265,7 @@
       }
     },
     "progress.level %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2212,7 +2297,56 @@
         }
       }
     },
+    "progress.milestone.passes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pässe"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passes"
+          }
+        }
+      }
+    },
+    "progress.milestone.peaks" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gipfel"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peaks"
+          }
+        }
+      }
+    },
+    "progress.milestone.places" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orte"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Places"
+          }
+        }
+      }
+    },
     "progress.milestones %lld %lld %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2224,6 +2358,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld places · %2$lld peaks · %3$lld passes"
+          }
+        }
+      }
+    },
+    "progress.milestones.header" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meilensteine"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milestones"
           }
         }
       }
@@ -2308,6 +2458,70 @@
         }
       }
     },
+    "progress.stat.collectibles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sammelobjekte"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collectibles"
+          }
+        }
+      }
+    },
+    "progress.stat.distance" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Distanz"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Distance"
+          }
+        }
+      }
+    },
+    "progress.stat.flowlines" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowlines"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowlines"
+          }
+        }
+      }
+    },
+    "progress.stat.totalXp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesamt-XP"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total XP"
+          }
+        }
+      }
+    },
     "progress.totalXp %@" : {
       "localizations" : {
         "de" : {
@@ -2325,6 +2539,7 @@
       }
     },
     "progress.xp %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2341,6 +2556,7 @@
       }
     },
     "progress.xpToNext %@ %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2400,6 +2616,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Last attempt fell short (attempt %lld)"
+          }
+        }
+      }
+    },
+    "quests.loading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quests werden geladen …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading quests…"
           }
         }
       }
@@ -2736,6 +2968,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Imported"
+          }
+        }
+      }
+    },
+    "strava.loading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strava wird geladen …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading Strava…"
           }
         }
       }

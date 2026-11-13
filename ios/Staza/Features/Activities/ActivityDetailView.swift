@@ -13,11 +13,11 @@ struct ActivityDetailView: View {
                 case .loading:
                     header(title: activity.title, date: activity.startedDate, meters: activity.distanceMeters,
                            seconds: activity.durationSeconds, xp: activity.xpEarned)
-                    ProgressView("activityDetail.loading")
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, StazaSpacing.xl)
+                    StazaLoadingView(title: "activityDetail.loading")
                 case .failed(let message):
-                    errorCard(message)
+                    StazaErrorView(title: "activityDetail.error.title", message: message) {
+                        Task { await model?.load() }
+                    }
                 case .loaded(let detail):
                     header(title: detail.title, date: detail.startedDate, meters: detail.distanceMeters,
                            seconds: detail.durationSeconds, xp: detail.xpEarned)
@@ -26,9 +26,10 @@ struct ActivityDetailView: View {
                     }
                 }
             }
-            .padding(StazaSpacing.md)
+            .padding(.horizontal, StazaSpacing.md)
+            .padding(.vertical, StazaSpacing.sm)
         }
-        .background(StazaColor.canvas)
+        .stazaScreen()
         .navigationTitle(activity.title)
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -40,23 +41,24 @@ struct ActivityDetailView: View {
     }
 
     private func header(title: String, date: Date?, meters: Double?, seconds: Double?, xp: Double) -> some View {
-        StazaCard {
-            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(title).font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                    Spacer()
-                    Text("activities.row.xp \(StazaFormat.number(xp, locale: locale))")
-                        .font(StazaFont.caption.weight(.semibold))
-                        .foregroundStyle(StazaColor.accent)
+        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            if let date {
+                OverlineText(verbatim: ActivityStyle.overlineDate(date, locale: locale))
+            }
+            Text(title)
+                .font(StazaFont.title)
+                .foregroundStyle(StazaColor.textPrimary)
+            HStack(alignment: .lastTextBaseline, spacing: StazaSpacing.md) {
+                ActivityDistanceLine(meters: meters, seconds: seconds)
+                Spacer(minLength: StazaSpacing.sm)
+                VStack(alignment: .trailing, spacing: StazaSpacing.xxs) {
+                    OverlineText("activityDetail.xpEarned")
+                    XPValue(xp: xp, font: StazaFont.metricLarge)
                 }
-                HStack {
-                    if let date { Text(StazaFormat.date(date, locale: locale)) }
-                    if let meters { Text(StazaFormat.distance(meters: meters, locale: locale)) }
-                }
-                .font(StazaFont.caption)
-                .foregroundStyle(StazaColor.textMuted)
             }
         }
+        .padding(.vertical, StazaSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("activityDetailHeader")
     }
@@ -70,6 +72,7 @@ struct ActivityDetailView: View {
             Text("activityDetail.tab.nearMisses").tag(ActivityDetailSection.nearMisses)
         }
         .pickerStyle(.segmented)
+        .controlSize(.large)
         .accessibilityIdentifier("activityDetailSections")
 
         switch model.section {
@@ -77,37 +80,44 @@ struct ActivityDetailView: View {
             if ReplayTimeline(detail: detail) != nil {
                 ReplayView(detail: detail)
             } else {
-                emptyCard("activityDetail.replay.unavailable", id: "activityDetailReplay")
+                emptyState("activityDetail.replay.unavailable", systemImage: "map", id: "activityDetailReplay")
             }
         case .collected:
             if detail.events.isEmpty {
-                emptyCard("activityDetail.collected.empty", id: "activityDetailCollectedEmpty")
+                emptyState("activityDetail.collected.empty", systemImage: "sparkles", id: "activityDetailCollectedEmpty")
             } else {
-                ForEach(detail.events) { event in collectedRow(event) }
+                VStack(spacing: StazaSpacing.sm) {
+                    ForEach(detail.events) { event in collectedRow(event) }
+                }
             }
         case .nearMisses:
             if detail.nearMisses.isEmpty {
-                emptyCard("activityDetail.nearMisses.empty", id: "activityDetailNearMissesEmpty")
+                emptyState("activityDetail.nearMisses.empty", systemImage: "scope", id: "activityDetailNearMissesEmpty")
             } else {
-                ForEach(detail.nearMisses) { miss in nearMissRow(miss) }
+                VStack(spacing: StazaSpacing.sm) {
+                    ForEach(detail.nearMisses) { miss in nearMissRow(miss) }
+                }
             }
         }
     }
 
     private func collectedRow(_ event: ActivityDetailEvent) -> some View {
-        StazaCard {
-            HStack(alignment: .firstTextBaseline) {
+        let tint = ActivityStyle.tint(xp: event.value, isRepeat: event.isRepeat)
+        return StazaCard(padding: StazaSpacing.sm + StazaSpacing.xs) {
+            HStack(spacing: StazaSpacing.md) {
+                IconBadge(systemImage: ActivityStyle.icon(collectibleType: event.collectible.type), tint: tint, size: 40)
                 VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                    Text(event.collectible.name).font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
+                    Text(event.collectible.name)
+                        .font(StazaFont.headline)
+                        .foregroundStyle(StazaColor.textPrimary)
+                        .lineLimit(2)
                     if event.isRepeat {
-                        Text("activityDetail.collected.revisit").font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+                        StazaChip("activityDetail.collected.revisit", systemImage: "arrow.counterclockwise")
                     }
                 }
-                Spacer()
+                Spacer(minLength: StazaSpacing.sm)
                 if !event.isRepeat {
-                    Text("activities.row.xp \(StazaFormat.number(event.value, locale: locale))")
-                        .font(StazaFont.caption.weight(.semibold))
-                        .foregroundStyle(StazaColor.accent)
+                    XPValue(xp: event.value, font: StazaFont.metric.weight(.semibold))
                 }
             }
         }
@@ -115,32 +125,32 @@ struct ActivityDetailView: View {
     }
 
     private func nearMissRow(_ miss: ActivityNearMiss) -> some View {
-        StazaCard {
-            HStack(alignment: .firstTextBaseline) {
-                Text(miss.name).font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                Spacer()
-                Text(StazaFormat.distance(meters: miss.minimumDistanceMeters, locale: locale))
-                    .font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
+        StazaCard(padding: StazaSpacing.sm + StazaSpacing.xs) {
+            HStack(spacing: StazaSpacing.md) {
+                IconBadge(systemImage: "scope", tint: StazaColor.markerRing, size: 40)
+                VStack(alignment: .leading, spacing: StazaSpacing.xs) {
+                    Text(miss.name)
+                        .font(StazaFont.headline)
+                        .foregroundStyle(StazaColor.textPrimary)
+                        .lineLimit(2)
+                    Text("activities.row.xp \(StazaFormat.number(miss.value, locale: locale))")
+                        .font(StazaFont.metricSmall)
+                        .foregroundStyle(StazaColor.textSubtle)
+                }
+                Spacer(minLength: StazaSpacing.sm)
+                Text(verbatim: StazaFormat.distance(meters: miss.minimumDistanceMeters, locale: locale))
+                    .font(StazaFont.title3.monospacedDigit())
+                    .foregroundStyle(StazaColor.textPrimary)
+                    .lineLimit(1)
             }
         }
         .accessibilityElement(children: .combine)
     }
 
-    private func emptyCard(_ key: LocalizedStringKey, id: String) -> some View {
+    private func emptyState(_ key: LocalizedStringKey, systemImage: String, id: String) -> some View {
         StazaCard {
-            Text(key).font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
+            StazaStateView(systemImage: systemImage, title: Text(key))
         }
         .accessibilityIdentifier(id)
-    }
-
-    private func errorCard(_ message: String) -> some View {
-        StazaCard {
-            VStack(alignment: .leading, spacing: StazaSpacing.sm) {
-                Text("activityDetail.error.title").font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                Text(message).font(StazaFont.body).foregroundStyle(StazaColor.textMuted)
-                Button("home.error.retry") { Task { await model?.load() } }
-                    .buttonStyle(.bordered)
-            }
-        }
     }
 }

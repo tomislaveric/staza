@@ -65,14 +65,18 @@ struct WorldMapView: UIViewRepresentable {
 
         func mapView(_ map: MLNMapView, didFinishLoading style: MLNStyle) {
             let accent = UIColor(StazaColor.accent)
-            let white = UIColor.white
+            let foundColor = UIColor(StazaColor.success)
+            let unfoundColor = UIColor(StazaColor.textMuted)
+            let flowline = UIColor(StazaColor.rarityRare)
+            let proposed = UIColor(StazaColor.rarityEpic)
+            let canvas = UIColor(StazaColor.canvas)
 
             let flowlines = MLNShapeSource(identifier: "world-flowlines", shape: nil, options: nil)
             style.addSource(flowlines)
             let flowlineLayer = MLNLineStyleLayer(identifier: "world-flowlines-line", source: flowlines)
-            flowlineLayer.lineColor = NSExpression(forConstantValue: UIColor.systemBlue)
+            flowlineLayer.lineColor = NSExpression(forConstantValue: flowline)
             flowlineLayer.lineWidth = NSExpression(forConstantValue: 3)
-            flowlineLayer.lineOpacity = NSExpression(forConstantValue: 0.8)
+            flowlineLayer.lineOpacity = NSExpression(forConstantValue: 0.85)
             flowlineLayer.lineCap = NSExpression(forConstantValue: "round")
             flowlineLayer.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(flowlineLayer)
@@ -88,12 +92,13 @@ struct WorldMapView: UIViewRepresentable {
 
             let collectibles = MLNShapeSource(identifier: "world-collectibles", shape: nil, options: nil)
             style.addSource(collectibles)
-            for (id, found, color) in [("unfound", false, UIColor.systemOrange), ("found", true, UIColor.systemYellow)] {
+            for (id, found, color) in [("unfound", false, unfoundColor), ("found", true, foundColor)] {
                 let layer = MLNCircleStyleLayer(identifier: "world-collectibles-\(id)", source: collectibles)
                 layer.predicate = NSPredicate(format: "found == %@", NSNumber(value: found))
-                layer.circleRadius = NSExpression(forConstantValue: 7)
+                layer.circleRadius = NSExpression(forConstantValue: found ? 6 : 7)
                 layer.circleColor = NSExpression(forConstantValue: color)
-                layer.circleStrokeColor = NSExpression(forConstantValue: white)
+                layer.circleOpacity = NSExpression(forConstantValue: found ? 0.9 : 1)
+                layer.circleStrokeColor = NSExpression(forConstantValue: canvas)
                 layer.circleStrokeWidth = NSExpression(forConstantValue: 2)
                 style.addLayer(layer)
             }
@@ -103,20 +108,20 @@ struct WorldMapView: UIViewRepresentable {
             let questLayer = MLNCircleStyleLayer(identifier: "world-quest-collectibles-circle", source: quest)
             questLayer.circleRadius = NSExpression(forConstantValue: 9)
             questLayer.circleColor = NSExpression(forConstantValue: accent)
-            questLayer.circleStrokeColor = NSExpression(forConstantValue: white)
+            questLayer.circleStrokeColor = NSExpression(forConstantValue: canvas)
             questLayer.circleStrokeWidth = NSExpression(forConstantValue: 3)
             style.addLayer(questLayer)
 
             let routeSource = MLNShapeSource(identifier: "explore-route", shape: nil, options: nil)
             style.addSource(routeSource)
             let casing = MLNLineStyleLayer(identifier: "explore-route-casing", source: routeSource)
-            casing.lineColor = NSExpression(forConstantValue: UIColor.white)
+            casing.lineColor = NSExpression(forConstantValue: canvas)
             casing.lineWidth = NSExpression(forConstantValue: 8)
             casing.lineCap = NSExpression(forConstantValue: "round")
             casing.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(casing)
             let routeLayer = MLNLineStyleLayer(identifier: "explore-route-line", source: routeSource)
-            routeLayer.lineColor = NSExpression(forConstantValue: UIColor.systemPurple)
+            routeLayer.lineColor = NSExpression(forConstantValue: proposed)
             routeLayer.lineWidth = NSExpression(forConstantValue: 5)
             routeLayer.lineCap = NSExpression(forConstantValue: "round")
             routeLayer.lineJoin = NSExpression(forConstantValue: "round")
