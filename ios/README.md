@@ -20,7 +20,8 @@ Native SwiftUI app shell. Open `Staza.xcodeproj` in Xcode 16+.
 
 ## Configuration
 
-Debug builds use `http://localhost:3000`, release builds `https://play.staza.world`.
+Debug builds use `http://localhost:3000` in the simulator and `https://dev.play.staza.world`
+on a device; release builds use `https://play.staza.world`.
 Override with the `STAZA_API_BASE_URL` environment variable.
 
 ## URL scheme and document types
