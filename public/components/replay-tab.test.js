@@ -37,6 +37,20 @@ describe("FartlekCompletionsSection", () => {
     expect(markup).toContain('data-flowline-row="fartlek-1"');
     expect(markup).toContain('class="fartlek-swatch is-unvisited"');
     expect(markup).not.toContain("max ");
+    expect(markup).not.toContain("Hidden Flowline found");
+  });
+
+  it("labels completions of Flowlines the player had not revealed yet", () => {
+    const markup = FartlekCompletionsSection([{
+      fartlekId: "fartlek-1",
+      fartlekName: "Harbour Straight",
+      completedAtTimestampMs: 2_000,
+      fartlekLengthMSnapshot: 3_000,
+      elapsedTimeS: 600,
+      averageSpeedMps: 5,
+      hiddenFound: true
+    }]);
+    expect(markup).toContain("Hidden Flowline found");
   });
 
   it("keeps each flowline swatch grey until the collection timestamp, then marks it completed", () => {

@@ -42,67 +42,313 @@ struct LevelHeroCard: View {
     }
 }
 
-/// "To do" checklist: every row opens its target (web Home to-dos).
-struct HomeTodoSection: View {
-    let todos: [HomeTodo]
-    let perform: (HomeTodo.Target) -> Void
+/// One featured next step (web `HomeUpNext`): the easiest active quest, else an active
+/// exploration, else planning one.
+struct UpNextSection: View {
+    enum Target: Equatable, Sendable { case quests, world }
+
+    let highlights: HomeHighlights
+    let perform: (Target) -> Void
     @Environment(\.locale) private var locale
 
     var body: some View {
-        SectionHeader("home.todo.header")
-        StazaCard(padding: 0) {
-            VStack(spacing: 0) {
-                ForEach(Array(todos.enumerated()), id: \.element.id) { index, todo in
-                    if index > 0 { Divider().overlay(StazaColor.border) }
-                    Button { perform(todo.target) } label: {
-                        row(todo).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("homeTodo.\(todo.id)")
+        SectionHeader("home.upNext.header")
+        if let quest = highlights.quest {
+            Button { perform(.quests) } label: { questCard(quest) }
+                .buttonStyle(.stazaCardPress)
+                .accessibilityIdentifier("homeUpNext.quest.\(quest.id)")
+            if highlights.activeQuestCount > 1 {
+                Button { perform(.quests) } label: {
+                    Label { Text("home.upNext.moreQuests \(highlights.activeQuestCount - 1)") } icon: { Image(systemName: "chevron.right") }
+                        .labelStyle(TrailingIconLabelStyle())
+                        .font(StazaFont.footnote.weight(.medium))
+                        .foregroundStyle(StazaColor.textMuted)
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("homeUpNext.moreQuests")
             }
-            .padding(.horizontal, StazaSpacing.md)
+            if let exploration = highlights.exploration {
+                Button { perform(.world) } label: { explorationRow(exploration) }
+                    .buttonStyle(.stazaCardPress)
+                    .accessibilityIdentifier("homeUpNext.exploration.\(exploration.id)")
+            }
+        } else if let exploration = highlights.exploration {
+            Button { perform(.world) } label: {
+                featured(
+                    tint: StazaColor.markerRing,
+                    overline: Text("home.upNext.exploration"),
+                    title: Text(verbatim: exploration.title),
+                    goal: Text(verbatim: exploration.description),
+                    xp: exploration.rewardXp
+                ) { EmptyView() }
+            }
+            .buttonStyle(.stazaCardPress)
+            .accessibilityIdentifier("homeUpNext.exploration.\(exploration.id)")
+        } else {
+            Button { perform(.world) } label: {
+                featured(
+                    tint: StazaColor.markerRing,
+                    overline: Text("home.upNext.plan.overline"),
+                    title: Text("home.upNext.plan.title"),
+                    goal: Text("home.upNext.plan.goal"),
+                    xp: nil
+                ) { EmptyView() }
+            }
+            .buttonStyle(.stazaCardPress)
+            .accessibilityIdentifier("homeUpNext.plan")
         }
-        .accessibilityIdentifier("homeTodos")
     }
 
-    @ViewBuilder
-    private func row(_ todo: HomeTodo) -> some View {
-        switch todo {
-        case .spendSkillPoints(let points):
-            TaskRow(checked: false, title: Text("home.todo.spend \(points)"), goal: Text("home.todo.spend.goal"), showsChevron: true) {
-                StazaChip("home.todo.spend.pill \(points)", tint: StazaColor.accent)
+    private func questCard(_ quest: AuthoredQuest) -> some View {
+        featured(
+            tint: StazaColor.accent,
+            overline: Text(verbatim: quest.chainTitle) + Text(verbatim: "  ·  ") + Text("quests.pill.step \(quest.step) \(quest.totalSteps)"),
+            title: Text(verbatim: quest.title),
+            goal: Text(verbatim: quest.description),
+            xp: quest.xp
+        ) {
+            if quest.isNew == true {
+                StazaChip("quests.pill.new", tint: StazaColor.accent)
             }
-        case .quest(let quest):
-            QuestTaskRow(quest: quest, showsChevron: true)
-        case .moreQuests(let count):
-            HStack(spacing: StazaSpacing.sm) {
-                Text("home.todo.moreQuests \(count)")
-                    .font(StazaFont.subheadline)
-                    .foregroundStyle(StazaColor.textMuted)
-                    .lineLimit(1)
+            if let failure = quest.lastFailure {
+                StazaChip("quests.pill.fellShort", systemImage: "xmark", tint: StazaColor.danger)
+                ForEach(Array((failure.criteria ?? []).filter { !$0.met }.enumerated()), id: \.offset) { _, criterion in
+                    StazaChip(verbatim: QuestPills.criterion(criterion, locale: locale), tint: StazaColor.danger)
+                }
+            }
+            StazaChip(QuestPills.difficulty(quest.difficulty))
+        }
+    }
+
+    private func featured<Pills: View>(tint: Color, overline: Text, title: Text, goal: Text, xp: Double?, @ViewBuilder pills: () -> Pills) -> some View {
+        let shape = RoundedRectangle(cornerRadius: StazaRadius.card, style: .continuous)
+        return VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            overline
+                .font(StazaFont.overline)
+                .textCase(.uppercase)
+                .tracking(0.9)
+                .foregroundStyle(tint)
+                .lineLimit(1)
+            title
+                .font(StazaFont.title)
+                .foregroundStyle(StazaColor.textPrimary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            goal
+                .font(StazaFont.subheadline)
+                .foregroundStyle(StazaColor.textMuted)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .center, spacing: StazaSpacing.sm) {
+                MoreFlowLayout(spacing: StazaSpacing.xs + StazaSpacing.xxs) { pills() }
                 Spacer(minLength: 0)
+                if let xp {
+                    Text("home.quest.reward \(StazaFormat.number(xp, locale: locale))")
+                        .font(StazaFont.title3.monospacedDigit())
+                        .foregroundStyle(StazaColor.accent)
+                        .shadow(color: StazaColor.accent.opacity(0.35), radius: 8)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(StazaColor.textSubtle)
                     .accessibilityHidden(true)
             }
-            .padding(.leading, TaskRow<EmptyView>.textInset)
-            .padding(.vertical, StazaSpacing.sm + StazaSpacing.xs)
-        case .exploration(let instance):
-            TaskRow(checked: false, title: Text(verbatim: instance.title), goal: Text(verbatim: instance.description), showsChevron: true) {
-                StazaChip("home.todo.exploration")
-                StazaChip("home.quest.reward \(StazaFormat.number(instance.rewardXp, locale: locale))", tint: StazaColor.accent)
+            .padding(.top, StazaSpacing.xs)
+        }
+        .padding(StazaSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            shape.fill(StazaColor.surface)
+                .overlay(shape.fill(RadialGradient(colors: [tint.opacity(0.18), .clear], center: .topTrailing, startRadius: 0, endRadius: 260)))
+        }
+        .overlay(shape.strokeBorder(tint.opacity(0.4), lineWidth: 1))
+        .contentShape(shape)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func explorationRow(_ exploration: QuestInstance) -> some View {
+        StazaCard(padding: StazaSpacing.sm + StazaSpacing.xs) {
+            HStack(spacing: StazaSpacing.sm) {
+                IconBadge(systemImage: "map", tint: StazaColor.markerRing, size: 32)
+                VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                    OverlineText("home.upNext.exploration")
+                    Text(verbatim: exploration.title)
+                        .font(StazaFont.subheadline.weight(.semibold))
+                        .foregroundStyle(StazaColor.textPrimary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: StazaSpacing.sm)
+                Text("home.quest.reward \(StazaFormat.number(exploration.rewardXp, locale: locale))")
+                    .font(StazaFont.metric)
+                    .foregroundStyle(StazaColor.accent)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(StazaColor.textSubtle)
+                    .accessibilityHidden(true)
             }
-        case .planExploration:
-            TaskRow(checked: false, title: Text("home.todo.plan.title"), goal: Text("home.todo.plan.goal"), showsChevron: true) {
-                EmptyView()
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Skill Atlas nodes the player can unlock now and nodes that are close (web `HomeSkillHighlights`).
+struct SkillHighlightsSection: View {
+    let highlights: HomeHighlights
+    let onOpenSkillAtlas: () -> Void
+    @Environment(\.locale) private var locale
+
+    var body: some View {
+        SectionHeader("home.skillHighlights.header") {
+            if highlights.skillPoints > 0 {
+                StazaChip("home.skills.points \(StazaFormat.number(Double(highlights.skillPoints), locale: locale))", tint: StazaColor.accent)
             }
+        }
+        if !highlights.ready.isEmpty {
+            group("home.skillHighlights.ready") {
+                ForEach(highlights.ready) { node in
+                    Button(action: onOpenSkillAtlas) { readyCard(node) }
+                        .buttonStyle(.stazaCardPress)
+                        .accessibilityIdentifier("homeSkill.ready.\(node.id)")
+                }
+            }
+        } else if highlights.skillPoints > 0 {
+            Button(action: onOpenSkillAtlas) {
+                Label { Text("home.skillHighlights.spend \(highlights.skillPoints)") } icon: { Image(systemName: "chevron.right") }
+                    .labelStyle(TrailingIconLabelStyle())
+                    .font(StazaFont.footnote.weight(.medium))
+                    .foregroundStyle(StazaColor.accent)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("homeSkill.spend")
+        }
+        if !highlights.almost.isEmpty {
+            group("home.skillHighlights.almost") {
+                ForEach(highlights.almost) { item in
+                    Button(action: onOpenSkillAtlas) { almostCard(item) }
+                        .buttonStyle(.stazaCardPress)
+                        .accessibilityIdentifier("homeSkill.almost.\(item.id)")
+                }
+            }
+        }
+    }
+
+    private func group<Cards: View>(_ title: LocalizedStringKey, @ViewBuilder cards: () -> Cards) -> some View {
+        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            OverlineText(title)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: StazaSpacing.sm) { cards() }
+                    .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollClipDisabled()
+        }
+    }
+
+    private func readyCard(_ node: HomeHighlights.Node) -> some View {
+        card(node, tint: StazaColor.accent) {
+            Text(verbatim: node.grant.label)
+                .font(StazaFont.caption)
+                .foregroundStyle(StazaColor.textMuted)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Text("home.skillHighlights.unlock \(node.cost)")
+                .font(StazaFont.caption.weight(.bold))
+                .foregroundStyle(StazaColor.onAccent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(StazaColor.accent, in: Capsule())
+        }
+    }
+
+    private func almostCard(_ item: HomeHighlights.AlmostNode) -> some View {
+        card(item.node, tint: nil) {
+            Spacer(minLength: 0)
+            HStack(alignment: .firstTextBaseline, spacing: StazaSpacing.sm) {
+                if let requirement = item.blockingRequirement {
+                    Text(verbatim: requirement.label)
+                        .foregroundStyle(StazaColor.textMuted)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Text(verbatim: "\(value(requirement.current))/\(value(requirement.target))")
+                        .font(StazaFont.metricSmall)
+                        .foregroundStyle(StazaColor.textPrimary)
+                } else {
+                    Text("home.skillHighlights.needsPoints \(max(item.node.cost - highlights.skillPoints, 1))")
+                        .foregroundStyle(StazaColor.textMuted)
+                }
+            }
+            .font(StazaFont.caption)
+            StazaProgressBar(value: item.progress, height: 4)
+        }
+    }
+
+    private func card<Content: View>(_ node: HomeHighlights.Node, tint: Color?, @ViewBuilder content: () -> Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: StazaRadius.card, style: .continuous)
+        return VStack(alignment: .leading, spacing: StazaSpacing.xs + StazaSpacing.xxs) {
+            Label { Self.sportLabel(node.sport) } icon: { Image(systemName: SkillAtlasNodeGlyph.sportIcon(node.sport)) }
+                .font(StazaFont.overline)
+                .textCase(.uppercase)
+                .foregroundStyle(StazaColor.textSubtle)
+            Text(verbatim: node.name)
+                .font(StazaFont.headline)
+                .foregroundStyle(StazaColor.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            content()
+        }
+        .padding(StazaSpacing.md)
+        .frame(width: 200, alignment: .leading)
+        .frame(minHeight: 132, alignment: .topLeading)
+        .background {
+            shape.fill(StazaColor.surface)
+                .overlay(shape.fill(LinearGradient(colors: [(tint ?? .clear).opacity(0.14), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)))
+        }
+        .overlay(shape.strokeBorder(tint?.opacity(0.45) ?? StazaColor.border, lineWidth: 1))
+        .contentShape(shape)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func value(_ number: Double) -> String {
+        StazaFormat.number(number, locale: locale, fractionDigits: number.rounded() == number ? 0 : 1)
+    }
+
+    static func sportLabel(_ sport: String) -> Text {
+        switch sport {
+        case "running": Text("addActivity.sport.running")
+        case "hiking": Text("addActivity.sport.hiking")
+        default: Text("addActivity.sport.cycling")
         }
     }
 }
 
-/// Shown instead of the to-do list until the first activity exists (web `HomeOnboarding`).
+/// Title followed by its icon, for inline "more" links.
+struct TrailingIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: StazaSpacing.xs) {
+            configuration.title
+            configuration.icon.imageScale(.small)
+        }
+    }
+}
+
+/// Subtle press feedback for full-card buttons.
+struct StazaCardPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == StazaCardPressStyle {
+    static var stazaCardPress: StazaCardPressStyle { StazaCardPressStyle() }
+}
+
+/// Shown instead of Up next until the first activity exists (web `HomeOnboarding`).
 struct OnboardingCard: View {
     let onAddActivity: () -> Void
 
@@ -176,9 +422,6 @@ struct HomeAchievementsSection: View {
                 StazaProgressBar(value: achievements.totalSkills > 0 ? Double(achievements.unlockedSkills) / Double(achievements.totalSkills) : 0)
                     .accessibilityHidden(true)
                 Spacer(minLength: 0)
-                if achievements.skillPoints > 0 {
-                    StazaChip("home.skills.points \(StazaFormat.number(Double(achievements.skillPoints), locale: locale))", tint: StazaColor.accent)
-                }
             }
             .frame(maxHeight: .infinity, alignment: .topLeading)
         }

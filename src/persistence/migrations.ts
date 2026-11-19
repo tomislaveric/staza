@@ -918,6 +918,25 @@ export const migrations: Migration[] = [{
   async up(client) {
     await client.query("ALTER TABLE strava_oauth_states ADD COLUMN native BOOLEAN NOT NULL DEFAULT false");
   }
+}, {
+  id: "041_player_flowline_reveals",
+  async up(client) {
+    // Flowlines are hidden per player until revealed by exploring an area or riding them.
+    await client.query(`
+      CREATE TABLE player_flowline_reveals (
+        player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        fartlek_id TEXT NOT NULL REFERENCES fartleks(id) ON DELETE CASCADE,
+        revealed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        source TEXT NOT NULL CHECK (source IN ('explore', 'ride')),
+        PRIMARY KEY (player_id, fartlek_id)
+      );
+      INSERT INTO player_flowline_reveals (player_id, fartlek_id, revealed_at, source)
+      SELECT player_id, fartlek_id, min(completed_at), 'ride'
+      FROM fartlek_completions
+      GROUP BY player_id, fartlek_id
+      ON CONFLICT DO NOTHING;
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

@@ -32,6 +32,8 @@ const proposalHints = {
  *   `status` "rerouting" while an edit is re-planned.
  * - "confirming": the selected route is being persisted.
  * Proposals are ephemeral: `customizedById` maps an original proposal id to its edited route.
+ * `destination` is an optional required target: a collectible, or a revealed Flowline (`kind: "flowline"`).
+ * `revealedFlowlineIds` are the Flowlines the last Generate newly revealed to the player.
  */
 export const createExplorationState = (area, start, destination) => ({
   area,
@@ -50,6 +52,7 @@ export const createExplorationState = (area, start, destination) => ({
   previewProposalId: undefined,
   hoveredTargetId: undefined,
   catalog: { collectibles: [], flowlines: [] },
+  revealedFlowlineIds: [],
   limits: { maxRouteTargets: 12, maxRouteWaypoints: 8 },
   truncated: false,
   warnings: [],
@@ -111,7 +114,8 @@ export const buildGenerateRequest = (state) => {
       routeType: "round_trip",
       sport: state.sport,
       start: state.start,
-      ...(state.destination ? { destinationId: state.destination.id } : {})
+      ...(state.destination?.kind === "flowline" ? { destinationFlowlineId: state.destination.id }
+        : state.destination ? { destinationId: state.destination.id } : {})
     }
   };
 };
@@ -192,7 +196,7 @@ const ConfigureStep = (state) => {
     <section class="world-detail exploration-panel" aria-label="Explore this area">
       ${panelHeader("Step 1 · Plan your outing")}
       <form class="route-planner-form" data-exploration-form novalidate>
-        ${state.destination ? `<p class="route-planner-note">Route to <strong data-user-content>${escapeHtml(state.destination.name)}</strong></p>` : ""}
+        ${state.destination ? `<p class="route-planner-note">${state.destination.kind === "flowline" ? "Route via Flowline" : "Route to"} <strong data-user-content>${escapeHtml(state.destination.name)}</strong></p>` : ""}
         <div class="route-planner-toggle" role="group" aria-label="Sport">
           ${SPORT_OPTIONS.map((option) => `<button type="button" data-exploration-sport="${option.value}" aria-pressed="${state.sport === option.value}"${generating ? " disabled" : ""}>${option.label}</button>`).join("")}
         </div>
@@ -269,6 +273,34 @@ const CustomizeSection = (state) => {
   `;
 };
 
+/**
+ * Revealed Flowlines of the frozen area, newly revealed ones first and marked. Any of them can
+ * become the required target of a new route.
+ */
+export const RevealedFlowlinesSection = (state) => {
+  const fresh = new Set(state.revealedFlowlineIds ?? []);
+  const flowlines = [...state.catalog.flowlines].sort((left, right) => Number(fresh.has(right.id)) - Number(fresh.has(left.id)));
+  if (flowlines.length === 0 || state.status === "rerouting") return "";
+  const idle = state.phase !== "confirming";
+  return `
+    <div class="exploration-revealed" data-exploration-revealed>
+      <p class="exploration-target-count"><strong>${fresh.size ? "Flowlines revealed" : "Flowlines in this area"}</strong>
+        ${fresh.size ? `<small>${escapeHtml(plural(fresh.size, "new Flowline", "new Flowlines"))}</small>` : ""}</p>
+      <ul class="exploration-along" aria-label="Revealed Flowlines">
+        ${flowlines.map((flowline) => {
+          const chosen = state.destination?.kind === "flowline" && state.destination.id === flowline.id;
+          return `
+            <li data-exploration-revealed-flowline="${escapeHtml(flowline.id)}"${fresh.has(flowline.id) ? ' class="is-new"' : ""}>
+              <span class="exploration-target-name"><b class="fartlek-swatch" aria-hidden="true"></b><span data-user-content>${escapeHtml(flowline.name)}</span>
+                ${fresh.has(flowline.id) ? "<small>New</small>" : ""}</span>
+              <button type="button" data-exploration-flowline-route="${escapeHtml(flowline.id)}"${!idle || chosen ? " disabled" : ""}>${chosen ? "Planned via this" : "Plan route via this"}</button>
+            </li>`;
+        }).join("")}
+      </ul>
+    </div>
+  `;
+};
+
 /** PROPOSALS / CUSTOMIZE / CONFIRMING: generated routes, the selected route's contents and confirmation. */
 const RouteStep = (state) => {
   const selected = activeProposal(state);
@@ -283,6 +315,7 @@ const RouteStep = (state) => {
         ${state.proposals.map((proposal) => RouteProposalCard(state, proposal)).join("")}
       </ol>
       ${selected ? CustomizeSection(state) : '<p class="route-planner-note">Choose a route to see what it includes.</p>'}
+      ${RevealedFlowlinesSection(state)}
       ${statusLine(state)}
       <p class="route-planner-note">Routes are a planning aid. Progress only counts from your recorded activities after you start.</p>
       <button type="button" class="route-planner-confirm" data-exploration-confirm${!selected || state.status !== "idle" || state.phase !== "customize" ? " disabled" : ""}>Start Exploration</button>

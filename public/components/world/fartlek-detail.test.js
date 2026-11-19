@@ -53,4 +53,8 @@ describe("FartlekDetail", () => {
     expect(markup).toContain("10:00");
     expect(markup).toContain(">3<");
   });
+
+  it("offers a route that rides the Flowline", () => {
+    expect(FartlekDetail(fartlek())).toContain('data-fartlek-route="');
+  });
 });

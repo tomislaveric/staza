@@ -1,7 +1,7 @@
 import { formatDuration } from "./format-duration.js";
 import { getAppLocale } from "../app-locales.js";
 import { getActivityLabel } from "./activity-labels.js";
-import { AuthoredQuestTask, QuestPill, TaskRow } from "./quest-task.js";
+import { QuestPill, difficultyLabel, failurePills, questStep } from "./quest-task.js";
 
 const formatNumber = (value, maximumFractionDigits = 0) => new Intl.NumberFormat(getAppLocale(), {
   maximumFractionDigits
@@ -100,50 +100,148 @@ export const HomeRecentActivity = (activity) => {
   `;
 };
 
-const ACTIVE_QUEST_LIMIT = 3;
+const HIGHLIGHT_LIMIT = 3;
+const DIFFICULTY_RANK = { easy: 0, medium: 1, hard: 2, prestige: 3 };
+const difficultyRank = (difficulty) => DIFFICULTY_RANK[difficulty] ?? Object.keys(DIFFICULTY_RANK).length;
 
-/**
- * Home to-do checklist, in order: spend Skill Points, active authored quests (capped, then a
- * "View all" row), active explorations, otherwise a "Plan an exploration" fallback.
- */
-export const homeTodos = ({ skillPoints = 0, authoredQuests = [], instances = [] } = {}) => {
-  const todos = [];
-  if (skillPoints > 0) {
-    todos.push({
-      id: "spend-skill-points",
-      title: `Spend ${formatNumber(skillPoints)} Skill Point${skillPoints === 1 ? "" : "s"}`,
-      goal: "Unlock new sports, filters and quest chains.",
-      pills: QuestPill(`${formatNumber(skillPoints)} SP`, "accent"),
-      target: "skill-tree"
-    });
-  }
-  const activeQuests = (authoredQuests ?? []).filter((quest) => quest.state === "active");
-  activeQuests.slice(0, ACTIVE_QUEST_LIMIT).forEach((quest) => todos.push({ id: `quest:${quest.id}`, quest, target: "progress" }));
-  if (activeQuests.length > ACTIVE_QUEST_LIMIT) {
-    todos.push({ id: "view-all-quests", title: `View all quests (${formatNumber(activeQuests.length)})`, className: "is-more", target: "progress" });
-  }
-  const explorations = (instances ?? []).filter((instance) => instance.status === "active");
-  explorations.forEach((exploration) => todos.push({
-    id: `exploration:${exploration.id}`,
-    title: exploration.title,
-    goal: exploration.description,
-    pills: `${QuestPill("Exploration", "muted")}${Number.isFinite(exploration.rewardXp) ? QuestPill(`+${formatNumber(exploration.rewardXp)} XP`, "accent") : ""}`,
-    target: "world"
-  }));
-  if (!activeQuests.length && !explorations.length) {
-    todos.push({ id: "plan-exploration", title: "Plan an exploration", goal: "Pick an area in World and turn it into a route with targets to collect.", target: "world" });
-  }
-  return todos;
+/** The easiest active authored quest: lowest difficulty, then lowest XP, then catalog order. */
+export const featuredQuest = (quests = []) => (quests ?? [])
+  .map((quest, index) => ({ quest, index }))
+  .filter(({ quest }) => quest.state === "active")
+  .sort((a, b) => difficultyRank(a.quest.difficulty) - difficultyRank(b.quest.difficulty)
+    || (a.quest.xp ?? 0) - (b.quest.xp ?? 0)
+    || a.index - b.index)[0]?.quest;
+
+/** Average requirement completion, each requirement capped at 100%; 1 when there are none. */
+export const requirementProgress = (node) => {
+  const requirements = node.requirements ?? [];
+  if (!requirements.length) return 1;
+  return requirements.reduce((sum, requirement) => sum + (requirement.met || !(requirement.target > 0)
+    ? 1
+    : Math.max(0, Math.min(1, requirement.current / requirement.target))), 0) / requirements.length;
 };
 
-export const HomeTodos = (items) => `
-  <section class="authored-quests home-todos" aria-labelledby="home-todos-title" data-home-todos>
-    <h2 id="home-todos-title">TO DO</h2>
-    <ol class="quest-task-list">${items.map((item) => item.quest
-    ? AuthoredQuestTask(item.quest, { target: item.target })
-    : TaskRow({ ...item, dataAttrs: { "data-home-todo": item.id } })).join("")}</ol>
+/** Unlockable Skill Atlas nodes, cheapest first. */
+export const readyNodes = (nodes = []) => (nodes ?? [])
+  .map((node, index) => ({ node, index }))
+  .filter(({ node }) => node.state === "unlockable")
+  .sort((a, b) => a.node.cost - b.node.cost || a.index - b.index)
+  .slice(0, HIGHLIGHT_LIMIT)
+  .map(({ node }) => node);
+
+/** Started, locked nodes whose prerequisites are met, closest to unlockable first. */
+export const almostNodes = (nodes = []) => (nodes ?? [])
+  .map((node, index) => ({ node, index, progress: requirementProgress(node) }))
+  .filter(({ node, progress }) => node.state === "locked" && node.prerequisitesMet && progress > 0)
+  .sort((a, b) => b.progress - a.progress || a.node.cost - b.node.cost || a.index - b.index)
+  .slice(0, HIGHLIGHT_LIMIT)
+  .map(({ node, progress }) => ({ node, progress }));
+
+/** The unmet requirement with the least progress, which is what keeps the node locked longest. */
+const blockingRequirement = (node) => (node.requirements ?? [])
+  .filter((requirement) => !requirement.met)
+  .sort((a, b) => (a.current / a.target) - (b.current / b.target))[0];
+
+export const homeHighlights = ({ skillPoints = 0, authoredQuests = [], instances = [], nodes = [] } = {}) => {
+  const activeQuests = (authoredQuests ?? []).filter((quest) => quest.state === "active");
+  return {
+    quest: featuredQuest(activeQuests),
+    activeQuestCount: activeQuests.length,
+    exploration: (instances ?? []).find((instance) => instance.status === "active"),
+    skillPoints: skillPoints ?? 0,
+    ready: readyNodes(nodes),
+    almost: almostNodes(nodes)
+  };
+};
+
+const decimal = (value) => formatNumber(value, value % 1 === 0 ? 0 : 1);
+
+const UpNextQuest = (quest, moreCount) => `
+  <button type="button" class="home-up-next-card" data-home-action-target="progress" data-home-up-next="quest:${escapeHtml(quest.id)}">
+    <span class="home-up-next-kicker">
+      <span data-user-content>${escapeHtml(quest.chainTitle ?? "Quest")}</span>
+      ${questStep(quest)}${quest.isNew ? QuestPill("NEW", "new") : ""}
+    </span>
+    <strong class="home-up-next-title" data-user-content>${escapeHtml(quest.title)}</strong>
+    <span class="home-up-next-goal" data-user-content>${escapeHtml(quest.description)}</span>
+    ${quest.lastFailure ? `<span class="quest-pills">${failurePills(quest)}</span>` : ""}
+    <span class="home-up-next-footer">
+      <span class="quest-pills">${QuestPill(difficultyLabel(quest.difficulty), "muted")}</span>
+      <span class="home-up-next-reward">+${formatNumber(quest.xp)} XP</span>
+    </span>
+  </button>
+  ${moreCount > 0 ? `<button type="button" class="home-up-next-more" data-home-action-target="progress">${formatNumber(moreCount)} more active quest${moreCount === 1 ? "" : "s"} <span aria-hidden="true">›</span></button>` : ""}
+`;
+
+const UpNextExploration = (exploration, { compact = false } = {}) => `
+  <button type="button" class="${compact ? "home-up-next-side" : "home-up-next-card is-exploration"}" data-home-action-target="world" data-home-up-next="exploration:${escapeHtml(exploration.id)}">
+    <span class="home-up-next-kicker">EXPLORATION</span>
+    <strong class="home-up-next-title" data-user-content>${escapeHtml(exploration.title)}</strong>
+    ${compact ? "" : `<span class="home-up-next-goal" data-user-content>${escapeHtml(exploration.description ?? "")}</span>`}
+    ${Number.isFinite(exploration.rewardXp) ? `<span class="home-up-next-reward">+${formatNumber(exploration.rewardXp)} XP</span>` : ""}
+  </button>
+`;
+
+const UpNextPlan = () => `
+  <button type="button" class="home-up-next-card is-plan" data-home-action-target="world" data-home-up-next="plan-exploration">
+    <span class="home-up-next-kicker">WORLD</span>
+    <strong class="home-up-next-title">Plan an exploration</strong>
+    <span class="home-up-next-goal">Pick an area in World and turn it into a route with targets to collect.</span>
+  </button>
+`;
+
+/** One featured next step: the easiest quest, else an active exploration, else planning one. */
+export const HomeUpNext = ({ quest, activeQuestCount = 0, exploration } = {}) => `
+  <section class="home-up-next" aria-labelledby="home-up-next-title" data-home-up-next-section>
+    <div class="home-section-heading"><h1 id="home-up-next-title">UP NEXT</h1></div>
+    ${quest
+    ? `${UpNextQuest(quest, activeQuestCount - 1)}${exploration ? UpNextExploration(exploration, { compact: true }) : ""}`
+    : exploration ? UpNextExploration(exploration) : UpNextPlan()}
   </section>
 `;
+
+const sportLabel = (sport) => getActivityLabel(sport, 2).toUpperCase();
+
+const ReadyNode = (node) => `
+  <li><button type="button" class="home-skill-card is-ready" data-home-skill-node="${escapeHtml(node.id)}">
+    <span class="home-skill-sport">${escapeHtml(sportLabel(node.sport))}</span>
+    <strong data-user-content>${escapeHtml(node.name)}</strong>
+    <span class="home-skill-grant" data-user-content>${escapeHtml(node.grant?.label ?? node.description ?? "")}</span>
+    <span class="home-skill-cta">Unlock · ${formatNumber(node.cost)} SP</span>
+  </button></li>
+`;
+
+const AlmostNode = ({ node, progress }, skillPoints) => {
+  const requirement = blockingRequirement(node);
+  const missing = Math.max(0, node.cost - skillPoints);
+  const hint = requirement
+    ? `<span data-user-content>${escapeHtml(requirement.label)}</span><b>${decimal(requirement.current)}/${decimal(requirement.target)}</b>`
+    : `<span>Needs ${formatNumber(missing || node.cost)} more SP</span>`;
+  return `
+  <li><button type="button" class="home-skill-card is-almost" data-home-skill-node="${escapeHtml(node.id)}">
+    <span class="home-skill-sport">${escapeHtml(sportLabel(node.sport))}</span>
+    <strong data-user-content>${escapeHtml(node.name)}</strong>
+    <span class="home-skill-hint">${hint}</span>
+    <span class="home-skill-track" role="progressbar" aria-label="${escapeHtml(node.name)} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(progress * 100)}"><i style="width: ${Math.round(progress * 100)}%"></i></span>
+  </button></li>
+`;
+};
+
+/** Skill Atlas nodes the player can unlock now and nodes that are close. */
+export const HomeSkillHighlights = ({ skillPoints = 0, ready = [], almost = [] } = {}) => {
+  if (!ready.length && !almost.length && skillPoints <= 0) return "";
+  return `
+  <section class="home-skill-highlights" aria-labelledby="home-skill-highlights-title" data-home-skill-highlights>
+    <div class="home-section-heading">
+      <h1 id="home-skill-highlights-title">SKILL ATLAS</h1>
+      ${skillPoints > 0 ? `<b class="home-tile-flag" data-home-skill-points-balance>${formatNumber(skillPoints)} SP to spend</b>` : ""}
+    </div>
+    ${ready.length ? `<div class="home-skill-group"><p class="home-section-label">READY TO UNLOCK</p><ul class="home-skill-cards">${ready.map(ReadyNode).join("")}</ul></div>` : ""}
+    ${!ready.length && skillPoints > 0 ? `<button type="button" class="home-up-next-more" data-home-action-target="skill-tree">Spend ${formatNumber(skillPoints)} Skill Point${skillPoints === 1 ? "" : "s"} in the Skill Atlas <span aria-hidden="true">›</span></button>` : ""}
+    ${almost.length ? `<div class="home-skill-group"><p class="home-section-label">ALMOST THERE</p><ul class="home-skill-cards">${almost.map((item) => AlmostNode(item, skillPoints)).join("")}</ul></div>` : ""}
+  </section>
+`;
+};
 
 export const HomeOnboarding = () => `
   <section class="home-onboarding" aria-labelledby="onboarding-title" data-home-onboarding>
@@ -161,7 +259,7 @@ export const HomeOnboarding = () => `
 
 const pct = (value, total) => (total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0);
 
-export const HomeAchievements = ({ skillPoints = 0, unlocked = [], totalNodes = 0, titles = [], badges = [], stats } = {}) => {
+export const HomeAchievements = ({ unlocked = [], totalNodes = 0, titles = [], badges = [], stats } = {}) => {
   const earned = [...titles, ...badges];
   return `
   <section class="home-achievements" aria-labelledby="achievements-title">
@@ -171,7 +269,6 @@ export const HomeAchievements = ({ skillPoints = 0, unlocked = [], totalNodes = 
         <small>SKILLS</small>
         <strong data-home-unlocked-count>${unlocked.length}<em> / ${totalNodes}</em></strong>
         <span class="quest-progress-track" aria-hidden="true"><i style="width: ${pct(unlocked.length, totalNodes)}%;"></i></span>
-        ${skillPoints > 0 ? `<b class="home-tile-flag" data-home-skill-points>${formatNumber(skillPoints)} SP to spend</b>` : ""}
       </button>
       <div class="home-tile" data-home-achievements>
         <small>ACHIEVEMENTS</small>
@@ -190,14 +287,23 @@ export const HomeAchievements = ({ skillPoints = 0, unlocked = [], totalNodes = 
 `;
 };
 
-export const HomePage = (model) => `
+export const HomePage = (model) => {
+  const highlights = homeHighlights({
+    skillPoints: model.achievements?.skillPoints,
+    authoredQuests: model.achievements?.authoredQuests,
+    instances: model.activeQuests,
+    nodes: model.achievements?.nodes
+  });
+  return `
   <section class="home-page">
     ${HomePlayerProgress(model)}
-    ${model.latest ? HomeTodos(homeTodos({ skillPoints: model.achievements?.skillPoints, authoredQuests: model.achievements?.authoredQuests, instances: model.activeQuests })) : HomeOnboarding()}
+    ${model.latest ? HomeUpNext(highlights) : HomeOnboarding()}
+    ${HomeSkillHighlights(highlights)}
     ${HomeAchievements({ ...model.achievements, stats: model.stats })}
     ${HomeRecentActivity(model.latest)}
   </section>
 `;
+};
 
 const responseJson = async (response) => {
   const body = await response.json();
@@ -217,6 +323,7 @@ const loadAchievements = async () => {
       skillPoints: tree.balance,
       unlocked: tree.nodes.filter((node) => node.state === "unlocked"),
       totalNodes: tree.nodes.length,
+      nodes: tree.nodes,
       titles: capabilities.titles,
       badges: capabilities.badges,
       authoredQuests: quests.quests
@@ -251,6 +358,9 @@ export const mountHomePage = async (mountPoint, onSelectActivity, onNavigate) =>
       mountReplayStillCard(mountPoint.querySelector(".home-activity-card"), replay, basemap);
     }
     mountPoint.querySelector("[data-home-skill-tree]")?.addEventListener("click", () => onNavigate?.("skill-tree"));
+    mountPoint.querySelectorAll("[data-home-skill-node]").forEach((button) => {
+      button.addEventListener("click", () => onNavigate?.("skill-tree", undefined, button.dataset.homeSkillNode));
+    });
     mountPoint.querySelectorAll("[data-home-action-target]").forEach((button) => {
       button.addEventListener("click", () => onNavigate?.(button.dataset.homeActionTarget));
     });

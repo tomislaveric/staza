@@ -9,6 +9,7 @@ export interface PlayerDataResetResult {
 
 const playerOwnedTables = [
   "fartlek_completions",
+  "player_flowline_reveals",
   "quest_instances",
   "quest_instance_cancellations",
   "planned_routes",

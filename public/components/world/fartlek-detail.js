@@ -17,7 +17,7 @@ export const formatSpeed = (metersPerSecond) => `${(metersPerSecond * 3.6).toFix
 /**
  * Selecting a Fartlek shows its traversal challenge: name, length, and
  * completion status. Wording never implies a speed target - completion is about finishing
- * the segment, not about pace.
+ * the segment, not about pace. A revealed Flowline can be the target of a planned route.
  */
 export const FartlekDetail = (fartlek) => {
   const { latestCompletion } = fartlek;
@@ -45,6 +45,7 @@ export const FartlekDetail = (fartlek) => {
           <div><dt>Completions</dt><dd>${escapeHtml(fartlek.completionCount)}</dd></div>
         </dl>
       ` : `<p class="fartlek-detail-hint">Complete the full segment in one activity.</p>`}
+      <button type="button" class="collectible-route-button" data-fartlek-route="${escapeHtml(fartlek.id)}">Plan route via this Flowline</button>
     </section>
   `;
 };

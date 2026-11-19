@@ -6,7 +6,7 @@ final class HomeModelTests: XCTestCase {
     private static let dashboard = #"{"progress":{"totalXp":1075,"level":5,"currentLevelXp":75,"nextLevelXp":500,"progressToNextLevel":0.15,"remainingXp":425,"progressPercent":15},"lifetime":{"distanceMeters":137300,"totalCollectibles":2,"totalFlowlines":11},"sportRecords":[],"milestones":{"places":0,"peaks":0,"mountainPasses":0,"flowlines":11},"recentActivities":[],"questHistory":[]}"#
     private static let activities = #"[{"id":"a1","type":"cycling","title":"Ride","startedAt":"2026-11-08T10:00:00.000Z","distanceMeters":137300,"durationSeconds":20760,"xpEarned":1075,"collectedCount":2,"revisitCount":1,"flowlineCount":11,"hasVideo":true}]"#
     private static let detail = #"{"id":"a1","type":"cycling","title":"Ride","startedAt":"2026-11-08T10:00:00.000Z","distanceMeters":137300,"durationSeconds":20760,"xpEarned":1075,"collectedCount":2,"revisitCount":1,"flowlineCount":11,"hasVideo":true,"events":[{"id":"e1","collectible":{"name":"Col du Pigeonnier","type":"mountain_pass"},"value":100,"latitude":49.0,"longitude":7.9,"activityTimestamp":1500}],"replay":{"activity":{"route":[{"latitude":49.0,"longitude":7.9,"timestampMs":1000},{"latitude":49.1,"longitude":8.0,"timestampMs":2000}]},"activityResult":{"nearMisses":[]}}}"#
-    private static let skillTree = #"{"isPremium":false,"earnedPoints":5,"spentPoints":0,"balance":5,"nextSkillPoint":{"level":6,"xpRemaining":425,"progress":0.15},"nodes":[\#(node("n1", "unlocked")),\#(node("n2", "locked"))]}"#
+    private static let skillTree = #"{"isPremium":false,"earnedPoints":5,"spentPoints":0,"balance":5,"nextSkillPoint":{"level":6,"xpRemaining":425,"progress":0.15},"nodes":[\#(node("n1", "unlocked")),\#(node("n2", "locked")),\#(node("n3", "unlockable"))]}"#
     private static let capabilities = #"{"titles":[{"id":"t1","label":"Climber"}],"badges":[]}"#
 
     private static func node(_ id: String, _ state: String) -> String {
@@ -74,9 +74,13 @@ final class HomeModelTests: XCTestCase {
         let achievements = try XCTUnwrap(content.achievements)
         XCTAssertEqual(achievements.skillPoints, 5)
         XCTAssertEqual(achievements.unlockedSkills, 1)
-        XCTAssertEqual(achievements.totalSkills, 2)
+        XCTAssertEqual(achievements.totalSkills, 3)
         XCTAssertEqual(achievements.earned.map(\.label), ["Climber"])
-        XCTAssertEqual(content.todos, [.spendSkillPoints(5), .planExploration])
+        let highlights = content.highlights
+        XCTAssertNil(highlights.quest)
+        XCTAssertEqual(highlights.skillPoints, 5)
+        XCTAssertEqual(highlights.ready.map(\.id), ["n3"])
+        XCTAssertTrue(highlights.showsSkills)
     }
 
     func testSecondaryFailuresStillRenderHome() async throws {
@@ -89,7 +93,8 @@ final class HomeModelTests: XCTestCase {
         XCTAssertNil(content.latestDetail)
         XCTAssertNil(content.replay)
         XCTAssertEqual(content.latest?.id, "a1")
-        XCTAssertEqual(content.todos, [.planExploration])
+        XCTAssertNil(content.highlights.quest)
+        XCTAssertFalse(content.highlights.showsSkills)
     }
 
     func testNoActivitiesSkipsDetailAndBasemap() async throws {
@@ -107,34 +112,75 @@ final class HomeModelTests: XCTestCase {
         XCTAssertEqual(model.state, .failed("boom"))
     }
 
-    func testTodosOrderAndFallback() throws {
-        func decode<T: Decodable>(_ json: String) throws -> T { try JSONDecoder().decode(T.self, from: Data(json.utf8)) }
-        let active: AuthoredQuest = try decode(Self.authored("q1", state: "active"))
-        let locked: AuthoredQuest = try decode(Self.authored("q3", state: "locked"))
-        let completed: AuthoredQuest = try decode(Self.authored("q4", state: "completed"))
-        let exploring: QuestInstance = try decode(Self.instance("x", status: "active"))
-        let done: QuestInstance = try decode(Self.instance("y", status: "completed"))
+    private func decode<T: Decodable>(_ json: String) throws -> T { try JSONDecoder().decode(T.self, from: Data(json.utf8)) }
 
-        XCTAssertEqual(
-            HomeTodo.list(skillPoints: 2, authoredQuests: [locked, active, completed], instances: [done, exploring]),
-            [.spendSkillPoints(2), .quest(active), .exploration(exploring)]
-        )
-        XCTAssertEqual(HomeTodo.list(skillPoints: 0, authoredQuests: [active], instances: [done]), [.quest(active)])
-        XCTAssertEqual(HomeTodo.list(skillPoints: 0, authoredQuests: [locked], instances: [exploring]), [.exploration(exploring)])
-        XCTAssertEqual(HomeTodo.list(skillPoints: 0, authoredQuests: [locked, completed], instances: [done]), [.planExploration])
-        XCTAssertEqual(HomeTodo.spendSkillPoints(2).target, .skillAtlas)
-        XCTAssertEqual(HomeTodo.quest(active).target, .quests)
-        XCTAssertEqual(HomeTodo.moreQuests(4).target, .quests)
-        XCTAssertEqual(HomeTodo.exploration(exploring).target, .world)
-        XCTAssertEqual(HomeTodo.planExploration.target, .world)
+    private func quest(_ id: String, state: String = "active", difficulty: String = "medium", xp: Double = 100) throws -> AuthoredQuest {
+        try decode(#"{"id":"\#(id)","chainTitle":"Chain","step":1,"totalSteps":3,"title":"Quest \#(id)","description":"D","difficulty":"\#(difficulty)","xp":\#(xp),"state":"\#(state)"}"#)
     }
 
-    func testTodosCapActiveQuestsAtThree() throws {
-        let quests: [AuthoredQuest] = try (1...4).map {
-            try JSONDecoder().decode(AuthoredQuest.self, from: Data(Self.authored("q\($0)", state: "active").utf8))
-        }
-        let todos = HomeTodo.list(skillPoints: 0, authoredQuests: quests, instances: [])
-        XCTAssertEqual(todos, [.quest(quests[0]), .quest(quests[1]), .quest(quests[2]), .moreQuests(4)])
-        XCTAssertEqual(HomeTodo.list(skillPoints: 0, authoredQuests: Array(quests.prefix(3)), instances: []).count, 3)
+    private func skill(
+        _ id: String,
+        state: SkillAtlasView_.Node.State = .locked,
+        cost: Int = 1,
+        prerequisitesMet: Bool = true,
+        requirements: [(Double, Double)] = []
+    ) -> SkillAtlasView_.Node {
+        SkillAtlasView_.Node(
+            id: id, name: id, description: "", sport: "cycling", branch: "rush", tier: .level(1), cost: cost,
+            premium: false, grant: .init(type: "quest_unlock", label: id), prerequisites: [],
+            layout: .init(col: 0, row: 0), state: state,
+            requirements: requirements.map { .init(label: "Flowlines", target: $0.1, current: $0.0, met: $0.0 >= $0.1) },
+            prerequisitesMet: prerequisitesMet
+        )
+    }
+
+    func testFeaturesTheEasiestActiveQuest() throws {
+        let quests = [
+            try quest("hard", difficulty: "hard", xp: 50),
+            try quest("medium-rich", xp: 300),
+            try quest("done", state: "completed", difficulty: "easy"),
+            try quest("medium-a"),
+            try quest("medium-b")
+        ]
+        XCTAssertEqual(HomeHighlights.featuredQuest(quests)?.id, "medium-a")
+        XCTAssertEqual(HomeHighlights.featuredQuest([try quest("m"), try quest("e", difficulty: "easy", xp: 400)])?.id, "e")
+        XCTAssertNil(HomeHighlights.featuredQuest([try quest("x", state: "locked")]))
+    }
+
+    func testUpNextCountsActiveQuestsAndFindsTheExploration() throws {
+        let exploring: QuestInstance = try decode(Self.instance("x", status: "active"))
+        let done: QuestInstance = try decode(Self.instance("y", status: "completed"))
+        let highlights = HomeHighlights(
+            skillPoints: 0,
+            authoredQuests: [try quest("1"), try quest("2", difficulty: "easy"), try quest("3", state: "locked")],
+            instances: [done, exploring],
+            nodes: []
+        )
+        XCTAssertEqual(highlights.quest?.id, "2")
+        XCTAssertEqual(highlights.activeQuestCount, 2)
+        XCTAssertEqual(highlights.exploration?.id, "x")
+        XCTAssertFalse(highlights.showsSkills)
+    }
+
+    func testReadyNodesAreCheapestFirstAndCapped() {
+        let nodes = [skill("a", state: .unlockable, cost: 3), skill("b", state: .unlockable), skill("c"), skill("d", state: .unlockable, cost: 2), skill("e", state: .unlockable, cost: 3)]
+        XCTAssertEqual(HomeHighlights.readyNodes(nodes).map(\.id), ["b", "d", "a"])
+    }
+
+    func testAlmostNodesRankStartedLockedNodesByProgress() {
+        let nodes = [
+            skill("half", requirements: [(5, 10)]),
+            skill("untouched", requirements: [(0, 10)]),
+            skill("blocked", prerequisitesMet: false, requirements: [(9, 10)]),
+            skill("premium", state: .premiumLocked, requirements: [(9, 10)]),
+            skill("needs-sp", cost: 3, requirements: [(12, 10)]),
+            skill("mixed", requirements: [(30, 10), (1, 10)])
+        ]
+        let almost = HomeHighlights.almostNodes(nodes)
+        XCTAssertEqual(almost.map(\.id), ["needs-sp", "mixed", "half"])
+        zip(almost.map(\.progress), [1, 0.55, 0.5]).forEach { XCTAssertEqual($0, $1, accuracy: 0.0001) }
+        XCTAssertNil(almost[0].blockingRequirement)
+        XCTAssertEqual(almost[1].blockingRequirement?.current, 1)
+        XCTAssertEqual(HomeHighlights.requirementProgress(skill("free")), 1)
     }
 }

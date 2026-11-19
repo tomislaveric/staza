@@ -44,6 +44,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   timestamps, preserving the geometry recorded with new activity snapshots.
 - [GameEvent instead of Coin](features/gameevent-instead-of-coin/README.md) —
   generalize downstream Coin-passage records into typed game events.
+- [Hidden Flowline Discovery](features/hidden-flowline-discovery/README.md) —
+  make Flowlines per-player hidden opportunities that Explore this Area and rides
+  reveal, and let a revealed Flowline be a route's required target.
 - [Highlight planner](features/highlight-planner/README.md) — formalize selected
   game-event timing into a deterministic render manifest before media rendering.
 - [Home Active Quests](features/home-active-quests/README.md) — list the player's
@@ -127,6 +130,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Mobile UX Audit](features/mobile-ux-audit/README.md) — audit the app in a
   real browser and improve mobile navigation and responsiveness while preserving
   the existing visual style and desktop behavior.
+- [Motivating Home](features/motivating-home/README.md) — replace the Home checkbox
+  to-dos with an Up next card for the easiest quest and Skill Atlas highlights (ready to
+  unlock, almost there) on web, iOS and Android; quest rows drop their checkboxes.
 - [Multi Clip creation](features/multi-clip-creation/README.md) — select detected
   Coin passages and combine them into one chronological highlight video.
 - [Multi-Sport Skill Atlas](features/multi-sport-skill-atlas/README.md) — extend the

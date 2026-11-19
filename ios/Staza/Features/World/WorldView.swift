@@ -79,6 +79,9 @@ struct WorldView: View {
             .onChange(of: explore.isActive) { _, active in
                 withAnimation(.snappy) { active ? sheet.startExplore() : sheet.endExplore() }
             }
+            .onChange(of: explore.revealedFlowlineIds) { _, revealed in
+                if !revealed.isEmpty { Task { await model.reloadViewport() } }
+            }
             .onChange(of: explore.selectedId) { _, selected in
                 if selected != nil { withAnimation(.snappy) { sheet.revealMap() } }
             }
@@ -140,7 +143,12 @@ struct WorldView: View {
         case .explore:
             ExplorePanel(model: explore)
         case .detail(let selection):
-            WorldDetailBody(selection: selection, isQuestTarget: model.isQuestTarget(selection))
+            WorldDetailBody(selection: selection, isQuestTarget: model.isQuestTarget(selection)) { flowline in
+                model.selection = nil
+                model.clearHighlight()
+                withAnimation(.snappy) { sheet.closeDetail() }
+                explore.begin(via: flowline, userLocation: userLocation)
+            }
         }
     }
 

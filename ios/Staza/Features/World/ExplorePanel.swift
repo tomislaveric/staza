@@ -29,6 +29,11 @@ struct ExplorePanel: View {
 
     private var configure: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
+            if let flowline = model.destinationFlowline {
+                Label("explore.viaFlowline \(flowline.name)", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(StazaFont.footnote)
+                    .foregroundStyle(StazaColor.textPrimary)
+            }
             VStack(alignment: .leading, spacing: StazaSpacing.sm) {
                 if model.userLocation != nil {
                     Picker("explore.start", selection: Binding(get: { model.useUserLocation }, set: { model.useUserLocation = $0 })) {
@@ -102,6 +107,7 @@ struct ExplorePanel: View {
                 }
                 targets
             }
+            if !model.flowlines.isEmpty { revealedFlowlines }
             HStack(spacing: StazaSpacing.sm) {
                 Button("explore.changeRide") { model.changeRide() }.buttonStyle(.stazaSecondary)
                 if model.isCustomized {
@@ -195,6 +201,44 @@ struct ExplorePanel: View {
             }
             .scrollClipDisabled()
         }
+    }
+
+    /// The area's revealed Flowlines, newly revealed first; any can become the route's target.
+    private var revealedFlowlines: some View {
+        let fresh = Set(model.revealedFlowlineIds)
+        return VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            HStack(spacing: StazaSpacing.sm) {
+                OverlineText(fresh.isEmpty ? "explore.flowlines.area" : "explore.flowlines.revealed")
+                Spacer()
+                if !fresh.isEmpty {
+                    Text("explore.flowlines.new \(fresh.count)")
+                        .font(StazaFont.footnote.weight(.semibold))
+                        .foregroundStyle(StazaColor.accent)
+                }
+            }
+            ForEach(model.flowlines.prefix(8)) { flowline in
+                HStack(spacing: StazaSpacing.sm) {
+                    Capsule().fill(StazaColor.rarityRare).frame(width: 14, height: 3).accessibilityHidden(true)
+                    Text(verbatim: flowline.name).lineLimit(1)
+                    if fresh.contains(flowline.id) {
+                        StazaChip("explore.flowlines.newBadge", tint: StazaColor.accent)
+                    }
+                    Spacer(minLength: StazaSpacing.sm)
+                    if model.destinationFlowline?.id == flowline.id {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(StazaColor.accent)
+                            .accessibilityLabel(Text("explore.flowlines.planned"))
+                    } else {
+                        Button("explore.flowlines.planVia") { Task { await model.planVia(flowline.id) } }
+                            .font(StazaFont.footnote.weight(.semibold))
+                            .foregroundStyle(StazaColor.accent)
+                            .disabled(model.isRerouting || model.phase != .proposals)
+                    }
+                }
+                .font(StazaFont.footnote.weight(.medium))
+                .foregroundStyle(StazaColor.textPrimary)
+            }
+        }
+        .accessibilityIdentifier("exploreRevealedFlowlines")
     }
 
     private func destinationChip(_ item: WorldCollectible) -> some View {

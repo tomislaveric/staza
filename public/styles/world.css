@@ -431,6 +431,11 @@
 .world-stats i { color: var(--text-subtle); font-family: var(--font-body); font-size: 16px; font-style: normal; }
 .world-stats strong { font-weight: 600; }
 .world-stats-truncated { color: var(--text-subtle); font-size: 12px; }
+.world-hidden-flowlines { align-items: center; color: var(--text-muted); display: flex; flex-wrap: wrap; font-family: var(--font-display); font-size: 12px; gap: 8px; margin: 6px 12px 0; }
+.world-hidden-flowlines .fartlek-swatch { opacity: .5; width: 12px; }
+.world-hidden-flowlines button { font-size: 12px; }
+.exploration-revealed li.is-new .exploration-target-name small { color: var(--accent-yellow); font-family: var(--font-display); letter-spacing: .1em; text-transform: uppercase; }
+.activity-replay-fartlek-found { color: var(--accent-yellow); font-family: var(--font-display); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 
 .quest-list { padding-top: 16px; }
 .quest-list h2 { color: var(--text-primary); font-family: var(--font-display); font-size: 18px; margin: 0 0 12px; }

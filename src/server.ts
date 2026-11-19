@@ -24,6 +24,7 @@ import { ActivityRepository } from "./persistence/activityRepository.js";
 import { CollectibleRepository } from "./persistence/collectibleRepository.js";
 import { FartlekRepository } from "./persistence/fartlekRepository.js";
 import { FartlekCompletionRepository } from "./persistence/fartlekCompletionRepository.js";
+import { FlowlineRevealRepository } from "./persistence/flowlineRevealRepository.js";
 import {
   QuestInstanceRepository,
   QuestInstanceNotFoundError,
@@ -74,6 +75,7 @@ const activityRepository = new ActivityRepository(databasePool, config.devTools)
 const collectibleRepository = new CollectibleRepository(databasePool);
 const fartlekRepository = new FartlekRepository(databasePool);
 const fartlekCompletionRepository = new FartlekCompletionRepository(databasePool);
+const flowlineRevealRepository = new FlowlineRevealRepository(databasePool);
 const questInstanceRepository = new QuestInstanceRepository(databasePool);
 const skillTreeRepository = new SkillTreeRepository(databasePool);
 const authoredQuestRepository = new AuthoredQuestRepository(databasePool);
@@ -1041,21 +1043,23 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
       const stats = await collectibleRepository.worldStats(discoveredSourceIds);
-      response.json({ collectibles: [], stats, truncated: false, fartleks: [] });
+      response.json({ collectibles: [], stats, truncated: false, fartleks: [], hiddenFlowlineCount: 0 });
       return;
     }
     const flowlinePolicy = flowlinePolicyForBounds(bounds, config.worldFlowlineLimit);
     // The client caches collectibles for a wider area; it asks for them only when leaving that area.
     const areaBounds = parseBoundsParameter(request.query.collectibleBbox);
     const skipCollectibles = request.query.skipCollectibles === "1";
-    const [stats, viewport, fartlekResult] = await Promise.all([
+    const [stats, viewport, fartlekResult, hiddenFlowlineCount] = await Promise.all([
       collectibleRepository.worldStatsWithinBounds(bounds, discoveredSourceIds),
       skipCollectibles
         ? undefined
         : areaBounds
           ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit)
           : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      fartlekRepository.listWithinBoundsLimited(bounds, flowlinePolicy)
+      // Flowlines are hidden until the player reveals them; only a count hints at the rest.
+      flowlineRevealRepository.listRevealedWithinBoundsLimited(playerId, bounds, flowlinePolicy),
+      flowlineRevealRepository.countHiddenWithinBounds(playerId, bounds)
     ]);
     const fartleks = await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
     const world = viewport ? createWorldSnapshot(viewport.collectibles, discoveredSourceIds) : undefined;
@@ -1064,7 +1068,8 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
       stats,
       ...(viewport ? { truncated: viewport.truncated } : { collectiblesSkipped: true }),
       fartlekTruncated: fartlekResult.truncated,
-      fartleks
+      fartleks,
+      hiddenFlowlineCount
     });
   } catch (error) {
     next(error);
@@ -1130,6 +1135,7 @@ const explorationService = new ExplorationService({
   ...(config.routingServiceUrl
     ? { routing: new RoutingClient({ baseUrl: config.routingServiceUrl, timeoutMs: config.routingServiceTimeoutMs }) }
     : {}),
+  reveals: flowlineRevealRepository,
   sessions: new ExplorationSessionStore(),
   proposals: new ProposalStore(),
   explorations: questInstanceRepository

@@ -29,6 +29,14 @@ export const explorationObjectives = (targets: QuestRouteTarget[]): QuestObjecti
   return objectives;
 };
 
+/** Objective of a route planned through a revealed Flowline: ride it once, in full, in the activity. */
+export const flowlineObjective = (flowline: { id: string; name: string }): QuestObjective => ({
+  id: `flowline-${flowline.id}`,
+  type: "flowline_rule",
+  requiredCount: 1,
+  targets: [{ id: flowline.id, name: flowline.name }]
+});
+
 /** Copies targets with their objective ids assigned for planning. */
 export const withObjectiveIds = (targets: QuestRouteTarget[], objectives: QuestObjective[]): QuestRouteTarget[] =>
   targets.map((target) => ({
@@ -39,7 +47,14 @@ export const withObjectiveIds = (targets: QuestRouteTarget[], objectives: QuestO
 const plural = (count: number, singular: string, pluralForm: string) => `${count} ${count === 1 ? singular : pluralForm}`;
 
 /** Human title and summary of an exploration, derived from its targets. */
-export const describeExploration = (targets: QuestRouteTarget[]): { title: string; description: string } => {
+export const describeExploration = (
+  targets: QuestRouteTarget[],
+  flowline?: { name: string }
+): { title: string; description: string } => {
+  if (flowline) {
+    const extra = targets.length > 0 ? ` and visit ${plural(targets.length, "destination", "destinations")}` : "";
+    return { title: `Exploration: ${flowline.name}`, description: `Ride the Flowline ${flowline.name} in full${extra}.` };
+  }
   if (targets.length === 0) return { title: "Exploration: Area route", description: "A route through the explored area." };
   const names = targets.map((target) => target.name);
   const title = names.length <= 2

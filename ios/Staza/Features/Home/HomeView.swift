@@ -19,10 +19,14 @@ struct HomeView: View {
                     }
                 case .loaded(let content):
                     LevelHeroCard(progress: content.progress)
+                    let highlights = content.highlights
                     if content.latest == nil {
                         OnboardingCard(onAddActivity: onAddActivity)
                     } else {
-                        HomeTodoSection(todos: content.todos, perform: open)
+                        UpNextSection(highlights: highlights, perform: open)
+                    }
+                    if highlights.showsSkills {
+                        SkillHighlightsSection(highlights: highlights) { onSelectTab(.skillAtlas) }
                     }
                     HomeAchievementsSection(
                         achievements: content.achievements,
@@ -47,9 +51,8 @@ struct HomeView: View {
         .refreshable { await model?.load() }
     }
 
-    private func open(_ target: HomeTodo.Target) {
+    private func open(_ target: UpNextSection.Target) {
         switch target {
-        case .skillAtlas: onSelectTab(.skillAtlas)
         case .world: onSelectTab(.world)
         case .quests: isShowingQuests = true
         }

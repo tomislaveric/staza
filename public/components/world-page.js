@@ -142,14 +142,24 @@ export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks
 `;
 };
 
-export const WorldStats = (stats, truncated) => `
+export const WorldStats = (stats, truncated, hiddenFlowlineCount = 0) => `
   <p class="world-stats">
     <span>${formatNumber(stats.discoveredCount)} visited here</span>
     <i aria-hidden="true">\u00b7</i>
     <span>${formatNumber(stats.remainingCount)} remaining</span>
     ${truncated ? '<i aria-hidden="true">\u00b7</i><span class="world-stats-truncated">Zoom in to see everything here</span>' : ""}
   </p>
+  ${HiddenFlowlinesTeaser(hiddenFlowlineCount)}
 `;
+
+/** Hidden Flowlines are never drawn; only their count invites the player to explore the area. */
+export const HiddenFlowlinesTeaser = (count) => count > 0 ? `
+  <p class="world-hidden-flowlines" data-world-hidden-flowlines>
+    <b class="fartlek-swatch" aria-hidden="true"></b>
+    <span>${count === 1 ? "1 hidden Flowline here" : `${formatNumber(count)} hidden Flowlines here`}</span>
+    <button type="button" data-world-explore-hidden>Explore this Area</button>
+  </p>
+` : "";
 
 /** "Discovered X / Y" for the visible map area; placeholders until the first viewport loads. */
 export const WorldDiscovered = (stats) => `
@@ -262,6 +272,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   let stats = emptyStats;
   let truncated = false;
   let fartleks = [];
+  let hiddenFlowlineCount = 0;
   let availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
   let selection;
   let selectedQuestKey;
@@ -319,11 +330,14 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       : exploration.pendingTargetIds ?? routeTargetIds(activeProposal(exploration));
     const alongIds = new Set(traversedFlowlines(activeProposal(exploration)).map((flowline) => flowline.id));
     const alongFlowlines = catalog.flowlines.filter((flowline) => alongIds.has(flowline.id));
+    // Newly revealed Flowlines stay on the map as context so the discovery is visible.
+    const revealed = new Set(exploration.revealedFlowlineIds);
+    const shownFlowlines = catalog.flowlines.filter((flowline) => alongIds.has(flowline.id) || revealed.has(flowline.id));
     worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, {
       selectedId: exploration.hoveredTargetId,
       questCollectibleIds: highlighted
     }));
-    worldMap?.setFartleks(fartleksToFeatureCollection(alongFlowlines, {
+    worldMap?.setFartleks(fartleksToFeatureCollection(shownFlowlines, {
       selectedId: exploration.hoveredTargetId,
       questTargetIds: [...alongIds]
     }));
@@ -429,6 +443,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       button.addEventListener("click", () => void selectQuest(button.dataset.collectibleQuest));
     });
     detailHost.querySelector("[data-collectible-route]")?.addEventListener("click", (event) => openRouteTo(event.currentTarget.dataset.collectibleRoute));
+    detailHost.querySelector("[data-fartlek-route]")?.addEventListener("click", (event) => openRouteViaFlowline(event.currentTarget.dataset.fartlekRoute));
     detailHost.querySelector("[data-world-close]")?.addEventListener("click", clearSelection);
     detailHost.querySelectorAll("[data-world-marker]").forEach((button) => {
       button.addEventListener("click", () => selectCollectible(button.dataset.worldMarker));
@@ -436,7 +451,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   };
 
   const renderSidePanels = () => {
-    statsHost.innerHTML = WorldStats(stats, truncated);
+    statsHost.innerHTML = WorldStats(stats, truncated, exploration ? 0 : hiddenFlowlineCount);
+    statsHost.querySelector("[data-world-explore-hidden]")?.addEventListener("click", () => openExploration());
     discoveredHost.innerHTML = WorldDiscovered(stats);
     questHost.innerHTML = QuestList(questInstances, pendingQuestId, selectedQuestKey, plannedRoutes);
     questHost.querySelectorAll("[data-quest-retry]").forEach((button) => {
@@ -620,10 +636,23 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   /** "Route to" on a collectible: a loop from home through it, planned like Explore this Area. */
   function openRouteTo(collectibleId) {
     const collectible = collectibleById(collectibleId);
-    if (!worldMap || exploration || !collectible) return;
+    if (!collectible) return;
+    openRouteThrough([[collectible.longitude, collectible.latitude]], { id: collectible.id, name: collectible.name });
+  }
+
+  /** "Plan route via this Flowline": a loop from home that rides the revealed Flowline in full. */
+  function openRouteViaFlowline(fartlekId) {
+    const fartlek = fartlekById(fartlekId);
+    if (!fartlek) return;
+    openRouteThrough(fartlek.geometry.coordinates, { kind: "flowline", id: fartlek.id, name: fartlek.name });
+  }
+
+  /** Opens Explore this Area framed around the destination points (and home) with that destination required. */
+  function openRouteThrough(points, destination) {
+    if (!worldMap || exploration || points.length === 0) return;
     const start = homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined;
-    const lats = [collectible.latitude, ...(start ? [start.lat] : [])];
-    const lons = [collectible.longitude, ...(start ? [start.lon] : [])];
+    const lats = [...points.map(([, lat]) => lat), ...(start ? [start.lat] : [])];
+    const lons = [...points.map(([lon]) => lon), ...(start ? [start.lon] : [])];
     const padLat = Math.max(0.01, (Math.max(...lats) - Math.min(...lats)) * 0.5);
     const padLon = Math.max(0.015, (Math.max(...lons) - Math.min(...lons)) * 0.5);
     const bounds = {
@@ -638,7 +667,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       bbox: boundsToParameter(bounds),
       center: { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 },
       zoom: worldMap.getView().zoom
-    }, start, { id: collectible.id, name: collectible.name });
+    }, start, destination);
     setStatus(undefined);
     renderSidePanels();
     renderExploration();
@@ -666,6 +695,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       previewProposalId: undefined,
       hoveredTargetId: undefined,
       catalog: { collectibles: [], flowlines: [] },
+      revealedFlowlineIds: [],
       truncated: false,
       adding: false,
       pendingTargetIds: undefined,
@@ -726,6 +756,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         proposals: result.proposals,
         customizedById: {},
         catalog: result.catalog,
+        revealedFlowlineIds: result.revealedFlowlineIds ?? [],
         truncated: Boolean(result.truncated),
         warnings: result.warnings ?? [],
         limits: result.limits ?? exploration.limits,
@@ -733,12 +764,26 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         phase: preferred ? "customize" : "proposals"
       });
       worldMap.fitTo(result.proposals.flatMap((proposal) => geometryPoints(proposal.geometry)));
+      // Flowlines are reloaded with every viewport, so revealed ones appear once the exploration closes.
+      if (exploration.revealedFlowlineIds.length) void loadViewport(worldMap.getBounds());
     } catch (generateError) {
       if (token !== explorationToken || !exploration) return;
       exploration.phase = "configure";
       exploration.error = explorationErrorMessage(generateError);
     }
     renderExploration();
+  }
+
+  /** Re-plans the frozen area as routes that ride one of its revealed Flowlines in full. */
+  function planViaRevealedFlowline(id) {
+    if (!exploration || exploration.status !== "idle" || exploration.phase === "confirming") return;
+    const flowline = exploration.catalog.flowlines.find((item) => item.id === id);
+    if (!flowline) return;
+    const revealedFlowlineIds = exploration.revealedFlowlineIds;
+    returnToConfigure(undefined);
+    exploration.destination = { kind: "flowline", id: flowline.id, name: flowline.name };
+    exploration.revealedFlowlineIds = revealedFlowlineIds;
+    void generateRoutes();
   }
 
   /** GENERATING → CONFIGURE without waiting; a late response is ignored. */
@@ -935,6 +980,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       renderExploration();
     });
     on("[data-exploration-reset]", "click", () => resetSelectedRoute());
+    on("[data-exploration-flowline-route]", "click", (button) => planViaRevealedFlowline(button.dataset.explorationFlowlineRoute));
     on("[data-exploration-confirm]", "click", () => void confirmExploration());
   }
 
@@ -1002,6 +1048,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       stats = snapshot.stats;
       truncated = loadedArea.truncated || snapshot.fartlekTruncated === true;
       fartleks = snapshot.fartleks ?? [];
+      hiddenFlowlineCount = snapshot.hiddenFlowlineCount ?? 0;
       availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
       selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
       setStatus(collectibles.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);

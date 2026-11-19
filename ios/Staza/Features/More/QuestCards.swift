@@ -1,29 +1,27 @@
 import SwiftUI
 
-/// Generic checklist row: checkbox, title (with optional NEW pill), one-line goal and pills.
-/// Shared by quest rows and Home to-dos; `showsChevron` marks the row as navigable.
+/// Generic quest row: state stripe, title (with optional NEW pill), one-line goal and pills.
+/// `completed` rows are dimmed with a success stripe; `showsChevron` marks the row as navigable.
 struct TaskRow<Pills: View>: View {
-    let checked: Bool
+    let completed: Bool
     var isNew = false
     let title: Text
     var goal: Text?
     var showsChevron = false
     @ViewBuilder let pills: Pills
 
-    /// Leading offset of the title column, for rows that align with task text but have no checkbox.
-    static var textInset: CGFloat { checkboxSize + checkboxSpacing }
-    private static var checkboxSize: CGFloat { 20 }
-    private static var checkboxSpacing: CGFloat { StazaSpacing.sm + StazaSpacing.xs }
-
     var body: some View {
         HStack(alignment: .center, spacing: StazaSpacing.sm) {
-            HStack(alignment: .top, spacing: Self.checkboxSpacing) {
-                checkbox
+            HStack(alignment: .top, spacing: StazaSpacing.sm + StazaSpacing.xs) {
+                Capsule()
+                    .fill(completed ? StazaColor.success : StazaColor.accent)
+                    .frame(width: 3)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: StazaSpacing.xs) {
                     HStack(alignment: .firstTextBaseline, spacing: StazaSpacing.sm) {
                         title
                             .font(StazaFont.headline)
-                            .foregroundStyle(checked ? StazaColor.textMuted : StazaColor.textPrimary)
+                            .foregroundStyle(completed ? StazaColor.textMuted : StazaColor.textPrimary)
                             .lineLimit(1)
                         if isNew {
                             StazaChip("quests.pill.new", tint: StazaColor.accent)
@@ -41,8 +39,9 @@ struct TaskRow<Pills: View>: View {
                             .padding(.top, StazaSpacing.xxs)
                     }
                 }
-                .opacity(checked ? 0.6 : 1)
+                .opacity(completed ? 0.7 : 1)
             }
+            .fixedSize(horizontal: false, vertical: true)
             if showsChevron {
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
@@ -53,26 +52,9 @@ struct TaskRow<Pills: View>: View {
         .padding(.vertical, StazaSpacing.sm + StazaSpacing.xs)
         .accessibilityElement(children: .combine)
     }
-
-    @ViewBuilder
-    private var checkbox: some View {
-        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
-        if checked {
-            shape.fill(StazaColor.accent)
-                .overlay(Image(systemName: "checkmark").font(.caption2.weight(.heavy)).foregroundStyle(StazaColor.surface))
-                .frame(width: Self.checkboxSize, height: Self.checkboxSize)
-                .padding(.top, 1)
-                .accessibilityLabel(Text("quests.state.completed"))
-        } else {
-            shape.strokeBorder(StazaColor.accent, lineWidth: 1.5)
-                .frame(width: Self.checkboxSize, height: Self.checkboxSize)
-                .padding(.top, 1)
-                .accessibilityHidden(true)
-        }
-    }
 }
 
-/// A quest as a to-do item: checkbox, title, one-line goal and pills. Shared by Progress, the Quests list and Home.
+/// A quest row: title, one-line goal and pills. Shared by Progress and the Quests list.
 struct QuestTaskRow: View {
     let quest: AuthoredQuest
     var showsChevron = false
@@ -80,12 +62,15 @@ struct QuestTaskRow: View {
 
     var body: some View {
         TaskRow(
-            checked: quest.state == .completed,
+            completed: quest.state == .completed,
             isNew: quest.isNew == true,
             title: Text(verbatim: quest.title),
             goal: Text(verbatim: quest.description),
             showsChevron: showsChevron
         ) {
+            if quest.state == .completed {
+                StazaChip("quests.state.completed", systemImage: "checkmark", tint: StazaColor.success)
+            }
             if quest.state == .active, let failure = quest.lastFailure {
                 StazaChip("quests.pill.fellShort", systemImage: "xmark", tint: StazaColor.danger)
                 ForEach(Array((failure.criteria ?? []).filter { !$0.met }.enumerated()), id: \.offset) { _, criterion in
@@ -99,7 +84,7 @@ struct QuestTaskRow: View {
     }
 }
 
-/// Quests as one checklist card: open orders get a checkbox, locked ones a lock pill.
+/// Quests as one card: open and finished quests as rows, locked ones with a lock pill.
 struct QuestTaskList: View {
     let quests: [AuthoredQuest]
 

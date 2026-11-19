@@ -14,6 +14,8 @@ struct ReplayFlowline: Decodable, Equatable, Sendable {
     let fartlekName: String
     let completedAtTimestampMs: Double
     var fartlekGeometry: Geometry? = nil
+    /// The player had not revealed this Flowline before riding it.
+    var hiddenFound: Bool? = nil
 }
 
 struct ReplayCoordinate: Equatable, Sendable {
@@ -32,6 +34,8 @@ struct ReplayReveal: Equatable, Identifiable, Sendable {
     var category: String? = nil
     /// The completed segment of a Flowline reveal, drawn once it is revealed.
     var path: [ReplayCoordinate] = []
+    /// A Flowline completion the player had not revealed before this ride.
+    var hiddenFound = false
 }
 
 /// Timestamp-driven replay state derived from the activity track and its events.
@@ -64,7 +68,8 @@ struct ReplayTimeline: Equatable, Sendable {
                 pair.count >= 2 ? ReplayCoordinate(latitude: pair[1], longitude: pair[0]) : nil
             }
             return ReplayReveal(id: "flowline-\(index)", name: item.fartlekName, kind: .flowline,
-                                isRepeat: false, timestampMs: item.completedAtTimestampMs, coordinate: nil, path: path)
+                                isRepeat: false, timestampMs: item.completedAtTimestampMs, coordinate: nil, path: path,
+                                hiddenFound: item.hiddenFound ?? false)
         }
         self.init(route: route, reveals: events + flowlines)
     }

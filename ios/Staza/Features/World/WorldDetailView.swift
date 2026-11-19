@@ -33,6 +33,8 @@ struct WorldDetailHeader: View {
 struct WorldDetailBody: View {
     let selection: WorldSelection
     let isQuestTarget: Bool
+    /// Plans a route that rides the shown Flowline; only revealed Flowlines are ever shown.
+    var onPlanRoute: ((WorldFlowline) -> Void)? = nil
     @Environment(\.locale) private var locale
 
     var body: some View {
@@ -51,6 +53,13 @@ struct WorldDetailBody: View {
                     if let score = flowline.flowScore {
                         StatTile(label: "world.detail.flowScore", value: "\(Int(score.rounded()))", tint: StazaColor.rarityRare)
                     }
+                }
+                if let onPlanRoute {
+                    Button { onPlanRoute(flowline) } label: {
+                        Label("world.detail.planViaFlowline", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    }
+                    .buttonStyle(.stazaPrimaryWide)
+                    .accessibilityIdentifier("worldPlanViaFlowline")
                 }
             }
         }

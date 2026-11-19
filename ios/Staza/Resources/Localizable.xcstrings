@@ -1351,6 +1351,102 @@
         }
       }
     },
+    "explore.flowlines.area" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowlines in diesem Gebiet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowlines in this area"
+          }
+        }
+      }
+    },
+    "explore.flowlines.new %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld neu"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld new"
+          }
+        }
+      }
+    },
+    "explore.flowlines.newBadge" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neu"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New"
+          }
+        }
+      }
+    },
+    "explore.flowlines.planVia" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route hierüber planen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan route via this"
+          }
+        }
+      }
+    },
+    "explore.flowlines.planned" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hierüber geplant"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planned via this"
+          }
+        }
+      }
+    },
+    "explore.flowlines.revealed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowlines entdeckt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowlines revealed"
+          }
+        }
+      }
+    },
     "explore.generate" : {
       "localizations" : {
         "de" : {
@@ -1619,6 +1715,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plan a ride in this area"
+          }
+        }
+      }
+    },
+    "explore.viaFlowline %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route über Flowline %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route via Flowline %@"
           }
         }
       }
@@ -2104,6 +2216,126 @@
         }
       }
     },
+    "home.skillHighlights.almost" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fast geschafft"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Almost there"
+          }
+        }
+      }
+    },
+    "home.skillHighlights.header" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skill Atlas"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skill Atlas"
+          }
+        }
+      }
+    },
+    "home.skillHighlights.needsPoints %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch %lld SP nötig"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Needs %lld more SP"
+          }
+        }
+      }
+    },
+    "home.skillHighlights.ready" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit zum Freischalten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready to unlock"
+          }
+        }
+      }
+    },
+    "home.skillHighlights.spend %lld" : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Skillpunkt im Skill Atlas einsetzen"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Skillpunkte im Skill Atlas einsetzen"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Spend %lld Skill Point in the Skill Atlas"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Spend %lld Skill Points in the Skill Atlas"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.skillHighlights.unlock %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Freischalten · %lld SP"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlock · %lld SP"
+          }
+        }
+      }
+    },
     "home.skills" : {
       "localizations" : {
         "de" : {
@@ -2296,7 +2528,7 @@
         }
       }
     },
-    "home.todo.exploration" : {
+    "home.upNext.exploration" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2312,39 +2544,63 @@
         }
       }
     },
-    "home.todo.header" : {
+    "home.upNext.header" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zu erledigen"
+            "value" : "Als Nächstes"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "To do"
+            "value" : "Up next"
           }
         }
       }
     },
-    "home.todo.moreQuests %lld" : {
+    "home.upNext.moreQuests %lld" : {
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle Quests ansehen (%lld)"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weitere aktive Quest"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weitere aktive Quests"
+                }
+              }
+            }
           }
         },
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View all quests (%lld)"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more active quest"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more active quests"
+                }
+              }
+            }
           }
         }
       }
     },
-    "home.todo.plan.goal" : {
+    "home.upNext.plan.goal" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2360,7 +2616,23 @@
         }
       }
     },
-    "home.todo.plan.title" : {
+    "home.upNext.plan.overline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "World"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "World"
+          }
+        }
+      }
+    },
+    "home.upNext.plan.title" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2372,78 +2644,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plan an exploration"
-          }
-        }
-      }
-    },
-    "home.todo.spend %lld" : {
-      "localizations" : {
-        "de" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Skillpunkt einsetzen"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Skillpunkte einsetzen"
-                }
-              }
-            }
-          }
-        },
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Spend %lld Skill Point"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Spend %lld Skill Points"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "home.todo.spend.goal" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schalte neue Sportarten, Filter und Quest-Ketten frei."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unlock new sports, filters and quest chains."
-          }
-        }
-      }
-    },
-    "home.todo.spend.pill %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld SP"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld SP"
           }
         }
       }
@@ -3813,6 +4013,22 @@
         }
       }
     },
+    "replay.flowline.hiddenFound" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verborgene Flowline gefunden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hidden Flowline found"
+          }
+        }
+      }
+    },
     "sheet.detent.large" : {
       "localizations" : {
         "de" : {
@@ -4469,6 +4685,22 @@
         }
       }
     },
+    "world.detail.planViaFlowline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route über diese Flowline planen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan route via this Flowline"
+          }
+        }
+      }
+    },
     "world.detail.questTarget" : {
       "localizations" : {
         "de" : {
@@ -5121,6 +5353,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld of %2$lld found"
+          }
+        }
+      }
+    },
+    "world.stats.hiddenFlowlines %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld verborgene Flowlines hier – Gebiet erkunden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld hidden Flowlines here — Explore this Area"
           }
         }
       }

@@ -9,6 +9,7 @@ import {
   formatRouteDuration,
   plannedRouteGpxUrl,
   plannedRouteSummary,
+  RevealedFlowlinesSection,
   routeTargetIds,
   targetSummaryText
 } from "./exploration-panel.js";
@@ -86,6 +87,38 @@ describe("buildGenerateRequest", () => {
   it("asks for a loop through the chosen collectible when routing to it", () => {
     const state = createExplorationState(area, { lat: 50, lon: 9 }, { id: "c1", name: "Col" });
     expect(buildGenerateRequest(state).body.destinationId).toBe("c1");
+  });
+
+  it("asks for a loop that rides the chosen Flowline", () => {
+    const state = createExplorationState(area, { lat: 50, lon: 9 }, { kind: "flowline", id: "f1", name: "River Line" });
+    const { body } = buildGenerateRequest(state);
+    expect(body.destinationFlowlineId).toBe("f1");
+    expect(body).not.toHaveProperty("destinationId");
+    expect(ExplorationPanel(state)).toContain("Route via Flowline");
+  });
+});
+
+describe("RevealedFlowlinesSection", () => {
+  const withFlowlines = (overrides = {}) => customizing({
+    catalog: { ...catalog, flowlines: [{ id: "f1", name: "River Line" }, { id: "f2", name: "Ridge Line" }] },
+    ...overrides
+  });
+
+  it("lists newly revealed Flowlines first and offers to plan a route via each", () => {
+    const markup = RevealedFlowlinesSection(withFlowlines({ revealedFlowlineIds: ["f2"] }));
+    expect(markup).toContain("Flowlines revealed");
+    expect(markup).toContain("1 new Flowline");
+    expect(markup.indexOf("Ridge Line")).toBeLessThan(markup.indexOf("River Line"));
+    expect(markup).toContain('data-exploration-revealed-flowline="f2" class="is-new"');
+    expect(markup).toContain('data-exploration-flowline-route="f1"');
+    expect(ExplorationPanel(withFlowlines({ revealedFlowlineIds: ["f2"] }))).toContain("data-exploration-revealed");
+  });
+
+  it("marks the Flowline the routes already ride and hides itself while nothing is revealed", () => {
+    const markup = RevealedFlowlinesSection(withFlowlines({ destination: { kind: "flowline", id: "f1", name: "River Line" } }));
+    expect(markup).toContain("Flowlines in this area");
+    expect(markup).toMatch(/data-exploration-flowline-route="f1" disabled>Planned via this/);
+    expect(RevealedFlowlinesSection(customizing({ catalog: { ...catalog, flowlines: [] } }))).toBe("");
   });
 });
 

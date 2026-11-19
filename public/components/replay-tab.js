@@ -222,6 +222,7 @@ export const FartlekCompletionsSection = (fartlekCompletions = []) => {
             <span class="activity-replay-fartlek-main">
               <b class="fartlek-swatch is-unvisited" aria-hidden="true"></b>
               <span class="activity-replay-fartlek-name">${escapeHtml(completion.fartlekName)}</span>
+              ${completion.hiddenFound ? '<small class="activity-replay-fartlek-found" data-flowline-hidden-found>Hidden Flowline found</small>' : ""}
             </span>
             <span class="activity-replay-fartlek-stats">
               <small>${escapeHtml(formatDistance(completion.fartlekLengthMSnapshot))}</small>

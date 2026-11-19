@@ -57,49 +57,88 @@ struct HomeAchievements: Equatable, Sendable {
     let totalSkills: Int
     let earned: [PlayerCapabilities.Entry]
     let authoredQuests: [AuthoredQuest]
+    var nodes: [SkillAtlasView_.Node] = []
 }
 
-/// One Home to-do row, mirroring the web Home to-do list. Order: spend Skill Points, up to three active
-/// authored quests (plus a "view all" row beyond that), active explorations, otherwise plan one.
-enum HomeTodo: Equatable, Identifiable, Sendable {
-    enum Target: Equatable, Sendable { case skillAtlas, quests, world }
+/// What Home suggests next, mirroring web `homeHighlights`: the easiest active quest (or an
+/// exploration), Skill Atlas nodes that can be unlocked now and nodes that are close.
+struct HomeHighlights: Equatable, Sendable {
+    typealias Node = SkillAtlasView_.Node
 
-    static let questLimit = 3
+    struct AlmostNode: Equatable, Identifiable, Sendable {
+        let node: Node
+        /// Average requirement completion, 0...1.
+        let progress: Double
+        var id: String { node.id }
 
-    case spendSkillPoints(Int)
-    case quest(AuthoredQuest)
-    case moreQuests(Int)
-    case exploration(QuestInstance)
-    case planExploration
-
-    static func list(skillPoints: Int, authoredQuests: [AuthoredQuest], instances: [QuestInstance]) -> [HomeTodo] {
-        var todos: [HomeTodo] = []
-        if skillPoints > 0 { todos.append(.spendSkillPoints(skillPoints)) }
-        let quests = authoredQuests.filter { $0.state == .active }
-        todos += quests.prefix(questLimit).map(HomeTodo.quest)
-        if quests.count > questLimit { todos.append(.moreQuests(quests.count)) }
-        let explorations = instances.filter(\.isActive)
-        todos += explorations.map(HomeTodo.exploration)
-        if quests.isEmpty && explorations.isEmpty { todos.append(.planExploration) }
-        return todos
-    }
-
-    var id: String {
-        switch self {
-        case .spendSkillPoints: "skillPoints"
-        case .quest(let quest): "quest.\(quest.id)"
-        case .moreQuests: "moreQuests"
-        case .exploration(let instance): "exploration.\(instance.id)"
-        case .planExploration: "planExploration"
+        /// The unmet requirement with the least progress; nil when only Skill Points are missing.
+        var blockingRequirement: SkillAtlasView_.Requirement? {
+            node.requirements.filter { !$0.met }.min { $0.current / $0.target < $1.current / $1.target }
         }
     }
 
-    var target: Target {
-        switch self {
-        case .spendSkillPoints: .skillAtlas
-        case .quest, .moreQuests: .quests
-        case .exploration, .planExploration: .world
+    static let limit = 3
+    private static let difficultyRank = ["easy": 0, "medium": 1, "hard": 2, "prestige": 3]
+
+    let quest: AuthoredQuest?
+    let activeQuestCount: Int
+    let exploration: QuestInstance?
+    let skillPoints: Int
+    let ready: [Node]
+    let almost: [AlmostNode]
+
+    var showsSkills: Bool { !ready.isEmpty || !almost.isEmpty || skillPoints > 0 }
+
+    init(skillPoints: Int, authoredQuests: [AuthoredQuest], instances: [QuestInstance], nodes: [Node]) {
+        let active = authoredQuests.filter { $0.state == .active }
+        quest = Self.featuredQuest(active)
+        activeQuestCount = active.count
+        exploration = instances.first(where: \.isActive)
+        self.skillPoints = skillPoints
+        ready = Self.readyNodes(nodes)
+        almost = Self.almostNodes(nodes)
+    }
+
+    /// Lowest difficulty, then lowest XP, then catalog order.
+    static func featuredQuest(_ quests: [AuthoredQuest]) -> AuthoredQuest? {
+        let rank = { (quest: AuthoredQuest) in difficultyRank[quest.difficulty] ?? difficultyRank.count }
+        return quests.enumerated()
+            .filter { $0.element.state == .active }
+            .min { a, b in
+                (rank(a.element), a.element.xp, a.offset) < (rank(b.element), b.element.xp, b.offset)
+            }?.element
+    }
+
+    /// Unlockable nodes, cheapest first.
+    static func readyNodes(_ nodes: [Node]) -> [Node] {
+        nodes.enumerated()
+            .filter { $0.element.state == .unlockable }
+            .sorted { ($0.element.cost, $0.offset) < ($1.element.cost, $1.offset) }
+            .prefix(limit)
+            .map(\.element)
+    }
+
+    /// Started, locked nodes whose prerequisites are met, closest to unlockable first.
+    static func almostNodes(_ nodes: [Node]) -> [AlmostNode] {
+        nodes.enumerated()
+            .filter { $0.element.state == .locked && $0.element.prerequisitesMet == true }
+            .map { (offset: $0.offset, item: AlmostNode(node: $0.element, progress: requirementProgress($0.element))) }
+            .filter { $0.item.progress > 0 }
+            .sorted { a, b in
+                if a.item.progress != b.item.progress { return a.item.progress > b.item.progress }
+                return (a.item.node.cost, a.offset) < (b.item.node.cost, b.offset)
+            }
+            .prefix(limit)
+            .map(\.item)
+    }
+
+    /// Average requirement completion, each requirement capped at 100%; 1 when there are none.
+    static func requirementProgress(_ node: Node) -> Double {
+        guard !node.requirements.isEmpty else { return 1 }
+        let total = node.requirements.reduce(0.0) { sum, requirement in
+            sum + (requirement.met || requirement.target <= 0 ? 1 : min(max(requirement.current / requirement.target, 0), 1))
         }
+        return total / Double(node.requirements.count)
     }
 }
 
@@ -114,7 +153,12 @@ struct HomeContent: Equatable {
     let instances: [QuestInstance]
     let achievements: HomeAchievements?
 
-    var todos: [HomeTodo] {
-        HomeTodo.list(skillPoints: achievements?.skillPoints ?? 0, authoredQuests: achievements?.authoredQuests ?? [], instances: instances)
+    var highlights: HomeHighlights {
+        HomeHighlights(
+            skillPoints: achievements?.skillPoints ?? 0,
+            authoredQuests: achievements?.authoredQuests ?? [],
+            instances: instances,
+            nodes: achievements?.nodes ?? []
+        )
     }
 }

@@ -29,14 +29,13 @@ const attributes = (dataAttrs = {}) => Object.entries(dataAttrs)
   .join("");
 
 /**
- * One checklist row: checkbox, title (+ NEW), one-line goal, optional extra content and pills.
+ * One quest row: state stripe, title (+ NEW), one-line goal, optional extra content and pills.
  * With a `target` the whole row is a button (Home to-dos) that ends in a chevron.
  * `pills` and `extra` are trusted HTML built from QuestPill; everything else is escaped.
  */
 export const TaskRow = ({ state = "active", isNew = false, className = "", title, goal, pills = "", extra = "", target, dataAttrs } = {}) => {
   const classes = ["quest-task", target ? "is-action" : "", className, `is-${state}`, isNew ? "is-new" : ""].filter(Boolean).join(" ");
   const inner = `
-    <span class="quest-task-check" aria-hidden="true"></span>
     <span class="quest-task-body">
       <span class="quest-task-head"><strong data-user-content>${escapeHtml(title)}</strong>${isNew ? QuestPill("NEW", "new") : ""}</span>
       ${goal ? `<span class="quest-task-goal" data-user-content title="${escapeHtml(goal)}">${escapeHtml(goal)}</span>` : ""}
@@ -57,7 +56,7 @@ export const AuthoredQuestTask = (quest, { target } = {}) => TaskRow({
   title: quest.title,
   goal: quest.description,
   extra: quest.lastFailure ? `<span class="quest-pills">${failurePills(quest)}</span>` : "",
-  pills: `${QuestPill(difficultyLabel(quest.difficulty), "muted")}${questStep(quest)}${QuestPill(`+${formatNumber(quest.xp)} XP`, "accent")}`,
+  pills: `${quest.state === "completed" ? QuestPill("Completed", "success") : ""}${QuestPill(difficultyLabel(quest.difficulty), "muted")}${questStep(quest)}${QuestPill(`+${formatNumber(quest.xp)} XP`, "accent")}`,
   target,
   dataAttrs: { "data-authored-quest": quest.id }
 });

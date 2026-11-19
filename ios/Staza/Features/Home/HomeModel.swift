@@ -58,7 +58,8 @@ final class HomeModel {
             unlockedSkills: tree.nodes.filter { $0.state == .unlocked }.count,
             totalSkills: tree.nodes.count,
             earned: capabilities.titles + capabilities.badges,
-            authoredQuests: authored
+            authoredQuests: authored,
+            nodes: tree.nodes
         )
     }
 

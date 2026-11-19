@@ -28,7 +28,9 @@ bbox recommendation list of `default-quests`. There is one exploration creation 
 4. Proposals may contain different target subsets.
 5. Customization edits ONE route; unrelated proposals are not regenerated.
 6. Nothing is persisted before **Start Exploration**: no configuration, candidate
-   subsets, unused proposals or abandoned customizations.
+   subsets, unused proposals or abandoned customizations. The exception is the
+   Flowline discovery: **Generate Routes** permanently reveals Flowlines of the area to
+   the player (see [hidden-flowline-discovery](../hidden-flowline-discovery/README.md)).
 7. Planning never awards XP, discovers collectibles, completes Flowlines, or progresses
    objectives. Activity evaluation remains the only gameplay truth.
 
@@ -80,15 +82,18 @@ normal World view without network calls.
 
 Inputs: frozen-area targets, start, optional end, route type, ride constraint.
 Eligible targets reuse `buildExplorationTargets` (published, visible collectibles with a
-category; already achieved stay eligible with lower value). Flowlines are **not** targets:
-they are never waypoints, never affect ordering, detours or scoring, and are not required.
+category; already achieved stay eligible with lower value). Flowlines are **not** targets
+by default: they are never waypoints, never affect ordering, detours or scoring, and are not
+required. The exception is a revealed Flowline the player explicitly picks
+(`destinationFlowlineId`, see [hidden-flowline-discovery](../hidden-flowline-discovery/README.md)):
+every proposal must then ride it in full.
 Three internal strategies — `balanced`, `peak_focus`, `discovery` — are expressed as
 synthetic objectives over point destinations (per-kind required counts scaled to the budget:
 `clamp(round(budgetKm / 12), 2, 8)` targets, shares redistributed when a kind is absent).
 Each strategy reuses `selectTargetPool` and `generateCandidates` (seeded greedy cheapest
 insertion + bounded 2-opt; no brute-force permutations). Candidates are interleaved across
 strategies, deduplicated by target set and routed under one shared budget (≤ 9 requests,
-concurrency 3, 20 s deadline). After routing, the final geometry is intersected with published Flowline geometries (midpoint
+concurrency 3, 20 s deadline). After routing, the final geometry is intersected with the player's revealed Flowline geometries (midpoint
 pre-check, 30 m corridor, ≥ 80 % coverage) and returned as `traversedFlowlines` metadata.
 Scores combine destination progress, constraint fit, loop quality, route
 shape, target freshness and detour penalty. Proposals must be distinct (target-set
@@ -130,7 +135,8 @@ All require authentication and CSRF.
 No schema change beyond migration `028_exploration_instances` (inactive `exploration`
 template row). Confirmation reads the stored (possibly customized) proposal and persists
 one QuestInstance (objectives from the route's included and nearby destinations: one
-`collectible_targets` per category, no Flowline objective — Flowline completion still depends
+`collectible_targets` per category, no Flowline objective unless a Flowline was picked as
+the route's target, which adds one `flowline_rule` objective — Flowline completion still depends
 only on the imported activity; `scope_hash` = proposal id
 for idempotency; `fresh_progress = true`) and one PlannedRoute atomically. Historical
 instances keep loading and progressing.

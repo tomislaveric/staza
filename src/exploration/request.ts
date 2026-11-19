@@ -31,6 +31,8 @@ export interface GenerateRequest {
   input: RoutePlanningInput;
   /** A collectible every route must visit ("Route to"). */
   destinationId?: string;
+  /** A revealed Flowline every route must ride ("Plan route via this Flowline"). */
+  destinationFlowlineId?: string;
 }
 
 /** Round-trip length that lets the planner span the frozen area: about twice its diagonal. */
@@ -50,14 +52,21 @@ export const areaConstraint = ({ bounds }: ExplorationAreaContext): { type: "dis
 export const parseGenerateRequest = (body: unknown): GenerateRequest => {
   if (!isRecord(body)) throw new UserInputError("An exploration request is required.");
   const area = parseArea(body.area);
-  const { destinationId } = body;
+  const { destinationId, destinationFlowlineId } = body;
   if (destinationId !== undefined && (typeof destinationId !== "string" || destinationId.trim() === "")) {
     throw new UserInputError("The destination must be a collectible id.");
+  }
+  if (destinationFlowlineId !== undefined && (typeof destinationFlowlineId !== "string" || destinationFlowlineId.trim() === "")) {
+    throw new UserInputError("The Flowline must be a Flowline id.");
+  }
+  if (destinationId && destinationFlowlineId) {
+    throw new UserInputError("Choose either a destination or a Flowline, not both.");
   }
   return {
     area,
     input: parseRoutePlanningInput({ routeType: "round_trip", constraint: areaConstraint(area), ...body }),
-    ...(destinationId ? { destinationId } : {})
+    ...(destinationId ? { destinationId } : {}),
+    ...(destinationFlowlineId ? { destinationFlowlineId } : {})
   };
 };
 

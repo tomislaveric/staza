@@ -96,7 +96,7 @@ import world.staza.app.core.format.StazaFormat
 import world.staza.app.designsystem.StazaTheme
 
 /** Brand palette of the atlas, matching the iOS tokens and the web atlas. */
-private object AtlasColors {
+internal object AtlasColors {
     val canvas = Color(0xFF0D0E10)
     val surface = Color(0xFF111318)
     val surfaceRaised = Color(0xFF171A20)
@@ -671,7 +671,7 @@ private fun laneTitle(branch: String): Int = when (branch) {
     else -> R.string.atlas_lane_endurance
 }
 
-private fun sportIcon(sport: String): ImageVector = when (sport) {
+internal fun sportIcon(sport: String): ImageVector = when (sport) {
     "running" -> Icons.Filled.DirectionsRun
     "hiking" -> Icons.Filled.Hiking
     else -> Icons.Filled.DirectionsBike

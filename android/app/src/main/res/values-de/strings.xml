@@ -48,4 +48,34 @@
     <string name="atlas_state_unlockable">Bereit</string>
     <string name="atlas_state_locked">Gesperrt</string>
     <string name="atlas_state_premium">Premium</string>
+    <string name="home_loading">Home wird geladen…</string>
+    <string name="home_error">Home konnte nicht geladen werden.</string>
+    <string name="home_level">Level %1$d</string>
+    <string name="home_total_xp">%1$s XP</string>
+    <string name="home_remaining">%1$s XP bis Level %2$d</string>
+    <string name="home_up_next">Als Nächstes</string>
+    <string name="home_quest_step">Schritt %1$d/%2$d</string>
+    <string name="home_quest_xp">+%1$s XP</string>
+    <string name="home_difficulty_easy">Leicht</string>
+    <string name="home_difficulty_medium">Mittel</string>
+    <string name="home_difficulty_hard">Schwer</string>
+    <string name="home_difficulty_prestige">Prestige</string>
+    <plurals name="home_more_quests">
+        <item quantity="one">%d weitere aktive Quest</item>
+        <item quantity="other">%d weitere aktive Quests</item>
+    </plurals>
+    <string name="home_exploration">Erkundung</string>
+    <string name="home_plan_overline">World</string>
+    <string name="home_plan_title">Erkundung planen</string>
+    <string name="home_plan_goal">Wähle in World ein Gebiet und mach daraus eine Route mit Zielen zum Sammeln.</string>
+    <string name="home_skills_header">Skill Atlas</string>
+    <string name="home_skills_ready">Bereit zum Freischalten</string>
+    <string name="home_skills_almost">Fast geschafft</string>
+    <string name="home_skills_unlock">Freischalten · %1$d SP</string>
+    <string name="home_skills_needs_points">Noch %1$d SP nötig</string>
+    <string name="home_skills_requirement">%1$s · %2$s/%3$s</string>
+    <plurals name="home_skills_spend">
+        <item quantity="one">%d Skillpunkt im Skill Atlas einsetzen</item>
+        <item quantity="other">%d Skillpunkte im Skill Atlas einsetzen</item>
+    </plurals>
 </resources>

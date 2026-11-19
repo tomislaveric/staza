@@ -53,6 +53,14 @@ struct WorldBrowseHeader: View {
             .minimumScaleFactor(0.8)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("worldStats")
+            if model.hiddenFlowlineCount > 0 {
+                Label("world.stats.hiddenFlowlines \(model.hiddenFlowlineCount)", systemImage: "eye.slash")
+                    .font(StazaFont.footnote)
+                    .foregroundStyle(StazaColor.rarityRare)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityIdentifier("worldHiddenFlowlines")
+            }
         } else {
             Text("world.loading").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
         }

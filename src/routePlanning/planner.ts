@@ -22,7 +22,7 @@ import type {
   RoutingResult,
   ScoredRoute
 } from "./types.js";
-import { staysWithinBounds, validateRoute } from "./validation.js";
+import { staysWithinBounds, traversedFlowlines, validateRoute } from "./validation.js";
 import { insideBounds } from "./validation.js";
 import { distanceBetween } from "./geo.js";
 import type { GeoBounds } from "../worldQuery.js";
@@ -368,6 +368,8 @@ export interface GenerateAreaRoutesInput {
   bounds: GeoBounds;
   /** A destination every loop must pass through, with the objectives it advances. */
   required?: { target: QuestRouteTarget; objectives: QuestObjective[] };
+  /** A revealed Flowline every loop must ride in full; routes that do not are discarded. */
+  requiredFlowline?: FlowlineGeometry;
 }
 
 /** Loop sizes of an area route: stops on an ellipse inscribed in the area, as a share of its half-extent. */
@@ -484,11 +486,48 @@ export const destinationStops = (
 };
 
 /**
+ * Points that make the router ride a Flowline from end to end, entering at the end nearer the
+ * start: both ends and the middle vertex.
+ */
+export const flowlineRidePoints = (start: LatLon, flowline: FlowlineGeometry): LatLon[] => {
+  const points = flowline.coordinates.map(([lon, lat]) => ({ lat, lon }));
+  const first = points[0];
+  const last = points[points.length - 1];
+  const middle = points[Math.floor(points.length / 2)];
+  const forward = distanceBetween(start, first) <= distanceBetween(start, last);
+  const ordered = forward ? [first, middle, last] : [last, middle, first];
+  return ordered.filter((point, index) => ordered.findIndex((other) => waypointId(other) === waypointId(point)) === index);
+};
+
+/**
+ * Loop stops through a Flowline: the destination loop towards its far end, with the Flowline
+ * ridden in place of the destination, so the way back leaves the Flowline instead of retracing it.
+ */
+export const flowlineStops = (
+  input: RoutePlanningInput,
+  bounds: GeoBounds,
+  flowlines: FlowlineGeometry[],
+  flowline: FlowlineGeometry,
+  sides: readonly number[]
+): CandidateStop[] => {
+  const ride = flowlineRidePoints(input.start, flowline);
+  const exit = waypointTarget(ride[ride.length - 1]);
+  const loop = destinationStops(input, bounds, flowlines, exit, sides);
+  const index = loop.findIndex((stop) => stop.target.id === exit.id);
+  const rideIds = new Set(ride.map(waypointId));
+  return [
+    ...loop.slice(0, index).filter((stop) => !rideIds.has(stop.target.id)),
+    ...ride.map((point) => ({ target: waypointTarget(point) })),
+    ...loop.slice(index + 1).filter((stop) => !rideIds.has(stop.target.id))
+  ];
+};
+
+/**
  * Route generation for an area without destinations: the bbox is the only hard fact. Routes are
  * loops of three sizes through route-only anchors, so they carry no objectives or progress.
  */
 export const generateAreaRoutes = async (
-  { requestId, playerId, scopeId, flowlines, input, bounds, required }: GenerateAreaRoutesInput,
+  { requestId, playerId, scopeId, flowlines, input, bounds, required, requiredFlowline }: GenerateAreaRoutesInput,
   { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal[]> => {
   const policy = policyForSport(basePolicy, input.sport);
@@ -496,7 +535,9 @@ export const generateAreaRoutes = async (
   const seen = new Set<string>();
   const queued: QueuedCandidate[] = [];
   const objectives = required?.objectives ?? [];
-  const shapes = required
+  const shapes = requiredFlowline
+    ? DESTINATION_LOOPS.map((loop) => flowlineStops(input, bounds, flowlines, requiredFlowline, loop.sides))
+    : required
     ? DESTINATION_LOOPS.map((loop) => destinationStops(input, bounds, flowlines, required.target, loop.sides))
     : AREA_LOOPS.map((loop) => areaAnchors(input, bounds, flowlines, loop).map((point) => ({ target: waypointTarget(point) })));
   for (const stops of shapes) {
@@ -510,7 +551,9 @@ export const generateAreaRoutes = async (
     requestId, input, bounds, eligibleTargets: required ? [required.target] : [], maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy
   });
   // Loops should not ride the same road out and back; keep those only when nothing better exists.
-  const direct = run.scored.filter((route) => detourLengthM(route.routing.geometry.coordinates) <= MAX_AREA_DETOUR_M);
+  const ridesFlowline = run.scored.filter((route) => !requiredFlowline
+    || traversedFlowlines(route.routing, [requiredFlowline]).length > 0);
+  const direct = ridesFlowline.filter((route) => detourLengthM(route.routing.geometry.coordinates) <= MAX_AREA_DETOUR_M);
   const loops = direct.filter((route) => backtrackRatio(route.routing.geometry.coordinates) <= MAX_AREA_BACKTRACK);
   const usable = loops.length > 0 ? loops : direct;
   const byLength = [...usable].sort((a, b) => a.routing.distanceM - b.routing.distanceM);

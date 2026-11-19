@@ -205,6 +205,8 @@ export interface FartlekCompletionDraft {
   fartlekGeometryVersionSnapshot: number;
   /** XP this completion awards. */
   xp?: number;
+  /** The player had not revealed this Flowline before riding it ("Hidden Flowline found"). */
+  hiddenFound?: boolean;
 }
 
 export interface ActivityResult {
@@ -624,6 +626,8 @@ export interface QuestInput {
 export interface WorldViewportResponse extends WorldSnapshot {
   truncated: boolean;
   fartleks: WorldFartlek[];
+  /** Published Flowlines in the viewport the player has not revealed yet; their geometry is never sent. */
+  hiddenFlowlineCount: number;
 }
 
 export type JobState = "processing" | "awaiting_selection" | "rendering" | "succeeded" | "failed";

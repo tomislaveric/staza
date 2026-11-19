@@ -210,5 +210,7 @@ export interface StoredProposal {
   plannerVersion: number;
   /** Sport the route was planned for; persisted as the routing profile on confirmation. */
   sport?: Sport;
+  /** Revealed Flowline the route was planned to ride; becomes a `flowline_rule` objective. */
+  flowline?: { id: string; name: string };
   expiresAtMs: number;
 }

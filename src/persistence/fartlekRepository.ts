@@ -3,7 +3,7 @@ import type { Fartlek, FartlekGeometry, FartlekStatus } from "../domain.js";
 import type { GeoBounds } from "../worldQuery.js";
 import { fartlekGeometryBounds } from "../fartlek.js";
 
-interface FartlekRow {
+export interface FartlekRow {
   id: string;
   name: string;
   geometry: FartlekGeometry;
@@ -32,7 +32,7 @@ interface FartlekRow {
   updated_at: Date;
 }
 
-const mapFartlek = (row: FartlekRow): Fartlek => ({
+export const mapFartlek = (row: FartlekRow): Fartlek => ({
   id: row.id,
   name: row.name,
   geometry: row.geometry,
@@ -63,7 +63,7 @@ const mapFartlek = (row: FartlekRow): Fartlek => ({
   updatedAt: row.updated_at.toISOString()
 });
 
-const SELECT_COLUMNS =
+export const SELECT_COLUMNS =
   "id, name, geometry, start_latitude, start_longitude, end_latitude, end_longitude, length_meters, status, " +
   "direction_restricted, source_type, source_external_id, source_attribution, source_metadata, " +
   "suitability_score, suitability_reasons, mapping_confidence, " +

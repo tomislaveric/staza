@@ -8,6 +8,7 @@ final class WorldModel {
     private(set) var basemapFailed = false
     private(set) var collectibles: [WorldCollectible] = []
     private(set) var flowlines: [WorldFlowline] = []
+    private(set) var hiddenFlowlineCount = 0
     private(set) var questTargets = QuestTargets.empty
     private(set) var truncated = false
     private(set) var viewportFailed = false
@@ -81,6 +82,7 @@ final class WorldModel {
             guard generation == viewportGeneration else { return }
             collectibles = viewport.collectibles ?? []
             flowlines = viewport.fartleks ?? []
+            hiddenFlowlineCount = viewport.hiddenFlowlineCount ?? 0
             truncated = viewport.truncated ?? false
             stats = viewport.stats
             viewportFailed = false
@@ -90,6 +92,12 @@ final class WorldModel {
             guard generation == viewportGeneration else { return }
             viewportFailed = true
         }
+    }
+
+    /// Reloads the current viewport, e.g. after Explore this Area revealed Flowlines.
+    func reloadViewport() async {
+        guard let bounds else { return }
+        await loadViewport(bounds)
     }
 
     func select(_ kind: WorldSelectionKind, id: String) {

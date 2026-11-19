@@ -36,6 +36,7 @@ import { ActivityImportRejectedError } from "../errors.js";
 import { getLevelProgress } from "../progression.js";
 import { withXpPercentOfBest } from "../activitySummary.js";
 import { FartlekCompletionRepository } from "./fartlekCompletionRepository.js";
+import { FlowlineRevealRepository } from "./flowlineRevealRepository.js";
 import type { SkillTreeStats } from "../skillTree/types.js";
 import { aggregateSkillTreeStats } from "../skillTree/statsQuery.js";
 
@@ -132,6 +133,15 @@ const withReadableFlowlineNames = (snapshot: ReplaySnapshot): ReplaySnapshot => 
   }
 });
 
+/** Riding a Flowline the player had not revealed yet completes it as usual and marks it as a hidden find. */
+export const markHiddenFlowlinesFound = (result: ActivityResult, revealedIds: ReadonlySet<string>): ActivityResult => ({
+  ...result,
+  fartlekCompletions: result.fartlekCompletions.map((completion) => ({
+    ...completion,
+    hiddenFound: !revealedIds.has(completion.fartlekId)
+  }))
+});
+
 /**
  * A collectible already claimed by the player earlier is a revisit: it stays in the replay and
  * result card but grants no XP and no longer counts as a new collectible.
@@ -181,10 +191,12 @@ const mapVideo = (row: VideoRow): ActivityVideo => ({
 
 export class ActivityRepository {
   private readonly fartlekCompletionRepository: FartlekCompletionRepository;
+  private readonly flowlineRevealRepository: FlowlineRevealRepository;
 
   /** `skipStravaJourneyCutoff` is for dev stages only: Strava imports may predate the account. */
   constructor(private readonly pool: Pool, private readonly skipStravaJourneyCutoff = false) {
     this.fartlekCompletionRepository = new FartlekCompletionRepository(pool);
+    this.flowlineRevealRepository = new FlowlineRevealRepository(pool);
   }
 
   async persistCompletedActivity(
@@ -249,7 +261,10 @@ export class ActivityRepository {
          WHERE activities.player_id = $1 AND events.source_id = ANY($2::text[])`,
         [playerId, submittedSourceIds]
       );
-      const result = resolveCollectibleClaims(submittedResult, new Set(claimed.rows.map((row) => row.source_id)));
+      const claimedResult = resolveCollectibleClaims(submittedResult, new Set(claimed.rows.map((row) => row.source_id)));
+      const ridden = claimedResult.fartlekCompletions.map((completion) => completion.fartlekId);
+      const revealedBefore = await this.flowlineRevealRepository.revealedIds(playerId, ridden, client);
+      const result = markHiddenFlowlinesFound(claimedResult, revealedBefore);
       const knownFlowlines = await client.query<{ fartlek_id: string }>(
         "SELECT DISTINCT fartlek_id FROM fartlek_completions WHERE player_id = $1 AND fartlek_id = ANY($2::text[])",
         [playerId, result.fartlekCompletions.map((completion) => completion.fartlekId)]
@@ -320,6 +335,7 @@ export class ActivityRepository {
         await this.fartlekCompletionRepository.insertManyWithClient(
           client, playerId, activity.id, result.fartlekCompletions
         );
+        await this.flowlineRevealRepository.reveal(playerId, ridden, "ride", client);
       }
       const activityStartedAt = new Date(activity.startedAt);
       const authoredOutcomes = await resolveAuthoredQuestAttemptsWithClient(

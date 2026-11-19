@@ -141,7 +141,7 @@ describe("Authored quests on Progress", () => {
     expect(html).not.toContain("PRO");
   });
 
-  it("lists only finished quests as checked task rows", () => {
+  it("lists only finished quests as completed rows without checkboxes", () => {
     const html = QuestBadges([
       quest({ title: "Flow Quest I", description: "Complete 1 Flowline.", state: "completed", isNew: true }),
       quest({ id: "q:2", title: "Flow Quest II", state: "locked" })
@@ -149,6 +149,8 @@ describe("Authored quests on Progress", () => {
     expect(html).toContain("FINISHED QUESTS");
     expect(html).toContain('quest-task authored-quest is-completed is-new" data-authored-quest="q:1"');
     expect(html).toContain("Complete 1 Flowline.");
+    expect(html).toContain('<span class="quest-pill is-success">Completed</span>');
+    expect(html).not.toContain("quest-task-check");
     expect(html).not.toContain("Flow Quest II");
     expect(QuestBadges([quest({ state: "active" })])).toBe("");
   });

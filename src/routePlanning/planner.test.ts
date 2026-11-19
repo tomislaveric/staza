@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { areaAnchors, customizedStops, generateAreaRoutes, generateExplorationRoutes, PlanningError, rerouteTargets, type RouteProvider } from "./planner.js";
+import { areaAnchors, customizedStops, flowlineRidePoints, generateAreaRoutes, generateExplorationRoutes, PlanningError, rerouteTargets, type RouteProvider } from "./planner.js";
 import { PLANNING_LIMITS } from "./policy.js";
 import { constraintFitFlag, distinctRoutes, proposalHint, selectProposals } from "./proposals.js";
 import { backtrackRatio, detourLengthM } from "./roundTrip.js";
@@ -326,6 +326,19 @@ describe("areaAnchors", () => {
       expect(anchors).toHaveLength(3);
       expect(anchors.some(onFlowline)).toBe(false);
     }
+  });
+});
+
+describe("flowlineRidePoints", () => {
+  it("rides a Flowline from the end nearer the start through its middle to the far end", () => {
+    const flowline = flowlineGeometry("f", [5, 0], [1, 0]);
+    const points = flowlineRidePoints(at(0, 0), flowline);
+    const [lon, lat] = flowline.coordinates[3];
+    expect(points).toEqual([
+      { lat: flowline.coordinates[5][1], lon: flowline.coordinates[5][0] },
+      { lat, lon },
+      { lat: flowline.coordinates[0][1], lon: flowline.coordinates[0][0] }
+    ]);
   });
 });
 

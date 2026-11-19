@@ -15,6 +15,12 @@ final class ExploreModel {
     private(set) var isRerouting = false
     private(set) var proposals: [RouteProposal] = []
     private(set) var catalog: [WorldCollectible] = []
+    /// Revealed Flowlines of the area, newly revealed ones first.
+    private(set) var flowlines: [WorldFlowline] = []
+    /// Flowlines the last generate newly revealed to the player.
+    private(set) var revealedFlowlineIds: [String] = []
+    /// The revealed Flowline the routes must ride, if one was chosen.
+    private(set) var destinationFlowline: WorldFlowline?
     private(set) var selectedId: String?
     private(set) var plannedRoute: PlannedRoute?
     var distanceKm = 40
@@ -58,10 +64,29 @@ final class ExploreModel {
         area = ExploreArea(bounds: bounds)
         self.userLocation = userLocation
         useUserLocation = false
+        destinationFlowline = nil
+        revealedFlowlineIds = []
         discardProposals()
         plannedRoute = nil
         failure = nil
         phase = .configure
+    }
+
+    /// Opens Explore this Area around a revealed Flowline that every route must ride.
+    func begin(via flowline: WorldFlowline, userLocation: GeoPoint?) {
+        guard let area = ExploreArea.around(flowline, start: userLocation) else { return }
+        begin(bounds: area.bounds, userLocation: userLocation)
+        useUserLocation = userLocation != nil
+        destinationFlowline = flowline
+    }
+
+    /// Re-plans the same area as routes that ride one of its revealed Flowlines.
+    func planVia(_ flowlineId: String) async {
+        guard phase == .proposals, !isRerouting, let flowline = flowlines.first(where: { $0.id == flowlineId }) else { return }
+        destinationFlowline = flowline
+        discardProposals()
+        phase = .configure
+        await generate()
     }
 
     func cancel() {
@@ -84,7 +109,8 @@ final class ExploreModel {
         let request = GenerateRequest(
             area: .init(bbox: area.bounds.queryValue, center: area.center, zoom: 12),
             start: start,
-            constraint: .init(value: Double(distanceKm * 1000))
+            constraint: .init(value: Double(distanceKm * 1000)),
+            destinationFlowlineId: destinationFlowline?.id
         )
         do {
             let result: GeneratedExploration = try await api.post("/api/explorations/generate", body: request)
@@ -98,6 +124,11 @@ final class ExploreModel {
             proposals = result.proposals
             original = Dictionary(result.proposals.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             catalog = result.catalog.collectibles
+            let revealed = result.revealedFlowlineIds ?? []
+            if !revealed.isEmpty { revealedFlowlineIds = revealed }
+            let fresh = Set(revealedFlowlineIds)
+            let areaFlowlines = result.catalog.flowlines ?? []
+            flowlines = areaFlowlines.filter { fresh.contains($0.id) } + areaFlowlines.filter { !fresh.contains($0.id) }
             selectedId = (result.proposals.first { $0.recommended == true } ?? result.proposals[0]).id
             phase = .proposals
         } catch is CancellationError {
@@ -197,6 +228,7 @@ final class ExploreModel {
     private func discardProposals() {
         proposals = []
         catalog = []
+        flowlines = []
         selectedId = nil
         explorationId = nil
         original = [:]

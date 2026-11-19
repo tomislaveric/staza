@@ -18,7 +18,15 @@ final class WorldModelTests: XCTestCase {
         await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
         XCTAssertEqual(model.collectibles.map(\.id), ["c1"])
         XCTAssertEqual(model.flowlines.first?.coordinates.count, 2)
+        XCTAssertEqual(model.hiddenFlowlineCount, 0)
         XCTAssertFalse(model.viewportFailed)
+    }
+
+    func testViewportCarriesHiddenFlowlineCount() async {
+        let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"hiddenFlowlineCount":3"#)
+        let model = WorldModel(api: APIClient(baseURL: baseURL, transport: PathTransport(responses: ["/api/world": (200, body)])))
+        await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
+        XCTAssertEqual(model.hiddenFlowlineCount, 3)
     }
 
     func testViewportFailureFlagged() async {

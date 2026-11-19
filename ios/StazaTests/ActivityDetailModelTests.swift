@@ -71,12 +71,13 @@ final class ReplayTimelineTests: XCTestCase {
     }
 
     func testFlowlineRevealCarriesCompletedSegmentGeometry() throws {
-        let json = #"{"id":"a1","type":"ride","title":"Ride","startedAt":"2026-01-02T08:00:00.000Z","xpEarned":0,"collectedCount":0,"flowlineCount":2,"events":[],"replay":{"activity":{"route":[{"latitude":0,"longitude":0,"timestampMs":0},{"latitude":1,"longitude":1,"timestampMs":1000}]},"activityResult":{"fartlekCompletions":[{"fartlekName":"River","completedAtTimestampMs":500,"fartlekGeometry":{"type":"LineString","coordinates":[[8.1,47.2],[8.2,47.3]]}},{"fartlekName":"Legacy","completedAtTimestampMs":900}]}}}"#
+        let json = #"{"id":"a1","type":"ride","title":"Ride","startedAt":"2026-01-02T08:00:00.000Z","xpEarned":0,"collectedCount":0,"flowlineCount":2,"events":[],"replay":{"activity":{"route":[{"latitude":0,"longitude":0,"timestampMs":0},{"latitude":1,"longitude":1,"timestampMs":1000}]},"activityResult":{"fartlekCompletions":[{"fartlekName":"River","completedAtTimestampMs":500,"hiddenFound":true,"fartlekGeometry":{"type":"LineString","coordinates":[[8.1,47.2],[8.2,47.3]]}},{"fartlekName":"Legacy","completedAtTimestampMs":900}]}}}"#
         let detail = try JSONDecoder().decode(ActivityDetail.self, from: Data(json.utf8))
         let flowlines = try XCTUnwrap(ReplayTimeline(detail: detail)).reveals.filter { $0.kind == .flowline }
         XCTAssertEqual(flowlines.map(\.name), ["River", "Legacy"])
         XCTAssertEqual(flowlines[0].path, [ReplayCoordinate(latitude: 47.2, longitude: 8.1), ReplayCoordinate(latitude: 47.3, longitude: 8.2)])
         XCTAssertEqual(flowlines[1].path, [])
+        XCTAssertEqual(flowlines.map(\.hiddenFound), [true, false])
     }
 
     func testBasemapPaletteFallsBackToWebDefaults() throws {

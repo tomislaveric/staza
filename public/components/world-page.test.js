@@ -1,9 +1,19 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { availableWorldFilters, distanceBetween, WorldDiscovered, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mappedWorldFartleks, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
+import { availableWorldFilters, distanceBetween, HiddenFlowlinesTeaser, WorldDiscovered, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mappedWorldFartleks, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
 import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import * as worldMarkers from "./world/world-markers.js";
 import * as worldMap from "./world/world-map.js";
+
+describe("HiddenFlowlinesTeaser", () => {
+  it("shows only the count of hidden Flowlines and invites exploring the area", () => {
+    expect(HiddenFlowlinesTeaser(0)).toBe("");
+    expect(HiddenFlowlinesTeaser(1)).toContain("1 hidden Flowline here");
+    const markup = HiddenFlowlinesTeaser(4);
+    expect(markup).toContain("4 hidden Flowlines here");
+    expect(markup).toContain("data-world-explore-hidden");
+  });
+});
 
 const collectibles = [
   { id: "viewpoint-found", name: "Viewpoint", type: "landmark", primaryCategory: "viewpoint", found: true, latitude: 49, longitude: 8 },

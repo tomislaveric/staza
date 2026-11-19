@@ -38,6 +38,8 @@ struct WorldViewport: Decodable, Equatable, Sendable {
     let fartleks: [WorldFlowline]?
     let truncated: Bool?
     var stats: WorldStats? = nil
+    /// Published Flowlines in view the player has not revealed; only their count is sent.
+    var hiddenFlowlineCount: Int? = nil
 }
 
 /// The World-relevant part of `GET /api/player/capabilities`.

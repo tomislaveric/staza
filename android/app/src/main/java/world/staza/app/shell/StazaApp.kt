@@ -34,6 +34,7 @@ import world.staza.app.core.auth.AuthState
 import world.staza.app.designsystem.StazaTheme
 import world.staza.app.ui.FoundationsScreen
 import world.staza.app.atlas.SkillAtlasRoute
+import world.staza.app.home.HomeRoute
 import world.staza.app.ui.PlaceholderScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,9 +91,20 @@ fun StazaApp(authState: AuthState) {
             startDestination = TopLevelDestination.Home.route,
             modifier = Modifier.padding(padding),
         ) {
+            fun openTab(destination: TopLevelDestination) {
+                navController.navigate(destination.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
             TopLevelDestination.entries.forEach { item ->
                 composable(item.route) {
                     when (item) {
+                        TopLevelDestination.Home -> HomeRoute(
+                            onOpenAtlas = { openTab(TopLevelDestination.SkillAtlas) },
+                            onOpenWorld = { openTab(TopLevelDestination.World) },
+                        )
                         TopLevelDestination.More -> FoundationsScreen(authState)
                         TopLevelDestination.SkillAtlas -> SkillAtlasRoute()
                         else ->

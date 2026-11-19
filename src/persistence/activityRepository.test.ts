@@ -282,8 +282,9 @@ describePersistence("ActivityRepository", () => {
     await pool!.query(
       `INSERT INTO fartleks (
         id, name, geometry, start_latitude, start_longitude, end_latitude, end_longitude, length_meters,
-        status, source_type, source_external_id, suitability_score, mapping_confidence
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', 'osm', 'way:1', 90, 95)`,
+        status, source_type, source_external_id, suitability_score, mapping_confidence,
+        bbox_min_latitude, bbox_min_longitude, bbox_max_latitude, bbox_max_longitude
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', 'osm', 'way:1', 90, 95, $4, $5, $6, $7)`,
       [
         "fartlek-1", "Harbour Straight",
         JSON.stringify({ type: "LineString", coordinates: [[12.5683, 55.6761], [12.5693, 55.6771]] }),
@@ -322,6 +323,9 @@ describePersistence("ActivityRepository", () => {
     expect(await repository!.getProgress(playerId)).toMatchObject({ totalXp: 50 });
     const completions = await pool!.query("SELECT fartlek_id, elapsed_time_s FROM fartlek_completions WHERE player_id = $1", [playerId]);
     expect(completions.rows).toEqual([{ fartlek_id: "fartlek-1", elapsed_time_s: 600 }]);
+    expect(replaySnapshot.rows[0].replay_snapshot.activityResult.fartlekCompletions[0].hiddenFound).toBe(true);
+    const reveals = await pool!.query("SELECT fartlek_id, source FROM player_flowline_reveals WHERE player_id = $1", [playerId]);
+    expect(reveals.rows).toEqual([{ fartlek_id: "fartlek-1", source: "ride" }]);
 
     // Reprocessing the same activity (e.g. a replay) must not double-grant Fartlek XP or insert a duplicate row.
     await expect(repository!.persistCompletedActivity(playerId, activity(id), fartlekResult))

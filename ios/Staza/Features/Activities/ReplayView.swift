@@ -114,6 +114,9 @@ struct ReplayView: View {
                     if item.isRepeat {
                         StazaChip("activityDetail.collected.revisit", systemImage: "arrow.counterclockwise")
                     }
+                    if item.hiddenFound {
+                        StazaChip("replay.flowline.hiddenFound", systemImage: "eye", tint: StazaColor.accent)
+                    }
                 }
             }
             .padding(.top, StazaSpacing.xs)

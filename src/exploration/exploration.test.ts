@@ -53,6 +53,20 @@ const flowline = (id: string, from: [number, number], to: [number, number], over
   } as WorldFartlek;
 };
 
+/** In-memory per-player Flowline reveals; `initial` are already revealed. */
+const memoryReveals = (initial: string[] = []) => {
+  const revealed = new Set(initial);
+  return {
+    revealed,
+    revealedIds: async (_playerId: string, ids: string[]) => new Set(ids.filter((id) => revealed.has(id))),
+    reveal: async (_playerId: string, ids: string[]) => {
+      const fresh = ids.filter((id) => !revealed.has(id));
+      fresh.forEach((id) => revealed.add(id));
+      return fresh.sort();
+    }
+  };
+};
+
 describe("buildExplorationTargets", () => {
   it("keeps published, visible, categorized collectibles as destinations and never Flowlines", () => {
     const { targets, truncated } = buildExplorationTargets([
@@ -154,7 +168,12 @@ describe("ExplorationService", () => {
   ];
   const worldFlowlines = [flowline("f-near", [2, 0], [3, 0]), flowline("f-west", [0, -2], [0, -4]), flowline("f-east", [0.2, 0.2], [0.8, 0.8])];
 
-  const setup = (options: { routing?: RouteProvider | null; collectibles?: WorldCollectible[] } = {}) => {
+  const setup = (options: {
+    routing?: RouteProvider | null;
+    collectibles?: WorldCollectible[];
+    flowlines?: WorldFartlek[];
+    reveals?: ReturnType<typeof memoryReveals>;
+  } = {}) => {
     const created: Array<{ playerId: string; exploration: NewExploration; route: NewPlannedRoute }> = [];
     const routeCalls: unknown[] = [];
     const routing = options.routing === null
@@ -163,10 +182,11 @@ describe("ExplorationService", () => {
     const service = new ExplorationService({
       loadArea: async () => ({
         collectibles: options.collectibles ?? worldCollectibles,
-        flowlines: options.collectibles ? [] : worldFlowlines,
+        flowlines: options.flowlines ?? (options.collectibles ? [] : worldFlowlines),
         truncated: false
       }),
       ...(routing ? { routing } : {}),
+      reveals: options.reveals ?? memoryReveals(),
       sessions: new ExplorationSessionStore(),
       proposals: new ProposalStore(),
       explorations: {
@@ -245,6 +265,51 @@ describe("ExplorationService", () => {
     await expect(service.generate("p1", { ...generateBody, destinationId: "nope" })).rejects.toThrow();
   });
 
+  describe("hidden Flowlines", () => {
+    const filler = (id: string, northKm: number) => flowline(id, [northKm, -8], [northKm, -7], { flowScore: 50 });
+    const scored = [
+      flowline("f-near", [2, 0], [3, 0], { flowScore: 90 }),
+      flowline("f-west", [-1.5, -3], [1.5, -3], { flowScore: 80 }),
+      flowline("f-east", [0.2, 0.2], [0.8, 0.8], { flowScore: 10 }),
+      filler("f-x1", -8), filler("f-x2", -6), filler("f-x3", -4)
+    ];
+
+    it("reveals the best hidden Flowlines on generate and plans only with revealed ones", async () => {
+      const reveals = memoryReveals();
+      const { service } = setup({ flowlines: scored, reveals });
+      const first = await service.generate("p1", generateBody);
+      expect(first.revealedFlowlineIds).toEqual(["f-near", "f-west", "f-x1", "f-x2", "f-x3"]);
+      expect(first.catalog.flowlines.map((item) => item.id)).not.toContain("f-east");
+      for (const proposal of first.proposals) {
+        expect(proposal.traversedFlowlines.map((item) => item.id)).not.toContain("f-east");
+      }
+      const second = await service.generate("p1", generateBody);
+      expect(second.revealedFlowlineIds).toEqual(["f-east"]);
+      expect((await service.generate("p1", generateBody)).revealedFlowlineIds).toEqual([]);
+    });
+
+    it("plans routes that ride a chosen revealed Flowline and confirms it as a Flowline objective", async () => {
+      const { service, created } = setup({ flowlines: scored });
+      const result = await service.generate("p1", { ...generateBody, destinationFlowlineId: "f-west" });
+      expect(result.proposals.length).toBeGreaterThan(0);
+      for (const proposal of result.proposals) {
+        expect(proposal.traversedFlowlines.map((item) => item.id)).toContain("f-west");
+      }
+      await service.confirm("p1", { proposalId: result.proposals[0].id });
+      expect(created[0].exploration.title).toBe("Exploration: f-west");
+      expect(created[0].exploration.objectives).toEqual([
+        { id: "flowline-f-west", type: "flowline_rule", requiredCount: 1, targets: [{ id: "f-west", name: "f-west" }] }
+      ]);
+    });
+
+    it("rejects hidden Flowlines and combined destinations", async () => {
+      const { service } = setup({ flowlines: scored, reveals: memoryReveals() });
+      await expect(service.generate("p1", { ...generateBody, destinationFlowlineId: "f-east" })).rejects.toBeInstanceOf(UserInputError);
+      await expect(service.generate("p1", { ...generateBody, destinationFlowlineId: "f-west", destinationId: "c-mid" }))
+        .rejects.toBeInstanceOf(UserInputError);
+    });
+  });
+
   it("reports missing routing with a stable code", async () => {
     await expect(setup({ routing: null }).service.generate("p1", generateBody)).rejects.toMatchObject({ code: "planning_unavailable" });
   });
@@ -312,6 +377,7 @@ describe("ExplorationService outings", () => {
     const service = new ExplorationService({
       loadArea: async (_playerId, bounds) => ({ collectibles: world.filter((item) => inBounds(item, bounds)), flowlines: [], truncated: false }),
       routing: { route: async (request, options) => { requests.push(request); return route(request, options); } },
+      reveals: memoryReveals(),
       sessions: new ExplorationSessionStore(),
       proposals: new ProposalStore(),
       explorations: { createExploration: async (_playerId, _exploration, plannedRoute) => { created.push({ route: plannedRoute }); return "instance"; } },
@@ -331,6 +397,7 @@ describe("ExplorationService outings", () => {
     const leaky = new ExplorationService({
       loadArea: async () => ({ collectibles: [...near, ...ring], flowlines: [], truncated: false }),
       routing: { route: async (request) => straightLineRoute(request) },
+      reveals: memoryReveals(),
       sessions: new ExplorationSessionStore(),
       proposals: new ProposalStore(),
       explorations: { createExploration: async () => "instance" },

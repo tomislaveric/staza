@@ -29,12 +29,16 @@ struct RouteProposal: Decodable, Equatable, Identifiable, Sendable {
 
 struct ExplorationCatalog: Decodable, Equatable, Sendable {
     let collectibles: [WorldCollectible]
+    /// Flowlines of the area the player has revealed.
+    var flowlines: [WorldFlowline]? = nil
 }
 
 struct GeneratedExploration: Decodable, Equatable, Sendable {
     let explorationId: String
     let proposals: [RouteProposal]
     let catalog: ExplorationCatalog
+    /// Flowlines this generate newly revealed to the player.
+    var revealedFlowlineIds: [String]? = nil
 }
 
 struct RerouteResponse: Decodable, Sendable {
@@ -57,6 +61,16 @@ struct ExploreArea: Equatable, Sendable {
     let bounds: WorldBounds
 
     var center: GeoPoint { GeoPoint(lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2) }
+
+    /// An area framing a Flowline and, when known, the player's start.
+    static func around(_ flowline: WorldFlowline, start: GeoPoint?) -> ExploreArea? {
+        let lats = flowline.coordinates.map(\.latitude) + (start.map { [$0.lat] } ?? [])
+        let lons = flowline.coordinates.map(\.longitude) + (start.map { [$0.lon] } ?? [])
+        guard let minLat = lats.min(), let maxLat = lats.max(), let minLon = lons.min(), let maxLon = lons.max() else { return nil }
+        let padLat = max(0.01, (maxLat - minLat) * 0.5)
+        let padLon = max(0.015, (maxLon - minLon) * 0.5)
+        return ExploreArea(bounds: WorldBounds(west: minLon - padLon, south: minLat - padLat, east: maxLon + padLon, north: maxLat + padLat))
+    }
 }
 
 struct GenerateRequest: Encodable, Sendable {
@@ -73,6 +87,8 @@ struct GenerateRequest: Encodable, Sendable {
     let start: GeoPoint
     let routeType = "round_trip"
     let constraint: Constraint
+    /// A revealed Flowline every proposal must ride in full.
+    var destinationFlowlineId: String? = nil
 }
 
 struct RerouteRequest: Encodable, Sendable {

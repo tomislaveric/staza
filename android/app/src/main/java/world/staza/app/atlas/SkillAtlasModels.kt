@@ -33,6 +33,7 @@ data class SkillNode(
     val prerequisites: List<String> = emptyList(),
     val state: State,
     val requirements: List<Requirement> = emptyList(),
+    val prerequisitesMet: Boolean = false,
 ) {
     @Serializable
     enum class State {

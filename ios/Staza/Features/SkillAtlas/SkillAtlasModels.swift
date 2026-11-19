@@ -67,6 +67,7 @@ struct SkillAtlasView_: Decodable, Equatable, Sendable {
         let layout: Layout
         let state: State
         let requirements: [Requirement]
+        var prerequisitesMet: Bool? = nil
     }
 
     let isPremium: Bool
