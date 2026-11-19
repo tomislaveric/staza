@@ -12,6 +12,9 @@ Native SwiftUI app shell. Open `Staza.xcodeproj` in Xcode 16+.
 - `Staza/Features` – feature screens: `Shell` (`TabView`), `Auth`, `Home`, `World` (map, Explore), `Quests`,
   `SkillAtlas`, `Progress`, `Activities` (detail, replay), `AddActivity` (`.fit` import), `StravaImport`,
   `Profile`, and `More`
+- `Staza/Features/SkillAtlas` – the atlas is drawn as portrait branch lanes per sport.
+  `SkillAtlasLaneLayout` places the nodes (Android has a matching port), the lane tree draws
+  the connectors, and a node opens a detail sheet.
 - `Staza/Core/Networking` – async/await `APIClient`, `TokenProvider` boundary
 - `Staza/Core/Auth` – Keychain credentials, `SessionManager`, observable `AuthState`
 - `Staza/Core/Formatting` – locale-aware number/date/distance formatting

@@ -27,11 +27,13 @@ has a placeholder screen.
   - Hiking: SUMMIT (`summit`) / EXPLORE / ENDURANCE
 - Each node's row is its progression depth: 1 + the longest in-sport prerequisite path
   from the hub.
-- Cross-branch nodes (`branch: "cross"`) sit between the columns of their parents (mean
-  column). Cross-sport (`cross_sport`) and prestige nodes go below them, centred under
-  their in-sport parents (centre lane by default).
-- Collisions at the same (row, col) are resolved by a ±0.5 column nudge, or by moving
-  the node to a new row.
+- The tree uses a five-column grid: lanes in columns 0, 2, and 4, with gutters in columns 1
+  and 3.
+- Cross-branch (`cross`), cross-sport (`cross_sport`), and prestige nodes sit at the mean
+  column of their in-sport parents, which is often a gutter. If that cell is taken, the
+  node tries the neighbouring columns, then moves down one row.
+- Nodes with no in-sport prerequisite (reachable only from another sport) share one row
+  below the whole tree.
 
 ### Connectors
 - Curved parent→child connectors are drawn behind the nodes with a canvas, using the
@@ -39,8 +41,9 @@ has a placeholder screen.
   - solid accent: both ends unlocked
   - dotted accent: leads to an unlockable node
   - dim: locked or distant
-- Prerequisites from another sport appear as a small external-reference chip
-  (e.g. "↗ Running: Runner"). Tapping it switches the sport picker.
+- A node with a prerequisite from another sport shows a small ↗ badge. In its sheet,
+  that prerequisite appears as "Requires: Runner · Running". Tapping the chip switches the
+  sport and selects that node.
 
 ### Nodes
 - Compact circles (~44–52pt) in the web style:
@@ -78,23 +81,26 @@ has a placeholder screen.
 5. **Next-up strip.**
 6. **Polish:**
    - Accessibility: every node is a button announcing name, state, and cost.
-   - Dynamic Type: fall back to horizontal scrolling if the content gets too wide.
+   - Dynamic Type: the tree's own text is capped at the `xLarge` size so three lanes
+     still fit; the header, sheet, and Next-up strip scale without a cap. There is no
+     horizontal-scroll fallback.
    - Localization in `Localizable.xcstrings`.
    - UI test identifiers.
 
 ### Android
-7. **Data layer:** Kotlin models, a repository for `GET /api/skill-tree` and
-   `POST /api/skill-tree/unlock`, and a ViewModel.
+7. **Data layer:** Kotlin models and a Compose state holder (`SkillAtlasState`). It
+   calls `GET /api/skill-tree` and `POST /api/skill-tree/unlock` through `ApiClient`.
+   The app has no ViewModel dependency.
 8. **Lane layout:** a Kotlin port of the lane layout, with JVM unit tests.
 9. **Screen:** a Compose screen with:
    - the header card, sport tabs, and Next-up row
    - lanes with `Canvas` connectors
    - a `ModalBottomSheet` for node details
-   - the screen wired into `Destinations.SkillAtlas`
+   - the screen wired into `TopLevelDestination.SkillAtlas`
    - strings in `values/` and `values-de/`
 
 ### Docs
-10. Update the iOS README notes on the mobile atlas presentation.
+10. Update the iOS and Android README notes on the mobile atlas presentation.
 
 ## Acceptance criteria
 
@@ -104,7 +110,7 @@ has a placeholder screen.
   default text size.
 - Tapping any node opens its details. Unlocking from the sheet updates the tree, the
   header balance, and the Next-up strip.
-- Cross-sport prerequisites can be reached through the external-reference chip.
+- Cross-sport prerequisites can be reached from the node sheet's prerequisite chips.
 - The Next-up strip lists exactly the `unlockable` nodes.
 - Unlock, requirement, premium, and Skill Point semantics behave the same as before.
 

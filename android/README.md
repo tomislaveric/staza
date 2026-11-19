@@ -32,5 +32,8 @@ Or open `android/` in Android Studio and run the `app` configuration.
   DataStore `CredentialStore`.
 - `core/format` – locale-aware number, date, and distance formatting.
 - `designsystem` – Material 3 theme (dynamic color, light/dark, spacing tokens).
-- `shell` – `NavigationBar` + Add Activity FAB; destinations are placeholders.
+- `shell` – `NavigationBar` + Add Activity FAB; destinations other than Skill Atlas and More
+  are placeholders.
+- `atlas` – Skill Atlas: lanes per sport with connectors, a Next-up row, and a node bottom
+  sheet. `SkillAtlasLaneLayout` is a port of the iOS layout; keep the two in sync.
 - Strings live in `res/values` (English) and `res/values-de` (German).

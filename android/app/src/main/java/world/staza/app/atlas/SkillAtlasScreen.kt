@@ -50,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -116,6 +117,7 @@ private object AtlasColors {
 private val RowHeight = 100.dp
 private val LaneHeaderHeight = 28.dp
 private val TopPadding = 8.dp
+private val NodeTopInset = 4.dp
 
 @Composable
 fun SkillAtlasRoute() {
@@ -197,6 +199,12 @@ private fun AtlasContent(state: SkillAtlasState, atlas: SkillAtlas) {
                 selectedTabIndex = state.sports.indexOf(sport).coerceAtLeast(0),
                 containerColor = AtlasColors.surfaceRaised,
                 contentColor = AtlasColors.textPrimary,
+                indicator = {
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(state.sports.indexOf(sport).coerceAtLeast(0)),
+                        color = AtlasColors.accent,
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 state.sports.forEach { item ->
@@ -312,7 +320,7 @@ private fun LaneTree(layout: SkillAtlasLaneLayout, selectedNodeId: String?, onSe
     BoxWithConstraints(Modifier.fillMaxWidth().height(totalHeight)) {
         val columnWidth = maxWidth / SkillAtlasLaneLayout.COLUMN_COUNT
         fun centerX(col: Int) = columnWidth * (col + 0.5f)
-        fun centerY(placed: SkillAtlasLaneLayout.Placed) = rowTop(placed.row) + 8.dp + glyphDiameter(placed.node) / 2
+        fun centerY(placed: SkillAtlasLaneLayout.Placed) = rowTop(placed.row) + NodeTopInset + glyphFrame(placed.node) / 2
         val positions = layout.nodes.associate { it.id to (centerX(it.col) to centerY(it)) }
 
         Canvas(Modifier.fillMaxSize()) {
@@ -358,19 +366,25 @@ private fun LaneTree(layout: SkillAtlasLaneLayout, selectedNodeId: String?, onSe
         }
 
         layout.lanes.forEach { lane ->
-            Text(
-                stringResource(laneTitle(lane.branch)),
-                color = AtlasColors.textMuted,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.5.sp,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                modifier = Modifier
+            Box(
+                Modifier
                     .width(columnWidth * 1.8f)
-                    .offset(x = centerX(lane.col) - columnWidth * 0.9f, y = rowTop(1) - LaneHeaderHeight + 6.dp)
-                    .semantics { heading() },
-            )
+                    .offset(x = centerX(lane.col) - columnWidth * 0.9f, y = rowTop(1) - LaneHeaderHeight + 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    stringResource(laneTitle(lane.branch)),
+                    color = AtlasColors.textMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.5.sp,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .background(AtlasColors.canvas, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp)
+                        .semantics { heading() },
+                )
+            }
         }
 
         layout.nodes.forEach { placed ->
@@ -378,10 +392,10 @@ private fun LaneTree(layout: SkillAtlasLaneLayout, selectedNodeId: String?, onSe
             Box(
                 Modifier
                     .width(columnWidth)
-                    .height(RowHeight - 8.dp)
+                    .height(RowHeight - NodeTopInset)
                     .offset {
                         with(density) {
-                            IntOffset((columnWidth * placed.col).roundToPx(), (rowTop(placed.row) + 8.dp).roundToPx())
+                            IntOffset((columnWidth * placed.col).roundToPx(), (rowTop(placed.row) + NodeTopInset).roundToPx())
                         }
                     },
             ) {
@@ -411,7 +425,7 @@ private fun LaneNode(placed: SkillAtlasLaneLayout.Placed, selected: Boolean, dis
                 stateDescription = stateText
             },
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         NodeGlyph(node, selected = selected, linksOtherSport = placed.externalPrerequisites.isNotEmpty())
         Text(
@@ -429,6 +443,9 @@ private fun LaneNode(placed: SkillAtlasLaneLayout.Placed, selected: Boolean, dis
         )
     }
 }
+
+/** The glyph plus room for its corner badges. */
+private fun glyphFrame(node: SkillNode): Dp = glyphDiameter(node) + 12.dp
 
 private fun glyphDiameter(node: SkillNode, compact: Boolean = false): Dp = when {
     compact -> 28.dp
@@ -455,7 +472,7 @@ private fun NodeGlyph(node: SkillNode, selected: Boolean = false, linksOtherSpor
         SkillNode.State.Unlockable -> AtlasColors.accent
         else -> AtlasColors.textSubtle
     }
-    Box(Modifier.size(diameter + if (compact) 0.dp else 12.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(if (compact) diameter else glyphFrame(node)), contentAlignment = Alignment.Center) {
         Box(
             Modifier
                 .size(diameter)
