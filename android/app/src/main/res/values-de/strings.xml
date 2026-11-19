@@ -26,4 +26,26 @@
     <string name="session_signed_in">Angemeldet</string>
     <string name="session_signed_in_as">Angemeldet als %1$s</string>
     <string name="session_unknown">Sitzung wird geprüft …</string>
+    <string name="atlas_loading">Skill-Atlas wird geladen…</string>
+    <string name="atlas_error">Der Skill-Atlas konnte nicht geladen werden.</string>
+    <string name="atlas_retry">Erneut versuchen</string>
+    <string name="atlas_points">%1$d Skillpunkte verfügbar</string>
+    <string name="atlas_earned">Verdient</string>
+    <string name="atlas_spent">Ausgegeben</string>
+    <string name="atlas_next_point">Nächster Skillpunkt auf Level %1$d (noch %2$s XP)</string>
+    <string name="atlas_next_up">Als Nächstes</string>
+    <string name="atlas_lane_flow">FLOW</string>
+    <string name="atlas_lane_speed">TEMPO</string>
+    <string name="atlas_lane_summit">GIPFEL</string>
+    <string name="atlas_lane_explore">ERKUNDEN</string>
+    <string name="atlas_lane_endurance">AUSDAUER</string>
+    <string name="atlas_cost">Kosten: %1$d Skillpunkte</string>
+    <string name="atlas_sp">%1$d SP</string>
+    <string name="atlas_requires">Benötigt: %1$s</string>
+    <string name="atlas_requires_in_sport">Benötigt: %1$s · %2$s</string>
+    <string name="atlas_unlock">Freischalten</string>
+    <string name="atlas_state_unlocked">Freigeschaltet</string>
+    <string name="atlas_state_unlockable">Bereit</string>
+    <string name="atlas_state_locked">Gesperrt</string>
+    <string name="atlas_state_premium">Premium</string>
 </resources>

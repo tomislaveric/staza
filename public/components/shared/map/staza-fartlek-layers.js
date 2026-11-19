@@ -1,4 +1,5 @@
 import { EMPTY_FEATURE_COLLECTION } from "./staza-collectible-features.js";
+import { STAZA_MAP_PALETTE } from "./staza-map-palette.js";
 
 /**
  * Fartlek MapLibre vocabulary: a linear road/path segment challenge, rendered as a `line`
@@ -15,11 +16,11 @@ export const FARTLEK_LINE_LAYER = "staza-fartleks-line";
 export const FARTLEK_SELECTED_LAYER = "staza-fartleks-selected";
 export const FARTLEK_HIT_LAYER = "staza-fartleks-hit";
 
-const CASING_COLOR = "#0b0c0f";
+const CASING_COLOR = STAZA_MAP_PALETTE.casing;
 /** A muted blue-teal keeps unridden segments distinct from roads without competing with gold. */
-const UNCOMPLETED_LINE = "#6b9eac";
-const COMPLETED_LINE = "#e8b80a";
-const SELECTED_ACCENT = "#e8b80a";
+const UNCOMPLETED_LINE = STAZA_MAP_PALETTE.flowline;
+const COMPLETED_LINE = STAZA_MAP_PALETTE.flowlineCompleted;
+const SELECTED_ACCENT = STAZA_MAP_PALETTE.highlight;
 const UNCOMPLETED_OPACITY = 0.68;
 const COMPLETED_OPACITY = 0.95;
 
@@ -73,7 +74,7 @@ const fartlekSelectedLayer = () => ({
   filter: SELECTED_OR_QUEST_TARGET,
   layout: { "line-cap": "round", "line-join": "round" },
   paint: {
-    "line-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "line-color": ["case", SELECTED, STAZA_MAP_PALETTE.highlightSelected, SELECTED_ACCENT],
     "line-opacity": ["case", SELECTED, 0.95, 0.22],
     // MapLibre allows one zoom interpolate per expression, so the state switch sits inside each stop.
     "line-width": ["interpolate", ["linear"], ["zoom"],

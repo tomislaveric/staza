@@ -21,6 +21,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Collectible rarity cleanup and category icons](features/collectible-rarity-cleanup-and-category-icons/README.md) — remove Rare/Epic collectible tiers and add distinct SVG map icons for Viewpoint and Place.
 - [Coming soon](features/coming-soon/README.md) — add a reusable multi-language
   "Coming Soon" annotation and remove the unsupported Komoot external-route feature.
+- [Compact Progress quests](features/compact-progress-quests/README.md) — to-do style
+  quest checklists on Progress (active, locked, checked finished) and a Home TO DO overview,
+  on web and iOS.
 - [Default quests](features/default-quests/README.md) — *superseded by Explore this
   Area*; generated bbox-local recommendations including Mountain Passes and mixed
   Flowline challenges; track and cancel started quests independently of the map.
@@ -46,6 +49,10 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Home Active Quests](features/home-active-quests/README.md) — list the player's
   active quests on Home with read-only cards, and link to Staza World when none
   are active.
+- [Home Parity](features/home-parity/README.md) — bring the iOS Home screen to
+  parity with web Home: NEXT recommendation/onboarding, skills, achievements and
+  summary tiles, and a recent-activity card with a static route map; iOS maps
+  use the web colors from a served map palette and show completed Flowlines.
 - [Import data workflow](features/import-data-workflow/README.md) — import
   quäldich, OSM/Wikidata, and Fartlek snapshots into DEV or PROD through GitHub
   Actions while keeping PostgreSQL private on the VPS.
@@ -183,6 +190,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Skill Atlas](features/skill-atlas/README.md) — refactor the Skill Tree into a
   pannable, zoomable, radial constellation map (client-only visual/layout/
   interaction refactor) while preserving all gameplay, persistence, and APIs.
+- [Skill Atlas Mobile](features/skill-atlas-mobile/README.md) — portrait branch-lane
+  Skill Atlas for iOS and Android with visible node connections, a node detail bottom
+  sheet, and a "Next up" strip of unlockable nodes.
 - [Skill Points Reflection](features/skill-points-reflection/README.md) — explain
   level-based Skill Point rewards and mark awarding levels in the Progress journey.
 - [Skill Tree](features/skill-tree/README.md) — interactive, animated progression

@@ -1,9 +1,12 @@
 import { config } from "./config.js";
 import { applyStazaMapTheme, type MapStyle } from "./basemapTheme.js";
+import { STAZA_MAP_PALETTE, type StazaMapPalette } from "./mapPalette.js";
 
 export interface BasemapConfig {
   styleUrl: string;
   attribution: string;
+  /** Overlay colors (routes, Flowlines, markers) so every client draws the same map. */
+  palette: StazaMapPalette;
 }
 
 /** Path of the Staza-themed basemap style document served to every client. */
@@ -16,7 +19,8 @@ export const THEMED_STYLE_PATH = "/api/world/basemap/style.json";
  */
 export const getBasemapConfig = (origin: string): BasemapConfig => ({
   styleUrl: new URL(THEMED_STYLE_PATH, origin).toString(),
-  attribution: config.basemapAttribution
+  attribution: config.basemapAttribution,
+  palette: STAZA_MAP_PALETTE
 });
 
 /** Origins the browser must be allowed to reach to load the configured basemap. */

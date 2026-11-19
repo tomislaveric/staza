@@ -4,6 +4,10 @@ import Observation
 struct Basemap: Decodable, Equatable, Sendable {
     let styleUrl: String
     let attribution: String?
+    var palette: MapPalette? = nil
+
+    /// The served overlay palette, or the web defaults for older servers.
+    var mapPalette: MapPalette { palette ?? .standard }
 }
 
 @MainActor

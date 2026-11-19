@@ -33,6 +33,7 @@ import world.staza.app.R
 import world.staza.app.core.auth.AuthState
 import world.staza.app.designsystem.StazaTheme
 import world.staza.app.ui.FoundationsScreen
+import world.staza.app.atlas.SkillAtlasRoute
 import world.staza.app.ui.PlaceholderScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,10 +92,11 @@ fun StazaApp(authState: AuthState) {
         ) {
             TopLevelDestination.entries.forEach { item ->
                 composable(item.route) {
-                    if (item == TopLevelDestination.More) {
-                        FoundationsScreen(authState)
-                    } else {
-                        PlaceholderScreen(title = stringResource(item.label))
+                    when (item) {
+                        TopLevelDestination.More -> FoundationsScreen(authState)
+                        TopLevelDestination.SkillAtlas -> SkillAtlasRoute()
+                        else ->
+                            PlaceholderScreen(title = stringResource(item.label))
                     }
                 }
             }

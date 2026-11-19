@@ -29,11 +29,17 @@ struct ProgressView_: View {
                 LazyVStack(alignment: .leading, spacing: StazaSpacing.md) {
                     if model.showsNewRewards { rewardsBanner }
                     LevelHeroCard(progress: dashboard.progress, showsTotalXp: true)
+                    if !model.activeQuests.isEmpty || !model.lockedQuests.isEmpty {
+                        questsSection(active: model.activeQuests, locked: model.lockedQuests)
+                    }
+                    if !model.finishedQuests.isEmpty { finishedQuestsSection(model.finishedQuests) }
                     lifetimeSection(dashboard)
+                    if let capabilities = model.capabilities, !capabilities.badges.isEmpty || !capabilities.titles.isEmpty {
+                        badgesTitlesSection(capabilities)
+                    }
                     milestonesSection(dashboard.milestones)
                     if !dashboard.sportRecords.isEmpty { recordsSection(dashboard.sportRecords) }
                     if !dashboard.recentActivities.isEmpty { recentSection(dashboard.recentActivities) }
-                    if !dashboard.questHistory.isEmpty { questsSection(dashboard.questHistory) }
                     allActivitiesLink
                 }
                 .padding(.horizontal, StazaSpacing.md)
@@ -189,27 +195,35 @@ struct ProgressView_: View {
         return items
     }
 
-    private func questsSection(_ history: [ProgressDashboard.QuestHistoryEntry]) -> some View {
+    private func questsSection(active: [AuthoredQuest], locked: [AuthoredQuest]) -> some View {
         VStack(alignment: .leading, spacing: StazaSpacing.sm) {
             SectionHeader("progress.quests")
-            StazaCard(padding: 0) {
-                VStack(spacing: 0) {
-                    ForEach(Array(history.enumerated()), id: \.element.id) { index, entry in
-                        if index > 0 { Divider().overlay(StazaColor.border).padding(.leading, 68) }
-                        HStack(spacing: StazaSpacing.md) {
-                            IconBadge(systemImage: "checkmark.seal.fill", tint: StazaColor.success)
-                            Text(verbatim: entry.title)
-                                .font(StazaFont.body)
-                                .foregroundStyle(StazaColor.textPrimary)
-                            Spacer(minLength: StazaSpacing.sm)
-                            Text("home.quest.reward \(StazaFormat.number(entry.xp, locale: locale))")
-                                .font(StazaFont.metric.weight(.semibold))
-                                .foregroundStyle(StazaColor.accent)
-                        }
-                        .padding(.horizontal, StazaSpacing.md)
-                        .padding(.vertical, StazaSpacing.sm + StazaSpacing.xs)
-                        .accessibilityElement(children: .combine)
-                    }
+            if !active.isEmpty { QuestTaskList(quests: active) }
+            if !locked.isEmpty {
+                CollapsibleQuestGroup(label: Text("progress.quests.locked \(locked.count)"),
+                                      systemImage: "lock.fill", quests: locked)
+                    .accessibilityIdentifier("lockedQuestsGroup")
+            }
+        }
+    }
+
+    private func finishedQuestsSection(_ finished: [AuthoredQuest]) -> some View {
+        CollapsibleQuestGroup(label: Text("progress.quests.finished \(finished.count)"),
+                              systemImage: "checkmark.square.fill", quests: finished)
+            .accessibilityIdentifier("finishedQuestsGroup")
+    }
+
+    private func badgesTitlesSection(_ capabilities: PlayerCapabilities) -> some View {
+        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            SectionHeader("progress.badgesTitles")
+            MoreFlowLayout {
+                ForEach(capabilities.badges) { badge in
+                    StazaChip(verbatim: badge.label, systemImage: "rosette", tint: StazaColor.accent)
+                        .accessibilityLabel(Text("progress.badge \(badge.label)"))
+                }
+                ForEach(capabilities.titles) { title in
+                    StazaChip(verbatim: title.label, systemImage: "textformat", tint: StazaColor.textMuted)
+                        .accessibilityLabel(Text("progress.title \(title.label)"))
                 }
             }
         }

@@ -3,7 +3,9 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppContainer.self) private var container
     @State private var model: HomeModel?
-    var onOpenWorld: () -> Void = {}
+    @State private var isShowingQuests = false
+    var onSelectTab: (AppTab) -> Void = { _ in }
+    var onAddActivity: () -> Void = {}
 
     var body: some View {
         ScrollView {
@@ -17,13 +19,26 @@ struct HomeView: View {
                     }
                 case .loaded(let content):
                     LevelHeroCard(progress: content.progress)
-                    questsSection(content.activeQuests)
+                    if content.latest == nil {
+                        OnboardingCard(onAddActivity: onAddActivity)
+                    } else {
+                        HomeTodoSection(todos: content.todos, perform: open)
+                    }
+                    HomeAchievementsSection(
+                        achievements: content.achievements,
+                        lifetime: content.lifetime,
+                        totalXp: content.progress.totalXp,
+                        onOpenSkillAtlas: { onSelectTab(.skillAtlas) }
+                    )
+                    recentActivity(content)
                 }
             }
             .padding(.horizontal, StazaSpacing.md)
             .padding(.vertical, StazaSpacing.sm)
         }
         .stazaScreen()
+        .navigationDestination(for: ActivityHistoryItem.self) { ActivityDetailView(activity: $0) }
+        .navigationDestination(isPresented: $isShowingQuests) { QuestListView() }
         .task(id: container.dataRevision) {
             let model = self.model ?? HomeModel(api: container.apiClient)
             self.model = model
@@ -32,24 +47,33 @@ struct HomeView: View {
         .refreshable { await model?.load() }
     }
 
+    private func open(_ target: HomeTodo.Target) {
+        switch target {
+        case .skillAtlas: onSelectTab(.skillAtlas)
+        case .world: onSelectTab(.world)
+        case .quests: isShowingQuests = true
+        }
+    }
+
     @ViewBuilder
-    private func questsSection(_ quests: [QuestInstance]) -> some View {
-        SectionHeader("home.quests.header")
-        if quests.isEmpty {
-            StazaCard {
-                StazaStateView(systemImage: "flag.checkered", tint: StazaColor.accent, title: Text("home.quests.empty")) {
-                    Button("home.quests.openWorld", systemImage: "map.fill", action: onOpenWorld)
-                        .buttonStyle(.stazaPrimary)
-                        .accessibilityIdentifier("homeOpenWorldButton")
-                }
+    private func recentActivity(_ content: HomeContent) -> some View {
+        SectionHeader("home.recent.header")
+        if let latest = content.latest {
+            NavigationLink(value: latest) {
+                RecentActivityCard(activity: latest, detail: content.latestDetail, replay: content.replay, basemap: content.basemap)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("home.recent.accessibility"))
+            .accessibilityIdentifier("homeRecentActivity")
         } else {
-            ForEach(quests) { QuestCard(quest: $0) }
+            StazaCard {
+                StazaStateView(systemImage: "figure.outdoor.cycle", title: Text("home.recent.empty.title"), message: Text("home.recent.empty.body"))
+            }
         }
     }
 }
 
-#Preview("EN") { HomeView().environment(AppContainer()).preferredColorScheme(.dark) }
+#Preview("EN") { NavigationStack { HomeView() }.environment(AppContainer()).preferredColorScheme(.dark) }
 #Preview("DE dark") {
-    HomeView().environment(AppContainer()).environment(\.locale, Locale(identifier: "de")).preferredColorScheme(.dark)
+    NavigationStack { HomeView() }.environment(AppContainer()).environment(\.locale, Locale(identifier: "de")).preferredColorScheme(.dark)
 }

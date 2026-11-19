@@ -7,8 +7,13 @@ struct ReplayTrackPoint: Decodable, Equatable, Sendable {
 }
 
 struct ReplayFlowline: Decodable, Equatable, Sendable {
+    /// GeoJSON LineString of the completed segment, `[longitude, latitude]` pairs.
+    struct Geometry: Decodable, Equatable, Sendable {
+        let coordinates: [[Double]]
+    }
     let fartlekName: String
     let completedAtTimestampMs: Double
+    var fartlekGeometry: Geometry? = nil
 }
 
 struct ReplayCoordinate: Equatable, Sendable {
@@ -25,6 +30,8 @@ struct ReplayReveal: Equatable, Identifiable, Sendable {
     let timestampMs: Double
     let coordinate: ReplayCoordinate?
     var category: String? = nil
+    /// The completed segment of a Flowline reveal, drawn once it is revealed.
+    var path: [ReplayCoordinate] = []
 }
 
 /// Timestamp-driven replay state derived from the activity track and its events.
@@ -53,8 +60,11 @@ struct ReplayTimeline: Equatable, Sendable {
                                 isRepeat: event.isRepeat, timestampMs: ts, coordinate: coordinate, category: event.category)
         }
         let flowlines = (detail.replay?.activityResult?.fartlekCompletions ?? []).enumerated().map { index, item in
-            ReplayReveal(id: "flowline-\(index)", name: item.fartlekName, kind: .flowline,
-                         isRepeat: false, timestampMs: item.completedAtTimestampMs, coordinate: nil)
+            let path = (item.fartlekGeometry?.coordinates ?? []).compactMap { pair in
+                pair.count >= 2 ? ReplayCoordinate(latitude: pair[1], longitude: pair[0]) : nil
+            }
+            return ReplayReveal(id: "flowline-\(index)", name: item.fartlekName, kind: .flowline,
+                                isRepeat: false, timestampMs: item.completedAtTimestampMs, coordinate: nil, path: path)
         }
         self.init(route: route, reveals: events + flowlines)
     }

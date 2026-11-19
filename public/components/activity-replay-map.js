@@ -9,6 +9,7 @@ import {
 import { collectiblesToFeatureCollection } from "./shared/map/staza-collectible-features.js";
 import { lineFeature, pointFeature, pointsToBounds } from "./shared/map/staza-map-utils.js";
 import { interpolatePosition, markerState, replayDurationSeconds, replayMarkers } from "../replay.js";
+import { STAZA_MAP_PALETTE } from "./shared/map/staza-map-palette.js";
 
 const REPLAY_PLAYBACK_RATE = 2;
 const ROUTE_BACKGROUND_SOURCE = "staza-activity-route-background";
@@ -19,8 +20,8 @@ const POSITION_HALO_LAYER = "staza-activity-position-halo";
 const POSITION_LAYER = "staza-activity-position";
 
 /** The travelled activity route reads clearly in a Staza accent, distinct from the quest gold. */
-const ACTIVITY_ROUTE_ACCENT = "#5ec8c2";
-const POSITION_ACCENT = "#e8b80a";
+const ACTIVITY_ROUTE_ACCENT = STAZA_MAP_PALETTE.activityRoute;
+const POSITION_ACCENT = STAZA_MAP_PALETTE.position;
 const FIT_PADDING = 48;
 
 /** Absolute activity timestamp for a 0..1 playback progress. */
@@ -137,7 +138,7 @@ const positionLayers = () => [
     source: POSITION_SOURCE,
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 4, 15, 7],
-      "circle-color": "#f5f7fa",
+      "circle-color": STAZA_MAP_PALETTE.positionCore,
       "circle-stroke-width": 2,
       "circle-stroke-color": POSITION_ACCENT
     }

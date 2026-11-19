@@ -5,11 +5,17 @@ struct AuthoredQuest: Decodable, Equatable, Identifiable, Sendable {
         struct Criterion: Decodable, Equatable, Sendable {
             let label: String
             let met: Bool
+            var current: Double? = nil
+            var required: Double? = nil
+            var unit: String? = nil
         }
         let attemptCount: Int
         let criteria: [Criterion]?
     }
-    struct RequiredNode: Decodable, Equatable, Sendable { let name: String }
+    struct RequiredNode: Decodable, Equatable, Sendable {
+        let name: String
+        var premium: Bool? = nil
+    }
 
     enum State: String, Decodable, Sendable { case active, completed, locked }
 
@@ -22,6 +28,7 @@ struct AuthoredQuest: Decodable, Equatable, Identifiable, Sendable {
     let difficulty: String
     let xp: Double
     let state: State
+    var isNew: Bool? = nil
     let lastFailure: Failure?
     let requiredNode: RequiredNode?
     let requiredQuestTitle: String?

@@ -10,6 +10,8 @@ struct ActivityHistoryItem: Decodable, Hashable, Identifiable, Sendable {
     let xpEarned: Double
     let collectedCount: Int
     let flowlineCount: Int
+    var revisitCount: Int? = nil
+    var hasVideo: Bool? = nil
 
     var startedDate: Date? {
         let fractional = ISO8601DateFormatter()

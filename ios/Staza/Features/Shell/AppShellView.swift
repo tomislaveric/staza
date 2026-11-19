@@ -69,7 +69,7 @@ struct AppShellView: View {
     @ViewBuilder
     private func content(for tab: AppTab) -> some View {
         switch tab {
-        case .home: HomeView(onOpenWorld: { selection = .world })
+        case .home: HomeView(onSelectTab: { selection = $0 }, onAddActivity: { isAddingActivity = true })
         case .world: WorldView()
         case .skillAtlas: SkillAtlasView()
         case .progress: ProgressView_()

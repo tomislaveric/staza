@@ -1,6 +1,7 @@
 import { getAppLocale } from "../app-locales.js";
 
 import { getActivityLabel } from "./activity-labels.js";
+import { AuthoredQuestTask, QuestPill } from "./quest-task.js";
 
 const formatNumber = (value, maximumFractionDigits = 0) => new Intl.NumberFormat(getAppLocale(), {
   maximumFractionDigits
@@ -142,55 +143,26 @@ export const RecentActivities = (activities) => `
   </section>
 `;
 
-const questRequirement = (quest) => quest.requiredNode
-  ? `Unlock ${quest.requiredNode.name} in the Skill Atlas${quest.requiredNode.premium ? " (PRO)" : ""}`
-  : `Complete ${quest.requiredQuestTitle} first`;
-
-const difficultyLabel = (difficulty) => difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
-
-const criteriaList = (criteria = []) => criteria.length
-  ? `<ul class="authored-quest-criteria">${criteria.map((criterion) => `<li class="${criterion.met ? "is-met" : "is-missed"}"><span data-user-content>${escapeHtml(criterion.label)}</span> <b>${formatNumber(criterion.current)} / ${formatNumber(criterion.required)}${criterion.unit ? ` ${escapeHtml(criterion.unit)}` : ""}</b></li>`).join("")}</ul>`
-  : "";
-
-const questStatus = (quest) => {
-  if (quest.state === "completed") return "Done";
-  if (quest.state === "active") return "Active · your next activity decides";
+const questRequirementPill = (quest) => {
+  if (quest.requiredNode) return QuestPill(`🔒 ${quest.requiredNode.name}${quest.requiredNode.premium ? " · PRO" : ""}`, "lock", "Unlock in the Skill Atlas");
+  if (quest.requiredQuestTitle) return QuestPill(`After ${quest.requiredQuestTitle}`, "lock");
   return "";
 };
 
-const failureHint = (quest) => quest.lastFailure
-  ? `<small class="authored-quest-failure">Last activity fell short · try again</small>${criteriaList(quest.lastFailure.criteria)}`
-  : "";
-
-const AuthoredQuest = (quest) => `
-  <li class="quest-instance-card authored-quest is-${quest.state}${quest.isNew ? " is-new" : ""}" data-authored-quest="${escapeHtml(quest.id)}">
-    <article>
-      <span class="quest-card-head"><strong data-user-content>${escapeHtml(quest.title)}</strong>${quest.isNew ? '<i class="new-reward-tag">NEW</i>' : ""}</span>
-      <span class="quest-card-description" data-user-content>${escapeHtml(quest.description)}</span>
-      <span class="quest-card-progress">
-        <small class="authored-quest-meta"><span>${escapeHtml(difficultyLabel(quest.difficulty))}</span> · +${formatNumber(quest.xp)} XP${questStatus(quest) ? ` · <span>${questStatus(quest)}</span>` : ""}</small>
-        ${quest.state === "active" ? failureHint(quest) : ""}
-        ${quest.state === "locked" ? `<small class="authored-quest-lock">${escapeHtml(questRequirement(quest))}</small>` : ""}
-      </span>
-    </article>
+const LockedQuest = (quest) => `
+  <li class="authored-quest-locked" data-authored-quest="${escapeHtml(quest.id)}">
+    <span data-user-content>${escapeHtml(quest.title)}</span>${questRequirementPill(quest)}
   </li>
 `;
 
 export const AuthoredQuests = (quests = []) => {
   const open = quests.filter((quest) => quest.state === "active");
   const locked = quests.filter((quest) => quest.state === "locked");
-  const completed = quests.filter((quest) => quest.state === "completed");
-  const justCompleted = completed.filter((quest) => quest.isNew);
   return `
   <section class="authored-quests" aria-labelledby="authored-quests-title">
     <h2 id="authored-quests-title">QUESTS</h2>
-    <p class="authored-quests-rule">Unlocked quests are active right away. Your next activity decides them. Quests pay bonus XP by difficulty.</p>
-    ${justCompleted.length ? `<ol class="home-quest-list authored-quests-just-completed">${justCompleted.map(AuthoredQuest).join("")}</ol>` : ""}
-    ${open.length
-    ? `<ol class="home-quest-list">${open.map(AuthoredQuest).join("")}</ol>`
-    : ""}
-    ${completed.length ? `<p class="authored-quests-done">${formatNumber(completed.length)} completed</p>` : ""}
-    ${locked.length ? `<details class="authored-quests-locked"><summary>Locked quests (${formatNumber(locked.length)})</summary><ol class="home-quest-list">${locked.map(AuthoredQuest).join("")}</ol></details>` : ""}
+    ${open.length ? `<ol class="quest-task-list">${open.map((quest) => AuthoredQuestTask(quest)).join("")}</ol>` : ""}
+    ${locked.length ? `<details class="authored-quests-locked"><summary>Locked quests (${formatNumber(locked.length)})</summary><ol>${locked.map(LockedQuest).join("")}</ol></details>` : ""}
   </section>
 `;
 };
@@ -198,31 +170,12 @@ export const AuthoredQuests = (quests = []) => {
 export const QuestBadges = (quests = []) => {
   const finished = quests.filter((quest) => quest.state === "completed");
   return finished.length ? `
-  <section class="quest-badges-section" aria-labelledby="quest-badges-title">
+  <section class="authored-quests is-finished" aria-labelledby="quest-badges-title">
     <h2 id="quest-badges-title">FINISHED QUESTS</h2>
-    <ul class="quest-badges">${finished.map((quest) => `<li class="quest-badge${quest.isNew ? " is-new" : ""}" data-quest-badge="${escapeHtml(quest.id)}">
-      <b data-user-content>${escapeHtml(quest.title)}</b>
-      <small data-user-content>${escapeHtml(quest.description)}</small>
-    </li>`).join("")}</ul>
+    <ol class="quest-task-list">${finished.map((quest) => AuthoredQuestTask(quest)).join("")}</ol>
   </section>
 ` : "";
 };
-
-export const QuestHistory = (history = []) => history.length ? `
-  <section class="quest-history" aria-labelledby="quest-history-title">
-    <h2 id="quest-history-title">COMPLETED QUESTS</h2>
-    <ol>
-      ${history.map((entry) => `
-        <li class="quest-history-entry" data-quest-history="${escapeHtml(entry.id)}">
-          <div>
-            <strong data-user-content>${escapeHtml(entry.title)}</strong>
-            <span data-user-content>${escapeHtml(entry.chainTitle ?? (entry.kind === "exploration" ? "Exploration" : "Quest"))} · ${escapeHtml(difficultyLabel(entry.difficulty))} · ${escapeHtml(formatActivityDate(entry.completedAt))}</span>
-          </div>
-          <em>+${formatNumber(entry.xp)} XP</em>
-        </li>`).join("")}
-    </ol>
-  </section>
-` : "";
 
 export const ProgressPage = (model) => `
   <section class="progress-page" aria-labelledby="progress-title">
@@ -237,7 +190,6 @@ export const ProgressPage = (model) => `
     ${Trophies(model.capabilities)}
     ${PersonalRecords(model.sportRecords)}
     ${DiscoveryMilestones(model.milestones)}
-    ${QuestHistory(model.questHistory)}
     ${RecentActivities(model.recentActivities)}
   </section>
 `;

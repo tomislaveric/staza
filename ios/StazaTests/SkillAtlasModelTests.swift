@@ -29,6 +29,25 @@ final class SkillAtlasModelTests: XCTestCase {
         XCTAssertNil(model.unlockError)
     }
 
+    func testNextUpListsUnlockableNodesAndSelectionSwitchesSport() async throws {
+        let body = #"{"isPremium":false,"earnedPoints":3,"spentPoints":0,"balance":3,"nextSkillPoint":{"level":5,"xpRemaining":120,"progress":0.4},"nodes":["#
+            + [("cyclist", "cycling", "unlocked", 1), ("flow", "cycling", "unlockable", 2), ("runner", "running", "unlockable", 1), ("hiker", "hiking", "locked", 1)]
+                .map { #"{"id":"\#($0.0)","name":"\#($0.0)","description":"D","sport":"\#($0.1)","branch":"\#($0.0 == "flow" ? "rush" : "root")","tier":"prestige","cost":\#($0.3),"premium":false,"grant":{"type":"badge","label":"B"},"prerequisites":[],"layout":{"col":0,"row":0},"state":"\#($0.2)","requirements":[]}"# }
+                .joined(separator: ",")
+            + "]}"
+        let model = SkillAtlasModel(api: APIClient(baseURL: baseURL, transport: Transport(responses: [(200, body)])))
+        await model.load()
+        XCTAssertEqual(model.nextUpNodes.map(\.id), ["runner", "flow"])
+        XCTAssertEqual(model.atlas?.nodes.first?.tier, .prestige)
+        XCTAssertEqual(model.activeSport, "cycling")
+
+        model.select("runner")
+        XCTAssertEqual(model.activeSport, "running")
+        XCTAssertEqual(model.selectedNode?.id, "runner")
+        model.clearSelection()
+        XCTAssertNil(model.selectedNode)
+    }
+
     func testUnlockRejectionSurfacesError() async throws {
         let transport = Transport(responses: [
             (200, atlas(state: "unlockable", balance: 2)),

@@ -36,19 +36,11 @@ struct ProgressDashboard: Decodable, Equatable, Sendable {
         private enum CodingKeys: String, CodingKey { case xpPercentOfBest }
     }
 
-    struct QuestHistoryEntry: Decodable, Equatable, Identifiable, Sendable {
-        let id: String
-        let title: String
-        let xp: Double
-        let completedAt: String
-    }
-
     let progress: PlayerProgress
     let lifetime: Lifetime
     let sportRecords: [SportRecord]
     let milestones: Milestones
     let recentActivities: [RecentActivity]
-    let questHistory: [QuestHistoryEntry]
 }
 
 struct NewRewards: Decodable, Equatable, Sendable {

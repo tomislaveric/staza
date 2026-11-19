@@ -1,6 +1,7 @@
 import { formatDuration } from "./format-duration.js";
 import { getAppLocale } from "../app-locales.js";
 import { getActivityLabel } from "./activity-labels.js";
+import { AuthoredQuestTask, QuestPill, TaskRow } from "./quest-task.js";
 
 const formatNumber = (value, maximumFractionDigits = 0) => new Intl.NumberFormat(getAppLocale(), {
   maximumFractionDigits
@@ -99,27 +100,48 @@ export const HomeRecentActivity = (activity) => {
   `;
 };
 
+const ACTIVE_QUEST_LIMIT = 3;
+
 /**
- * One recommended next step. Priority: spend Skill Points, go for an active quest (quests start
- * automatically), wait on an exploration, otherwise plan an exploration.
+ * Home to-do checklist, in order: spend Skill Points, active authored quests (capped, then a
+ * "View all" row), active explorations, otherwise a "Plan an exploration" fallback.
  */
-export const homeNextAction = ({ skillPoints = 0, authoredQuests = [], instances = [] } = {}) => {
+export const homeTodos = ({ skillPoints = 0, authoredQuests = [], instances = [] } = {}) => {
+  const todos = [];
   if (skillPoints > 0) {
-    return { id: "spend-skill-points", title: `Spend ${skillPoints} Skill Point${skillPoints === 1 ? "" : "s"}`, body: "Unlock new sports, filters and quest chains in the Skill Atlas.", cta: "Open Skill Atlas", target: "skill-tree" };
+    todos.push({
+      id: "spend-skill-points",
+      title: `Spend ${formatNumber(skillPoints)} Skill Point${skillPoints === 1 ? "" : "s"}`,
+      goal: "Unlock new sports, filters and quest chains.",
+      pills: QuestPill(`${formatNumber(skillPoints)} SP`, "accent"),
+      target: "skill-tree"
+    });
   }
-  const active = authoredQuests.find((quest) => quest.state === "active");
-  if (active) return { id: "active-quest", title: `${active.title} is active`, body: active.lastFailure ? "Your last activity fell short. Your next activity decides again." : "Go for your next ride, run or hike. That activity decides the attempt.", cta: "View Quests", target: "progress" };
-  const exploration = instances.find((instance) => instance.status === "active");
-  if (exploration) return { id: "active-exploration", title: `${exploration.title} is active`, body: "Go for your next ride, run or hike. That activity decides the attempt.", cta: "Open World", target: "world" };
-  return { id: "plan-exploration", title: "Plan an exploration", body: "Pick an area in World and turn it into a route with targets to collect.", cta: "Open World", target: "world" };
+  const activeQuests = (authoredQuests ?? []).filter((quest) => quest.state === "active");
+  activeQuests.slice(0, ACTIVE_QUEST_LIMIT).forEach((quest) => todos.push({ id: `quest:${quest.id}`, quest, target: "progress" }));
+  if (activeQuests.length > ACTIVE_QUEST_LIMIT) {
+    todos.push({ id: "view-all-quests", title: `View all quests (${formatNumber(activeQuests.length)})`, className: "is-more", target: "progress" });
+  }
+  const explorations = (instances ?? []).filter((instance) => instance.status === "active");
+  explorations.forEach((exploration) => todos.push({
+    id: `exploration:${exploration.id}`,
+    title: exploration.title,
+    goal: exploration.description,
+    pills: `${QuestPill("Exploration", "muted")}${Number.isFinite(exploration.rewardXp) ? QuestPill(`+${formatNumber(exploration.rewardXp)} XP`, "accent") : ""}`,
+    target: "world"
+  }));
+  if (!activeQuests.length && !explorations.length) {
+    todos.push({ id: "plan-exploration", title: "Plan an exploration", goal: "Pick an area in World and turn it into a route with targets to collect.", target: "world" });
+  }
+  return todos;
 };
 
-export const HomeNextAction = (action) => `
-  <section class="home-next-action" aria-labelledby="next-action-title" data-home-next-action="${escapeHtml(action.id)}">
-    <small>NEXT</small>
-    <h2 id="next-action-title">${escapeHtml(action.title)}</h2>
-    <p>${escapeHtml(action.body)}</p>
-    <button type="button" class="home-next-action-cta" data-home-action-target="${escapeHtml(action.target)}">${escapeHtml(action.cta)}</button>
+export const HomeTodos = (items) => `
+  <section class="authored-quests home-todos" aria-labelledby="home-todos-title" data-home-todos>
+    <h2 id="home-todos-title">TO DO</h2>
+    <ol class="quest-task-list">${items.map((item) => item.quest
+    ? AuthoredQuestTask(item.quest, { target: item.target })
+    : TaskRow({ ...item, dataAttrs: { "data-home-todo": item.id } })).join("")}</ol>
   </section>
 `;
 
@@ -139,7 +161,7 @@ export const HomeOnboarding = () => `
 
 const pct = (value, total) => (total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0);
 
-export const HomeAchievements = ({ skillPoints = 0, unlocked = [], totalNodes = 0, titles = [], badges = [], nextQuest, stats } = {}) => {
+export const HomeAchievements = ({ skillPoints = 0, unlocked = [], totalNodes = 0, titles = [], badges = [], stats } = {}) => {
   const earned = [...titles, ...badges];
   return `
   <section class="home-achievements" aria-labelledby="achievements-title">
@@ -164,15 +186,6 @@ export const HomeAchievements = ({ skillPoints = 0, unlocked = [], totalNodes = 
         <div><dt>Flowlines</dt><dd>${formatNumber(stats.totalFlowlines ?? 0)}</dd></div>
       </dl>` : ""}
     </div>
-    ${nextQuest ? `<button type="button" class="home-next-quest" data-home-next-quest>
-      <span class="home-next-quest-head"><small>NEXT QUEST · ${escapeHtml(nextQuest.chainTitle).toUpperCase()}</small><b>+${formatNumber(nextQuest.xp)} XP</b></span>
-      <strong data-user-content>${escapeHtml(nextQuest.title)}</strong>
-      <span class="home-next-quest-desc" data-user-content>${escapeHtml(nextQuest.description)}</span>
-      <span class="home-next-quest-foot">
-        <span class="quest-progress-track" aria-hidden="true"><i style="width: ${pct(nextQuest.step - 1, nextQuest.totalSteps)}%;"></i></span>
-        <small>Step ${nextQuest.step} of ${nextQuest.totalSteps}</small>
-      </span>
-    </button>` : ""}
   </section>
 `;
 };
@@ -180,7 +193,7 @@ export const HomeAchievements = ({ skillPoints = 0, unlocked = [], totalNodes = 
 export const HomePage = (model) => `
   <section class="home-page">
     ${HomePlayerProgress(model)}
-    ${model.latest ? HomeNextAction(homeNextAction({ skillPoints: model.achievements?.skillPoints, authoredQuests: model.achievements?.authoredQuests, instances: model.activeQuests })) : HomeOnboarding()}
+    ${model.latest ? HomeTodos(homeTodos({ skillPoints: model.achievements?.skillPoints, authoredQuests: model.achievements?.authoredQuests, instances: model.activeQuests })) : HomeOnboarding()}
     ${HomeAchievements({ ...model.achievements, stats: model.stats })}
     ${HomeRecentActivity(model.latest)}
   </section>
@@ -206,7 +219,6 @@ const loadAchievements = async () => {
       totalNodes: tree.nodes.length,
       titles: capabilities.titles,
       badges: capabilities.badges,
-      nextQuest: quests.quests.find((quest) => quest.state === "active"),
       authoredQuests: quests.quests
     };
   } catch {
@@ -239,7 +251,6 @@ export const mountHomePage = async (mountPoint, onSelectActivity, onNavigate) =>
       mountReplayStillCard(mountPoint.querySelector(".home-activity-card"), replay, basemap);
     }
     mountPoint.querySelector("[data-home-skill-tree]")?.addEventListener("click", () => onNavigate?.("skill-tree"));
-    mountPoint.querySelector("[data-home-next-quest]")?.addEventListener("click", () => onNavigate?.("progress"));
     mountPoint.querySelectorAll("[data-home-action-target]").forEach((button) => {
       button.addEventListener("click", () => onNavigate?.(button.dataset.homeActionTarget));
     });

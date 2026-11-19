@@ -8,8 +8,6 @@ enum CollectibleMapIcons {
 
     static let foundColor = UIColor(red: 0xE8 / 255, green: 0xB8 / 255, blue: 0x0A / 255, alpha: 1)
     static let mutedColor = UIColor(StazaColor.markerRing)
-    static let unfoundFill = UIColor(red: 0x31 / 255, green: 0x5B / 255, blue: 0x68 / 255, alpha: 1)
-    static let selectedColor = UIColor(red: 0xFF / 255, green: 0xF1 / 255, blue: 0xA8 / 255, alpha: 1)
 
     /// Style image name for a collectible, or `nil` when it renders as a fallback circle.
     static func imageName(category: String?, found: Bool) -> String? {

@@ -51,8 +51,9 @@ struct WorldMapView: UIViewRepresentable {
     /// Coordinates to fit into view, e.g. a highlighted exploration's targets.
     var focus: [CLLocationCoordinate2D] = []
     var onLocationDenied: (Bool) -> Void = { _ in }
+    var palette: MapPalette = .standard
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator { Coordinator(palette: palette) }
 
     func makeUIView(context: Context) -> MLNMapView {
         let map = MLNMapView(frame: .zero, styleURL: styleURL)
@@ -99,6 +100,9 @@ struct WorldMapView: UIViewRepresentable {
         var onTrackingChange: (WorldTracking) -> Void = { _ in }
         var onLocationDenied: (Bool) -> Void = { _ in }
         var appliedInset: CGFloat = 0
+        private let palette: MapPalette
+
+        init(palette: MapPalette) { self.palette = palette }
         private var focus: [CLLocationCoordinate2D] = []
         var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
@@ -128,53 +132,24 @@ struct WorldMapView: UIViewRepresentable {
             DispatchQueue.main.async { [onTrackingChange] in onTrackingChange(tracking) }
         }
 
-        /// Line width interpolated by zoom, matching the web Fartlek line stops so lines stay thin when zoomed out.
-        static func zoomWidth(_ stops: [Double: Double]) -> NSExpression {
-            NSExpression(
-                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
-                stops.reduce(into: [NSNumber: NSNumber]()) { $0[NSNumber(value: $1.key)] = NSNumber(value: $1.value) }
-            )
-        }
-
         func mapView(_ map: MLNMapView, didFinishLoading style: MLNStyle) {
-            let accent = UIColor(StazaColor.accent)
-            let flowline = UIColor(StazaColor.rarityRare)
-            let proposed = UIColor(StazaColor.rarityEpic)
-            let canvas = UIColor(StazaColor.canvas)
+            let accent = palette.color(\.highlight)
 
             let flowlines = MLNShapeSource(identifier: "world-flowlines", shape: nil, options: nil)
             style.addSource(flowlines)
-            let flowlineLayer = MLNLineStyleLayer(identifier: "world-flowlines-line", source: flowlines)
-            flowlineLayer.lineColor = NSExpression(forConstantValue: flowline)
-            flowlineLayer.lineWidth = Self.zoomWidth([9: 1.2, 12: 1.8, 15: 2.6, 17: 3.4])
-            flowlineLayer.lineOpacity = NSExpression(forConstantValue: 0.85)
-            flowlineLayer.lineCap = NSExpression(forConstantValue: "round")
-            flowlineLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.addLayer(flowlineLayer)
+            StazaMapLayers.addFlowlines(to: style, source: flowlines, id: "world-flowlines", palette: palette)
 
+            // Quest target segments get the web's highlight emphasis on top of their regular line.
             let questFlowlines = MLNShapeSource(identifier: "world-quest-flowlines", shape: nil, options: nil)
             style.addSource(questFlowlines)
-            let questFlowlineLayer = MLNLineStyleLayer(identifier: "world-quest-flowlines-line", source: questFlowlines)
-            questFlowlineLayer.lineColor = NSExpression(forConstantValue: accent)
-            questFlowlineLayer.lineWidth = Self.zoomWidth([9: 1.8, 12: 2.6, 15: 3.6, 17: 4.6])
-            questFlowlineLayer.lineCap = NSExpression(forConstantValue: "round")
-            questFlowlineLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.addLayer(questFlowlineLayer)
+            StazaMapLayers.addFlowlines(to: style, source: questFlowlines, id: "world-quest-flowlines", palette: palette)
+            let questHighlight = StazaMapLayers.line(id: "world-quest-flowlines-highlight", source: questFlowlines, color: accent, opacity: 0.22,
+                                                     width: CollectibleMapIcons.zoomStops([9: 6, 12: 8, 15: 10, 17: 12]))
+            style.addLayer(questHighlight)
 
             let routeSource = MLNShapeSource(identifier: "explore-route", shape: nil, options: nil)
             style.addSource(routeSource)
-            let casing = MLNLineStyleLayer(identifier: "explore-route-casing", source: routeSource)
-            casing.lineColor = NSExpression(forConstantValue: canvas)
-            casing.lineWidth = NSExpression(forConstantValue: 8)
-            casing.lineCap = NSExpression(forConstantValue: "round")
-            casing.lineJoin = NSExpression(forConstantValue: "round")
-            style.addLayer(casing)
-            let routeLayer = MLNLineStyleLayer(identifier: "explore-route-line", source: routeSource)
-            routeLayer.lineColor = NSExpression(forConstantValue: proposed)
-            routeLayer.lineWidth = NSExpression(forConstantValue: 5)
-            routeLayer.lineCap = NSExpression(forConstantValue: "round")
-            routeLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.addLayer(routeLayer)
+            StazaMapLayers.addRoute(to: style, source: routeSource, id: "explore-route", accent: palette.color(\.questRoute), palette: palette)
             self.routeSource = routeSource
 
             // Collectibles draw above routes: fallback circles, highlight rings, then category icons.
@@ -185,16 +160,16 @@ struct WorldMapView: UIViewRepresentable {
             let circle = MLNCircleStyleLayer(identifier: Self.circleLayer, source: collectibles)
             circle.predicate = NSPredicate(format: "icon == ''")
             circle.circleRadius = CollectibleMapIcons.circleRadius
-            circle.circleColor = NSExpression(format: "TERNARY(found == YES, %@, %@)", CollectibleMapIcons.foundColor, CollectibleMapIcons.unfoundFill)
+            circle.circleColor = NSExpression(format: "TERNARY(found == YES, %@, %@)", palette.color(\.collectibleVisited), palette.color(\.collectibleUnvisited))
             circle.circleOpacity = NSExpression(format: "TERNARY(found == YES, 1, 0.88)")
             circle.circleStrokeWidth = CollectibleMapIcons.zoomStops([9: 1, 12: 1.4, 15: 1.8, 17: 2])
-            circle.circleStrokeColor = NSExpression(format: "TERNARY(found == YES, %@, %@)", UIColor(StazaColor.map), CollectibleMapIcons.mutedColor)
+            circle.circleStrokeColor = NSExpression(format: "TERNARY(found == YES, %@, %@)", palette.color(\.casing), palette.color(\.collectibleUnvisitedRing))
             circle.circleStrokeOpacity = NSExpression(forConstantValue: 0.95)
             style.addLayer(circle)
 
             let highlights: [(id: String, predicate: String, color: UIColor, scale: Double, emphasis: Double)] = [
                 ("quest", "questTarget == YES AND selected == NO", accent, 1, 0),
-                ("selected", "selected == YES", CollectibleMapIcons.selectedColor, 1.15, 1)
+                ("selected", "selected == YES", palette.color(\.highlightSelected), 1.15, 1)
             ]
             for highlight in highlights {
                 let glow = MLNCircleStyleLayer(identifier: "world-collectibles-\(highlight.id)-glow", source: collectibles)

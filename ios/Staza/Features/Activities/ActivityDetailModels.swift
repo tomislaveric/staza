@@ -47,6 +47,7 @@ struct ActivityDetail: Decodable, Equatable, Identifiable, Sendable {
     let collectedCount: Int
     let revisitCount: Int?
     let flowlineCount: Int
+    var hasVideo: Bool? = nil
     let events: [ActivityDetailEvent]
     let replay: Replay?
 

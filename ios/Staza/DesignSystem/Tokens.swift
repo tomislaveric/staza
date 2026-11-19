@@ -27,7 +27,6 @@ enum StazaColor {
     static let rarityEpic = hex(0x9B6BFF)
     static let rarityLegendary = accent
 
-    static let route = accent
     static let markerRing = hex(0x7FBAD0)
 
     private static func hex(_ value: UInt32) -> Color {

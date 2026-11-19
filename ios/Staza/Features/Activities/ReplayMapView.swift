@@ -7,13 +7,17 @@ struct ReplayMapView: UIViewRepresentable {
     let timeline: ReplayTimeline
     let currentMs: Double
     let revealed: [ReplayReveal]
+    /// Off for static stills (e.g. Home), so taps fall through to the enclosing card.
+    var isInteractive = true
+    var palette: MapPalette = .standard
 
-    func makeCoordinator() -> Coordinator { Coordinator(timeline: timeline) }
+    func makeCoordinator() -> Coordinator { Coordinator(timeline: timeline, palette: palette) }
 
     func makeUIView(context: Context) -> MLNMapView {
         let map = MLNMapView(frame: .zero, styleURL: styleURL)
         map.delegate = context.coordinator
         map.isRotateEnabled = false
+        map.isUserInteractionEnabled = isInteractive
         map.automaticallyAdjustsContentInset = false
         map.logoView.isHidden = false
         return map
@@ -25,42 +29,42 @@ struct ReplayMapView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MLNMapViewDelegate {
         private let timeline: ReplayTimeline
+        private let palette: MapPalette
         private var traveled: MLNShapeSource?
+        private var flowlines: MLNShapeSource?
         private var head: MLNShapeSource?
         private var items: MLNShapeSource?
         private var pending: (Double, [ReplayReveal])?
         private var lastItemCount = -1
+        private var lastFlowlineCount = -1
 
-        init(timeline: ReplayTimeline) { self.timeline = timeline }
+        init(timeline: ReplayTimeline, palette: MapPalette) {
+            self.timeline = timeline
+            self.palette = palette
+        }
 
         func mapView(_ map: MLNMapView, didFinishLoading style: MLNStyle) {
             let coords = timeline.route.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-            let accent = UIColor(StazaColor.route)
-            let untravelled = UIColor(StazaColor.textSubtle)
-            let outline = UIColor(StazaColor.canvas)
+            let position = palette.color(\.position)
+            let outline = palette.color(\.casing)
 
+            // Same order as the web replay: subdued full route, travelled route, Flowlines, collectibles, position.
             let routeSource = MLNShapeSource(identifier: "replay-route", shape: MLNPolyline(coordinates: coords, count: UInt(coords.count)), options: nil)
             style.addSource(routeSource)
-            let routeLayer = MLNLineStyleLayer(identifier: "replay-route-line", source: routeSource)
-            routeLayer.lineColor = NSExpression(forConstantValue: untravelled.withAlphaComponent(0.7))
-            routeLayer.lineWidth = NSExpression(forConstantValue: 4)
-            routeLayer.lineCap = NSExpression(forConstantValue: "round")
-            routeLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.addLayer(routeLayer)
+            StazaMapLayers.addSubduedRoute(to: style, source: routeSource, id: "replay-route", palette: palette)
 
             let traveledSource = MLNShapeSource(identifier: "replay-traveled", shape: nil, options: nil)
             style.addSource(traveledSource)
-            let traveledLayer = MLNLineStyleLayer(identifier: "replay-traveled-line", source: traveledSource)
-            traveledLayer.lineColor = NSExpression(forConstantValue: accent)
-            traveledLayer.lineWidth = NSExpression(forConstantValue: 5)
-            traveledLayer.lineCap = NSExpression(forConstantValue: "round")
-            traveledLayer.lineJoin = NSExpression(forConstantValue: "round")
-            style.addLayer(traveledLayer)
+            StazaMapLayers.addRoute(to: style, source: traveledSource, id: "replay-traveled", accent: palette.color(\.activityRoute), palette: palette)
+
+            let flowlineSource = MLNShapeSource(identifier: "replay-flowlines", shape: nil, options: nil)
+            style.addSource(flowlineSource)
+            StazaMapLayers.addFlowlines(to: style, source: flowlineSource, id: "replay-flowlines", palette: palette)
 
             let itemSource = MLNShapeSource(identifier: "replay-items", shape: nil, options: nil)
             style.addSource(itemSource)
             CollectibleMapIcons.register(on: style)
-            let gold = CollectibleMapIcons.foundColor
+            let gold = palette.color(\.collectibleVisited)
             let haloLayer = MLNCircleStyleLayer(identifier: "replay-items-halo", source: itemSource)
             haloLayer.circleRadius = CollectibleMapIcons.zoomStops([9: 13, 12: 16, 15: 19, 17: 22])
             haloLayer.circleColor = NSExpression(forConstantValue: gold)
@@ -87,17 +91,19 @@ struct ReplayMapView: UIViewRepresentable {
             let headSource = MLNShapeSource(identifier: "replay-head", shape: nil, options: nil)
             style.addSource(headSource)
             let headHalo = MLNCircleStyleLayer(identifier: "replay-head-halo", source: headSource)
-            headHalo.circleRadius = NSExpression(forConstantValue: 18)
-            headHalo.circleColor = NSExpression(forConstantValue: accent.withAlphaComponent(0.25))
+            headHalo.circleRadius = CollectibleMapIcons.zoomStops([9: 9, 15: 16])
+            headHalo.circleColor = NSExpression(forConstantValue: position)
+            headHalo.circleOpacity = NSExpression(forConstantValue: 0.18)
             style.addLayer(headHalo)
             let headLayer = MLNCircleStyleLayer(identifier: "replay-head-circle", source: headSource)
-            headLayer.circleRadius = NSExpression(forConstantValue: 8)
-            headLayer.circleColor = NSExpression(forConstantValue: accent)
-            headLayer.circleStrokeColor = NSExpression(forConstantValue: outline)
-            headLayer.circleStrokeWidth = NSExpression(forConstantValue: 3)
+            headLayer.circleRadius = CollectibleMapIcons.zoomStops([9: 4, 15: 7])
+            headLayer.circleColor = NSExpression(forConstantValue: palette.color(\.positionCore))
+            headLayer.circleStrokeColor = NSExpression(forConstantValue: position)
+            headLayer.circleStrokeWidth = NSExpression(forConstantValue: 2)
             style.addLayer(headLayer)
 
             traveled = traveledSource
+            flowlines = flowlineSource
             head = headSource
             items = itemSource
 
@@ -112,7 +118,7 @@ struct ReplayMapView: UIViewRepresentable {
         }
 
         func update(map: MLNMapView, currentMs: Double, revealed: [ReplayReveal]) {
-            guard let traveled, let head, let items else {
+            guard let traveled, let head, let items, let flowlines else {
                 pending = (currentMs, revealed)
                 return
             }
@@ -124,6 +130,16 @@ struct ReplayMapView: UIViewRepresentable {
                 head.shape = point
             } else {
                 head.shape = nil
+            }
+            let segments = revealed.filter { $0.kind == .flowline && $0.path.count >= 2 }
+            if segments.count != lastFlowlineCount {
+                lastFlowlineCount = segments.count
+                flowlines.shape = MLNShapeCollectionFeature(shapes: segments.map { reveal in
+                    let coords = reveal.path.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                    let line = MLNPolylineFeature(coordinates: coords, count: UInt(coords.count))
+                    line.attributes = ["completed": true]
+                    return line
+                })
             }
             let located = revealed.filter { $0.coordinate != nil }
             if located.count != lastItemCount {

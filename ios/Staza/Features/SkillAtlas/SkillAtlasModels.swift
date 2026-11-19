@@ -7,7 +7,10 @@ struct SkillAtlasView_: Decodable, Equatable, Sendable {
         let progress: Double
     }
 
-    struct Grant: Decodable, Equatable, Sendable { let label: String }
+    struct Grant: Decodable, Equatable, Sendable {
+        let type: String?
+        let label: String
+    }
 
     struct Requirement: Decodable, Equatable, Sendable {
         let label: String
@@ -21,6 +24,30 @@ struct SkillAtlasView_: Decodable, Equatable, Sendable {
         let row: Double
     }
 
+    enum Tier: Decodable, Equatable, Sendable {
+        case level(Int)
+        case prestige
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let level = try? container.decode(Int.self) {
+                self = .level(level)
+            } else {
+                self = .prestige
+            }
+        }
+
+        var glyph: String {
+            switch self {
+            case .level(1): "I"
+            case .level(2): "II"
+            case .level(3): "III"
+            case .level(let value): "\(value)"
+            case .prestige: "★"
+            }
+        }
+    }
+
     struct Node: Decodable, Equatable, Identifiable, Sendable {
         enum State: String, Decodable, Sendable {
             case locked, unlockable, unlocked
@@ -32,6 +59,7 @@ struct SkillAtlasView_: Decodable, Equatable, Sendable {
         let description: String
         let sport: String
         let branch: String
+        let tier: Tier?
         let cost: Int
         let premium: Bool
         let grant: Grant

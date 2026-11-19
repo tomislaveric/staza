@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { STAZA_DARK_PALETTE } from "./basemapTheme.js";
+import { STAZA_MAP_PALETTE } from "./mapPalette.js";
 import { THEMED_STYLE_PATH, createThemedStyleLoader, getBasemapConfig } from "./basemap.js";
 
 const PROVIDER_URL = "https://tiles.example/styles/liberty";
@@ -17,6 +18,10 @@ const okFetch = () => vi.fn().mockResolvedValue({ ok: true, status: 200, json: a
 describe("getBasemapConfig", () => {
   it("points clients at the Staza-themed style on the requesting origin", () => {
     expect(getBasemapConfig("https://staza.example").styleUrl).toBe(`https://staza.example${THEMED_STYLE_PATH}`);
+  });
+
+  it("serves the shared overlay palette so native maps match the web", () => {
+    expect(getBasemapConfig("https://staza.example").palette).toEqual(STAZA_MAP_PALETTE);
   });
 });
 

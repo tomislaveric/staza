@@ -59,7 +59,8 @@ struct WorldView: View {
                     tracking: $tracking,
                     bottomInset: sheetHeight,
                     focus: focus(model),
-                    onLocationDenied: { locationDenied = $0 }
+                    onLocationDenied: { locationDenied = $0 },
+                    palette: basemap.mapPalette
                 )
                 .ignoresSafeArea(edges: .top)
                 .overlay(alignment: .topTrailing) { locateButton.padding(StazaSpacing.md) }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HomeAchievements, HomeNextAction, HomeOnboarding, HomePage, HomeRecentActivity, homeNextAction, homeViewModel } from "./home-page.js";
+import { HomeAchievements, HomeOnboarding, HomePage, HomeRecentActivity, HomeTodos, homeTodos, homeViewModel } from "./home-page.js";
 
 describe("Home data transformation", () => {
   const progress = { totalXp: 700, level: 4, currentLevelXp: 100, nextLevelXp: 400, progressToNextLevel: .25 };
@@ -39,37 +39,76 @@ describe("Home data transformation", () => {
   });
 });
 
-describe("Home next action", () => {
-  it("prioritises Skill Points, active quests, then exploration", () => {
-    const quest = (state) => ({ title: "Q", chainTitle: "C", xp: 100, state });
-    expect(homeNextAction({ skillPoints: 2, authoredQuests: [quest("active")] }).id).toBe("spend-skill-points");
-    expect(homeNextAction({ authoredQuests: [quest("locked"), quest("active")] }).id).toBe("active-quest");
-    expect(homeNextAction({ authoredQuests: [{ ...quest("active"), lastFailure: { attemptCount: 1 } }] }).body).toContain("fell short");
-    expect(homeNextAction({ instances: [{ status: "active", title: "E" }] })).toMatchObject({ id: "active-exploration", target: "world" });
-    expect(homeNextAction({}).target).toBe("world");
-    expect(HomeNextAction(homeNextAction({ skillPoints: 1 }))).toContain('data-home-action-target="skill-tree"');
+describe("Home to-do list", () => {
+  const quest = (id, state = "active") => ({ id, title: `Quest ${id}`, description: "One ride.", difficulty: "easy", xp: 100, state });
+  const exploration = { id: "e1", status: "active", title: "Lake loop", description: "Collect 3 targets.", rewardXp: 250 };
+
+  it("orders Skill Points, capped active quests, explorations, and hides the fallback", () => {
+    const quests = [quest("1"), quest("2", "locked"), quest("3"), quest("4"), quest("5")];
+    const todos = homeTodos({ skillPoints: 2, authoredQuests: quests, instances: [exploration, { ...exploration, id: "e2", status: "completed" }] });
+    expect(todos.map((todo) => todo.id)).toEqual(["spend-skill-points", "quest:1", "quest:3", "quest:4", "view-all-quests", "exploration:e1"]);
+    expect(todos[0]).toMatchObject({ title: "Spend 2 Skill Points", target: "skill-tree" });
+    expect(todos[4]).toMatchObject({ title: "View all quests (4)", target: "progress" });
+    expect(homeTodos({ skillPoints: 1 })[0].title).toBe("Spend 1 Skill Point");
+  });
+
+  it("falls back to planning an exploration only when nothing is active", () => {
+    expect(homeTodos({}).map((todo) => todo.id)).toEqual(["plan-exploration"]);
+    expect(homeTodos({ authoredQuests: [quest("1")] }).map((todo) => todo.id)).toEqual(["quest:1"]);
+    expect(homeTodos({ instances: [exploration] }).map((todo) => todo.id)).toEqual(["exploration:e1"]);
+  });
+
+  it("renders every to-do as a navigation button with a chevron and escapes content", () => {
+    const html = HomeTodos(homeTodos({
+      skillPoints: 1,
+      authoredQuests: [{ ...quest("1"), title: "<b>Ride</b>" }],
+      instances: [{ ...exploration, description: "<img>" }]
+    }));
+    expect(html).toContain("data-home-todos");
+    expect(html).toContain('<span class="quest-pill is-accent">1 SP</span>');
+    expect(html).toContain('data-home-action-target="skill-tree"');
+    expect(html).toContain('class="quest-task is-action authored-quest is-active" data-home-action-target="progress" data-authored-quest="1"');
+    expect(html).toContain('data-home-action-target="world" data-home-todo="exploration:e1"');
+    expect(html).toContain('<span class="quest-pill is-muted">Exploration</span><span class="quest-pill is-accent">+250 XP</span>');
+    expect(html).toContain("&lt;b&gt;Ride&lt;/b&gt;");
+    expect(html).not.toContain("<img>");
+    expect(html.match(/class="quest-task-chevron"/g)).toHaveLength(3);
+  });
+
+  it("replaces the NEXT card on Home once there is an activity", () => {
+    const model = {
+      progress: { totalXp: 0, level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0, remainingXp: 100 },
+      stats: { totalXp: 0, distanceMeters: 0, totalCollected: 0 },
+      latest: { id: "a", startedAt: "2026-11-01T08:00:00.000Z", distanceMeters: 1000, xpEarned: 1, collectedCount: 0, events: [] },
+      activeQuests: [],
+      achievements: { skillPoints: 0, authoredQuests: [quest("1")] }
+    };
+    const html = HomePage(model);
+    expect(html).toContain("data-home-todos");
+    expect(html).not.toContain("home-next-action\"");
+    expect(html).not.toContain("NEXT QUEST");
+    expect(html).not.toContain("data-home-onboarding");
   });
 
   it("shows onboarding instead of a next action before the first activity", () => {
     const model = { progress: { totalXp: 0, level: 1, currentLevelXp: 0, nextLevelXp: 100, progressToNextLevel: 0, remainingXp: 100 }, stats: { totalXp: 0, distanceMeters: 0, totalCollected: 0 }, latest: undefined, activeQuests: [] };
     const html = HomePage(model);
     expect(html).toContain("data-home-onboarding");
-    expect(html).not.toContain("data-home-next-action");
+    expect(html).not.toContain("data-home-todos");
     expect(HomeOnboarding()).toContain('data-home-action-target="add-activity"');
     expect(html).not.toContain("EXPLORER");
   });
 });
 
 describe("Home achievements", () => {
-  it("shows unlocked skills, badges and the next authored quest", () => {
+  it("shows unlocked skills and badges without a separate next quest card", () => {
     const html = HomeAchievements({
       skillPoints: 2, totalNodes: 79, unlocked: [{ id: "endurance-i", name: "Endurance I" }],
-      badges: [{ id: "b", label: "Trailblazer" }],
-      nextQuest: { chainTitle: "Distance", step: 1, totalSteps: 3, title: "Ride 30 km", description: "One ride.", xp: 90 }
+      badges: [{ id: "b", label: "Trailblazer" }]
     });
     expect(html).toContain("<em> / 79</em>");
     expect(html).toContain("Trailblazer");
-    expect(html).toContain("Ride 30 km");
+    expect(html).not.toContain("NEXT QUEST");
   });
 
   it("shows Skill Points only when there are some to spend, plus the summary", () => {

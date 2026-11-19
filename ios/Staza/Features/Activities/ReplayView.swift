@@ -27,7 +27,7 @@ struct ReplayView: View {
         let shape = RoundedRectangle(cornerRadius: StazaRadius.panel, style: .continuous)
         ZStack(alignment: .bottom) {
             if let basemap = model.basemap, let url = URL(string: basemap.styleUrl) {
-                ReplayMapView(styleURL: url, timeline: model.timeline, currentMs: model.currentMs, revealed: model.revealed)
+                ReplayMapView(styleURL: url, timeline: model.timeline, currentMs: model.currentMs, revealed: model.revealed, palette: basemap.mapPalette)
                     .accessibilityIdentifier("replayMap")
             } else {
                 StazaColor.map.overlay {

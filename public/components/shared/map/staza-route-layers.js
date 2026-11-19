@@ -1,3 +1,4 @@
+import { STAZA_MAP_PALETTE } from "./staza-map-palette.js";
 /**
  * Shared Staza route line vocabulary. A route reads as one deliberate Staza layer over any
  * basemap: a soft glow, a dark casing, and the accent line on top. The factory is
@@ -5,8 +6,8 @@
  * route share styling conventions while staying visually distinct.
  */
 
-const QUEST_ACCENT = "#e8b80a";
-const CASING_COLOR = "#0b0c0f";
+const QUEST_ACCENT = STAZA_MAP_PALETTE.questRoute;
+const CASING_COLOR = STAZA_MAP_PALETTE.casing;
 
 const routeWidth = (scale) => ["interpolate", ["linear"], ["zoom"], 8, 2 * scale, 12, 3.5 * scale, 16, 6 * scale];
 
@@ -47,7 +48,7 @@ export const stazaRouteLayers = (sourceId, {
  * A subdued route used as context for the full historical activity: visible but secondary,
  * so the travelled segment and current position lead. Casing plus a muted line only.
  */
-export const stazaSubduedRouteLayers = (sourceId, { color = "#4a4f59", opacity = 0.5 } = {}) => [
+export const stazaSubduedRouteLayers = (sourceId, { color = STAZA_MAP_PALETTE.activityRouteSubdued, opacity = 0.5 } = {}) => [
   routeLine(sourceId, "casing", {
     "line-color": CASING_COLOR,
     "line-opacity": 0.5,

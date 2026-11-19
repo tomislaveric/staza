@@ -89,7 +89,7 @@ listed in `WEBAUTHN_EXTRA_ORIGINS`.
 
 | Method | Path | Auth | Request | Response |
 | --- | --- | --- | --- | --- |
-| GET | `/api/world/basemap` | bearer | – | `{ styleUrl, attribution }` (see MapLibre) |
+| GET | `/api/world/basemap` | bearer | – | `{ styleUrl, attribution, palette }` (see MapLibre) |
 | GET | `/api/world/basemap/style.json` | public | – | Staza-themed MapLibre style JSON |
 | GET | `/api/world?bbox=west,south,east,north` | bearer | Optional `bbox`, `collectibleBbox`, `skipCollectibles=1` | Viewport collectibles, stats, and Fartleks |
 | GET | `/api/world/quest-targets` | bearer | Repeated `collectibleId` and/or `flowlineId` query fields | `{ collectibles, flowlines }` |
@@ -303,10 +303,19 @@ No identifiers are committed; **placeholders to replace in deployment config**:
 
 ## MapLibre Native
 
-`GET /api/world/basemap` (bearer) returns `{ styleUrl, attribution }`. The
+`GET /api/world/basemap` (bearer) returns `{ styleUrl, attribution, palette }`. The
 `styleUrl` is the absolute URL of `GET /api/world/basemap/style.json` on the
 requesting origin. That endpoint is public, so MapLibre can load it without
 credentials.
+
+`palette` holds the `#rrggbb` overlay colors drawn on top of the basemap
+(`src/mapPalette.ts`): `casing`, `questRoute`, `alternateRoute`, `activityRoute`,
+`activityRouteSubdued`, `position`, `positionCore`, `flowline`, `flowlineCompleted`,
+`highlight`, `highlightSelected`, `collectibleVisited`, `collectibleUnvisited` and
+`collectibleUnvisitedRing`. The web uses the identical copy in
+`public/components/shared/map/staza-map-palette.js`, and a test keeps the two equal.
+Native clients draw routes, Flowlines and markers with these colors and fall back
+to the same values for missing or invalid entries.
 
 The server fetches the provider style, applies the Staza dark theme
 (`src/basemapTheme.ts`), makes the sprite, glyph and source URLs absolute, and

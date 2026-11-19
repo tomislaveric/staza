@@ -38,4 +38,18 @@ final class QuestListModel {
         let unlocked = chains.filter { $0.quests.contains { $0.state != .locked } }
         return unlocked + chains.filter { chain in !unlocked.contains(chain) }
     }
+
+    /// Open quests across all chains, shown first.
+    var activeQuests: [AuthoredQuest] {
+        chains.flatMap(\.quests).filter { $0.state == .active }
+    }
+
+    /// Chains that still have locked quests ahead; finished and active steps live in their own sections.
+    var upcomingChains: [QuestChain] {
+        chains.filter { chain in chain.quests.contains { $0.state == .locked } }
+    }
+
+    var finishedQuests: [AuthoredQuest] {
+        chains.flatMap(\.quests).filter { $0.state == .completed }
+    }
 }

@@ -13,6 +13,7 @@ import {
 import { createStazaMap, DEFAULT_CENTER, DEFAULT_ZOOM } from "../shared/map/staza-map.js";
 import { stazaRouteLayers, stazaSubduedRouteLayers } from "../shared/map/staza-route-layers.js";
 import { boundsToParameter, pointsToBounds, readBounds, routeToGeoJson } from "../shared/map/staza-map-utils.js";
+import { STAZA_MAP_PALETTE } from "../shared/map/staza-map-palette.js";
 
 /** Width reserved on the right for the detail panel so framing never hides the subject. */
 const DETAIL_PANEL_INSET = 368;
@@ -58,7 +59,7 @@ const ALTERNATES_SOURCE = "staza-exploration-alternates";
 export const ALTERNATES_SOURCE_ID = ALTERNATES_SOURCE;
 
 /** Unselected exploration route proposals: muted context under the selected route. */
-export const alternateRouteLayers = () => stazaSubduedRouteLayers(ALTERNATES_SOURCE, { color: "#c9b46a", opacity: 0.55 });
+export const alternateRouteLayers = () => stazaSubduedRouteLayers(ALTERNATES_SOURCE, { color: STAZA_MAP_PALETTE.alternateRoute, opacity: 0.55 });
 
 /** One LineString feature per unselected proposal, tagged with its proposal id for selection. */
 export const alternateRoutesToGeoJson = (routes = []) => ({

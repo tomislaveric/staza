@@ -1,4 +1,5 @@
 import { EMPTY_FEATURE_COLLECTION } from "./staza-collectible-features.js";
+import { STAZA_MAP_PALETTE } from "./staza-map-palette.js";
 
 export const COLLECTIBLE_SOURCE = "staza-collectibles";
 export const COLLECTIBLE_LAYER = "staza-collectibles";
@@ -21,10 +22,10 @@ export const COLLECTIBLE_CATEGORY_ICONS = [
   ["collectible-waterfall-muted", "/assets/collectible-waterfall-muted.svg"]
 ];
 
-const VISITED_FILL = "#e8b80a";
-const UNVISITED_FILL = "#315b68";
-const UNVISITED_RING = "#7fbad0";
-const SELECTED_ACCENT = "#e8b80a";
+const VISITED_FILL = STAZA_MAP_PALETTE.collectibleVisited;
+const UNVISITED_FILL = STAZA_MAP_PALETTE.collectibleUnvisited;
+const UNVISITED_RING = STAZA_MAP_PALETTE.collectibleUnvisitedRing;
+const SELECTED_ACCENT = STAZA_MAP_PALETTE.highlight;
 
 const SELECTED = ["==", ["get", "selected"], true];
 const QUEST_TARGET = ["==", ["get", "questTarget"], true];
@@ -77,7 +78,7 @@ const collectibleLayer = () => ({
     "circle-color": ["case", FILLED, VISITED_FILL, UNVISITED_FILL],
     "circle-opacity": questOpacity(["case", FILLED, 1, 0.88]),
     "circle-stroke-width": zoomSize(STROKE_STOPS),
-    "circle-stroke-color": ["case", FILLED, "#0b0c0f", UNVISITED_RING],
+    "circle-stroke-color": ["case", FILLED, STAZA_MAP_PALETTE.casing, UNVISITED_RING],
     "circle-stroke-opacity": questOpacity(0.95)
   }
 });
@@ -125,10 +126,10 @@ const selectedGlowLayer = () => ({
   filter: SELECTED_OR_QUEST_TARGET,
   paint: {
     "circle-radius": zoomSize(SELECTED_GLOW_STOPS, SELECTED, 1.35),
-    "circle-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "circle-color": ["case", SELECTED, STAZA_MAP_PALETTE.highlightSelected, SELECTED_ACCENT],
     "circle-opacity": ["case", SELECTED, 0.2, 0.08],
     "circle-stroke-width": 1,
-    "circle-stroke-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "circle-stroke-color": ["case", SELECTED, STAZA_MAP_PALETTE.highlightSelected, SELECTED_ACCENT],
     "circle-stroke-opacity": ["case", SELECTED, 0.8, 0.28]
   }
 });
@@ -140,10 +141,10 @@ const selectedRingLayer = () => ({
   filter: SELECTED_OR_QUEST_TARGET,
   paint: {
     "circle-radius": zoomSize(SELECTED_RING_STOPS, SELECTED, 1.25),
-    "circle-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "circle-color": ["case", SELECTED, STAZA_MAP_PALETTE.highlightSelected, SELECTED_ACCENT],
     "circle-opacity": ["case", SELECTED, 0.28, 0.14],
     "circle-stroke-width": ["case", SELECTED, 3, 2],
-    "circle-stroke-color": ["case", SELECTED, "#fff1a8", SELECTED_ACCENT],
+    "circle-stroke-color": ["case", SELECTED, STAZA_MAP_PALETTE.highlightSelected, SELECTED_ACCENT],
     "circle-stroke-opacity": 0.95
   }
 });

@@ -26,4 +26,26 @@
     <string name="session_signed_in">Signed in</string>
     <string name="session_signed_in_as">Signed in as %1$s</string>
     <string name="session_unknown">Checking session…</string>
+    <string name="atlas_loading">Loading Skill Atlas…</string>
+    <string name="atlas_error">Couldn\'t load the Skill Atlas.</string>
+    <string name="atlas_retry">Try again</string>
+    <string name="atlas_points">%1$d skill points available</string>
+    <string name="atlas_earned">Earned</string>
+    <string name="atlas_spent">Spent</string>
+    <string name="atlas_next_point">Next skill point at level %1$d (%2$s XP to go)</string>
+    <string name="atlas_next_up">Next up</string>
+    <string name="atlas_lane_flow">FLOW</string>
+    <string name="atlas_lane_speed">SPEED</string>
+    <string name="atlas_lane_summit">SUMMIT</string>
+    <string name="atlas_lane_explore">EXPLORE</string>
+    <string name="atlas_lane_endurance">ENDURANCE</string>
+    <string name="atlas_cost">Cost: %1$d skill points</string>
+    <string name="atlas_sp">%1$d SP</string>
+    <string name="atlas_requires">Requires: %1$s</string>
+    <string name="atlas_requires_in_sport">Requires: %1$s · %2$s</string>
+    <string name="atlas_unlock">Unlock</string>
+    <string name="atlas_state_unlocked">Unlocked</string>
+    <string name="atlas_state_unlockable">Ready</string>
+    <string name="atlas_state_locked">Locked</string>
+    <string name="atlas_state_premium">Premium</string>
 </resources>
