@@ -141,10 +141,10 @@ test.describe("World map", () => {
     await openApp(page, "/world");
     const shell = page.locator(".world-map-shell");
     await expect(shell).toBeVisible({ timeout: 15_000 });
-    const zoomIn = shell.getByRole("button", { name: "Zoom in" });
+    const zoomIn = shell.getByRole("button", { name: "Zoom in", exact: true });
     await expect(zoomIn).toBeVisible({ timeout: 15_000 });
 
-    const controls = [zoomIn, shell.getByRole("button", { name: "Zoom out" }), shell.locator("[data-world-locate]"), shell.locator("[data-world-explore]")];
+    const controls = [zoomIn, shell.getByRole("button", { name: "Zoom out", exact: true }), shell.locator("[data-world-locate]"), shell.locator("[data-world-explore]")];
     // Bring the whole map into view, then confirm no fixed UI or map chrome covers the controls.
     await shell.evaluate((element) => element.scrollIntoView({ block: "end" }));
     await page.waitForTimeout(300);
@@ -177,7 +177,7 @@ test.describe("Activity replay map", () => {
     await page.locator(".activity-tabs").waitFor();
     const replay = page.locator(".activity-replay-map");
     test.skip(await replay.count() === 0, "The activity has no replay.");
-    const zoomIn = replay.getByRole("button", { name: "Zoom in" });
+    const zoomIn = replay.getByRole("button", { name: "Zoom in", exact: true });
     await expect(zoomIn).toBeVisible({ timeout: 15_000 });
     // Starting playback collapses the collectibles panel into the top-right Report button.
     await replay.getByRole("button", { name: "Play replay" }).click();

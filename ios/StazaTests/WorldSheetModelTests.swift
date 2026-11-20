@@ -7,22 +7,35 @@ final class WorldSheetModelTests: XCTestCase {
 
     func testDetailReturnsToTheModeItWasOpenedFrom() {
         let sheet = WorldSheetModel()
-        sheet.startExplore()
+        sheet.startPlanner()
         sheet.showDetail(selection)
         sheet.showDetail(.flowline(WorldFlowline(id: "f1", name: "Flow", geometry: .init(coordinates: []), completed: false)))
         XCTAssertEqual(sheet.selection?.id, "flowline:f1")
         sheet.closeDetail()
-        XCTAssertEqual(sheet.mode, .explore)
+        XCTAssertEqual(sheet.mode, .planner)
     }
 
-    func testEndingExploreUnderADetailReturnsToBrowse() {
+    func testEndingPlannerUnderADetailReturnsToBrowse() {
         let sheet = WorldSheetModel()
-        sheet.startExplore()
+        sheet.startPlanner()
         sheet.showDetail(selection)
-        sheet.endExplore()
+        sheet.endPlanner()
         XCTAssertEqual(sheet.mode, .detail(selection))
         sheet.closeDetail()
         XCTAssertEqual(sheet.mode, .browse)
+    }
+
+    func testDiscoveriesReturnFromDetailAndNeverReplaceThePlanner() {
+        let sheet = WorldSheetModel()
+        sheet.showDiscoveries()
+        sheet.showDetail(selection)
+        sheet.closeDetail()
+        XCTAssertEqual(sheet.mode, .discoveries)
+        sheet.closeDiscoveries()
+        XCTAssertEqual(sheet.mode, .browse)
+        sheet.startPlanner()
+        sheet.showDiscoveries()
+        XCTAssertEqual(sheet.mode, .planner)
     }
 
     func testDetailExpandsCollapsedSheetAndRevealKeepsMapVisible() {

@@ -33,6 +33,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [E2 — iOS app screens and features](features/e2-ios-app-screens-and-features/README.md) — native SwiftUI screens for sign-in, Home, Activities with replay, World and Explore, Skill Atlas, Progress, Profile, and `.fit`/Strava import.
 - [E2 iOS audit remediation](features/e2-ios-audit-remediation/README.md) — fix the E2 iOS audit findings: localization, import robustness, native Strava OAuth CSRF, cross-tab refresh, streaming uploads, tests, and docs.
 - [Explore Area v2 polish](features/explore-area-v2-polish/README.md) — constrain routes to the selected area, reuse the last Locate Me position, and add arbitrary map points as route-only destinations.
+- [Explore reveal and manual planner](features/explore-reveal-and-manual-planner/README.md)
+  — Explore this area reveals the area's Flowlines as a game moment, and a separate
+  manual planner connects the chosen Flowlines and collectibles into a route.
 - [Explore this Area](features/explore-this-area/README.md) — route-first exploration:
   choose start and ride length, pick one of several generated routes from the frozen map
   area, tweak its targets, and confirm it as a single exploration.

@@ -49,11 +49,18 @@ const plural = (count: number, singular: string, pluralForm: string) => `${count
 /** Human title and summary of an exploration, derived from its targets. */
 export const describeExploration = (
   targets: QuestRouteTarget[],
-  flowline?: { name: string }
+  flowlines: { name: string }[] = []
 ): { title: string; description: string } => {
-  if (flowline) {
+  if (flowlines.length > 0) {
     const extra = targets.length > 0 ? ` and visit ${plural(targets.length, "destination", "destinations")}` : "";
-    return { title: `Exploration: ${flowline.name}`, description: `Ride the Flowline ${flowline.name} in full${extra}.` };
+    if (flowlines.length === 1) {
+      return { title: `Exploration: ${flowlines[0].name}`, description: `Ride the Flowline ${flowlines[0].name} in full${extra}.` };
+    }
+    const names = flowlines.map((flowline) => flowline.name);
+    return {
+      title: `Exploration: ${names[0]} +${names.length - 1}`,
+      description: `Ride ${plural(flowlines.length, "Flowline", "Flowlines")} in full${extra}.`
+    };
   }
   if (targets.length === 0) return { title: "Exploration: Area route", description: "A route through the explored area." };
   const names = targets.map((target) => target.name);

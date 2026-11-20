@@ -46,12 +46,14 @@ describePersistence("FlowlineRevealRepository", () => {
     expect(sources.rows).toEqual([{ source: "explore" }]);
   });
 
-  it("lists only revealed Flowlines in the viewport and counts the hidden ones", async () => {
-    expect(await repository!.countHiddenWithinBounds(playerId, bounds)).toBe(2);
+  it("lists revealed Flowlines in the viewport, counts them and lists hidden candidates without geometry", async () => {
+    expect((await repository!.listHiddenCandidatesWithinBounds(playerId, bounds)).map((row) => row.id).sort()).toEqual(["flow-a", "flow-b"]);
     await repository!.reveal(playerId, ["flow-b", "flow-outside"], "explore");
     const listed = await repository!.listRevealedWithinBoundsLimited(playerId, bounds);
     expect(listed).toMatchObject({ truncated: false, fartleks: [{ id: "flow-b" }] });
-    expect(await repository!.countHiddenWithinBounds(playerId, bounds)).toBe(1);
-    expect(await repository!.countHiddenWithinBounds(otherPlayerId, bounds)).toBe(2);
+    expect(await repository!.countRevealedWithinBounds(playerId, bounds)).toBe(1);
+    expect(await repository!.listHiddenCandidatesWithinBounds(playerId, bounds)).toEqual([{ id: "flow-a", flowScore: 80 }]);
+    expect(await repository!.listHiddenCandidatesWithinBounds(otherPlayerId, bounds)).toHaveLength(2);
+    expect((await repository!.listByIds(["flow-b", "missing"])).map((row) => row.id)).toEqual(["flow-b"]);
   });
 });

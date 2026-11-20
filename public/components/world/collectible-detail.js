@@ -77,7 +77,7 @@ export const CollectibleDetail = (collectible, relatedQuests = [], { distanceMet
         </div>
       ` : ""}
       ${hasPosition ? `
-        <button type="button" class="collectible-detail-route" data-collectible-route="${escapeHtml(collectible.id)}">Route to</button>
+        <button type="button" class="collectible-detail-route" data-collectible-route="${escapeHtml(collectible.id)}">Add to route</button>
       ` : ""}
     </section>
   `;

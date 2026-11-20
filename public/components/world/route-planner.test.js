@@ -1,0 +1,53 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildPlanRequest, collectibleStop, createPlannerState, flowlineStop, moveStop, orderStops, planArea, toggleStop, waypointStop
+} from "./route-planner.js";
+
+const flowline = flowlineStop({ id: "f1", name: "Rheintal", geometry: { coordinates: [[9, 47], [9.1, 47.2]] } });
+const peak = collectibleStop({ id: "peak-1", name: "Peak", type: "peak", latitude: 47.5, longitude: 9.5 });
+const point = waypointStop({ lat: 47.1, lon: 9.05 });
+
+describe("route planner stops", () => {
+  it("toggles stops and enforces the per-kind limits", () => {
+    const limits = { maxRouteTargets: 1, maxRouteWaypoints: 1, maxRouteFlowlines: 1 };
+    const { stops } = toggleStop([flowline], peak, limits);
+    expect(stops).toEqual([flowline, peak]);
+    expect(toggleStop(stops, peak, limits).stops).toEqual([flowline]);
+    expect(toggleStop(stops, flowlineStop({ id: "f2", name: "Other" }), limits))
+      .toEqual({ stops, error: "A route can include at most 1 Flowlines." });
+  });
+
+  it("applies the server's routed order and keeps unmentioned stops last", () => {
+    expect(orderStops([flowline, peak, point], ["waypoint:47.100000,9.050000", "flowline:f1"])).toEqual([point, flowline, peak]);
+    expect(moveStop([flowline, peak], 1, -1)).toEqual([peak, flowline]);
+    expect(moveStop([flowline, peak], 0, -1)).toEqual([flowline, peak]);
+  });
+});
+
+describe("buildPlanRequest", () => {
+  it("requires a start, an end for point-to-point and at least one stop", () => {
+    expect(buildPlanRequest(createPlannerState()).error).toBe("Choose a start on the map.");
+    const start = { lat: 47, lon: 9 };
+    expect(buildPlanRequest(createPlannerState({ start })).error).toBe("Add a Flowline, collectible or map point first.");
+    expect(buildPlanRequest({ ...createPlannerState({ start, stops: [peak] }), routeType: "point_to_point" }).error)
+      .toBe("Choose an end point on the map.");
+  });
+
+  it("sends exactly the chosen stops inside a padded area around them", () => {
+    const state = { ...createPlannerState({ start: { lat: 47, lon: 9 }, stops: [flowline, peak, point] }), keepOrder: true };
+    const { body } = buildPlanRequest(state);
+    expect(body).toEqual({
+      area: planArea(state),
+      sport: "cycling",
+      start: { lat: 47, lon: 9 },
+      routeType: "round_trip",
+      keepOrder: true,
+      stops: [{ kind: "flowline", id: "f1" }, { kind: "collectible", id: "peak-1" }, { kind: "waypoint", lat: 47.1, lon: 9.05 }]
+    });
+    const [west, south, east, north] = body.area.bbox.split(",").map(Number);
+    expect(west).toBeLessThan(9);
+    expect(south).toBeLessThan(47);
+    expect(east).toBeGreaterThan(9.5);
+    expect(north).toBeGreaterThan(47.5);
+  });
+});

@@ -8,11 +8,17 @@ final class WorldModel {
     private(set) var basemapFailed = false
     private(set) var collectibles: [WorldCollectible] = []
     private(set) var flowlines: [WorldFlowline] = []
-    private(set) var hiddenFlowlineCount = 0
+    private(set) var areaStatus: AreaStatus?
+    /// The Explore card: running, a result, or a failure. `nil` when dismissed.
+    private(set) var exploreState: ExploreState?
+    /// Newly revealed Flowlines not drawn yet while the reveal is staggered.
+    private(set) var revealing: Set<String> = []
     private(set) var questTargets = QuestTargets.empty
     private(set) var truncated = false
     private(set) var viewportFailed = false
     private(set) var bounds: WorldBounds?
+    /// The area `areaStatus` describes; Explore reveals exactly this area so the CTA and the outcome agree.
+    private var areaBounds: WorldBounds?
     private(set) var stats: WorldStats?
     private(set) var instances: [QuestInstance] = []
     private(set) var capabilities = WorldCapabilities.empty
@@ -39,7 +45,12 @@ final class WorldModel {
     }
 
     var visibleCollectibles: [WorldCollectible] { WorldFilters.collectibles(collectibles, selected: selectedFilters) }
-    var visibleFlowlines: [WorldFlowline] { WorldFilters.flowlines(flowlines, selected: selectedFilters) }
+    var visibleFlowlines: [WorldFlowline] {
+        WorldFilters.flowlines(flowlines, selected: selectedFilters).filter { !revealing.contains($0.id) }
+    }
+
+    var exploreAction: ExploreAction { ExploreAction(areaStatus) }
+    var isExploring: Bool { exploreState == .exploring }
 
     /// Quest targets drawn on the map: the highlighted exploration's, else every active one's.
     var mapQuestTargets: QuestTargets { highlightedTargets ?? questTargets }
@@ -82,7 +93,8 @@ final class WorldModel {
             guard generation == viewportGeneration else { return }
             collectibles = viewport.collectibles ?? []
             flowlines = viewport.fartleks ?? []
-            hiddenFlowlineCount = viewport.hiddenFlowlineCount ?? 0
+            areaStatus = viewport.areaStatus
+            areaBounds = bounds
             truncated = viewport.truncated ?? false
             stats = viewport.stats
             viewportFailed = false
@@ -94,18 +106,60 @@ final class WorldModel {
         }
     }
 
-    /// Reloads the current viewport, e.g. after Explore this Area revealed Flowlines.
-    func reloadViewport() async {
-        guard let bounds else { return }
-        await loadViewport(bounds)
+    /// Explore this area: reveals the visible area's eligible Flowlines. Never plans a route.
+    func exploreArea(reduceMotion: Bool = false) async {
+        guard let bounds = areaBounds, !isExploring, exploreAction == .explore || exploreAction == .exploreNew else { return }
+        exploreState = .exploring
+        do {
+            let result: ExploreResult = try await api.post("/api/world/explore", body: ExploreRequest(bbox: bounds.queryValue))
+            if let status = areaStatus {
+                areaStatus = AreaStatus(exploreAllowed: status.exploreAllowed, knownFlowlines: result.knownCount, availableFlowlines: result.availableCount)
+            }
+            exploreState = .result(result)
+            await reveal(result.revealed, reduceMotion: reduceMotion)
+        } catch is CancellationError {
+            exploreState = nil
+        } catch {
+            exploreState = .failed(Self.message(error))
+        }
+    }
+
+    func dismissExplore() { exploreState = nil }
+
+    /// Adds newly revealed Flowlines and lets them appear one after another, at once with reduced motion.
+    private func reveal(_ revealed: [WorldFlowline], reduceMotion: Bool) async {
+        let known = Set(flowlines.map(\.id))
+        let fresh = revealed.filter { !known.contains($0.id) }
+        guard !fresh.isEmpty else { return }
+        if !reduceMotion { revealing.formUnion(fresh.map(\.id)) }
+        flowlines += fresh
+        guard !reduceMotion else { return }
+        for flowline in fresh {
+            revealing.remove(flowline.id)
+            try? await Task.sleep(for: .milliseconds(140))
+        }
+        revealing = []
+    }
+
+    private static func message(_ error: Error) -> String? {
+        if case APIError.server(_, let message, _) = error { return message }
+        return nil
+    }
+
+    func flowline(id: String) -> WorldFlowline? {
+        (mapQuestTargets.flowlines + questTargets.flowlines + flowlines).first { $0.id == id }
+    }
+
+    func collectible(id: String) -> WorldCollectible? {
+        (mapQuestTargets.collectibles + questTargets.collectibles + collectibles).first { $0.id == id }
     }
 
     func select(_ kind: WorldSelectionKind, id: String) {
         switch kind {
         case .collectible:
-            if let item = (mapQuestTargets.collectibles + questTargets.collectibles + collectibles).first(where: { $0.id == id }) { selection = .collectible(item) }
+            if let item = collectible(id: id) { selection = .collectible(item) }
         case .flowline:
-            if let item = (mapQuestTargets.flowlines + questTargets.flowlines + flowlines).first(where: { $0.id == id }) { selection = .flowline(item) }
+            if let item = flowline(id: id) { selection = .flowline(item) }
         }
     }
 
@@ -237,4 +291,11 @@ final class WorldModel {
         let collectibleCap = max(100 - uniqueFlowlines.count, 0)
         return (Array(uniqueCollectibles.prefix(collectibleCap)), Array(uniqueFlowlines.prefix(100)))
     }
+}
+
+enum ExploreState: Equatable, Sendable {
+    case exploring
+    case result(ExploreResult)
+    /// A failure, with the server's message when it sent one.
+    case failed(String?)
 }

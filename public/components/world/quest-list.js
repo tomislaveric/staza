@@ -1,6 +1,6 @@
 import { escapeHtml } from "../collected-list.js";
 import { CollectibleSwatch } from "./collectible-swatch.js";
-import { plannedRouteGpxUrl, plannedRouteSummary } from "./exploration-panel.js";
+import { plannedRouteGpxUrl, plannedRouteSummary } from "./route-format.js";
 
 const categoryNames = {
   peak: "peaks",
@@ -144,6 +144,6 @@ export const QuestList = (instances, pendingQuestId, selectedQuestKey, plannedRo
         selectedQuestKey,
         plannedRoutes.get(instance.id)
       )).join("")}</ol>`
-      : '<p class="default-quest-empty">Use Explore this Area on the map to pick targets, plan a route and start an exploration.</p>'}
+      : '<p class="default-quest-empty">Explore an area to reveal Flowlines, then plan a route to start an exploration.</p>'}
   </section>
 `;

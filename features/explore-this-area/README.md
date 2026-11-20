@@ -1,5 +1,13 @@
 # explore-this-area
 
+> **Superseded in part by
+> [explore-reveal-and-manual-planner](../explore-reveal-and-manual-planner/README.md).**
+> "Explore this area" no longer generates routes: it only reveals Flowlines of the
+> visible area (`POST /api/world/explore`). Routes are built in a separate manual
+> planner (`POST /api/explorations/plan`) from stops the player chooses; the generator
+> described here survives only as the optional **Suggest route** inside that planner and
+> no longer reveals Flowlines. Start Exploration / confirm is unchanged.
+
 ## Goal
 
 Replace the bbox-generated multi-quest suggestion flow with one route-first

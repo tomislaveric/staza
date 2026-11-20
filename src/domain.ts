@@ -1,3 +1,5 @@
+import type { FlowlineCharacter } from "./flowlineCharacter.js";
+import type { FlowlineAreaStatus } from "./flowlineReveal.js";
 export type CollectibleType = "coin" | "landmark" | "mountain_pass";
 export type CollectibleStatus = "published" | "archived";
 export type CollectibleCategory = "viewpoint" | "peak" | "castle" | "waterfall" | "place" | "mountain_pass";
@@ -169,6 +171,11 @@ export interface WorldFartlek {
   lengthMeters: number;
   /** Flow score (0..100); lets the World "high flow" filter work client-side. */
   flowScore?: number;
+  enduranceScore?: number;
+  exploreScore?: number;
+  roadQualityScore?: number;
+  /** Primary riding character and every character the Flowline is good for. */
+  character: FlowlineCharacter;
   status: FartlekStatus;
   source: FartlekSource;
   completed: boolean;
@@ -626,8 +633,8 @@ export interface QuestInput {
 export interface WorldViewportResponse extends WorldSnapshot {
   truncated: boolean;
   fartleks: WorldFartlek[];
-  /** Published Flowlines in the viewport the player has not revealed yet; their geometry is never sent. */
-  hiddenFlowlineCount: number;
+  /** Derived explored state of the viewport; hidden Flowline geometry is never sent. */
+  areaStatus: FlowlineAreaStatus;
 }
 
 export type JobState = "processing" | "awaiting_selection" | "rendering" | "succeeded" | "failed";

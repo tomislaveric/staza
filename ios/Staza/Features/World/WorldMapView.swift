@@ -44,6 +44,8 @@ struct WorldMapView: UIViewRepresentable {
     var selectedCollectibleId: String? = nil
     let onViewportChange: (WorldBounds) -> Void
     let onSelect: (WorldSelectionKind, String) -> Void
+    /// A tap on the map that hit no collectible or Flowline.
+    var onMapTap: (GeoPoint) -> Void = { _ in }
     var onUserLocation: (GeoPoint?) -> Void = { _ in }
     @Binding var tracking: WorldTracking
     /// Height covered by the bottom sheet; the map keeps its focus above it.
@@ -79,6 +81,7 @@ struct WorldMapView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onViewportChange = onViewportChange
         coordinator.onSelect = onSelect
+        coordinator.onMapTap = onMapTap
         coordinator.onUserLocation = onUserLocation
         coordinator.onTrackingChange = { tracking = $0 }
         coordinator.onLocationDenied = onLocationDenied
@@ -105,6 +108,7 @@ struct WorldMapView: UIViewRepresentable {
         init(palette: MapPalette) { self.palette = palette }
         private var focus: [CLLocationCoordinate2D] = []
         var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
+        var onMapTap: (GeoPoint) -> Void = { _ in }
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
         var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selectedId: String?) = ([], [], .empty, nil)
 
@@ -225,6 +229,8 @@ struct WorldMapView: UIViewRepresentable {
                     return
                 }
             }
+            let coordinate = map.convert(point, toCoordinateFrom: map)
+            onMapTap(GeoPoint(lat: coordinate.latitude, lon: coordinate.longitude))
         }
 
         func mapView(_ map: MLNMapView, regionDidChangeAnimated animated: Bool) {

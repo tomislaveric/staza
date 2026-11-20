@@ -37,7 +37,7 @@ describe("FartlekCompletionsSection", () => {
     expect(markup).toContain('data-flowline-row="fartlek-1"');
     expect(markup).toContain('class="fartlek-swatch is-unvisited"');
     expect(markup).not.toContain("max ");
-    expect(markup).not.toContain("Hidden Flowline found");
+    expect(markup).not.toContain("New Flowline discovered");
   });
 
   it("labels completions of Flowlines the player had not revealed yet", () => {
@@ -50,7 +50,7 @@ describe("FartlekCompletionsSection", () => {
       averageSpeedMps: 5,
       hiddenFound: true
     }]);
-    expect(markup).toContain("Hidden Flowline found");
+    expect(markup).toContain("New Flowline discovered");
   });
 
   it("keeps each flowline swatch grey until the collection timestamp, then marks it completed", () => {

@@ -1,27 +1,18 @@
 import SwiftUI
 
-/// Sheet header while browsing: visible-area discovery counts and "Explore this Area".
+/// Sheet header while browsing: visible-area discovery counts. Explore and Plan route live on the map.
 struct WorldBrowseHeader: View {
     let model: WorldModel
-    let onExplore: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: StazaSpacing.md) {
-            VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
-                Text("world.sheet.title")
-                    .font(StazaFont.title3)
-                    .foregroundStyle(StazaColor.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                summary
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: onExplore) {
-                Label("explore.start.short", systemImage: "location.north.line.fill")
-            }
-            .buttonStyle(.stazaPrimary)
-            .disabled(model.bounds == nil)
-            .accessibilityIdentifier("exploreThisArea")
+        VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+            Text("world.sheet.title")
+                .font(StazaFont.title3)
+                .foregroundStyle(StazaColor.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            summary
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, StazaSpacing.md)
         .padding(.bottom, StazaSpacing.md)
         .accessibilityIdentifier("worldBrowseHeader")
@@ -53,14 +44,6 @@ struct WorldBrowseHeader: View {
             .minimumScaleFactor(0.8)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("worldStats")
-            if model.hiddenFlowlineCount > 0 {
-                Label("world.stats.hiddenFlowlines \(model.hiddenFlowlineCount)", systemImage: "eye.slash")
-                    .font(StazaFont.footnote)
-                    .foregroundStyle(StazaColor.rarityRare)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .accessibilityIdentifier("worldHiddenFlowlines")
-            }
         } else {
             Text("world.loading").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
         }

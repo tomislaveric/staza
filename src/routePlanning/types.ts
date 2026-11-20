@@ -193,6 +193,12 @@ export interface RouteProposal {
   waypoints?: LatLon[];
   /** Requested route-only map points the customized route could not serve. */
   droppedWaypoints?: LatLon[];
+  /** Flowlines the player added to a manual route that it rides in full. */
+  flowlineIds?: string[];
+  /** Flowlines the player added to a manual route that it could not ride. */
+  droppedFlowlineIds?: string[];
+  /** Manual route stop order: collectible ids, waypoint ids and `flowline:<id>`. */
+  stopOrder?: string[];
   /** Internal; useful for debugging and tests. Not intended for user display. */
   score: ScoreBreakdown;
 }
@@ -210,7 +216,7 @@ export interface StoredProposal {
   plannerVersion: number;
   /** Sport the route was planned for; persisted as the routing profile on confirmation. */
   sport?: Sport;
-  /** Revealed Flowline the route was planned to ride; becomes a `flowline_rule` objective. */
-  flowline?: { id: string; name: string };
+  /** Revealed Flowlines the route was planned to ride; each becomes a `flowline_rule` objective. */
+  flowlines?: { id: string; name: string }[];
   expiresAtMs: number;
 }

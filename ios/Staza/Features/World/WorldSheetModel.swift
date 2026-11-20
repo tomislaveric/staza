@@ -7,7 +7,10 @@ import Observation
 final class WorldSheetModel {
     enum Mode: Equatable {
         case browse
-        case explore
+        /// "View discoveries": what the visible area holds, with its revealed Flowlines.
+        case discoveries
+        /// The manual "Plan a route" planner.
+        case planner
         case detail(WorldSelection)
     }
 
@@ -32,22 +35,35 @@ final class WorldSheetModel {
         mode = underlying
     }
 
-    func startExplore() {
-        underlying = .explore
-        mode = .explore
+    /// Discoveries never replace the planner; while planning they open from the planner's detail instead.
+    func showDiscoveries() {
+        guard underlying != .planner, mode != .planner else { return }
+        underlying = .discoveries
+        mode = .discoveries
+        if detent == .peek { detent = .medium }
+    }
+
+    func closeDiscoveries() {
+        underlying = .browse
+        if mode == .discoveries { mode = .browse }
+    }
+
+    func startPlanner() {
+        underlying = .planner
+        mode = .planner
         detent = .medium
     }
 
-    /// Explore ended (cancelled or confirmed); a detail opened on top of it stays open.
-    func endExplore() {
+    /// The planner closed (cancelled or confirmed); a detail opened on top of it stays open.
+    func endPlanner() {
         underlying = .browse
-        if mode == .explore {
+        if mode == .planner {
             mode = .browse
             detent = .medium
         }
     }
 
-    /// Collapses the sheet so a newly drawn route is visible above it.
+    /// Collapses the sheet so a newly drawn route or framed Flowline is visible above it.
     func revealMap() {
         if detent == .large { detent = .medium }
     }

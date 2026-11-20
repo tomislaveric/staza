@@ -46,6 +46,8 @@ import { StravaError } from "./strava/errors.js";
 import { StravaService } from "./strava/service.js";
 import { TokenCipher } from "./strava/tokenCipher.js";
 import { toWorldFartlek } from "./fartlek.js";
+import { exploreAllowed, flowlineAreaStatus } from "./flowlineReveal.js";
+import { exploreArea } from "./worldExplore.js";
 import { createWorldSnapshot } from "./world.js";
 import { THEMED_STYLE_PATH, createThemedStyleLoader, getBasemapConfig, getBasemapOrigins } from "./basemap.js";
 import { ProposalStore } from "./routePlanning/proposalStore.js";
@@ -1043,23 +1045,25 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
       const stats = await collectibleRepository.worldStats(discoveredSourceIds);
-      response.json({ collectibles: [], stats, truncated: false, fartleks: [], hiddenFlowlineCount: 0 });
+      response.json({ collectibles: [], stats, truncated: false, fartleks: [], areaStatus: { exploreAllowed: false, knownFlowlines: 0, availableFlowlines: 0 } });
       return;
     }
     const flowlinePolicy = flowlinePolicyForBounds(bounds, config.worldFlowlineLimit);
     // The client caches collectibles for a wider area; it asks for them only when leaving that area.
     const areaBounds = parseBoundsParameter(request.query.collectibleBbox);
     const skipCollectibles = request.query.skipCollectibles === "1";
-    const [stats, viewport, fartlekResult, hiddenFlowlineCount] = await Promise.all([
+    const [stats, viewport, fartlekResult, knownFlowlines, hiddenCandidates] = await Promise.all([
       collectibleRepository.worldStatsWithinBounds(bounds, discoveredSourceIds),
       skipCollectibles
         ? undefined
         : areaBounds
           ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit)
           : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      // Flowlines are hidden until the player reveals them; only a count hints at the rest.
+      // Flowlines are hidden until the player reveals them; only counts hint at the rest.
       flowlineRevealRepository.listRevealedWithinBoundsLimited(playerId, bounds, flowlinePolicy),
-      flowlineRevealRepository.countHiddenWithinBounds(playerId, bounds)
+      flowlineRevealRepository.countRevealedWithinBounds(playerId, bounds),
+      // Wide viewports cannot be explored; skip scanning their hidden Flowlines.
+      exploreAllowed(bounds) ? flowlineRevealRepository.listHiddenCandidatesWithinBounds(playerId, bounds) : Promise.resolve([])
     ]);
     const fartleks = await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
     const world = viewport ? createWorldSnapshot(viewport.collectibles, discoveredSourceIds) : undefined;
@@ -1069,7 +1073,7 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
       ...(viewport ? { truncated: viewport.truncated } : { collectiblesSkipped: true }),
       fartlekTruncated: fartlekResult.truncated,
       fartleks,
-      hiddenFlowlineCount
+      areaStatus: flowlineAreaStatus(bounds, knownFlowlines, hiddenCandidates)
     });
   } catch (error) {
     next(error);
@@ -1170,9 +1174,28 @@ const loadQuestInstance = async (playerId: string, instanceId: string) => {
   return instance;
 };
 
+app.post("/api/world/explore", requirePlayer, requireCsrf, routeEditLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    response.json(await exploreArea(request.user!.playerId, request.body, {
+      reveals: flowlineRevealRepository,
+      toWorld: worldFartleksForPlayer
+    }));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/explorations/generate", requirePlayer, requireCsrf, routePlanningLimiter, async (request: UploadRequest, response, next) => {
   try {
     response.json(await explorationService.generate(request.user!.playerId, request.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/explorations/plan", requirePlayer, requireCsrf, routeEditLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    response.json(await explorationService.plan(request.user!.playerId, request.body));
   } catch (error) {
     next(error);
   }

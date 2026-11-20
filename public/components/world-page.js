@@ -10,15 +10,19 @@ import { boundsContain, expandBounds, isServedByLoadedArea, scaleBounds } from "
 import { QuestList } from "./world/quest-list.js";
 import { CollectibleDetail } from "./world/collectible-detail.js";
 import { FartlekDetail } from "./world/fartlek-detail.js";
+import { DiscoveriesPanel, exploreCta, ExploreResultCard, revealSequence } from "./world/explore-reveal.js";
 import {
-  activeProposal,
-  buildGenerateRequest,
-  createExplorationState,
-  ExplorationPanel,
-  findCatalogTarget,
-  routeTargetIds,
-  traversedFlowlines
-} from "./world/exploration-panel.js";
+  buildPlanRequest,
+  buildSuggestRequest,
+  collectibleStop,
+  createPlannerState,
+  flowlineStop,
+  moveStop,
+  orderStops,
+  RoutePlannerPanel,
+  toggleStop,
+  waypointStop
+} from "./world/route-planner.js";
 
 export const worldFilters = ["all", "found", "unfound", "fartleks", "viewpoint", "peak", "castle", "waterfall", "place", "mountain_pass"];
 
@@ -142,24 +146,23 @@ export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks
 `;
 };
 
-export const WorldStats = (stats, truncated, hiddenFlowlineCount = 0) => `
+export const WorldStats = (stats, truncated) => `
   <p class="world-stats">
     <span>${formatNumber(stats.discoveredCount)} visited here</span>
     <i aria-hidden="true">\u00b7</i>
     <span>${formatNumber(stats.remainingCount)} remaining</span>
     ${truncated ? '<i aria-hidden="true">\u00b7</i><span class="world-stats-truncated">Zoom in to see everything here</span>' : ""}
   </p>
-  ${HiddenFlowlinesTeaser(hiddenFlowlineCount)}
 `;
 
-/** Hidden Flowlines are never drawn; only their count invites the player to explore the area. */
-export const HiddenFlowlinesTeaser = (count) => count > 0 ? `
-  <p class="world-hidden-flowlines" data-world-hidden-flowlines>
-    <b class="fartlek-swatch" aria-hidden="true"></b>
-    <span>${count === 1 ? "1 hidden Flowline here" : `${formatNumber(count)} hidden Flowlines here`}</span>
-    <button type="button" data-world-explore-hidden>Explore this Area</button>
-  </p>
-` : "";
+/** Primary state-driven Explore CTA plus a small "Plan route" entry; hidden Flowlines are never drawn. */
+export const WorldExploreControls = (areaStatus, { busy = false, stopCount = 0 } = {}) => {
+  const cta = exploreCta(areaStatus);
+  return `
+    <button class="world-explore" type="button" data-world-explore="${cta.action}"${cta.disabled || busy ? " disabled" : ""}>${escapeHtml(cta.label)}</button>
+    <button class="world-plan-route" type="button" data-world-plan>${stopCount ? `Plan route \u00b7 ${stopCount}` : "Plan route"}</button>
+  `;
+};
 
 /** "Discovered X / Y" for the visible map area; placeholders until the first viewport loads. */
 export const WorldDiscovered = (stats) => `
@@ -186,7 +189,8 @@ export const WorldPage = ({ stats, selectedFilters, lockedFilters = [] }) => `
         <div class="world-map-actions">
           <button class="world-locate" type="button" data-world-locate>LOCATE ME</button>
         </div>
-        <button class="world-explore" type="button" data-world-explore>EXPLORE THIS AREA</button>
+        <div class="world-explore-cta" data-world-explore-cta>${WorldExploreControls(undefined)}</div>
+        <div class="world-explore-card-host" data-world-explore-card hidden></div>
         <p class="world-map-status" data-world-status role="status" hidden></p>
       </div>
       <div class="world-detail-host" data-world-detail hidden></div>
@@ -239,9 +243,11 @@ const emptyStats = { totalCollectibles: 0, discoveredCount: 0, remainingCount: 0
 const expiredCodes = new Set(["exploration_expired", "proposal_expired"]);
 
 export const explorationErrorMessage = (error) => {
-  if (expiredCodes.has(error.code)) return "These routes expired. Generate routes again.";
+  if (expiredCodes.has(error.code)) return "This route expired. Route your stops again.";
   return error.message;
 };
+
+const prefersReducedMotion = () => Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
 
 export const mountWorldPage = async (mountPoint, onNavigate) => {
   mountPoint.innerHTML = '<section class="world-page"><p class="world-loading" role="status">Loading World...</p></section>';
@@ -272,7 +278,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   let stats = emptyStats;
   let truncated = false;
   let fartleks = [];
-  let hiddenFlowlineCount = 0;
+  let areaStatus;
   let availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
   let selection;
   let selectedQuestKey;
@@ -283,9 +289,18 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   let loadedArea;
   let worldMap;
   let homePosition;
-  /** Active "Explore this Area" session; undefined in the NORMAL map state. */
-  let exploration;
-  let explorationToken = 0;
+  /** Explore this area: undefined, or the exploring / result / error card. */
+  let explore;
+  let exploreToken = 0;
+  /** Newly revealed Flowlines that are still waiting for their staggered appearance. */
+  const revealing = new Set();
+  /** Side panel replacing the detail card: "discoveries" or "planner". */
+  let panel;
+  let discoveriesSort = "flow";
+  /** Manual route planner while open; `draftStops` keeps "Add to route" picks while it is closed. */
+  let planner;
+  let draftStops = [];
+  let plannerToken = 0;
   const plannedRoutes = new Map();
 
   mountPoint.innerHTML = WorldPage({ stats: undefined, selectedFilters, lockedFilters });
@@ -296,7 +311,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   const questHost = mountPoint.querySelector("[data-world-quests]");
   const detailHost = mountPoint.querySelector("[data-world-detail]");
   const collectibleListHost = mountPoint.querySelector("[data-world-collectible-list]");
-  const exploreButton = mountPoint.querySelector("[data-world-explore]");
+  const ctaHost = mountPoint.querySelector("[data-world-explore-cta]");
+  const exploreCardHost = mountPoint.querySelector("[data-world-explore-card]");
   mountPoint.querySelectorAll("[data-world-filter-unlock]").forEach((button) => {
     button.addEventListener("click", () => onNavigate?.(button.dataset.worldFilterUnlock));
   });
@@ -307,49 +323,22 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
 
   const collectibleById = (id) => collectibles.find((collectible) => collectible.id === id);
   const fartlekById = (id) => fartleks.find((fartlek) => fartlek.id === id);
-
-  /**
-   * Exploration markers by phase. While configuring, World markers stay as dimmed context and no
-   * exploration targets are revealed. Once a route is selected, the frozen area's targets are shown
-   * dimmed and only the selected route's contents are highlighted; hovering any marker highlights it,
-   * so eligible targets stay visible and pickable in add mode.
-   */
-  const renderExplorationTargets = () => {
-    if (exploration.phase === "configure" || exploration.phase === "generating") {
-      const mapped = mappedWorldCollectibles(collectibles, selectedFilters, []);
-      const mappedFartleks = mappedWorldFartleks(fartleks, selectedFilters, []);
-      worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { questCollectibleIds: [] }));
-      worldMap?.setFartleks(fartleksToFeatureCollection(mappedFartleks, { questTargetIds: [] }));
-      renderCollectibleList(mapped, undefined, mappedFartleks, undefined);
-      return;
-    }
-    const { catalog } = exploration;
-    const mapped = visibleWorldCollectibles(catalog.collectibles);
-    const highlighted = exploration.adding
-      ? catalog.collectibles.map((item) => item.id)
-      : exploration.pendingTargetIds ?? routeTargetIds(activeProposal(exploration));
-    const alongIds = new Set(traversedFlowlines(activeProposal(exploration)).map((flowline) => flowline.id));
-    const alongFlowlines = catalog.flowlines.filter((flowline) => alongIds.has(flowline.id));
-    // Newly revealed Flowlines stay on the map as context so the discovery is visible.
-    const revealed = new Set(exploration.revealedFlowlineIds);
-    const shownFlowlines = catalog.flowlines.filter((flowline) => alongIds.has(flowline.id) || revealed.has(flowline.id));
-    worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, {
-      selectedId: exploration.hoveredTargetId,
-      questCollectibleIds: highlighted
-    }));
-    worldMap?.setFartleks(fartleksToFeatureCollection(shownFlowlines, {
-      selectedId: exploration.hoveredTargetId,
-      questTargetIds: [...alongIds]
-    }));
-    renderCollectibleList(mapped, undefined, alongFlowlines, undefined);
-  };
+  const currentStops = () => planner?.stops ?? draftStops;
+  const routeFlowlineIds = () => currentStops().filter((stop) => stop.kind === "flowline").map((stop) => stop.id);
+  const routeCollectibleIds = () => currentStops().filter((stop) => stop.kind === "collectible").map((stop) => stop.id);
+  const shownFartleks = () => fartleks.filter((fartlek) => !revealing.has(fartlek.id));
 
   const renderCollectibles = () => {
-    if (exploration) {
-      renderExplorationTargets();
+    const selectedCollectibleId = selection?.kind === "collectible" ? selection.id : undefined;
+    const selectedFartlekId = selection?.kind === "fartlek" ? selection.id : undefined;
+    if (planner) {
+      // Planner: collectibles stay visible, revealed Flowlines are opportunities, chosen stops highlighted.
+      const mapped = mappedWorldCollectibles(collectibles, selectedFilters, []);
+      worldMap?.setCollectibles(collectiblesToFeatureCollection(mapped, { questCollectibleIds: routeCollectibleIds() }));
+      worldMap?.setFartleks(fartleksToFeatureCollection(shownFartleks(), { questTargetIds: routeFlowlineIds() }));
+      renderCollectibleList(mapped, undefined, shownFartleks(), undefined);
       return;
     }
-    const selectedCollectibleId = selection?.kind === "collectible" ? selection.id : undefined;
     const questCollectibleIds = selectedQuestKey
       ? selectedQuestTargets.collectibles.map((collectible) => collectible.id)
       : undefined;
@@ -359,11 +348,10 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       questCollectibleIds
     }));
 
-    const selectedFartlekId = selection?.kind === "fartlek" ? selection.id : undefined;
     const questFlowlineIds = selectedQuestKey
       ? selectedQuestTargets.flowlines.map((flowline) => flowline.id)
       : undefined;
-    const mappedFartleks = mappedWorldFartleks(fartleks, selectedFilters, selectedQuestTargets.flowlines);
+    const mappedFartleks = mappedWorldFartleks(shownFartleks(), selectedFilters, selectedQuestTargets.flowlines);
     worldMap?.setFartleks(fartleksToFeatureCollection(mappedFartleks, {
       selectedId: selectedFartlekId,
       questTargetIds: questFlowlineIds
@@ -382,7 +370,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     const fartlekItems = mappedFartleks.map((fartlek) => `
       <li>
         <button type="button" class="world-fartlek-marker" data-world-fartlek="${escapeHtml(fartlek.id)}"
-          aria-pressed="${fartlek.id === selectedFartlekId}" data-user-content>${escapeHtml(fartlek.name)}, ${fartlek.completed ? "completed" : "not completed"}</button>
+          aria-pressed="${fartlek.id === selectedFartlekId}" data-user-content>${escapeHtml(fartlek.name)}, ${fartlek.completed ? "completed" : "unridden"}</button>
       </li>
     `).join("");
     collectibleListHost.innerHTML = collectibleItems + fartlekItems;
@@ -392,6 +380,25 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     collectibleListHost.querySelectorAll("[data-world-fartlek]").forEach((button) => {
       button.addEventListener("click", () => selectFartlek(button.dataset.worldFartlek));
     });
+  };
+
+  const renderControls = () => {
+    ctaHost.hidden = Boolean(planner);
+    ctaHost.innerHTML = WorldExploreControls(areaStatus, { busy: explore?.phase === "exploring", stopCount: draftStops.length });
+    ctaHost.querySelector("[data-world-explore]")?.addEventListener("click", () => void exploreArea());
+    ctaHost.querySelector("[data-world-plan]")?.addEventListener("click", () => openPlanner());
+    exploreCardHost.hidden = !explore || Boolean(planner);
+    exploreCardHost.innerHTML = explore && !planner ? ExploreResultCard(explore) : "";
+    const on = (selector, handler) => exploreCardHost.querySelectorAll(selector).forEach((button) => button.addEventListener("click", handler));
+    on("[data-explore-close]", () => closeExploreCard());
+    on("[data-explore-zoom-out]", () => {
+      const view = worldMap.getView();
+      closeExploreCard();
+      worldMap.flyTo(view.center.lon, view.center.lat, Math.max(0, view.zoom - 2));
+    });
+    on("[data-explore-show-known]", () => showKnownFlowlines());
+    on("[data-explore-discoveries]", () => openDiscoveries());
+    on("[data-explore-plan]", () => openPlanner());
   };
 
   const hideDetail = () => {
@@ -405,45 +412,89 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       objective.type !== "flowline_rule" && objective.targets.some((target) => target.id === collectibleId)))
     .map((instance) => ({ id: `instance:${instance.id}`, title: instance.title }));
 
+  const visibleCollectibles = () => {
+    const bounds = worldMap?.getBounds();
+    return visibleWorldCollectibles(collectibles).filter((item) => !bounds || boundsContain(bounds, {
+      west: item.longitude, east: item.longitude, south: item.latitude, north: item.latitude
+    }));
+  };
+
+  const showPanel = (markup) => {
+    detailHost.hidden = false;
+    worldMap?.setDetailPanelOpen(true);
+    detailHost.innerHTML = markup;
+  };
+
+  const bindRouteButtons = () => {
+    detailHost.querySelectorAll("[data-flowline-add-route]").forEach((button) => {
+      button.addEventListener("click", () => toggleFlowlineStop(button.dataset.flowlineAddRoute));
+    });
+  };
+
   const renderDetail = () => {
-    if (exploreButton) exploreButton.hidden = Boolean(exploration);
-    if (exploration) {
-      detailHost.hidden = false;
-      worldMap?.setDetailPanelOpen(true);
-      detailHost.innerHTML = ExplorationPanel(exploration);
-      bindExploration();
+    renderControls();
+    if (planner) {
+      showPanel(RoutePlannerPanel(planner));
+      bindPlanner();
+      return;
+    }
+    if (panel === "discoveries") {
+      showPanel(DiscoveriesPanel({
+        flowlines: fartleks,
+        collectibles: visibleCollectibles(),
+        sort: discoveriesSort,
+        origin: homePosition,
+        routeStopIds: routeFlowlineIds()
+      }));
+      detailHost.querySelector("[data-discoveries-close]")?.addEventListener("click", () => {
+        panel = undefined;
+        selection = undefined;
+        renderCollectibles();
+        renderDetail();
+      });
+      detailHost.querySelectorAll("[data-discoveries-sort]").forEach((button) => button.addEventListener("click", () => {
+        discoveriesSort = button.dataset.discoveriesSort;
+        renderDetail();
+      }));
+      detailHost.querySelectorAll("[data-discovery-view]").forEach((button) => button.addEventListener("click", () => {
+        const fartlek = fartlekById(button.dataset.discoveryView);
+        if (!fartlek) return;
+        selection = { kind: "fartlek", id: fartlek.id };
+        renderCollectibles();
+        worldMap.fitTo(geometryPoints(fartlek.geometry));
+      }));
+      detailHost.querySelector("[data-discoveries-plan]")?.addEventListener("click", () => openPlanner());
+      bindRouteButtons();
       return;
     }
     if (!selection) {
       hideDetail();
       return;
     }
-    detailHost.hidden = false;
-    worldMap?.setDetailPanelOpen(true);
     if (selection.kind === "fartlek") {
       const fartlek = fartlekById(selection.id);
       if (!fartlek) {
         hideDetail();
         return;
       }
-      detailHost.innerHTML = FartlekDetail(fartlek);
+      showPanel(FartlekDetail(fartlek, { inRoute: routeFlowlineIds().includes(fartlek.id) }));
     } else {
       const collectible = collectibleById(selection.id);
       if (!collectible) {
         hideDetail();
         return;
       }
-      detailHost.innerHTML = CollectibleDetail(collectible, relatedInstances(collectible.id), {
+      showPanel(CollectibleDetail(collectible, relatedInstances(collectible.id), {
         distanceMeters: homePosition ? distanceBetween(homePosition, collectible) : undefined,
         origin: homePosition,
         locale: getAppLocale()
-      });
+      }));
     }
     detailHost.querySelectorAll("[data-collectible-quest]").forEach((button) => {
       button.addEventListener("click", () => void selectQuest(button.dataset.collectibleQuest));
     });
-    detailHost.querySelector("[data-collectible-route]")?.addEventListener("click", (event) => openRouteTo(event.currentTarget.dataset.collectibleRoute));
-    detailHost.querySelector("[data-fartlek-route]")?.addEventListener("click", (event) => openRouteViaFlowline(event.currentTarget.dataset.fartlekRoute));
+    detailHost.querySelector("[data-collectible-route]")?.addEventListener("click", (event) => planToCollectible(event.currentTarget.dataset.collectibleRoute));
+    bindRouteButtons();
     detailHost.querySelector("[data-world-close]")?.addEventListener("click", clearSelection);
     detailHost.querySelectorAll("[data-world-marker]").forEach((button) => {
       button.addEventListener("click", () => selectCollectible(button.dataset.worldMarker));
@@ -451,8 +502,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   };
 
   const renderSidePanels = () => {
-    statsHost.innerHTML = WorldStats(stats, truncated, exploration ? 0 : hiddenFlowlineCount);
-    statsHost.querySelector("[data-world-explore-hidden]")?.addEventListener("click", () => openExploration());
+    statsHost.innerHTML = WorldStats(stats, truncated);
     discoveredHost.innerHTML = WorldDiscovered(stats);
     questHost.innerHTML = QuestList(questInstances, pendingQuestId, selectedQuestKey, plannedRoutes);
     questHost.querySelectorAll("[data-quest-retry]").forEach((button) => {
@@ -489,31 +539,33 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   }
 
   function selectCollectible(id) {
-    if (exploration) {
-      addExplorationTarget(id);
+    if (planner) {
+      if (planner.adding === "collectible") toggleCollectibleStop(id);
       return;
     }
     selection = selection?.kind === "collectible" && selection.id === id
       ? undefined
       : { kind: "collectible", id };
+    panel = undefined;
     renderCollectibles();
     renderDetail();
   }
 
   function selectFartlek(id) {
-    if (exploration) {
-      addExplorationTarget(id);
+    if (planner) {
+      if (planner.adding === "flowline") toggleFlowlineStop(id);
       return;
     }
     selection = selection?.kind === "fartlek" && selection.id === id
       ? undefined
       : { kind: "fartlek", id };
+    if (panel !== "discoveries") panel = undefined;
     renderCollectibles();
     renderDetail();
   }
 
   async function selectQuest(key) {
-    if (exploration) return;
+    if (planner) return;
     const token = ++questSelectionToken;
     if (selectedQuestKey === key) {
       selectedQuestKey = undefined;
@@ -543,6 +595,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     selectedQuestKey = key;
     selectedQuestTargets = { collectibles: [], flowlines: [] };
     selection = undefined;
+    panel = undefined;
     syncRouteLayers();
     renderCollectibles();
     renderSidePanels();
@@ -579,27 +632,20 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     }
   }
 
-  /**
-   * Routes shown on the map. While exploring, only the selected or hovered proposal is visible;
-   * otherwise the selected quest's PlannedRoute.
-   */
+  /** Routes on the map: the planner's routed proposal while planning, otherwise the selected quest's PlannedRoute. */
   function syncRouteLayers() {
     if (!worldMap) return;
-    worldMap.setPickHandler(exploration?.picking ? pickExplorationPoint : undefined);
-    const canAddPoint = exploration?.phase === "customize" && exploration.status === "idle" && !exploration.adding;
-    worldMap.setMapClickHandler(canAddPoint ? offerExplorationPoint : undefined);
-    if (exploration) {
-      const shownId = exploration.previewProposalId ?? exploration.selectedProposalId;
-      const shown = activeProposal(exploration, shownId);
+    worldMap.setPickHandler(planner?.picking ? pickPlannerPoint : undefined);
+    worldMap.setMapClickHandler(planner?.adding === "waypoint" && planner.status === "idle" ? addPlannerWaypoint : undefined);
+    worldMap.setAlternateRoutes([]);
+    if (planner) {
       worldMap.setRouteEndpoints({
-        start: exploration.start,
-        end: exploration.routeType === "point_to_point" ? exploration.end : undefined
+        start: planner.start,
+        end: planner.routeType === "point_to_point" ? planner.end : undefined
       });
-      worldMap.setRoute(shown ? { geometry: shown.geometry } : undefined);
-      worldMap.setAlternateRoutes([]);
+      worldMap.setRoute(planner.proposal ? { geometry: planner.proposal.geometry } : undefined);
       return;
     }
-    worldMap.setAlternateRoutes([]);
     const instanceId = selectedQuestKey?.startsWith("instance:") ? selectedQuestKey.slice("instance:".length) : undefined;
     const plannedRoute = instanceId ? plannedRoutes.get(instanceId) : undefined;
     worldMap.setRouteEndpoints(plannedRoute ? {
@@ -609,379 +655,318 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     worldMap.setRoute(plannedRoute ? { geometry: plannedRoute.geometry } : undefined);
   }
 
-  const renderExploration = () => {
+  const renderAll = () => {
     syncRouteLayers();
     renderCollectibles();
     renderDetail();
   };
 
-  /** NORMAL → CONFIGURE: freezes the visible area for the whole exploration. */
-  function openExploration() {
-    if (!worldMap || exploration) return;
-    const view = worldMap.getView();
-    explorationToken += 1;
-    selectedQuestKey = undefined;
-    selectedQuestTargets = { collectibles: [], flowlines: [] };
-    selection = undefined;
-    exploration = createExplorationState({
-      bbox: boundsToParameter(worldMap.getBounds()),
-      center: view.center,
-      zoom: view.zoom
-    }, homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined);
-    setStatus(undefined);
-    renderSidePanels();
-    renderExploration();
+  /* ---------- Explore this area: reveal Flowlines, never plan ---------- */
+
+  function closeExploreCard() {
+    exploreToken += 1;
+    explore = undefined;
+    renderControls();
   }
 
-  /** "Route to" on a collectible: a loop from home through it, planned like Explore this Area. */
-  function openRouteTo(collectibleId) {
-    const collectible = collectibleById(collectibleId);
+  /** Newly revealed Flowlines appear one after another; immediately with reduced motion. */
+  function revealOnMap(flowlines) {
+    const known = new Set(fartleks.map((fartlek) => fartlek.id));
+    fartleks = [...fartleks, ...flowlines.filter((flowline) => !known.has(flowline.id))];
+    availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
+    renderFilters();
+    const steps = revealSequence(flowlines, { reducedMotion: prefersReducedMotion() });
+    for (const { flowline, delayMs } of steps) {
+      if (delayMs === 0) continue;
+      revealing.add(flowline.id);
+      setTimeout(() => {
+        revealing.delete(flowline.id);
+        renderCollectibles();
+      }, delayMs);
+    }
+    renderCollectibles();
+  }
+
+  async function exploreArea() {
+    if (!worldMap || planner || explore?.phase === "exploring") return;
+    const cta = exploreCta(areaStatus);
+    if (cta.disabled) return;
+    if (cta.action === "show") {
+      showKnownFlowlines();
+      return;
+    }
+    const token = ++exploreToken;
+    selection = undefined;
+    panel = undefined;
+    explore = { phase: "exploring" };
+    renderCollectibles();
+    renderDetail();
+    try {
+      const result = await jsonRequest("POST", "/api/world/explore", { bbox: boundsToParameter(worldMap.getBounds()) });
+      if (token !== exploreToken) return;
+      areaStatus = { ...areaStatus, knownFlowlines: result.knownCount, availableFlowlines: result.availableCount };
+      explore = { phase: "result", result };
+      if (result.revealed.length) revealOnMap(result.revealed);
+    } catch (error) {
+      if (token !== exploreToken) return;
+      explore = { phase: "error", error: error.message };
+    }
+    renderControls();
+  }
+
+  /** "Show known Flowlines": frames the area's revealed Flowlines and lists them. */
+  function showKnownFlowlines() {
+    exploreToken += 1;
+    explore = undefined;
+    const points = fartleks.flatMap((fartlek) => geometryPoints(fartlek.geometry));
+    if (points.length) worldMap.fitTo(points);
+    openDiscoveries();
+  }
+
+  function openDiscoveries() {
+    exploreToken += 1;
+    explore = undefined;
+    selection = undefined;
+    panel = "discoveries";
+    renderCollectibles();
+    renderDetail();
+  }
+
+  /* ---------- "Add to route" and the manual planner ---------- */
+
+  function setStops(stops, error) {
+    if (planner) {
+      Object.assign(planner, { stops, proposal: undefined, error });
+      renderAll();
+      return;
+    }
+    draftStops = stops;
+    if (error) setStatus(error);
+    renderCollectibles();
+    renderDetail();
+  }
+
+  const plannerLimits = () => planner?.limits ?? createPlannerState().limits;
+
+  function toggleFlowlineStop(id) {
+    const fartlek = fartlekById(id) ?? undefined;
+    const existing = currentStops().find((stop) => stop.kind === "flowline" && stop.id === id);
+    const stop = existing ?? (fartlek ? flowlineStop(fartlek) : undefined);
+    if (!stop) return;
+    const { stops, error } = toggleStop(currentStops(), stop, plannerLimits());
+    setStops(stops, error);
+  }
+
+  function toggleCollectibleStop(id) {
+    const collectible = collectibleById(id);
     if (!collectible) return;
-    openRouteThrough([[collectible.longitude, collectible.latitude]], { id: collectible.id, name: collectible.name });
+    const { stops, error } = toggleStop(currentStops(), collectibleStop(collectible), plannerLimits());
+    setStops(stops, error);
   }
 
-  /** "Plan route via this Flowline": a loop from home that rides the revealed Flowline in full. */
-  function openRouteViaFlowline(fartlekId) {
-    const fartlek = fartlekById(fartlekId);
-    if (!fartlek) return;
-    openRouteThrough(fartlek.geometry.coordinates, { kind: "flowline", id: fartlek.id, name: fartlek.name });
+  /** A collectible's "Add to route": adds it and opens the planner. */
+  function planToCollectible(id) {
+    const collectible = collectibleById(id);
+    if (!collectible) return;
+    const stop = collectibleStop(collectible);
+    if (!currentStops().some((item) => item.kind === "collectible" && item.id === id)) {
+      const { stops, error } = toggleStop(currentStops(), stop, plannerLimits());
+      draftStops = stops;
+      if (error) setStatus(error);
+    }
+    openPlanner();
   }
 
-  /** Opens Explore this Area framed around the destination points (and home) with that destination required. */
-  function openRouteThrough(points, destination) {
-    if (!worldMap || exploration || points.length === 0) return;
-    const start = homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined;
-    const lats = [...points.map(([, lat]) => lat), ...(start ? [start.lat] : [])];
-    const lons = [...points.map(([lon]) => lon), ...(start ? [start.lon] : [])];
-    const padLat = Math.max(0.01, (Math.max(...lats) - Math.min(...lats)) * 0.5);
-    const padLon = Math.max(0.015, (Math.max(...lons) - Math.min(...lons)) * 0.5);
-    const bounds = {
-      west: Math.min(...lons) - padLon, south: Math.min(...lats) - padLat,
-      east: Math.max(...lons) + padLon, north: Math.max(...lats) + padLat
-    };
-    explorationToken += 1;
+  /** Opens the manual planner; earlier "Add to route" picks become its first stops. */
+  function openPlanner() {
+    if (!worldMap || planner) return;
+    exploreToken += 1;
+    explore = undefined;
+    panel = undefined;
+    selection = undefined;
     selectedQuestKey = undefined;
     selectedQuestTargets = { collectibles: [], flowlines: [] };
-    selection = undefined;
-    exploration = createExplorationState({
-      bbox: boundsToParameter(bounds),
-      center: { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 },
-      zoom: worldMap.getView().zoom
-    }, start, destination);
+    planner = createPlannerState({
+      start: homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined,
+      stops: draftStops
+    });
     setStatus(undefined);
     renderSidePanels();
-    renderExploration();
-    worldMap.fitTo([[bounds.west, bounds.south], [bounds.east, bounds.north]]);
-    if (start) void generateRoutes();
+    renderAll();
   }
 
-  /** Any phase → NORMAL. Server-side proposals simply expire; nothing was persisted. */
-  function closeExploration() {
-    explorationToken += 1;
-    exploration = undefined;
-    renderExploration();
+  /** Closes the planner without persisting anything; its stops stay as the route draft. */
+  function closePlanner() {
+    plannerToken += 1;
+    draftStops = planner?.stops ?? draftStops;
+    planner = undefined;
+    renderAll();
   }
 
-  /** Back to CONFIGURE with the ride kept; generated proposals and customizations are discarded. */
-  function returnToConfigure(error) {
-    explorationToken += 1;
-    Object.assign(exploration, {
-      phase: "configure",
-      status: "idle",
-      explorationId: undefined,
-      proposals: [],
-      customizedById: {},
-      selectedProposalId: undefined,
-      previewProposalId: undefined,
-      hoveredTargetId: undefined,
-      catalog: { collectibles: [], flowlines: [] },
-      revealedFlowlineIds: [],
-      truncated: false,
-      adding: false,
-      pendingTargetIds: undefined,
-      error
-    });
+  function pickPlannerPoint(point) {
+    if (!planner?.picking) return;
+    if (planner.picking === "end") planner.end = point;
+    else planner.start = point;
+    planner.picking = planner.routeType === "point_to_point" && !planner.end ? "end" : undefined;
+    Object.assign(planner, { proposal: undefined, error: undefined });
+    renderAll();
   }
 
-  function pickExplorationPoint(point) {
-    if (!exploration?.picking || exploration.phase !== "configure") return;
-    if (exploration.picking === "end") exploration.end = point;
-    else exploration.start = point;
-    exploration.picking = exploration.routeType === "point_to_point" && !exploration.end ? "end" : undefined;
-    exploration.error = undefined;
-    renderExploration();
+  function addPlannerWaypoint(point) {
+    if (planner?.adding !== "waypoint" || planner.status !== "idle") return;
+    const { stops, error } = toggleStop(planner.stops, waypointStop(point), planner.limits);
+    setStops(stops, error);
   }
 
-  function locateExplorationStart() {
+  function locatePlannerStart() {
     const geolocation = globalThis.navigator?.geolocation;
     if (!geolocation) {
-      exploration.error = "Location is not available in this browser. Select your start on the map.";
+      planner.error = "Location is not available in this browser. Select your start on the map.";
       renderDetail();
       return;
     }
     geolocation.getCurrentPosition(
       (position) => {
-        if (!exploration || exploration.phase !== "configure") return;
-        exploration.picking = "start";
-        pickExplorationPoint({ lat: position.coords.latitude, lon: position.coords.longitude });
+        if (!planner) return;
+        planner.picking = "start";
+        pickPlannerPoint({ lat: position.coords.latitude, lon: position.coords.longitude });
       },
       () => {
-        if (!exploration) return;
-        exploration.error = "Location permission was denied. Select your start on the map.";
+        if (!planner) return;
+        planner.error = "Location permission was denied. Select your start on the map.";
         renderDetail();
       }
     );
   }
 
-  /** CONFIGURE → GENERATING → CUSTOMIZE: the planner picks targets; the best route is auto-selected. */
-  async function generateRoutes() {
-    if (!exploration || exploration.phase !== "configure") return;
-    const { body, error } = buildGenerateRequest(exploration);
+  /** "Route": connects exactly the chosen stops. */
+  async function routePlanner() {
+    if (!planner || planner.status !== "idle") return;
+    const { body, error } = buildPlanRequest(planner);
     if (error) {
-      exploration.error = error;
+      planner.error = error;
       renderDetail();
       return;
     }
-    const token = ++explorationToken;
-    exploration.phase = "generating";
-    exploration.picking = undefined;
-    exploration.error = undefined;
-    renderExploration();
+    const token = ++plannerToken;
+    Object.assign(planner, { status: "routing", adding: undefined, picking: undefined, error: undefined });
+    renderAll();
+    try {
+      const result = await jsonRequest("POST", "/api/explorations/plan", body);
+      if (token !== plannerToken || !planner) return;
+      Object.assign(planner, {
+        status: "idle",
+        proposal: result.proposal,
+        limits: result.limits ?? planner.limits,
+        stops: planner.keepOrder ? planner.stops : orderStops(planner.stops, result.proposal.stopOrder)
+      });
+      worldMap.fitTo(geometryPoints(result.proposal.geometry));
+    } catch (routeError) {
+      if (token !== plannerToken || !planner) return;
+      Object.assign(planner, { status: "idle", error: explorationErrorMessage(routeError) });
+    }
+    renderAll();
+  }
+
+  /** "Suggest route": optional; proposes collectibles for the visible area, which the player can then edit. */
+  async function suggestRoute() {
+    if (!planner || planner.status !== "idle") return;
+    const view = worldMap.getView();
+    const { body, error } = buildSuggestRequest(planner, { bbox: boundsToParameter(worldMap.getBounds()), center: view.center, zoom: view.zoom });
+    if (error) {
+      planner.error = error;
+      renderDetail();
+      return;
+    }
+    const token = ++plannerToken;
+    Object.assign(planner, { status: "suggesting", adding: undefined, picking: undefined, error: undefined });
+    renderAll();
     try {
       const result = await jsonRequest("POST", "/api/explorations/generate", body);
-      if (token !== explorationToken || !exploration) return;
-      const preferred = result.proposals.find((proposal) => proposal.recommended) ?? result.proposals[0];
-      Object.assign(exploration, {
-        explorationId: result.explorationId,
-        proposals: result.proposals,
-        customizedById: {},
-        catalog: result.catalog,
-        revealedFlowlineIds: result.revealedFlowlineIds ?? [],
-        truncated: Boolean(result.truncated),
-        warnings: result.warnings ?? [],
-        limits: result.limits ?? exploration.limits,
-        selectedProposalId: preferred?.id,
-        phase: preferred ? "customize" : "proposals"
-      });
-      worldMap.fitTo(result.proposals.flatMap((proposal) => geometryPoints(proposal.geometry)));
-      // Flowlines are reloaded with every viewport, so revealed ones appear once the exploration closes.
-      if (exploration.revealedFlowlineIds.length) void loadViewport(worldMap.getBounds());
-    } catch (generateError) {
-      if (token !== explorationToken || !exploration) return;
-      exploration.phase = "configure";
-      exploration.error = explorationErrorMessage(generateError);
+      if (token !== plannerToken || !planner) return;
+      const suggestion = result.proposals.find((proposal) => proposal.recommended) ?? result.proposals[0];
+      if (!suggestion) throw new Error("No route could be suggested here. Add stops yourself.");
+      const stops = suggestion.includedTargetIds
+        .map((id) => result.catalog.collectibles.find((item) => item.id === id))
+        .filter(Boolean)
+        .map(collectibleStop);
+      Object.assign(planner, { status: "idle", stops, keepOrder: false, routeType: "round_trip", proposal: suggestion });
+      worldMap.fitTo(geometryPoints(suggestion.geometry));
+    } catch (suggestError) {
+      if (token !== plannerToken || !planner) return;
+      Object.assign(planner, { status: "idle", error: explorationErrorMessage(suggestError) });
     }
-    renderExploration();
+    renderAll();
   }
 
-  /** Re-plans the frozen area as routes that ride one of its revealed Flowlines in full. */
-  function planViaRevealedFlowline(id) {
-    if (!exploration || exploration.status !== "idle" || exploration.phase === "confirming") return;
-    const flowline = exploration.catalog.flowlines.find((item) => item.id === id);
-    if (!flowline) return;
-    const revealedFlowlineIds = exploration.revealedFlowlineIds;
-    returnToConfigure(undefined);
-    exploration.destination = { kind: "flowline", id: flowline.id, name: flowline.name };
-    exploration.revealedFlowlineIds = revealedFlowlineIds;
-    void generateRoutes();
-  }
-
-  /** GENERATING → CONFIGURE without waiting; a late response is ignored. */
-  function stopGenerating() {
-    if (exploration?.phase !== "generating") return;
-    returnToConfigure(undefined);
-    renderExploration();
-  }
-
-  /** PROPOSALS/CUSTOMIZE → CUSTOMIZE for another proposal; its own edits are kept. */
-  function selectProposal(id) {
-    if (!exploration || exploration.status !== "idle") return;
-    if (exploration.phase !== "proposals" && exploration.phase !== "customize") return;
-    const proposal = activeProposal(exploration, id);
-    if (!proposal) return;
-    Object.assign(exploration, { selectedProposalId: id, previewProposalId: undefined, hoveredTargetId: undefined, adding: false, error: undefined, phase: "customize" });
-    worldMap.fitTo(geometryPoints(proposal.geometry));
-    renderExploration();
-  }
-
-  /** Temporarily draws a hovered proposal strong without changing the selection. */
-  function previewProposal(id) {
-    if (!exploration || (exploration.phase !== "proposals" && exploration.phase !== "customize")) return;
-    if (exploration.previewProposalId === id) return;
-    exploration.previewProposalId = id;
-    syncRouteLayers();
-  }
-
-  /** CUSTOMIZE: re-plans only the selected route for an edited target set. */
-  async function rerouteSelected(targetIds, waypoints = activeProposal(exploration)?.waypoints ?? []) {
-    const current = activeProposal(exploration);
-    if (!current || exploration.phase !== "customize" || exploration.status !== "idle") return;
-    const originalId = exploration.selectedProposalId;
-    const token = ++explorationToken;
-    Object.assign(exploration, {
-      status: "rerouting",
-      pendingTargetIds: targetIds,
-      adding: false,
-      previewProposalId: undefined,
-      hoveredTargetId: undefined,
-      error: undefined
-    });
-    renderExploration();
+  /** "Start Exploration": persists the routed plan as a QuestInstance with its PlannedRoute. */
+  async function confirmPlan() {
+    if (!planner?.proposal || planner.status !== "idle") return;
+    const token = ++plannerToken;
+    Object.assign(planner, { status: "confirming", error: undefined });
+    renderDetail();
     try {
-      const { proposal } = await jsonRequest(
-        "POST",
-        `/api/explorations/${encodeURIComponent(exploration.explorationId)}/reroute`,
-        { proposalId: current.id, targetIds, waypoints }
-      );
-      if (token !== explorationToken || !exploration) return;
-      exploration.customizedById = { ...exploration.customizedById, [originalId]: proposal };
-      exploration.status = "idle";
-      exploration.pendingTargetIds = undefined;
-    } catch (rerouteError) {
-      if (token !== explorationToken || !exploration) return;
-      exploration.status = "idle";
-      exploration.pendingTargetIds = undefined;
-      if (expiredCodes.has(rerouteError.code)) returnToConfigure(explorationErrorMessage(rerouteError));
-      else exploration.error = explorationErrorMessage(rerouteError);
-    }
-    renderExploration();
-  }
-
-  /** A map click during customization offers to add that coordinate as a route-only point. */
-  function offerExplorationPoint(point) {
-    if (exploration?.phase !== "customize" || exploration.status !== "idle" || exploration.adding) return;
-    worldMap.showPointTooltip(point, { onConfirm: addExplorationPoint });
-  }
-
-  function addExplorationPoint(point) {
-    const current = activeProposal(exploration);
-    if (!current || exploration.phase !== "customize" || exploration.status !== "idle") return;
-    const waypoints = current.waypoints ?? [];
-    if (waypoints.length >= exploration.limits.maxRouteWaypoints) {
-      exploration.error = `A route can include at most ${exploration.limits.maxRouteWaypoints} map points.`;
-      renderDetail();
-      return;
-    }
-    void rerouteSelected(routeTargetIds(current), [...waypoints, point]);
-  }
-
-  function removeExplorationPoint(index) {
-    const current = activeProposal(exploration);
-    if (!current?.waypoints?.[index]) return;
-    if (routeTargetIds(current).length + current.waypoints.length <= 1) return;
-    void rerouteSelected(routeTargetIds(current), current.waypoints.filter((_point, position) => position !== index));
-  }
-
-  function removeExplorationTarget(id) {
-    const contents = routeTargetIds(activeProposal(exploration));
-    if (contents.length + (activeProposal(exploration)?.waypoints ?? []).length <= 1 || !contents.includes(id)) return;
-    void rerouteSelected(contents.filter((targetId) => targetId !== id));
-  }
-
-  /** Briefly emphasize the matching map marker while a route target row is hovered. */
-  function previewExplorationTarget(id) {
-    if (!exploration || exploration.phase !== "customize") return;
-    if (exploration.hoveredTargetId === id) return;
-    exploration.hoveredTargetId = id;
-    renderCollectibles();
-  }
-
-  /** In add mode, a map or list selection of an eligible target of the frozen area adds it. */
-  function addExplorationTarget(id) {
-    if (!exploration?.adding || exploration.status !== "idle" || exploration.phase !== "customize") return;
-    if (!findCatalogTarget(exploration.catalog, id)) return;
-    const contents = routeTargetIds(activeProposal(exploration));
-    if (contents.includes(id)) return;
-    if (contents.length >= exploration.limits.maxRouteTargets) {
-      exploration.error = `A route can include at most ${exploration.limits.maxRouteTargets} targets.`;
-      renderDetail();
-      return;
-    }
-    void rerouteSelected([...contents, id]);
-  }
-
-  /** Restores the originally generated version of the selected route (no network). */
-  function resetSelectedRoute() {
-    if (!exploration || exploration.status !== "idle") return;
-    const { [exploration.selectedProposalId]: _discarded, ...rest } = exploration.customizedById;
-    exploration.customizedById = rest;
-    exploration.adding = false;
-    exploration.error = undefined;
-    const proposal = activeProposal(exploration);
-    if (proposal) worldMap.fitTo(geometryPoints(proposal.geometry));
-    renderExploration();
-  }
-
-  /** CUSTOMIZE → CONFIRMING → NORMAL with the new exploration selected on the map. */
-  async function confirmExploration() {
-    const proposal = activeProposal(exploration);
-    if (!proposal || exploration.phase !== "customize" || exploration.status !== "idle") return;
-    const token = ++explorationToken;
-    exploration.phase = "confirming";
-    exploration.adding = false;
-    exploration.error = undefined;
-    renderExploration();
-    try {
-      const { instance, plannedRoute } = await jsonRequest("POST", "/api/explorations/confirm", { proposalId: proposal.id });
-      if (token !== explorationToken || !exploration) return;
+      const { instance, plannedRoute } = await jsonRequest("POST", "/api/explorations/confirm", { proposalId: planner.proposal.id });
+      if (token !== plannerToken || !planner) return;
       plannedRoutes.set(instance.id, plannedRoute ?? null);
       questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
-      exploration = undefined;
-      renderExploration();
+      planner = undefined;
+      draftStops = [];
+      renderAll();
       await selectQuest(`instance:${instance.id}`);
     } catch (confirmError) {
-      if (token !== explorationToken || !exploration) return;
-      exploration.phase = "customize";
-      if (expiredCodes.has(confirmError.code)) returnToConfigure(explorationErrorMessage(confirmError));
-      else exploration.error = explorationErrorMessage(confirmError);
-      renderExploration();
+      if (token !== plannerToken || !planner) return;
+      Object.assign(planner, {
+        status: "idle",
+        error: explorationErrorMessage(confirmError),
+        ...(expiredCodes.has(confirmError.code) ? { proposal: undefined } : {})
+      });
+      renderAll();
     }
   }
 
-  function bindExploration() {
-    const on = (selector, event, handler) => detailHost.querySelectorAll(selector).forEach((element) => {
-      element.addEventListener(event, (domEvent) => handler(element, domEvent));
+  function bindPlanner() {
+    const on = (selector, handler) => detailHost.querySelectorAll(selector).forEach((element) => {
+      element.addEventListener("click", () => handler(element));
     });
-    const updateRide = (change) => {
-      if (exploration.phase !== "configure") return;
+    const edit = (change) => {
+      if (planner.status !== "idle") return;
       change();
-      exploration.error = undefined;
-      renderExploration();
+      planner.error = undefined;
+      renderAll();
     };
-    on("[data-exploration-cancel]", "click", () => closeExploration());
-    on("[data-exploration-pick]", "click", (button) => updateRide(() => {
-      exploration.picking = exploration.picking === button.dataset.explorationPick ? undefined : button.dataset.explorationPick;
+    on("[data-planner-close]", () => closePlanner());
+    on("[data-planner-sport]", (button) => edit(() => {
+      planner.sport = button.dataset.plannerSport;
+      planner.proposal = undefined;
     }));
-    on("[data-exploration-locate]", "click", () => locateExplorationStart());
-    on("[data-exploration-sport]", "click", (button) => updateRide(() => {
-      exploration.sport = button.dataset.explorationSport;
+    on("[data-planner-pick]", (button) => edit(() => {
+      planner.adding = undefined;
+      planner.picking = planner.picking === button.dataset.plannerPick ? undefined : button.dataset.plannerPick;
     }));
-    on("[data-exploration-form]", "submit", (_form, event) => {
-      event?.preventDefault?.();
-      void generateRoutes();
-    });
-    on("[data-exploration-stop]", "click", () => stopGenerating());
-    on("[data-exploration-edit-ride]", "click", () => {
-      if (exploration.status !== "idle") return;
-      returnToConfigure(undefined);
-      renderExploration();
-    });
-    on("[data-exploration-proposal]", "click", (button) => selectProposal(button.dataset.explorationProposal));
-    on("[data-exploration-proposal]", "mouseenter", (button) => previewProposal(button.dataset.explorationProposal));
-    on("[data-exploration-proposal]", "mouseleave", () => previewProposal(undefined));
-    on("[data-exploration-target]", "mouseenter", (item) => previewExplorationTarget(item.dataset.explorationTarget));
-    on("[data-exploration-target]", "mouseleave", () => previewExplorationTarget(undefined));
-    on("[data-exploration-remove-waypoint]", "click", (button) => removeExplorationPoint(Number(button.dataset.explorationRemoveWaypoint)));
-    on("[data-exploration-remove]", "click", (button) => removeExplorationTarget(button.dataset.explorationRemove));
-    on("[data-exploration-add]", "click", () => {
-      if (exploration.status !== "idle" || exploration.phase !== "customize") return;
-      exploration.adding = !exploration.adding;
-      exploration.error = undefined;
-      renderExploration();
-    });
-    on("[data-exploration-reset]", "click", () => resetSelectedRoute());
-    on("[data-exploration-flowline-route]", "click", (button) => planViaRevealedFlowline(button.dataset.explorationFlowlineRoute));
-    on("[data-exploration-confirm]", "click", () => void confirmExploration());
+    on("[data-planner-locate]", () => locatePlannerStart());
+    on("[data-planner-route-type]", (button) => edit(() => {
+      planner.routeType = button.dataset.plannerRouteType;
+      planner.proposal = undefined;
+      planner.picking = planner.routeType === "point_to_point" && !planner.end ? "end" : undefined;
+    }));
+    on("[data-planner-add]", (button) => edit(() => {
+      planner.picking = undefined;
+      planner.adding = planner.adding === button.dataset.plannerAdd ? undefined : button.dataset.plannerAdd;
+    }));
+    on("[data-planner-move]", (button) => edit(() => {
+      const [index, offset] = button.dataset.plannerMove.split(":").map(Number);
+      planner.stops = moveStop(planner.stops, index, offset);
+      planner.keepOrder = true;
+      planner.proposal = undefined;
+    }));
+    on("[data-planner-remove]", (button) => edit(() => {
+      planner.stops = planner.stops.filter((_stop, index) => index !== Number(button.dataset.plannerRemove));
+      planner.proposal = undefined;
+    }));
+    on("[data-planner-route]", () => void routePlanner());
+    on("[data-planner-suggest]", () => void suggestRoute());
+    on("[data-planner-confirm]", () => void confirmPlan());
   }
 
   async function retryQuest(instanceId) {
@@ -1048,7 +1033,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       stats = snapshot.stats;
       truncated = loadedArea.truncated || snapshot.fartlekTruncated === true;
       fartleks = snapshot.fartleks ?? [];
-      hiddenFlowlineCount = snapshot.hiddenFlowlineCount ?? 0;
+      areaStatus = snapshot.areaStatus;
       availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
       selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
       setStatus(collectibles.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);
@@ -1057,7 +1042,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       renderFilters();
       renderCollectibles();
       renderSidePanels();
-      if (!exploration) renderDetail();
+      renderDetail();
     } catch (error) {
       if (token !== requestToken) return;
       setStatus(error.message);
@@ -1086,7 +1071,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       }
       renderFilters();
       renderCollectibles();
-      if (!exploration) renderDetail();
+      renderDetail();
     });
   });
 
@@ -1105,16 +1090,14 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       homePosition,
       onViewportChange: scheduleViewportLoad,
       onCollectibleSelect: (id) => selectCollectible(id),
-      onCollectibleHover: (id) => previewExplorationTarget(id),
-      onFartlekSelect: (id) => selectFartlek(id),
-      onAlternateRouteSelect: (id) => selectProposal(id)
+      onFartlekSelect: (id) => selectFartlek(id)
     });
   } catch (error) {
     mapContainer.innerHTML = `<p class="world-load-error" role="alert">Unable to load the map: ${escapeHtml(error.message)}</p>`;
     return;
   }
 
-  exploreButton?.addEventListener("click", () => openExploration());
+  renderControls();
 
   mountPoint.querySelector("[data-world-locate]").addEventListener("click", () => {
     if (!navigator.geolocation) {

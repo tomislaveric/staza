@@ -106,8 +106,9 @@
   top: 14px;
   z-index: 3;
 }
-.world-explore { bottom: 16px; left: 50%; position: absolute; transform: translateX(-50%); z-index: 3; }
-.world-locate, .world-explore {
+.world-explore-cta { align-items: center; bottom: 16px; display: flex; gap: 6px; left: 50%; position: absolute; transform: translateX(-50%); z-index: 3; }
+.world-explore-cta[hidden] { display: none; }
+.world-locate, .world-explore, .world-plan-route {
   background: rgb(11 12 15 / 90%);
   border: 1px solid var(--border-faint);
   border-radius: 8px;
@@ -121,9 +122,105 @@
 }
 .world-explore { border-color: rgb(232 184 10 / 45%); color: var(--accent-yellow); }
 .world-explore[hidden] { display: none; }
-.world-explore { white-space: nowrap; }
-.world-locate:hover, .world-explore:hover { color: var(--text-primary); }
-.world-locate:focus-visible, .world-explore:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+.world-explore, .world-plan-route { white-space: nowrap; }
+.world-plan-route { font-size: 9px; padding: 6px 8px; }
+.world-explore:disabled { cursor: default; opacity: .6; }
+.world-locate:hover, .world-explore:hover:not(:disabled), .world-plan-route:hover { color: var(--text-primary); }
+.world-locate:focus-visible, .world-explore:focus-visible, .world-plan-route:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+
+/* Explore this area: a short reveal moment above the CTA, never a route. */
+.world-explore-card-host { bottom: 60px; left: 50%; position: absolute; transform: translateX(-50%); width: min(340px, calc(100% - 28px)); z-index: 4; }
+.world-explore-card-host[hidden] { display: none; }
+.world-explore-card {
+  backdrop-filter: blur(10px);
+  background: rgb(11 12 15 / 92%);
+  border: 1px solid var(--border-faint);
+  border-radius: 10px;
+  color: var(--text-muted);
+  display: grid;
+  font-size: 13px;
+  gap: 10px;
+  padding: 14px;
+}
+.world-explore-card.is-reveal { animation: world-reveal-in .35s ease-out; border-color: rgb(232 184 10 / 45%); }
+.world-explore-card.is-exploring { color: var(--accent-yellow); font-family: var(--font-display); font-size: 12px; letter-spacing: .1em; text-align: center; }
+.world-explore-card header { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
+.world-explore-card h2 { color: var(--text-primary); font-family: var(--font-display); font-size: 17px; margin: 0; }
+.world-explore-card p { margin: 0; }
+.world-explore-breakdown { display: flex; flex-wrap: wrap; gap: 6px 14px; list-style: none; margin: 0; padding: 0; }
+.world-explore-breakdown li { align-items: baseline; display: flex; gap: 6px; }
+.world-explore-breakdown strong { color: var(--text-primary); font-family: var(--font-mono); font-size: 15px; }
+.world-explore-card-actions, .discovery-card-actions, .fartlek-detail-actions, .route-planner-commands, .route-planner-stop-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.world-explore-card-actions button, .discoveries-sorts button, .discovery-card-actions button, .fartlek-detail-actions button,
+.route-planner button:not(.world-detail-close), .collectible-detail-route {
+  background: transparent;
+  border: 1px solid var(--border-faint);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 32px;
+  padding: 4px 10px;
+}
+.world-explore-card-actions button.is-primary, .route-planner .route-planner-submit, .route-planner .route-planner-confirm,
+.discovery-card-actions button[aria-pressed="true"], .fartlek-detail-actions button[aria-pressed="true"], .collectible-detail-route {
+  border-color: rgb(232 184 10 / 45%);
+  color: var(--accent-yellow);
+}
+.discoveries-sorts button[aria-pressed="true"], .route-planner button[aria-pressed="true"] { border-color: var(--accent-yellow); color: var(--text-primary); }
+.world-explore-card-actions button:hover, .discoveries-sorts button:hover, .discovery-card-actions button:hover,
+.fartlek-detail-actions button:hover, .route-planner button:hover:not(:disabled), .collectible-detail-route:hover { color: var(--text-primary); }
+.world-explore-card-actions button:focus-visible, .discoveries-sorts button:focus-visible, .discovery-card-actions button:focus-visible,
+.fartlek-detail-actions button:focus-visible, .route-planner button:focus-visible, .collectible-detail-route:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+.route-planner button:disabled { cursor: default; opacity: .55; }
+@keyframes world-reveal-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .world-explore-card.is-reveal { animation: none; }
+}
+
+/* Flowline character: one primary badge, at most two scores. */
+.flowline-character {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 10px;
+  justify-self: start;
+  letter-spacing: .1em;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+.flowline-character.is-flow, .world-explore-breakdown .is-flow span { color: var(--accent-yellow); }
+.flowline-character.is-endurance, .world-explore-breakdown .is-endurance span { color: #7cc4ff; }
+.flowline-character.is-explore, .world-explore-breakdown .is-explore span { color: #8fd694; }
+.flowline-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+.flowline-facts div { display: grid; gap: 2px; }
+.flowline-facts dt, .flowline-best-for small, .discoveries-counts dt { color: var(--text-muted); font-family: var(--font-display); font-size: 9px; letter-spacing: .12em; margin: 0; text-transform: uppercase; }
+.flowline-facts dd, .discoveries-counts dd { color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; margin: 0; }
+.flowline-best-for { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.fartlek-detail-more summary { color: var(--text-muted); cursor: pointer; font-family: var(--font-display); font-size: 12px; }
+.fartlek-detail-more[open] { display: grid; gap: 8px; }
+
+/* View discoveries. */
+.discoveries-counts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+.discoveries-counts div { display: grid; gap: 2px; }
+.discoveries-sorts { display: flex; flex-wrap: wrap; gap: 6px; }
+.discoveries-list { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.discovery-card { border: 1px solid var(--border-faint); border-radius: 8px; display: grid; gap: 8px; padding: 10px; }
+.discovery-card-title { align-items: center; display: flex; gap: 8px; margin: 0; }
+.discovery-card-title strong { color: var(--text-primary); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.discovery-card-title small { color: var(--text-muted); font-size: 10px; letter-spacing: .1em; margin-left: auto; text-transform: uppercase; }
+
+/* Manual planner stops. */
+.route-planner-stops li.is-dropped { opacity: .55; }
+.route-planner-stop-actions button { min-width: 32px; padding: 0 6px; }
+.route-planner-result { border-top: 1px solid var(--border-faint); display: grid; gap: 8px; padding-top: 10px; }
+.route-planner-waypoint { color: var(--text-muted); font-family: var(--font-mono); }
 
 .world-map-status {
   backdrop-filter: blur(10px);
@@ -431,9 +528,6 @@
 .world-stats i { color: var(--text-subtle); font-family: var(--font-body); font-size: 16px; font-style: normal; }
 .world-stats strong { font-weight: 600; }
 .world-stats-truncated { color: var(--text-subtle); font-size: 12px; }
-.world-hidden-flowlines { align-items: center; color: var(--text-muted); display: flex; flex-wrap: wrap; font-family: var(--font-display); font-size: 12px; gap: 8px; margin: 6px 12px 0; }
-.world-hidden-flowlines .fartlek-swatch { opacity: .5; width: 12px; }
-.world-hidden-flowlines button { font-size: 12px; }
 .exploration-revealed li.is-new .exploration-target-name small { color: var(--accent-yellow); font-family: var(--font-display); letter-spacing: .1em; text-transform: uppercase; }
 .activity-replay-fartlek-found { color: var(--accent-yellow); font-family: var(--font-display); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 
@@ -571,7 +665,8 @@
   .world-map-frame {
     height: clamp(320px, calc(100dvh - var(--mobile-header-height, 0px) - var(--mobile-nav-clearance, 0px) - 190px), 600px);
   }
-  .world-explore { bottom: 58px; }
+  .world-explore-cta { bottom: 58px; }
+  .world-explore-card-host { bottom: 102px; }
   .world-map-status { left: 70px; max-width: calc(100% - 150px); overflow-wrap: anywhere; transform: none; }
   .world-detail-host {
     backdrop-filter: none;
@@ -590,5 +685,5 @@
 
 @media (pointer: coarse) {
   .staza-map .maplibregl-ctrl-group button { height: 36px; width: 36px; }
-  .world-locate, .world-explore { min-height: 36px; }
+  .world-locate, .world-explore, .world-plan-route { min-height: 36px; }
 }

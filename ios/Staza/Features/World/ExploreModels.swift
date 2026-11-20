@@ -25,6 +25,12 @@ struct RouteProposal: Decodable, Equatable, Identifiable, Sendable {
     let start: GeoPoint
     let includedTargetIds: [String]
     let constraintFit: String?
+    var flowlineIds: [String]? = nil
+    var droppedFlowlineIds: [String]? = nil
+    var droppedTargetIds: [String]? = nil
+    var droppedWaypoints: [GeoPoint]? = nil
+    /// Manual route stop order: collectible ids, `waypoint:<lat>,<lon>` and `flowline:<id>`.
+    var stopOrder: [String]? = nil
 }
 
 struct ExplorationCatalog: Decodable, Equatable, Sendable {
@@ -37,11 +43,11 @@ struct GeneratedExploration: Decodable, Equatable, Sendable {
     let explorationId: String
     let proposals: [RouteProposal]
     let catalog: ExplorationCatalog
-    /// Flowlines this generate newly revealed to the player.
-    var revealedFlowlineIds: [String]? = nil
 }
 
-struct RerouteResponse: Decodable, Sendable {
+/// `POST /api/explorations/plan`: the one route connecting the player's stops.
+struct PlannedExploration: Decodable, Sendable {
+    let explorationId: String
     let proposal: RouteProposal
 }
 
@@ -57,43 +63,35 @@ struct ConfirmedExploration: Decodable, Sendable {
     let plannedRoute: PlannedRoute?
 }
 
-struct ExploreArea: Equatable, Sendable {
-    let bounds: WorldBounds
+/// The area sent with a plan or suggest request.
+struct PlanArea: Encodable, Equatable, Sendable {
+    let bbox: String
+    let center: GeoPoint
+    let zoom: Double
 
-    var center: GeoPoint { GeoPoint(lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2) }
-
-    /// An area framing a Flowline and, when known, the player's start.
-    static func around(_ flowline: WorldFlowline, start: GeoPoint?) -> ExploreArea? {
-        let lats = flowline.coordinates.map(\.latitude) + (start.map { [$0.lat] } ?? [])
-        let lons = flowline.coordinates.map(\.longitude) + (start.map { [$0.lon] } ?? [])
-        guard let minLat = lats.min(), let maxLat = lats.max(), let minLon = lons.min(), let maxLon = lons.max() else { return nil }
-        let padLat = max(0.01, (maxLat - minLat) * 0.5)
-        let padLon = max(0.015, (maxLon - minLon) * 0.5)
-        return ExploreArea(bounds: WorldBounds(west: minLon - padLon, south: minLat - padLat, east: maxLon + padLon, north: maxLat + padLat))
+    init(bounds: WorldBounds, zoom: Double = 11) {
+        bbox = bounds.queryValue
+        center = GeoPoint(lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2)
+        self.zoom = zoom
     }
 }
 
-struct GenerateRequest: Encodable, Sendable {
-    struct Area: Encodable, Sendable {
-        let bbox: String
-        let center: GeoPoint
-        let zoom: Double
-    }
-    struct Constraint: Encodable, Sendable {
-        let type = "distance"
-        let value: Double
-    }
-    let area: Area
+/// "Suggest route": the old generator, bounded to the visible area and the player's revealed Flowlines.
+struct SuggestRequest: Encodable, Sendable {
+    let area: PlanArea
+    let sport: String
     let start: GeoPoint
     let routeType = "round_trip"
-    let constraint: Constraint
-    /// A revealed Flowline every proposal must ride in full.
-    var destinationFlowlineId: String? = nil
 }
 
-struct RerouteRequest: Encodable, Sendable {
-    let proposalId: String
-    let targetIds: [String]
+struct PlanRequest: Encodable, Sendable {
+    let area: PlanArea
+    let sport: String
+    let start: GeoPoint
+    let routeType: String
+    let end: GeoPoint?
+    let keepOrder: Bool
+    let stops: [PlannerStop]
 }
 
 struct ConfirmRequest: Encodable, Sendable {

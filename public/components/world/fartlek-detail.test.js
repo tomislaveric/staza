@@ -37,7 +37,7 @@ describe("FartlekDetail", () => {
     expect(markup).toContain('aria-label="Close Flowline detail"');
     expect(markup).toContain("Complete the full segment in one activity.");
     expect(markup).not.toMatch(/as fast as possible/i);
-    expect(markup).toContain("Not yet completed");
+    expect(markup).toContain("Unridden");
   });
 
   it("shows latest time, average speed, best time and completion count once completed", () => {
@@ -54,7 +54,20 @@ describe("FartlekDetail", () => {
     expect(markup).toContain(">3<");
   });
 
-  it("offers a route that rides the Flowline", () => {
-    expect(FartlekDetail(fartlek())).toContain('data-fartlek-route="');
+  it("highlights the primary character with at most two scores and offers Add to route", () => {
+    const markup = FartlekDetail(fartlek({
+      flowScore: 84, enduranceScore: 70, exploreScore: 60, roadQualityScore: 91,
+      character: { primary: "flow", tags: ["flow", "endurance"] }
+    }));
+    expect(markup).toContain("High-flow");
+    expect(markup).toMatch(/<dt>Flow<\/dt><dd>84<\/dd>/);
+    expect(markup).toMatch(/<dt>Road quality<\/dt><dd>91<\/dd>/);
+    expect(markup).not.toContain("<dt>Endurance</dt>");
+    expect(markup).toContain("Best for");
+    expect(markup).toContain('data-flowline-add-route="');
+    expect(markup).toContain(">Add to route<");
+    expect(markup).toContain("View details");
+    expect(FartlekDetail(fartlek(), { inRoute: true })).toContain(">Added to route<");
+    expect(FartlekDetail(fartlek({ character: { primary: "flow", tags: ["flow"] } }))).not.toContain("Best for");
   });
 });

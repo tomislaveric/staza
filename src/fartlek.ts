@@ -1,5 +1,6 @@
 import type { Fartlek, FartlekCompletion, FartlekCompletionDraft, FartlekGeometry, WorldFartlek } from "./domain.js";
 import { readableFlowlineName } from "./flowlineName.js";
+import { classifyFlowline } from "./flowlineCharacter.js";
 import { distanceMeters } from "./geometry.js";
 import type { GeoBounds } from "./worldQuery.js";
 import { isWithinBounds } from "./worldQuery.js";
@@ -58,6 +59,10 @@ export const toWorldFartlek = (fartlek: Fartlek, stats: FartlekCompletionStats =
   geometry: fartlek.geometry,
   lengthMeters: fartlek.lengthMeters,
   ...(fartlek.flowScore === undefined ? {} : { flowScore: fartlek.flowScore }),
+  ...(fartlek.enduranceScore === undefined ? {} : { enduranceScore: fartlek.enduranceScore }),
+  ...(fartlek.exploreScore === undefined ? {} : { exploreScore: fartlek.exploreScore }),
+  ...(fartlek.roadQualityScore === undefined ? {} : { roadQualityScore: fartlek.roadQualityScore }),
+  character: classifyFlowline(fartlek),
   status: fartlek.status,
   source: fartlek.source,
   completed: stats.completed,

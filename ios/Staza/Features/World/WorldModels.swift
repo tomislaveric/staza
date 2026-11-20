@@ -21,6 +21,10 @@ struct WorldFlowline: Decodable, Equatable, Identifiable, Sendable {
     let completed: Bool
     var lengthMeters: Double? = nil
     var flowScore: Double? = nil
+    var enduranceScore: Double? = nil
+    var exploreScore: Double? = nil
+    var roadQualityScore: Double? = nil
+    var character: FlowlineCharacter? = nil
 
     var coordinates: [CLLocationCoordinate2D] {
         geometry.coordinates.compactMap { $0.count >= 2 ? CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) : nil }
@@ -38,8 +42,14 @@ struct WorldViewport: Decodable, Equatable, Sendable {
     let fartleks: [WorldFlowline]?
     let truncated: Bool?
     var stats: WorldStats? = nil
-    /// Published Flowlines in view the player has not revealed; only their count is sent.
-    var hiddenFlowlineCount: Int? = nil
+    var areaStatus: AreaStatus? = nil
+}
+
+/// Explore state of the visible area: revealed Flowlines in it and eligible ones still hidden.
+struct AreaStatus: Decodable, Equatable, Sendable {
+    let exploreAllowed: Bool
+    let knownFlowlines: Int
+    let availableFlowlines: Int
 }
 
 /// The World-relevant part of `GET /api/player/capabilities`.

@@ -1,9 +1,20 @@
 import type { Pool, PoolClient } from "pg";
 import type { Fartlek } from "../domain.js";
+import type { RevealCandidate } from "../flowlineReveal.js";
 import type { GeoBounds } from "../worldQuery.js";
 import { mapFartlek, SELECT_COLUMNS, type FartlekRow } from "./fartlekRepository.js";
 
 export type FlowlineRevealSource = "explore" | "ride";
+
+interface CandidateRow {
+  id: string;
+  flow_score: number | null;
+  suitability_score: number;
+  endurance_score: number | null;
+  explore_score: number | null;
+  road_quality_score: number | null;
+  data_confidence: number | null;
+}
 
 type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 
@@ -58,14 +69,43 @@ export class FlowlineRevealRepository {
     return { fartleks: rows.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)), truncated };
   }
 
-  /** Published Flowlines in the viewport the player has not revealed yet. */
-  async countHiddenWithinBounds(playerId: string, bounds: GeoBounds): Promise<number> {
+  /** Revealed published Flowlines in the viewport: the area's known Flowlines. */
+  async countRevealedWithinBounds(playerId: string, bounds: GeoBounds): Promise<number> {
     const result = await this.pool.query<{ count: string }>(
       `SELECT count(*) AS count FROM fartleks AS f
+       INNER JOIN player_flowline_reveals AS r ON r.fartlek_id = f.id AND r.player_id = $1
+       WHERE f.status = 'published' AND ${BBOX_OVERLAP}`,
+      [playerId, ...boundsValues(bounds)]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  /** Scores of the published Flowlines in the viewport the player has not revealed yet; never geometry. */
+  async listHiddenCandidatesWithinBounds(playerId: string, bounds: GeoBounds): Promise<RevealCandidate[]> {
+    const result = await this.pool.query<CandidateRow>(
+      `SELECT f.id, f.flow_score, f.suitability_score, f.endurance_score, f.explore_score, f.road_quality_score, f.data_confidence
+       FROM fartleks AS f
        WHERE f.status = 'published' AND ${BBOX_OVERLAP}
          AND NOT EXISTS (SELECT 1 FROM player_flowline_reveals AS r WHERE r.player_id = $1 AND r.fartlek_id = f.id)`,
       [playerId, ...boundsValues(bounds)]
     );
-    return Number(result.rows[0]?.count ?? 0);
+    return result.rows.map((row) => ({
+      id: row.id,
+      flowScore: row.flow_score ?? row.suitability_score,
+      ...(row.endurance_score === null ? {} : { enduranceScore: row.endurance_score }),
+      ...(row.explore_score === null ? {} : { exploreScore: row.explore_score }),
+      ...(row.road_quality_score === null ? {} : { roadQualityScore: row.road_quality_score }),
+      ...(row.data_confidence === null ? {} : { dataConfidence: row.data_confidence })
+    }));
+  }
+
+  /** Published Flowlines by id, in id order. */
+  async listByIds(fartlekIds: string[]): Promise<Fartlek[]> {
+    if (fartlekIds.length === 0) return [];
+    const result = await this.pool.query<FartlekRow>(
+      `SELECT ${SELECT_COLUMNS} FROM fartleks WHERE status = 'published' AND id = ANY($1::text[]) ORDER BY id`,
+      [fartlekIds]
+    );
+    return result.rows.map(mapFartlek);
   }
 }

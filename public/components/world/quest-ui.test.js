@@ -163,7 +163,7 @@ describe("Started explorations", () => {
 
   it("renders useful empty states without fabricating quests", () => {
     const markup = QuestList([], undefined);
-    expect(markup).toContain("Use Explore this Area on the map to pick targets, plan a route and start an exploration.");
+    expect(markup).toContain("Explore an area to reveal Flowlines, then plan a route to start an exploration.");
   });
 
   it("shows per-target Mountain Pass progress on started quests", () => {

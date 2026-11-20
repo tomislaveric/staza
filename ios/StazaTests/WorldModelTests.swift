@@ -18,15 +18,60 @@ final class WorldModelTests: XCTestCase {
         await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
         XCTAssertEqual(model.collectibles.map(\.id), ["c1"])
         XCTAssertEqual(model.flowlines.first?.coordinates.count, 2)
-        XCTAssertEqual(model.hiddenFlowlineCount, 0)
+        XCTAssertNil(model.areaStatus)
+        XCTAssertEqual(model.exploreAction, .zoomIn)
         XCTAssertFalse(model.viewportFailed)
     }
 
-    func testViewportCarriesHiddenFlowlineCount() async {
-        let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"hiddenFlowlineCount":3"#)
-        let model = WorldModel(api: APIClient(baseURL: baseURL, transport: PathTransport(responses: ["/api/world": (200, body)])))
+    private let status = #""areaStatus":{"exploreAllowed":true,"knownFlowlines":1,"availableFlowlines":2}"#
+
+    func testExploreRevealsFlowlinesAndUpdatesAreaStatus() async throws {
+        let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,\#(status)"#)
+        let revealed = #"{"id":"f2","name":"Rheintal","geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]},"completed":false,"flowScore":84,"roadQualityScore":91,"character":{"primary":"flow","tags":["flow","explore"]}}"#
+        let explored = #"{"outcome":"already_explored_new","revealed":[\#(revealed)],"knownCount":2,"availableCount":0,"summary":{"total":1,"byCharacter":{"flow":1}}}"#
+        let transport = StubTransport([.init(status: 200, body: body), .init(status: 200, body: explored)])
+        let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
         await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
-        XCTAssertEqual(model.hiddenFlowlineCount, 3)
+        XCTAssertEqual(model.exploreAction, .exploreNew)
+
+        await model.exploreArea(reduceMotion: true)
+        XCTAssertEqual(transport.requests.last?.url?.path, "/api/world/explore")
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(transport.requests.last?.httpBody)) as? [String: Any])
+        XCTAssertEqual(sent["bbox"] as? String, WorldBounds(west: 7, south: 46, east: 9, north: 48).queryValue)
+        XCTAssertEqual(model.visibleFlowlines.map(\.id), ["f1", "f2"])
+        XCTAssertEqual(model.flowline(id: "f2")?.resolvedCharacter.tags, [.flow, .explore])
+        guard case .result(let result) = model.exploreState else { return XCTFail("expected a result") }
+        XCTAssertEqual(result.breakdown, [ExploreResult.Count(tag: .flow, count: 1)])
+        XCTAssertEqual(model.exploreAction, .showFlowlines, "a fully known area only shows its Flowlines")
+
+        await model.exploreArea(reduceMotion: true)
+        XCTAssertEqual(transport.requests.count, 2, "Show Flowlines never explores again")
+        model.dismissExplore()
+        XCTAssertNil(model.exploreState)
+    }
+
+    func testExploreActionFollowsAreaStatus() {
+        XCTAssertEqual(ExploreAction(nil), .zoomIn)
+        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: false, knownFlowlines: 0, availableFlowlines: 3)), .zoomIn)
+        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: true, knownFlowlines: 0, availableFlowlines: 0)), .explore)
+        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: true, knownFlowlines: 0, availableFlowlines: 3)), .explore)
+        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: true, knownFlowlines: 2, availableFlowlines: 1)), .exploreNew)
+        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: true, knownFlowlines: 2, availableFlowlines: 0)), .showFlowlines)
+    }
+
+    func testDiscoverySorts() {
+        func flowline(_ id: String, flow: Double, endurance: Double, completed: Bool, lon: Double) -> WorldFlowline {
+            WorldFlowline(id: id, name: id, geometry: .init(coordinates: [[lon, 47], [lon, 47.01]]), completed: completed, flowScore: flow, enduranceScore: endurance)
+        }
+        let items = [
+            flowline("a", flow: 90, endurance: 10, completed: true, lon: 8.5),
+            flowline("b", flow: 50, endurance: 80, completed: false, lon: 8.0),
+            flowline("c", flow: 70, endurance: 40, completed: false, lon: 9.0)
+        ]
+        XCTAssertEqual(DiscoverySort.flow.sorted(items, origin: nil).map(\.id), ["a", "c", "b"])
+        XCTAssertEqual(DiscoverySort.endurance.sorted(items, origin: nil).map(\.id), ["b", "c", "a"])
+        XCTAssertEqual(DiscoverySort.unridden.sorted(items, origin: nil).map(\.id), ["c", "b", "a"])
+        XCTAssertEqual(DiscoverySort.nearby.sorted(items, origin: GeoPoint(lat: 47, lon: 8.9)).map(\.id), ["c", "a", "b"])
     }
 
     func testViewportFailureFlagged() async {

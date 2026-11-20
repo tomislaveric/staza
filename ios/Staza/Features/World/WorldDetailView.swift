@@ -29,43 +29,91 @@ struct WorldDetailHeader: View {
     }
 }
 
-/// Status chips and facts about the tapped collectible or flowline.
+/// Status chips and facts about the tapped collectible or flowline. A Flowline leads with its primary
+/// character; further scores stay behind "View details".
 struct WorldDetailBody: View {
     let selection: WorldSelection
     let isQuestTarget: Bool
-    /// Plans a route that rides the shown Flowline; only revealed Flowlines are ever shown.
-    var onPlanRoute: ((WorldFlowline) -> Void)? = nil
+    var inRoute = false
+    /// Adds the shown collectible or revealed Flowline to the route being planned, or removes it.
+    var onToggleRoute: (() -> Void)? = nil
     @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
             FlowChips {
                 StazaChip(selection.statusLabel, systemImage: selection.done ? "checkmark.circle.fill" : "circle.dashed", tint: selection.done ? StazaColor.success : StazaColor.textSubtle)
+                if case .flowline(let flowline) = selection {
+                    FlowlineCharacterChip(flowline: flowline)
+                }
                 if isQuestTarget {
                     StazaChip("world.detail.questTarget", systemImage: "scope", tint: StazaColor.accent)
                 }
             }
             if case .flowline(let flowline) = selection {
-                HStack(spacing: StazaSpacing.md) {
-                    if let length = flowline.lengthMeters {
-                        StatTile(label: "world.detail.length", value: StazaFormat.distance(meters: length, locale: locale))
-                    }
-                    if let score = flowline.flowScore {
-                        StatTile(label: "world.detail.flowScore", value: "\(Int(score.rounded()))", tint: StazaColor.rarityRare)
-                    }
+                flowlineFacts(flowline)
+            }
+            if let onToggleRoute {
+                Button(action: onToggleRoute) {
+                    Label(inRoute ? "world.route.added" : "world.route.add", systemImage: inRoute ? "checkmark" : "plus")
                 }
-                if let onPlanRoute {
-                    Button { onPlanRoute(flowline) } label: {
-                        Label("world.detail.planViaFlowline", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                    }
-                    .buttonStyle(.stazaPrimaryWide)
-                    .accessibilityIdentifier("worldPlanViaFlowline")
-                }
+                .buttonStyle(inRoute ? .stazaSecondaryWide : .stazaPrimaryWide)
+                .accessibilityAddTraits(inRoute ? .isSelected : [])
+                .accessibilityIdentifier("worldAddToRoute")
+            }
+            if case .flowline(let flowline) = selection {
+                DisclosureGroup("world.detail.viewDetails") { details(flowline) }
+                    .font(StazaFont.subheadline.weight(.medium))
+                    .tint(StazaColor.textMuted)
+                    .foregroundStyle(StazaColor.textPrimary)
+                    .accessibilityIdentifier("worldFlowlineDetails")
             }
         }
         .padding(.horizontal, StazaSpacing.md)
         .padding(.bottom, StazaSpacing.lg)
         .accessibilityIdentifier("worldDetailSheet")
+    }
+
+    /// Length, the primary character's score and road quality: never more than two scores at once.
+    @ViewBuilder
+    private func flowlineFacts(_ flowline: WorldFlowline) -> some View {
+        let character = flowline.resolvedCharacter
+        HStack(spacing: StazaSpacing.md) {
+            if let length = flowline.lengthMeters {
+                StatTile(label: "world.detail.length", value: StazaFormat.distance(meters: length, locale: locale))
+            }
+            if let score = flowline.score(for: character.primary) {
+                StatTile(label: character.primary.scoreLabel, value: "\(Int(score.rounded()))", tint: character.primary.tint)
+            }
+            if let quality = flowline.roadQualityScore {
+                StatTile(label: "world.detail.roadQuality", value: "\(Int(quality.rounded()))")
+            }
+        }
+        if character.tags.count > 1 {
+            HStack(spacing: StazaSpacing.sm) {
+                Text("world.detail.bestFor").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
+                ForEach(character.tags, id: \.self) { tag in
+                    StazaChip(tag.scoreLabel, systemImage: tag.systemImage, tint: tag.tint)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func details(_ flowline: WorldFlowline) -> some View {
+        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            HStack(spacing: StazaSpacing.md) {
+                ForEach(FlowlineTag.allCases, id: \.self) { tag in
+                    if let score = flowline.score(for: tag) {
+                        StatTile(label: tag.scoreLabel, value: "\(Int(score.rounded()))", tint: tag.tint)
+                    }
+                }
+            }
+            if !flowline.completed {
+                Text("world.detail.completeHint").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
+            }
+        }
+        .padding(.top, StazaSpacing.sm)
     }
 }
 
@@ -139,7 +187,7 @@ extension WorldSelection {
     var statusLabel: LocalizedStringKey {
         switch self {
         case .collectible(let item): item.found ? "world.detail.found" : "world.detail.notFound"
-        case .flowline(let item): item.completed ? "world.detail.completed" : "world.detail.notCompleted"
+        case .flowline(let item): item.completed ? "world.detail.completed" : "world.flowline.unridden"
         }
     }
 }

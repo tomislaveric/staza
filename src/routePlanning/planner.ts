@@ -54,7 +54,7 @@ export interface PlannedProposal {
 
 const transientCodes = new Set(["timeout", "unavailable", "rate_limited"]);
 
-interface QueuedCandidate {
+export interface QueuedCandidate {
   candidate: RouteCandidate;
   /** Objectives the candidate was built for; scores its progress and rebuilds retries. */
   objectives: QuestObjective[];
@@ -74,7 +74,7 @@ interface RoutingRun {
  * unroutable. Planned-but-unserved points within walking distance are reported as nearby;
  * other near-route points are ignored.
  */
-const routeCandidates = async (
+export const routeCandidates = async (
   queued: QueuedCandidate[],
   { requestId, input, bounds, eligibleTargets, maxRequests, routing, policy }: {
     requestId: string;
@@ -176,7 +176,7 @@ const routeCandidates = async (
   return { scored, failureCodes, routingRequests, unroutable };
 };
 
-const noRouteError = (failureCodes: string[]): PlanningError => {
+export const noRouteError = (failureCodes: string[]): PlanningError => {
   const transientOnly = failureCodes.length > 0 && failureCodes.every((code) => transientCodes.has(code));
   return transientOnly
     ? new PlanningError("routing_unavailable", "Route planning is temporarily unavailable.")
@@ -281,7 +281,7 @@ export interface RerouteTargetsInput {
 /** Id of a route-only waypoint; deterministic so a customized route keeps its stop order. */
 export const waypointId = (point: LatLon): string => `waypoint:${point.lat.toFixed(6)},${point.lon.toFixed(6)}`;
 
-const waypointTarget = (point: LatLon): QuestRouteTarget => ({
+export const waypointTarget = (point: LatLon): QuestRouteTarget => ({
   kind: "point",
   id: waypointId(point),
   name: "Map point",
