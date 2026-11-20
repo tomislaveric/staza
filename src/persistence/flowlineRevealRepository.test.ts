@@ -56,4 +56,20 @@ describePersistence("FlowlineRevealRepository", () => {
     expect(await repository!.listHiddenCandidatesWithinBounds(otherPlayerId, bounds)).toHaveLength(2);
     expect((await repository!.listByIds(["flow-b", "missing"])).map((row) => row.id)).toEqual(["flow-b"]);
   });
+
+  it("lists only the player's completed Flowlines for the default map", async () => {
+    await pool!.query(
+      "INSERT INTO activities (id, player_id, source_type, started_at, xp_earned, collected_count) VALUES ('ride-1', $1, 'fit', now(), 0, 0)",
+      [playerId]
+    );
+    await pool!.query(
+      `INSERT INTO fartlek_completions (id, fartlek_id, player_id, activity_id, completed_at, elapsed_time_s, average_speed_mps,
+         fartlek_length_m_snapshot, fartlek_geometry_version_snapshot)
+       VALUES ('00000000-0000-4000-8000-0000000000c1', 'flow-a', $1, 'ride-1', now(), 300, 5, 1500, 1)`,
+      [playerId]
+    );
+    await repository!.reveal(playerId, ["flow-b"], "explore");
+    expect(await repository!.listCompletedWithinBoundsLimited(playerId, bounds)).toMatchObject({ truncated: false, fartleks: [{ id: "flow-a" }] });
+    expect((await repository!.listCompletedWithinBoundsLimited(otherPlayerId, bounds)).fartleks).toEqual([]);
+  });
 });

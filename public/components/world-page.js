@@ -56,7 +56,6 @@ const filterLabels = {
   "long-endurance": "Long Flowlines"
 };
 
-const formatNumber = (value) => new Intl.NumberFormat(getAppLocale()).format(value);
 
 export const visibleWorldCollectibles = (collectibles) =>
   collectibles.filter((collectible) => collectible.visibility !== "hidden");
@@ -146,38 +145,27 @@ export const WorldFilterControls = (selectedFilters, collectibles = [], fartleks
 `;
 };
 
-export const WorldStats = (stats, truncated) => `
-  <p class="world-stats">
-    <span>${formatNumber(stats.discoveredCount)} visited here</span>
-    <i aria-hidden="true">\u00b7</i>
-    <span>${formatNumber(stats.remainingCount)} remaining</span>
-    ${truncated ? '<i aria-hidden="true">\u00b7</i><span class="world-stats-truncated">Zoom in to see everything here</span>' : ""}
-  </p>
-`;
+/** Only a hint when the viewport is capped; per-viewport counts are not shown. */
+export const WorldStats = (truncated) => truncated
+  ? '<p class="world-stats"><span class="world-stats-truncated">Zoom in to see everything here</span></p>'
+  : "";
 
 /** Primary state-driven Explore CTA plus a small "Plan route" entry; hidden Flowlines are never drawn. */
-export const WorldExploreControls = (areaStatus, { busy = false, stopCount = 0 } = {}) => {
-  const cta = exploreCta(areaStatus);
+export const WorldExploreControls = (exploreAllowed, { busy = false, stopCount = 0 } = {}) => {
+  const cta = exploreCta(exploreAllowed);
   return `
     <button class="world-explore" type="button" data-world-explore="${cta.action}"${cta.disabled || busy ? " disabled" : ""}>${escapeHtml(cta.label)}</button>
     <button class="world-plan-route" type="button" data-world-plan>${stopCount ? `Plan route \u00b7 ${stopCount}` : "Plan route"}</button>
   `;
 };
 
-/** "Discovered X / Y" for the visible map area; placeholders until the first viewport loads. */
-export const WorldDiscovered = (stats) => `
-  <span>Discovered in view</span>
-  <strong>${stats ? formatNumber(stats.discoveredCount) : "\u2013"} <i>/ ${stats ? formatNumber(stats.totalCollectibles) : "\u2013"}</i></strong>
-`;
-
-export const WorldPage = ({ stats, selectedFilters, lockedFilters = [] }) => `
+export const WorldPage = ({ selectedFilters, lockedFilters = [] }) => `
   <section class="world-page" aria-labelledby="world-title">
     <header class="world-header">
       <div>
         <h1 id="world-title">World</h1>
         <p>Discover what is worth exploring</p>
       </div>
-      <div class="world-discovered" data-world-discovered>${WorldDiscovered(stats)}</div>
     </header>
     ${WorldFilterControls(selectedFilters, [], [], [], lockedFilters)}
     <div class="world-map-shell">
@@ -189,7 +177,7 @@ export const WorldPage = ({ stats, selectedFilters, lockedFilters = [] }) => `
         <div class="world-map-actions">
           <button class="world-locate" type="button" data-world-locate>LOCATE ME</button>
         </div>
-        <div class="world-explore-cta" data-world-explore-cta>${WorldExploreControls(undefined)}</div>
+        <div class="world-explore-cta" data-world-explore-cta>${WorldExploreControls(false)}</div>
         <div class="world-explore-card-host" data-world-explore-card hidden></div>
         <p class="world-map-status" data-world-status role="status" hidden></p>
       </div>
@@ -238,7 +226,6 @@ export const distanceBetween = (from, to) => {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(a)));
 };
 
-const emptyStats = { totalCollectibles: 0, discoveredCount: 0, remainingCount: 0 };
 
 const expiredCodes = new Set(["exploration_expired", "proposal_expired"]);
 
@@ -275,10 +262,14 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   let selectedFilters = [];
   let collectibles = [];
   let pendingQuestId;
-  let stats = emptyStats;
   let truncated = false;
+  /** Completed Flowlines in the viewport plus every Flowline Explore showed this session. */
   let fartleks = [];
-  let areaStatus;
+  let completedFartleks = [];
+  let exploredFartleks = [];
+  /** The last explored area's revealed Flowlines: what the discoveries panel lists. */
+  let discoveries = [];
+  let exploreAllowed = false;
   let availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
   let selection;
   let selectedQuestKey;
@@ -303,11 +294,10 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   let plannerToken = 0;
   const plannedRoutes = new Map();
 
-  mountPoint.innerHTML = WorldPage({ stats: undefined, selectedFilters, lockedFilters });
+  mountPoint.innerHTML = WorldPage({ selectedFilters, lockedFilters });
   const mapContainer = mountPoint.querySelector("[data-world-map]");
   const statusHost = mountPoint.querySelector("[data-world-status]");
   const statsHost = mountPoint.querySelector("[data-world-stats]");
-  const discoveredHost = mountPoint.querySelector("[data-world-discovered]");
   const questHost = mountPoint.querySelector("[data-world-quests]");
   const detailHost = mountPoint.querySelector("[data-world-detail]");
   const collectibleListHost = mountPoint.querySelector("[data-world-collectible-list]");
@@ -384,7 +374,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
 
   const renderControls = () => {
     ctaHost.hidden = Boolean(planner);
-    ctaHost.innerHTML = WorldExploreControls(areaStatus, { busy: explore?.phase === "exploring", stopCount: draftStops.length });
+    ctaHost.innerHTML = WorldExploreControls(exploreAllowed, { busy: explore?.phase === "exploring", stopCount: draftStops.length });
     ctaHost.querySelector("[data-world-explore]")?.addEventListener("click", () => void exploreArea());
     ctaHost.querySelector("[data-world-plan]")?.addEventListener("click", () => openPlanner());
     exploreCardHost.hidden = !explore || Boolean(planner);
@@ -440,7 +430,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     }
     if (panel === "discoveries") {
       showPanel(DiscoveriesPanel({
-        flowlines: fartleks,
+        flowlines: discoveries,
         collectibles: visibleCollectibles(),
         sort: discoveriesSort,
         origin: homePosition,
@@ -502,8 +492,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   };
 
   const renderSidePanels = () => {
-    statsHost.innerHTML = WorldStats(stats, truncated);
-    discoveredHost.innerHTML = WorldDiscovered(stats);
+    statsHost.innerHTML = WorldStats(truncated);
     questHost.innerHTML = QuestList(questInstances, pendingQuestId, selectedQuestKey, plannedRoutes);
     questHost.querySelectorAll("[data-quest-retry]").forEach((button) => {
       button.addEventListener("click", () => void retryQuest(button.dataset.questRetry));
@@ -669,10 +658,23 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderControls();
   }
 
-  /** Newly revealed Flowlines appear one after another; immediately with reduced motion. */
-  function revealOnMap(flowlines) {
-    const known = new Set(fartleks.map((fartlek) => fartlek.id));
-    fartleks = [...fartleks, ...flowlines.filter((flowline) => !known.has(flowline.id))];
+  /** The viewport only sends completed Flowlines; explored ones stay on the map for the session. */
+  function mergeFartleks() {
+    const completed = new Set(completedFartleks.map((fartlek) => fartlek.id));
+    fartleks = [...completedFartleks, ...exploredFartleks.filter((fartlek) => !completed.has(fartlek.id))];
+  }
+
+  /** Known Flowlines show at once; newly revealed ones appear one after another (at once with reduced motion). */
+  function revealOnMap(known, flowlines) {
+    const shown = new Set(fartleks.map((fartlek) => fartlek.id));
+    const explored = new Set(exploredFartleks.map((fartlek) => fartlek.id));
+    for (const flowline of [...known, ...flowlines]) {
+      if (explored.has(flowline.id)) continue;
+      explored.add(flowline.id);
+      exploredFartleks.push(flowline);
+    }
+    mergeFartleks();
+    flowlines = flowlines.filter((flowline) => !shown.has(flowline.id));
     availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
     renderFilters();
     const steps = revealSequence(flowlines, { reducedMotion: prefersReducedMotion() });
@@ -689,12 +691,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
 
   async function exploreArea() {
     if (!worldMap || planner || explore?.phase === "exploring") return;
-    const cta = exploreCta(areaStatus);
-    if (cta.disabled) return;
-    if (cta.action === "show") {
-      showKnownFlowlines();
-      return;
-    }
+    if (exploreCta(exploreAllowed).disabled) return;
     const token = ++exploreToken;
     selection = undefined;
     panel = undefined;
@@ -704,9 +701,9 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     try {
       const result = await jsonRequest("POST", "/api/world/explore", { bbox: boundsToParameter(worldMap.getBounds()) });
       if (token !== exploreToken) return;
-      areaStatus = { ...areaStatus, knownFlowlines: result.knownCount, availableFlowlines: result.availableCount };
+      discoveries = result.known?.length ? result.known : result.revealed;
       explore = { phase: "result", result };
-      if (result.revealed.length) revealOnMap(result.revealed);
+      revealOnMap(result.known ?? [], result.revealed);
     } catch (error) {
       if (token !== exploreToken) return;
       explore = { phase: "error", error: error.message };
@@ -714,11 +711,11 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderControls();
   }
 
-  /** "Show known Flowlines": frames the area's revealed Flowlines and lists them. */
+  /** "Show known Flowlines": frames the explored area's Flowlines and lists them. */
   function showKnownFlowlines() {
     exploreToken += 1;
     explore = undefined;
-    const points = fartleks.flatMap((fartlek) => geometryPoints(fartlek.geometry));
+    const points = discoveries.flatMap((fartlek) => geometryPoints(fartlek.geometry));
     if (points.length) worldMap.fitTo(points);
     openDiscoveries();
   }
@@ -1030,10 +1027,10 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
           && boundsContain(keep, { west: item.longitude, east: item.longitude, south: item.latitude, north: item.latitude }));
         collectibles = [...snapshot.collectibles, ...retained];
       }
-      stats = snapshot.stats;
       truncated = loadedArea.truncated || snapshot.fartlekTruncated === true;
-      fartleks = snapshot.fartleks ?? [];
-      areaStatus = snapshot.areaStatus;
+      completedFartleks = snapshot.fartleks ?? [];
+      mergeFartleks();
+      exploreAllowed = snapshot.exploreAllowed === true;
       availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
       selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
       setStatus(collectibles.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);

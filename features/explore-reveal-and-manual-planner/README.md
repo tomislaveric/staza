@@ -41,7 +41,7 @@ In:
 
 - Web and iOS clients.
 - A reveal-only Explore action.
-- Derived area status.
+- A light World map: only completed Flowlines load with the viewport.
 - Flowline character tags.
 - Reveal moment and its result states.
 - Flowline detail card.
@@ -67,11 +67,14 @@ Out:
   - Eligible means published and above the quality and data-confidence thresholds.
   - Order: primary score descending, then id ascending.
   - Collectibles are not affected.
-- **Explored state is derived, not stored:**
-  - `known` = revealed Flowlines in the bbox.
-  - `available` = eligible unrevealed Flowlines in the bbox.
-  - The Explore call uses the same eligibility rule, so the button state and the result
-    always agree.
+- **Light map, Flowlines on demand (performance decision):**
+  - The viewport (`GET /api/world`) only loads collectibles and the player's
+    **completed** Flowlines. It runs no hidden-Flowline scan and returns no per-viewport
+    counts.
+  - Revealed but unridden Flowlines load only through Explore. They then stay on the
+    map for the rest of the session.
+  - There is no stored explored-area record. Explore itself reports whether the area
+    was already explored.
 - **Area size limit:** an area wider than 50 km (`MAX_EXPLORE_WIDTH_METERS`) cannot be
   explored; the button reads "Zoom in to explore" and does nothing.
 - **Eligibility thresholds** (`src/flowlineReveal.ts`): primary score ≥ 50, road quality
@@ -94,17 +97,20 @@ Out:
 
 1. **World default**
    - Collectibles (places, peaks, castles, viewpoints, passes) are always visible.
-   - Revealed Flowlines are visible. Hidden Flowlines are not drawn.
-   - Primary action: the state-driven Explore button. Next to it, a small secondary
-     **Plan route** button.
+   - Completed Flowlines (yellow) are visible. Revealed but unridden Flowlines (blue)
+     appear only after Explore in that area. Hidden Flowlines are never drawn.
+   - No visible-area counts that change with every pan.
+   - Primary action: the Explore button. Next to it, a small secondary **Plan route**
+     button.
 2. **Main button states**
 
    | Situation | Label | Action |
    |---|---|---|
-   | Zoom too low | Zoom in to explore | None (disabled) |
-   | Nothing revealed in the area yet | Explore this area | Explore |
-   | Some known, new ones available | Explore for new Flowlines | Explore |
-   | Everything known | Show Flowlines | Frame known Flowlines |
+   | Area wider than 50 km | Zoom in to explore | None (disabled) |
+   | Otherwise | Explore this area ("Erkunden" on iOS) | Explore |
+
+   - Explore in an already explored area shows its known Flowlines and reveals only
+     new eligible ones. It never repeats a discovery.
 
 3. **Explore**
    - Freeze the viewport bbox.
@@ -117,6 +123,11 @@ Out:
    - Then a summary appears: total, plus counts per primary character, e.g.
      "3 high-flow, 2 endurance, 2 exploration".
    - Actions: **View discoveries**, **Plan a route**, and close (Done / X).
+   - iOS: there is no map overlay. Explore and an icon-only Plan route button sit in
+     the World sheet header. When Explore finishes, the sheet moves to half height
+     and shows the discoveries with the result at the top. The map frames the new
+     Flowlines and highlights them while the discoveries are open. iOS labels are
+     kept short (e.g. "Erkunden") and secondary actions are icon-only.
 5. **Nothing found**
    - Message: "Nothing new discovered here. Try exploring a wider area or another
      region."
@@ -156,13 +167,17 @@ Out:
 ## API
 
 - `GET /api/world`
-  - Adds `areaStatus: { knownFlowlines, availableFlowlines, exploreAllowed }`.
+  - `fartleks` holds only the player's completed Flowlines in the bbox.
+  - Adds `exploreAllowed` (the bbox is at most 50 km wide). There are no
+    `areaStatus` or per-viewport `stats` for a bbox.
   - Each Flowline adds `character: { primary, tags }` and `completed`.
   - Unrevealed Flowlines never include geometry.
 - New `POST /api/world/explore` `{ bbox: "minLon,minLat,maxLon,maxLat" }`
   - Requires auth and CSRF. Rate limited. Areas wider than 50 km are rejected (400).
-  - Returns `{ outcome, revealed, knownCount, availableCount, summary: { total,
+  - Returns `{ outcome, revealed, known, knownCount, availableCount, summary: { total,
     byCharacter } }`.
+    - `known`: every revealed Flowline in the area, including `revealed`. Clients draw
+      these and list them as discoveries.
     - `outcome`: `discovered` (nothing was known before), `already_explored_new`
       (known Flowlines plus new reveals), `already_explored` (all known, nothing new),
       `nothing_new` (nothing known, nothing eligible).
@@ -192,7 +207,7 @@ Out:
 2. **Reveal policy:** eligibility filter, cap of 12, ordering, area-status computation
    and minimum-zoom rule, with tests.
 3. **Explore endpoint:**
-   - Add `POST /api/world/explore` and `areaStatus` on `/api/world`.
+   - Add `POST /api/world/explore`; `/api/world` loads only completed Flowlines.
    - Remove the reveal from generate.
    - Add repository count queries, with tests.
 4. **Manual planner:**
@@ -220,13 +235,16 @@ Out:
 - **First Explore:** on an unexplored area with eligible Flowlines, Explore reveals up
   to 12 of them. Then:
   - The summary shows the counts per character.
-  - The Flowlines stay visible after a reload.
+  - The reveals persist: after a reload, Explore in the same area shows them again
+    without re-discovering them.
 - **Repeat Explore:** in the same area it never re-reveals known Flowlines. It reports
   "already explored" and reveals only new eligible Flowlines.
 - **Nothing found:** an area with no eligible Flowlines shows the "Nothing new
   discovered here" state with Zoom out and Explore another area.
-- **Button states:** the main button label always matches `areaStatus`. Below the
-  minimum zoom it reads "Zoom in to explore".
+- **Button states:** the main button reads "Explore this area". If the area is wider
+  than 50 km, it reads "Zoom in to explore" and is disabled.
+- **Light map:** the viewport request returns only completed Flowlines. It runs no
+  hidden-Flowline scan and returns no per-viewport counts.
 - **No geometry leaks:** no response contains geometry of unrevealed Flowlines.
 - **Detail card:** shows the primary character and no more than two scores.
 - **Discoveries panel:** lists the area counts and sorts Flowlines by each option.
@@ -266,7 +284,7 @@ Out:
   discoveries), `world/route-planner.js` (planner state and plan body),
   `world/route-format.js`, wired in `public/components/world-page.js`.
 - iOS (`ios/Staza/Features/World/`): `FlowlineReveal.swift` (character, explore result,
-  button action, discovery sorting), `ExploreRevealViews.swift` (button overlay, result
-  card, discoveries sheet), `RoutePlannerModel.swift` / `RoutePlannerPanel.swift`
+  button action, discovery sorting), `ExploreRevealViews.swift` (sheet Explore and Plan
+  route buttons, result banner, discoveries sheet), `RoutePlannerModel.swift` / `RoutePlannerPanel.swift`
   (manual planner), `WorldDetailView.swift` (Flowline card), `WorldModel.swift`
   (`exploreArea`, staggered reveal).

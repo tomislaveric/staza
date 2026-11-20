@@ -18,45 +18,44 @@ final class WorldModelTests: XCTestCase {
         await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
         XCTAssertEqual(model.collectibles.map(\.id), ["c1"])
         XCTAssertEqual(model.flowlines.first?.coordinates.count, 2)
-        XCTAssertNil(model.areaStatus)
         XCTAssertEqual(model.exploreAction, .zoomIn)
         XCTAssertFalse(model.viewportFailed)
     }
 
-    private let status = #""areaStatus":{"exploreAllowed":true,"knownFlowlines":1,"availableFlowlines":2}"#
-
-    func testExploreRevealsFlowlinesAndUpdatesAreaStatus() async throws {
-        let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,\#(status)"#)
-        let revealed = #"{"id":"f2","name":"Rheintal","geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]},"completed":false,"flowScore":84,"roadQualityScore":91,"character":{"primary":"flow","tags":["flow","explore"]}}"#
-        let explored = #"{"outcome":"already_explored_new","revealed":[\#(revealed)],"knownCount":2,"availableCount":0,"summary":{"total":1,"byCharacter":{"flow":1}}}"#
-        let transport = StubTransport([.init(status: 200, body: body), .init(status: 200, body: explored)])
+    func testExploreShowsKnownAndRevealedFlowlinesOnTopOfCompletedOnes() async throws {
+        let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"exploreAllowed":true"#)
+            .replacingOccurrences(of: #""completed":false"#, with: #""completed":true"#)
+        let line = #""geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]},"completed":false"#
+        let known = #"{"id":"k1","name":"Known",\#(line)}"#
+        let revealed = #"{"id":"f2","name":"Rheintal",\#(line),"flowScore":84,"roadQualityScore":91,"character":{"primary":"flow","tags":["flow","explore"]}}"#
+        let explored = #"{"outcome":"already_explored_new","revealed":[\#(revealed)],"known":[\#(known),\#(revealed)],"knownCount":2,"availableCount":0,"summary":{"total":1,"byCharacter":{"flow":1}}}"#
+        let transport = StubTransport([.init(status: 200, body: body), .init(status: 200, body: explored), .init(status: 200, body: body)])
         let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
-        await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
-        XCTAssertEqual(model.exploreAction, .exploreNew)
+        let bounds = WorldBounds(west: 7, south: 46, east: 9, north: 48)
+        await model.loadViewport(bounds)
+        XCTAssertEqual(model.flowlines.map(\.id), ["f1"], "the map starts with completed Flowlines only")
+        XCTAssertEqual(model.exploreAction, .explore)
 
         await model.exploreArea(reduceMotion: true)
         XCTAssertEqual(transport.requests.last?.url?.path, "/api/world/explore")
         let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(transport.requests.last?.httpBody)) as? [String: Any])
-        XCTAssertEqual(sent["bbox"] as? String, WorldBounds(west: 7, south: 46, east: 9, north: 48).queryValue)
-        XCTAssertEqual(model.visibleFlowlines.map(\.id), ["f1", "f2"])
+        XCTAssertEqual(sent["bbox"] as? String, bounds.queryValue)
+        XCTAssertEqual(model.visibleFlowlines.map(\.id), ["f1", "k1", "f2"])
+        XCTAssertEqual(model.discoveries.map(\.id), ["k1", "f2"])
         XCTAssertEqual(model.flowline(id: "f2")?.resolvedCharacter.tags, [.flow, .explore])
         guard case .result(let result) = model.exploreState else { return XCTFail("expected a result") }
         XCTAssertEqual(result.breakdown, [ExploreResult.Count(tag: .flow, count: 1)])
-        XCTAssertEqual(model.exploreAction, .showFlowlines, "a fully known area only shows its Flowlines")
 
-        await model.exploreArea(reduceMotion: true)
-        XCTAssertEqual(transport.requests.count, 2, "Show Flowlines never explores again")
+        await model.loadViewport(bounds)
+        XCTAssertEqual(model.flowlines.map(\.id), ["f1", "k1", "f2"], "explored Flowlines stay on the map after a pan")
         model.dismissExplore()
         XCTAssertNil(model.exploreState)
     }
 
-    func testExploreActionFollowsAreaStatus() {
-        XCTAssertEqual(ExploreAction(nil), .zoomIn)
-        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: false, knownFlowlines: 0, availableFlowlines: 3)), .zoomIn)
-        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: true, knownFlowlines: 0, availableFlowlines: 0)), .explore)
-        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: true, knownFlowlines: 0, availableFlowlines: 3)), .explore)
-        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: true, knownFlowlines: 2, availableFlowlines: 1)), .exploreNew)
-        XCTAssertEqual(ExploreAction(AreaStatus(exploreAllowed: true, knownFlowlines: 2, availableFlowlines: 0)), .showFlowlines)
+    func testExploreActionFollowsViewportWidth() {
+        XCTAssertEqual(ExploreAction(exploreAllowed: nil), .zoomIn)
+        XCTAssertEqual(ExploreAction(exploreAllowed: false), .zoomIn)
+        XCTAssertEqual(ExploreAction(exploreAllowed: true), .explore)
     }
 
     func testDiscoverySorts() {

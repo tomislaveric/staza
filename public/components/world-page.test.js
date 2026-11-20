@@ -1,18 +1,18 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { availableWorldFilters, distanceBetween, WorldDiscovered, WorldExploreControls, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mappedWorldFartleks, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
+import { availableWorldFilters, distanceBetween, WorldExploreControls, filteredWorldCollectibles, filteredWorldFartleks, mappedWorldCollectibles, mappedWorldFartleks, mountWorldPage, visibleWorldCollectibles, WorldFilterControls, worldFilters, WorldPage } from "./world-page.js";
 import { CollectibleSwatch } from "./world/collectible-swatch.js";
 import * as worldMarkers from "./world/world-markers.js";
 import * as worldMap from "./world/world-map.js";
 
 describe("WorldExploreControls", () => {
   it("renders the state-driven Explore CTA beside a small Plan route button that counts route picks", () => {
-    const markup = WorldExploreControls({ exploreAllowed: true, knownFlowlines: 0, availableFlowlines: 3 }, { stopCount: 2 });
+    const markup = WorldExploreControls(true, { stopCount: 2 });
     expect(markup).toContain('data-world-explore="explore"');
     expect(markup).toContain(">Explore this area<");
     expect(markup).toContain("Plan route \u00b7 2");
     expect(markup).not.toMatch(/hidden Flowline/i);
-    expect(WorldExploreControls(undefined)).toMatch(/data-world-explore="zoom" disabled>Zoom in to explore/);
+    expect(WorldExploreControls(false)).toMatch(/data-world-explore="zoom" disabled>Zoom in to explore/);
   });
 });
 
@@ -226,15 +226,13 @@ describe("World filter controls", () => {
     expect(buttonMarkup(markup, "place")).toContain("collectible-place-muted.svg");
   });
 
-  it("scopes Discovered to the visible area and measures distance", () => {
-    expect(WorldDiscovered()).toContain("\u2013");
-    expect(WorldDiscovered({ discoveredCount: 2, totalCollectibles: 9 })).toContain("2");
+  it("measures distance", () => {
     const metres = distanceBetween({ latitude: 50, longitude: 9 }, { latitude: 50, longitude: 10 });
     expect(Math.round(metres / 1000)).toBe(71);
   });
 
   it("renders one filter group without a map-overlay legend", () => {
-    const markup = WorldPage({ stats: { discoveredCount: 1, totalCollectibles: 3 }, selectedFilters: [] });
+    const markup = WorldPage({ selectedFilters: [] });
     expect(markup.match(/class="world-filter-controls"/g)).toHaveLength(1);
     expect(markup).not.toContain("world-legend");
     expect(markup).not.toContain("World marker legend");
@@ -243,7 +241,7 @@ describe("World filter controls", () => {
   });
 
   it("keeps the exploration panel separate from the map frame", () => {
-    const markup = WorldPage({ stats: undefined, selectedFilters: [] });
+    const markup = WorldPage({ selectedFilters: [] });
     expect(markup).toMatch(/class="world-map-frame">[\s\S]*<\/div>\s*<div class="world-detail-host"/);
   });
 
@@ -370,7 +368,7 @@ describe("mounted World page interactions", () => {
     return base;
   };
 
-  const mount = async ({ instances = [], generateError, planError, exploreResult = discovered, savedHome, areaStatus } = {}) => {
+  const mount = async ({ instances = [], generateError, planError, exploreResult = discovered, savedHome, exploreAllowed = true } = {}) => {
     let savedHomeValue = savedHome ? JSON.stringify(savedHome) : null;
     const localStorage = {
       getItem: vi.fn(() => savedHomeValue),
@@ -394,7 +392,7 @@ describe("mounted World page interactions", () => {
       filter, { ...element(), dataset: { worldFilter: filter } }
     ]));
     const hosts = Object.fromEntries([
-      "map", "status", "stats", "discovered", "quests", "detail", "collectible-list", "locate", "explore-cta", "explore-card"
+      "map", "status", "stats", "quests", "detail", "collectible-list", "locate", "explore-cta", "explore-card"
     ].map((name) => [`[data-world-${name}]`, element()]));
     const questCancelButton = { ...element(), dataset: { questCancel: "instance-1" } };
     const questSelectButton = { ...element(), dataset: { questSelect: "instance:instance-1" } };
@@ -410,11 +408,7 @@ describe("mounted World page interactions", () => {
       querySelector: (selector) => hosts[selector],
       querySelectorAll: () => Object.values(buttons)
     };
-    const stats = { totalCollectibles: 3, discoveredCount: 2, remainingCount: 1 };
-    let viewportSnapshot = {
-      collectibles, fartleks, stats, truncated: false,
-      areaStatus: areaStatus ?? { exploreAllowed: true, knownFlowlines: 0, availableFlowlines: 2 }
-    };
+    let viewportSnapshot = { collectibles, fartleks, truncated: false, exploreAllowed };
     let activeInstances = instances;
     let viewportShifts = 0;
     const fetchMock = vi.fn(async (url, options) => {
@@ -558,15 +552,14 @@ describe("mounted World page interactions", () => {
     expect(page.buttons.peak.attributes["aria-pressed"]).toBe("true");
 
     const waterfall = { ...collectibles[0], id: "waterfall", primaryCategory: "waterfall" };
-    const viewportStats = { totalCollectibles: 1, discoveredCount: 0, remainingCount: 1 };
-    page.changeViewport({ collectibles: [waterfall], fartleks: [], stats: viewportStats, truncated: false });
+    page.changeViewport({ collectibles: [waterfall], fartleks: [], truncated: false });
     await vi.waitFor(() => expect(page.buttons.waterfall.hidden).toBe(false));
     expect(page.buttons.peak.hidden).toBe(true);
     expect(page.buttons.peak.attributes["aria-pressed"]).toBe("false");
     expect(page.buttons.all.attributes["aria-pressed"]).toBe("true");
     expect(page.collectibleIds()).toEqual(["waterfall"]);
 
-    page.changeViewport({ collectibles: [], fartleks: [], stats: viewportStats, truncated: false });
+    page.changeViewport({ collectibles: [], fartleks: [], truncated: false });
     await vi.waitFor(() => expect(page.buttons.waterfall.hidden).toBe(true));
     expect(page.buttons.all.hidden).toBe(false);
   });
@@ -649,7 +642,7 @@ describe("mounted World page interactions", () => {
     expect(page.exploreCard.innerHTML).toContain("View discoveries");
     expect(page.exploreCard.innerHTML).toContain("Plan a route");
     expect(page.fartlekIds()).toEqual(["fartlek-1", "fartlek-2", "fresh-1", "fresh-2"]);
-    expect(page.cta.innerHTML).toContain(">Show Flowlines<");
+    expect(page.cta.innerHTML).toContain(">Explore this area<");
     expect(page.fetchMock.mock.calls.some(([url]) => url.startsWith("/api/explorations"))).toBe(false);
     expect(page.map.setRoute).not.toHaveBeenCalledWith(expect.objectContaining({ geometry: expect.anything() }));
     page.exploreCard.bound["[data-explore-close]:click"]();
@@ -657,19 +650,11 @@ describe("mounted World page interactions", () => {
     expect(page.fartlekIds()).toContain("fresh-1");
   });
 
-  it("labels the CTA from the area status and shows known Flowlines instead of re-discovering them", async () => {
-    const partly = await mount({ areaStatus: { exploreAllowed: true, knownFlowlines: 3, availableFlowlines: 2 } });
-    expect(partly.cta.innerHTML).toContain(">Explore for new Flowlines<");
-    const zoomedOut = await mount({ areaStatus: { exploreAllowed: false, knownFlowlines: 0, availableFlowlines: 0 } });
+  it("asks to zoom in while the area is too wide to explore", async () => {
+    const zoomedOut = await mount({ exploreAllowed: false });
     expect(zoomedOut.cta.innerHTML).toContain("Zoom in to explore");
     zoomedOut.explore();
     expect(zoomedOut.calls("/api/world/explore")).toHaveLength(0);
-
-    const known = await mount({ areaStatus: { exploreAllowed: true, knownFlowlines: 2, availableFlowlines: 0 } });
-    known.explore();
-    expect(known.calls("/api/world/explore")).toHaveLength(0);
-    expect(known.detail.innerHTML).toContain("Discovered in this area");
-    expect(known.map.fitTo).toHaveBeenCalled();
   });
 
   it("encourages a wider search when nothing new was discovered", async () => {
@@ -684,12 +669,17 @@ describe("mounted World page interactions", () => {
   });
 
   it("offers the known Flowlines when the area was already explored", async () => {
-    const page = await mount({ exploreResult: { outcome: "already_explored", revealed: [], knownCount: 7, availableCount: 0, summary: { total: 0, byCharacter: {} } } });
+    const known = { ...fartleks[0], id: "known-1", name: "Known Flowline" };
+    const page = await mount({ exploreResult: { outcome: "already_explored", revealed: [], known: [known], knownCount: 1, availableCount: 0, summary: { total: 0, byCharacter: {} } } });
+    expect(page.fartlekIds()).not.toContain("known-1");
     page.explore();
     await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("Area already explored"));
-    expect(page.exploreCard.innerHTML).toContain("7 Flowlines known");
+    expect(page.exploreCard.innerHTML).toContain("1 Flowline known");
+    expect(page.fartlekIds()).toContain("known-1");
     page.card("[data-explore-show-known]");
     expect(page.detail.innerHTML).toContain("Discovered in this area");
+    expect(page.detail.innerHTML).toContain("Known Flowline");
+    expect(page.map.fitTo).toHaveBeenCalled();
     expect(page.exploreCard.hidden).toBe(true);
   });
 

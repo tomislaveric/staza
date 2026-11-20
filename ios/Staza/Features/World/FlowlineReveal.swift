@@ -44,6 +44,8 @@ struct ExploreResult: Decodable, Equatable, Sendable {
     }
     let outcome: Outcome
     let revealed: [WorldFlowline]
+    /// Every revealed Flowline in the area, including `revealed`.
+    var known: [WorldFlowline] = []
     /// Revealed Flowlines in the area, including the ones revealed just now.
     let knownCount: Int
     /// Eligible Flowlines still hidden after the reveal cap.
@@ -68,21 +70,12 @@ struct ExploreRequest: Encodable, Sendable {
     let bbox: String
 }
 
-/// The map's primary Explore button. Explore never repeats a discovery: a fully known area only
-/// shows its Flowlines.
+/// The sheet's Explore button: disabled while the visible area is too wide to explore.
 enum ExploreAction: Equatable, Sendable {
-    case zoomIn, explore, exploreNew, showFlowlines
+    case zoomIn, explore
 
-    init(_ status: AreaStatus?) {
-        guard let status, status.exploreAllowed else {
-            self = .zoomIn
-            return
-        }
-        if status.knownFlowlines > 0 {
-            self = status.availableFlowlines > 0 ? .exploreNew : .showFlowlines
-        } else {
-            self = .explore
-        }
+    init(exploreAllowed: Bool?) {
+        self = exploreAllowed == true ? .explore : .zoomIn
     }
 }
 

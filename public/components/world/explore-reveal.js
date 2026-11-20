@@ -15,15 +15,12 @@ export const characterScore = (flowline, tag) =>
 export const flowlineCharacter = (flowline) => flowline.character ?? { primary: "flow", tags: [] };
 
 /**
- * The map CTA from the server's area status. Explore never repeats a discovery: a fully known
- * area only shows its Flowlines.
+ * The map CTA. Explore loads the area's known Flowlines and reveals new ones; it never repeats a
+ * discovery, so the same button also shows an already explored area.
  */
-export const exploreCta = (areaStatus) => {
-  if (!areaStatus?.exploreAllowed) return { action: "zoom", label: "Zoom in to explore", disabled: true };
-  if (areaStatus.knownFlowlines > 0 && areaStatus.availableFlowlines > 0) return { action: "explore", label: "Explore for new Flowlines" };
-  if (areaStatus.knownFlowlines > 0) return { action: "show", label: "Show Flowlines" };
-  return { action: "explore", label: "Explore this area" };
-};
+export const exploreCta = (exploreAllowed) => exploreAllowed
+  ? { action: "explore", label: "Explore this area" }
+  : { action: "zoom", label: "Zoom in to explore", disabled: true };
 
 const plural = (count, singular, pluralForm) => `${count} ${count === 1 ? singular : pluralForm}`;
 

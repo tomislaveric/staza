@@ -1,5 +1,4 @@
 import type { FlowlineCharacter } from "./flowlineCharacter.js";
-import type { FlowlineAreaStatus } from "./flowlineReveal.js";
 export type CollectibleType = "coin" | "landmark" | "mountain_pass";
 export type CollectibleStatus = "published" | "archived";
 export type CollectibleCategory = "viewpoint" | "peak" | "castle" | "waterfall" | "place" | "mountain_pass";
@@ -630,11 +629,12 @@ export interface QuestInput {
   collectibleIds: string[];
 }
 
-export interface WorldViewportResponse extends WorldSnapshot {
+export interface WorldViewportResponse extends Omit<WorldSnapshot, "stats"> {
   truncated: boolean;
+  /** Only the player's completed Flowlines; revealed ones are loaded by Explore. */
   fartleks: WorldFartlek[];
-  /** Derived explored state of the viewport; hidden Flowline geometry is never sent. */
-  areaStatus: FlowlineAreaStatus;
+  /** The viewport is narrow enough to explore. */
+  exploreAllowed: boolean;
 }
 
 export type JobState = "processing" | "awaiting_selection" | "rendering" | "succeeded" | "failed";

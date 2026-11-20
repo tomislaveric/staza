@@ -59,76 +59,80 @@ struct FlowlineCharacterChip: View {
     }
 }
 
-// MARK: - Map CTA
+// MARK: - Sheet actions
 
-/// The map's primary Explore button and the small "Plan route" button beside it.
-struct ExploreCTA: View {
+/// Compact Explore button for the World sheet header; its label follows the area status.
+struct ExploreButton: View {
     let action: ExploreAction
     let isExploring: Bool
-    let routeStops: Int
     let onExplore: () -> Void
-    let onPlanRoute: () -> Void
 
     var body: some View {
-        HStack(spacing: StazaSpacing.sm) {
-            Button(action: onExplore) {
-                HStack(spacing: StazaSpacing.sm) {
-                    if isExploring {
-                        SwiftUI.ProgressView().tint(StazaColor.onAccent)
-                    } else {
-                        Image(systemName: action == .showFlowlines ? "eye" : "sparkle.magnifyingglass")
-                    }
-                    Text(isExploring ? "world.explore.exploring" : title)
+        Button(action: onExplore) {
+            HStack(spacing: StazaSpacing.xs) {
+                if isExploring {
+                    SwiftUI.ProgressView().controlSize(.small).tint(StazaColor.onAccent)
+                } else {
+                    Image(systemName: "sparkle.magnifyingglass")
                 }
+                Text(title).lineLimit(1)
             }
-            .buttonStyle(.stazaPrimary)
-            .disabled(action == .zoomIn || isExploring)
-            .accessibilityIdentifier("exploreThisArea")
-
-            Button(action: onPlanRoute) {
-                Label {
-                    if routeStops > 0 { Text("world.planRoute.count \(routeStops)") } else { Text("world.planRoute") }
-                } icon: {
-                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                }
-                .font(StazaFont.footnote.weight(.semibold))
-            }
-            .buttonStyle(.stazaSecondary)
-            .accessibilityIdentifier("worldPlanRoute")
+            .font(StazaFont.footnote.weight(.semibold))
         }
-        .padding(StazaSpacing.xs)
-        .stazaGlass(cornerRadius: StazaRadius.card)
+        .buttonStyle(.stazaPrimary)
+        .disabled(action == .zoomIn || isExploring)
+        .fixedSize()
+        .accessibilityIdentifier("exploreThisArea")
     }
 
     private var title: LocalizedStringKey {
+        if isExploring { return "world.explore.exploring" }
         switch action {
-        case .zoomIn: "world.explore.cta.zoomIn"
-        case .explore: "world.explore.cta.explore"
-        case .exploreNew: "world.explore.cta.exploreNew"
-        case .showFlowlines: "world.explore.cta.show"
+        case .zoomIn: return "world.explore.cta.zoomIn"
+        case .explore: return "world.explore.cta.explore"
         }
     }
 }
 
-// MARK: - Result card
-
-/// The reveal moment and what Explore found: discoveries, nothing new, or an already explored area.
-struct ExploreResultCard: View {
-    let state: ExploreState
-    let onViewDiscoveries: () -> Void
+/// Icon-only "Plan route" button; a badge counts the stops picked so far.
+struct PlanRouteButton: View {
+    let routeStops: Int
     let onPlanRoute: () -> Void
+
+    var body: some View {
+        Button(action: onPlanRoute) {
+            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                .font(StazaFont.footnote.weight(.semibold))
+                .overlay(alignment: .topTrailing) {
+                    if routeStops > 0 {
+                        Text(verbatim: "\(routeStops)")
+                            .font(Font.caption2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(StazaColor.onAccent)
+                            .padding(.horizontal, 4)
+                            .background(StazaColor.accent, in: Capsule())
+                            .offset(x: 10, y: -10)
+                    }
+                }
+        }
+        .buttonStyle(.stazaSecondary)
+        .fixedSize()
+        .accessibilityLabel(routeStops > 0 ? Text("world.planRoute.count \(routeStops)") : Text("world.planRoute"))
+        .accessibilityIdentifier("worldPlanRoute")
+    }
+}
+
+// MARK: - Result banner
+
+/// What the last Explore found, shown at the top of the discoveries sheet.
+struct ExploreResultBanner: View {
+    let state: ExploreState
     let onZoomOut: () -> Void
-    let onShowKnown: () -> Void
-    let onDismiss: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.sm) {
             switch state {
             case .exploring:
-                HStack(spacing: StazaSpacing.sm) {
-                    SwiftUI.ProgressView().tint(StazaColor.accent)
-                    Text("world.explore.exploring").font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                }
+                EmptyView()
             case .failed(let message):
                 header(Text("world.explore.error.title"), systemImage: "exclamationmark.triangle.fill", tint: StazaColor.danger)
                 if let message { Text(verbatim: message).font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted) }
@@ -136,9 +140,7 @@ struct ExploreResultCard: View {
                 resultContent(result)
             }
         }
-        .padding(StazaSpacing.md)
-        .frame(maxWidth: 420, alignment: .leading)
-        .stazaGlass(cornerRadius: StazaRadius.card)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("exploreResult")
     }
@@ -147,19 +149,18 @@ struct ExploreResultCard: View {
     private func resultContent(_ result: ExploreResult) -> some View {
         switch result.outcome {
         case .nothingNew:
-            header(Text("world.explore.nothing.title"), systemImage: "binoculars", tint: StazaColor.textMuted)
-            Text("world.explore.nothing.body").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
             HStack(spacing: StazaSpacing.sm) {
-                Button("world.explore.zoomOut", action: onZoomOut).buttonStyle(.stazaPrimary)
-                Button("world.explore.another", action: onDismiss).buttonStyle(.stazaSecondary)
+                header(Text("world.explore.nothing.title"), systemImage: "binoculars", tint: StazaColor.textMuted)
+                Spacer(minLength: StazaSpacing.xs)
+                Button(action: onZoomOut) {
+                    Label("world.explore.zoomOut", systemImage: "minus.magnifyingglass").labelStyle(.iconOnly)
+                }
+                .buttonStyle(.stazaSecondary)
             }
+            Text("world.explore.nothing.body").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
         case .alreadyExplored:
             header(Text("world.explore.explored.title"), systemImage: "checkmark.seal", tint: StazaColor.success)
             Text("world.explore.known \(result.knownCount)").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
-            HStack(spacing: StazaSpacing.sm) {
-                Button("world.explore.showKnown", action: onShowKnown).buttonStyle(.stazaPrimary)
-                Button("world.explore.done", action: onDismiss).buttonStyle(.stazaSecondary)
-            }
         case .discovered, .alreadyExploredNew:
             header(Text("world.explore.discovered \(result.summary.total)"), systemImage: "sparkles", tint: StazaColor.accent)
             if result.outcome == .alreadyExploredNew {
@@ -167,37 +168,20 @@ struct ExploreResultCard: View {
                     .font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
             }
             if !result.breakdown.isEmpty {
-                HStack(spacing: StazaSpacing.sm) {
+                MoreFlowLayout {
                     ForEach(result.breakdown, id: \.tag) { entry in
                         StazaChip(entry.tag.breakdown(entry.count), systemImage: entry.tag.systemImage, tint: entry.tag.tint)
                     }
                 }
                 .accessibilityElement(children: .combine)
             }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: StazaSpacing.sm) { discoveredActions }
-                VStack(alignment: .leading, spacing: StazaSpacing.sm) { discoveredActions }
-            }
         }
-    }
-
-    @ViewBuilder
-    private var discoveredActions: some View {
-        Button("world.explore.viewDiscoveries", action: onViewDiscoveries).buttonStyle(.stazaPrimary)
-            .accessibilityIdentifier("exploreViewDiscoveries")
-        Button("world.explore.planRoute", action: onPlanRoute).buttonStyle(.stazaSecondary)
-            .accessibilityIdentifier("explorePlanRoute")
-        Button("world.explore.done", action: onDismiss).buttonStyle(.stazaPlain)
     }
 
     private func header(_ title: Text, systemImage: String, tint: Color) -> some View {
         HStack(spacing: StazaSpacing.sm) {
-            IconBadge(systemImage: systemImage, tint: tint, size: 32)
+            IconBadge(systemImage: systemImage, tint: tint, size: 28)
             title.font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary).accessibilityAddTraits(.isHeader)
-            Spacer(minLength: StazaSpacing.sm)
-            if case .exploring = state {} else {
-                SheetCloseButton(action: onDismiss)
-            }
         }
     }
 }
@@ -205,6 +189,8 @@ struct ExploreResultCard: View {
 // MARK: - Discoveries
 
 struct DiscoveriesHeader: View {
+    let routeStops: Int
+    let onPlanRoute: () -> Void
     let onClose: () -> Void
 
     var body: some View {
@@ -215,6 +201,7 @@ struct DiscoveriesHeader: View {
                 .foregroundStyle(StazaColor.textPrimary)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: StazaSpacing.sm)
+            PlanRouteButton(routeStops: routeStops, onPlanRoute: onPlanRoute)
             SheetCloseButton(action: onClose)
         }
         .padding(.horizontal, StazaSpacing.md)
@@ -228,12 +215,16 @@ struct DiscoveriesContent: View {
     let planner: RoutePlannerModel
     let origin: GeoPoint?
     let onViewOnMap: (WorldFlowline) -> Void
+    var onZoomOut: () -> Void = {}
     @State private var sort = DiscoverySort.flow
     @Environment(\.locale) private var locale
 
     var body: some View {
-        let counts = AreaCounts(collectibles: model.collectibles, flowlines: model.flowlines)
+        let counts = AreaCounts(collectibles: model.collectibles, flowlines: model.discoveries)
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
+            if let state = model.exploreState, state != .exploring {
+                ExploreResultBanner(state: state, onZoomOut: onZoomOut)
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: StazaSpacing.sm) {
                     count("world.discoveries.flowlines", counts.flowlines, tint: StazaColor.rarityRare)
@@ -247,14 +238,14 @@ struct DiscoveriesContent: View {
             .scrollClipDisabled()
             .accessibilityIdentifier("discoveriesCounts")
 
-            if model.flowlines.isEmpty {
+            if model.discoveries.isEmpty {
                 Text("world.discoveries.empty").font(StazaFont.subheadline).foregroundStyle(StazaColor.textMuted)
             } else {
                 Picker("world.discoveries.sort", selection: $sort) {
                     ForEach(DiscoverySort.allCases) { Text(label($0)).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                ForEach(sort.sorted(model.flowlines, origin: origin)) { card($0) }
+                ForEach(sort.sorted(model.discoveries, origin: origin)) { card($0) }
             }
         }
         .padding(.horizontal, StazaSpacing.md)
@@ -284,10 +275,12 @@ struct DiscoveriesContent: View {
                 }
                 MetricLine(items: facts(flowline))
                 HStack(spacing: StazaSpacing.sm) {
-                    Button { onViewOnMap(flowline) } label: { Label("world.discoveries.viewOnMap", systemImage: "map") }
-                        .buttonStyle(.stazaSecondary)
+                    Button { onViewOnMap(flowline) } label: {
+                        Label("world.discoveries.viewOnMap", systemImage: "map").labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.stazaSecondary)
                     Button { planner.toggle(.flowline(flowline)) } label: {
-                        Label(inRoute ? "world.route.added" : "world.route.add", systemImage: inRoute ? "checkmark" : "plus")
+                        Label(inRoute ? "world.route.added" : "world.route.add", systemImage: inRoute ? "checkmark" : "plus").labelStyle(.iconOnly)
                     }
                     .buttonStyle(.stazaSecondary)
                     .accessibilityAddTraits(inRoute ? .isSelected : [])

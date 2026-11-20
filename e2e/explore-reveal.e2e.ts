@@ -15,17 +15,12 @@ const revealed = [flowline("f-rhine", "Rheintal Flowline", 8.5, "flow"), flowlin
 const json = (route: Route, body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 
 const stubWorld = async (page: Page) => {
-  let explored = false;
   const planBodies: Record<string, unknown>[] = [];
-  await page.route(/\/api\/world\?/, (route) => json(route, {
-    collectibles: [], fartleks: explored ? revealed : [], truncated: false,
-    stats: { discoveredCount: 0, totalCollectibles: 0 },
-    areaStatus: { exploreAllowed: true, knownFlowlines: explored ? 2 : 0, availableFlowlines: explored ? 0 : 2 }
-  }));
+  // The viewport only carries completed Flowlines; revealed ones come from Explore.
+  await page.route(/\/api\/world\?/, (route) => json(route, { collectibles: [], fartleks: [], truncated: false, exploreAllowed: true }));
   await page.route(/\/api\/world\/explore$/, (route) => {
-    explored = true;
     return json(route, {
-      outcome: "discovered", revealed, knownCount: 2, availableCount: 0,
+      outcome: "discovered", revealed, known: revealed, knownCount: 2, availableCount: 0,
       summary: { total: 2, byCharacter: { flow: 1, endurance: 1, explore: 0 } }
     });
   });
@@ -59,7 +54,7 @@ test.describe("explore this area", () => {
     await expect(card).toContainText("2 Flowlines discovered");
     await expect(card.locator(".world-explore-breakdown")).toContainText("1 high-flow");
     await expect(card.locator(".world-explore-breakdown")).toContainText("1 endurance");
-    await expect(cta).toHaveText("Show Flowlines");
+    await expect(cta).toHaveText("Explore this area");
 
     await card.locator("[data-explore-discoveries]").click();
     const discoveries = page.getByRole("region", { name: "Discovered in this area" });

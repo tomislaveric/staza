@@ -2,12 +2,9 @@ import { describe, expect, it } from "vitest";
 import { ExploreResultCard, exploreCta, revealSequence, sortDiscoveries } from "./explore-reveal.js";
 
 describe("exploreCta", () => {
-  it("changes with the area so Explore never looks pointlessly repeatable", () => {
-    expect(exploreCta({ exploreAllowed: false, knownFlowlines: 4, availableFlowlines: 2 })).toMatchObject({ action: "zoom", disabled: true });
-    expect(exploreCta({ exploreAllowed: true, knownFlowlines: 0, availableFlowlines: 0 }).label).toBe("Explore this area");
-    expect(exploreCta({ exploreAllowed: true, knownFlowlines: 0, availableFlowlines: 5 }).label).toBe("Explore this area");
-    expect(exploreCta({ exploreAllowed: true, knownFlowlines: 3, availableFlowlines: 2 }).label).toBe("Explore for new Flowlines");
-    expect(exploreCta({ exploreAllowed: true, knownFlowlines: 3, availableFlowlines: 0 })).toMatchObject({ action: "show", label: "Show Flowlines" });
+  it("is disabled only while the area is too wide to explore", () => {
+    expect(exploreCta(false)).toMatchObject({ action: "zoom", disabled: true });
+    expect(exploreCta(true)).toEqual({ action: "explore", label: "Explore this area" });
   });
 });
 

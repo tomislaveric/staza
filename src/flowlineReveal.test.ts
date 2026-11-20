@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exploreAllowed, exploreOutcome, flowlineAreaStatus, isRevealEligible, selectFlowlinesToReveal } from "./flowlineReveal.js";
+import { exploreAllowed, exploreOutcome, isRevealEligible, selectFlowlinesToReveal } from "./flowlineReveal.js";
 
 const bounds = (widthDegrees: number) => ({ minLatitude: 47, maxLatitude: 47.2, minLongitude: 9, maxLongitude: 9 + widthDegrees });
 
@@ -33,9 +33,8 @@ describe("isRevealEligible", () => {
 });
 
 describe("area status", () => {
-  it("counts eligible hidden Flowlines and blocks wide viewports", () => {
-    expect(flowlineAreaStatus(bounds(0.2), 3, [{ id: "a", flowScore: 80 }, { id: "b", flowScore: 10 }]))
-      .toEqual({ exploreAllowed: true, knownFlowlines: 3, availableFlowlines: 1 });
+  it("blocks wide viewports", () => {
+    expect(exploreAllowed(bounds(0.2))).toBe(true);
     expect(exploreAllowed(bounds(2))).toBe(false);
   });
 

@@ -69,6 +69,26 @@ export class FlowlineRevealRepository {
     return { fartleks: rows.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)), truncated };
   }
 
+  /** Published Flowlines in the viewport the player has completed: the World map's default Flowlines. */
+  async listCompletedWithinBoundsLimited(
+    playerId: string,
+    bounds: GeoBounds,
+    { minLengthMeters = 0, limit }: { minLengthMeters?: number; limit?: number } = {}
+  ): Promise<{ fartleks: Fartlek[]; truncated: boolean }> {
+    const result = await this.pool.query<FartlekRow>(
+      `SELECT ${SELECT_COLUMNS.split(", ").map((column) => `f.${column}`).join(", ")}
+       FROM fartleks AS f
+       WHERE f.status = 'published' AND f.length_meters >= $6 AND ${BBOX_OVERLAP}
+         AND EXISTS (SELECT 1 FROM fartlek_completions AS c WHERE c.player_id = $1 AND c.fartlek_id = f.id)
+       ORDER BY f.flow_score DESC, f.length_meters DESC, f.id
+       LIMIT $7`,
+      [playerId, ...boundsValues(bounds), minLengthMeters, limit === undefined ? null : limit + 1]
+    );
+    const truncated = limit !== undefined && result.rows.length > limit;
+    const rows = (truncated ? result.rows.slice(0, limit) : result.rows).map(mapFartlek);
+    return { fartleks: rows.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)), truncated };
+  }
+
   /** Revealed published Flowlines in the viewport: the area's known Flowlines. */
   async countRevealedWithinBounds(playerId: string, bounds: GeoBounds): Promise<number> {
     const result = await this.pool.query<{ count: string }>(

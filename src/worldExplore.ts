@@ -13,7 +13,7 @@ import { parseBoundsParameter, type GeoBounds } from "./worldQuery.js";
 
 export interface WorldExploreDependencies {
   reveals: {
-    countRevealedWithinBounds(playerId: string, bounds: GeoBounds): Promise<number>;
+    listRevealedWithinBounds(playerId: string, bounds: GeoBounds): Promise<Fartlek[]>;
     listHiddenCandidatesWithinBounds(playerId: string, bounds: GeoBounds): Promise<RevealCandidate[]>;
     reveal(playerId: string, flowlineIds: string[], source: "explore"): Promise<string[]>;
     listByIds(flowlineIds: string[]): Promise<Fartlek[]>;
@@ -26,6 +26,8 @@ export interface WorldExploreResult {
   outcome: ExploreOutcome;
   /** Flowlines this Explore revealed for the first time, best first. */
   revealed: WorldFartlek[];
+  /** Every revealed Flowline in the area after this Explore, including `revealed`. */
+  known: WorldFartlek[];
   /** Revealed Flowlines in the area after this Explore. */
   knownCount: number;
   /** Eligible Flowlines still hidden after this Explore (beyond the per-Explore cap). */
@@ -53,7 +55,7 @@ export const exploreArea = async (
 ): Promise<WorldExploreResult> => {
   const bounds = parseExploreRequest(body);
   const [knownBefore, hidden] = await Promise.all([
-    reveals.countRevealedWithinBounds(playerId, bounds),
+    reveals.listRevealedWithinBounds(playerId, bounds),
     reveals.listHiddenCandidatesWithinBounds(playerId, bounds)
   ]);
   const available = availableToReveal(hidden, new Set());
@@ -62,13 +64,14 @@ export const exploreArea = async (
   const order = new Map(selected.map((candidate, index) => [candidate.id, index]));
   const flowlines = (await reveals.listByIds([...newlyRevealed]))
     .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-  const revealed = await toWorld(playerId, flowlines);
+  const [revealed, knownWorld] = await Promise.all([toWorld(playerId, flowlines), toWorld(playerId, knownBefore)]);
   const byCharacter: Record<FlowlineCharacterTag, number> = { flow: 0, endurance: 0, explore: 0 };
   for (const flowline of revealed) byCharacter[flowline.character.primary] += 1;
   return {
-    outcome: exploreOutcome(knownBefore, revealed.length),
+    outcome: exploreOutcome(knownBefore.length, revealed.length),
     revealed,
-    knownCount: knownBefore + revealed.length,
+    known: [...knownWorld, ...revealed],
+    knownCount: knownBefore.length + revealed.length,
     availableCount: available.length - revealed.length,
     summary: { total: revealed.length, byCharacter }
   };

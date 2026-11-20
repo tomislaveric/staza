@@ -46,7 +46,7 @@ import { StravaError } from "./strava/errors.js";
 import { StravaService } from "./strava/service.js";
 import { TokenCipher } from "./strava/tokenCipher.js";
 import { toWorldFartlek } from "./fartlek.js";
-import { exploreAllowed, flowlineAreaStatus } from "./flowlineReveal.js";
+import { exploreAllowed } from "./flowlineReveal.js";
 import { exploreArea } from "./worldExplore.js";
 import { createWorldSnapshot } from "./world.js";
 import { THEMED_STYLE_PATH, createThemedStyleLoader, getBasemapConfig, getBasemapOrigins } from "./basemap.js";
@@ -1045,35 +1045,30 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
       const stats = await collectibleRepository.worldStats(discoveredSourceIds);
-      response.json({ collectibles: [], stats, truncated: false, fartleks: [], areaStatus: { exploreAllowed: false, knownFlowlines: 0, availableFlowlines: 0 } });
+      response.json({ collectibles: [], stats, truncated: false, fartleks: [], exploreAllowed: false });
       return;
     }
     const flowlinePolicy = flowlinePolicyForBounds(bounds, config.worldFlowlineLimit);
     // The client caches collectibles for a wider area; it asks for them only when leaving that area.
     const areaBounds = parseBoundsParameter(request.query.collectibleBbox);
     const skipCollectibles = request.query.skipCollectibles === "1";
-    const [stats, viewport, fartlekResult, knownFlowlines, hiddenCandidates] = await Promise.all([
-      collectibleRepository.worldStatsWithinBounds(bounds, discoveredSourceIds),
+    const [viewport, fartlekResult] = await Promise.all([
       skipCollectibles
         ? undefined
         : areaBounds
           ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit)
           : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      // Flowlines are hidden until the player reveals them; only counts hint at the rest.
-      flowlineRevealRepository.listRevealedWithinBoundsLimited(playerId, bounds, flowlinePolicy),
-      flowlineRevealRepository.countRevealedWithinBounds(playerId, bounds),
-      // Wide viewports cannot be explored; skip scanning their hidden Flowlines.
-      exploreAllowed(bounds) ? flowlineRevealRepository.listHiddenCandidatesWithinBounds(playerId, bounds) : Promise.resolve([])
+      // Only ridden Flowlines are on the map by default; revealed ones come from Explore.
+      flowlineRevealRepository.listCompletedWithinBoundsLimited(playerId, bounds, flowlinePolicy)
     ]);
     const fartleks = await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
     const world = viewport ? createWorldSnapshot(viewport.collectibles, discoveredSourceIds) : undefined;
     response.json({
-      ...(world ?? {}),
-      stats,
+      ...(world ? { collectibles: world.collectibles } : {}),
       ...(viewport ? { truncated: viewport.truncated } : { collectiblesSkipped: true }),
       fartlekTruncated: fartlekResult.truncated,
       fartleks,
-      areaStatus: flowlineAreaStatus(bounds, knownFlowlines, hiddenCandidates)
+      exploreAllowed: exploreAllowed(bounds)
     });
   } catch (error) {
     next(error);
@@ -1177,7 +1172,13 @@ const loadQuestInstance = async (playerId: string, instanceId: string) => {
 app.post("/api/world/explore", requirePlayer, requireCsrf, routeEditLimiter, async (request: UploadRequest, response, next) => {
   try {
     response.json(await exploreArea(request.user!.playerId, request.body, {
-      reveals: flowlineRevealRepository,
+      reveals: {
+        listRevealedWithinBounds: (playerId, bounds) =>
+          flowlineRevealRepository.listRevealedWithinBoundsLimited(playerId, bounds, { limit: config.worldFlowlineLimit }).then((result) => result.fartleks),
+        listHiddenCandidatesWithinBounds: (playerId, bounds) => flowlineRevealRepository.listHiddenCandidatesWithinBounds(playerId, bounds),
+        reveal: (playerId, ids, source) => flowlineRevealRepository.reveal(playerId, ids, source),
+        listByIds: (ids) => flowlineRevealRepository.listByIds(ids)
+      },
       toWorld: worldFartleksForPlayer
     }));
   } catch (error) {

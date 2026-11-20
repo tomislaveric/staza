@@ -50,7 +50,7 @@ struct WorldView: View {
                     styleURL: url,
                     collectibles: model.visibleCollectibles,
                     flowlines: model.visibleFlowlines,
-                    questTargets: planner.isActive ? plannerTargets(planner) : model.mapQuestTargets,
+                    questTargets: planner.isActive ? plannerTargets(planner) : (revealedTargets(model) ?? model.mapQuestTargets),
                     route: planner.displayedRoute,
                     selectedCollectibleId: model.selection.flatMap { selection -> String? in
                         if case .collectible(let item) = selection { return item.id }
@@ -76,12 +76,8 @@ struct WorldView: View {
                     sheetContent(model, planner)
                 }
                 .accessibilityIdentifier("worldSheet")
-
-                exploreOverlay(model, planner)
-                    .padding(.horizontal, StazaSpacing.md)
-                    .padding(.bottom, sheetHeight + StazaSpacing.sm)
-                    .animation(reduceMotion ? nil : .snappy, value: model.exploreState)
             }
+            .onChange(of: model.exploreState) { _, state in exploreFinished(state, model) }
             .onChange(of: model.selection) { _, selection in
                 if let selection { withAnimation(.snappy) { sheet.showDetail(selection) } }
             }
@@ -124,55 +120,33 @@ struct WorldView: View {
 
     // MARK: Explore
 
-    /// The map's Explore button, or the card with what Explore found. Hidden while planning or in a detail.
-    @ViewBuilder
-    private func exploreOverlay(_ model: WorldModel, _ planner: RoutePlannerModel) -> some View {
-        let browsing = sheet.mode == .browse || sheet.mode == .discoveries
-        if browsing && !planner.isActive {
-            if let state = model.exploreState, state != .exploring {
-                ExploreResultCard(
-                    state: state,
-                    onViewDiscoveries: {
-                        model.dismissExplore()
-                        withAnimation(.snappy) { sheet.showDiscoveries() }
-                    },
-                    onPlanRoute: { openPlanner(model, planner) },
-                    onZoomOut: {
-                        model.dismissExplore()
-                        zoomOut(model)
-                    },
-                    onShowKnown: { showKnownFlowlines(model) },
-                    onDismiss: { model.dismissExplore() }
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                ExploreCTA(
-                    action: model.exploreAction,
-                    isExploring: model.isExploring,
-                    routeStops: planner.stops.count,
-                    onExplore: { explore(model) },
-                    onPlanRoute: { openPlanner(model, planner) }
-                )
-                .transition(.opacity)
-            }
+    /// Explore finished: the sheet opens the discoveries at half height and the map frames what was found.
+    private func exploreFinished(_ state: ExploreState?, _ model: WorldModel) {
+        guard let state, state != .exploring, !(planner?.isActive ?? false) else { return }
+        if case .result(let result) = state, !model.discoveries.isEmpty {
+            framed = (result.revealed.isEmpty ? model.discoveries : result.revealed).flatMap(\.coordinates)
         }
+        withAnimation(.snappy) {
+            sheet.showDiscoveries()
+            sheet.detent = .medium
+        }
+    }
+
+    /// Newly revealed Flowlines stay emphasised while their discoveries are open.
+    private func revealedTargets(_ model: WorldModel) -> QuestTargets? {
+        guard sheet.mode == .discoveries, case .result(let result)? = model.exploreState else { return nil }
+        let ids = Set((result.revealed.isEmpty ? model.discoveries : result.revealed).map(\.id))
+        guard !ids.isEmpty else { return nil }
+        return QuestTargets(collectibles: [], flowlines: model.visibleFlowlines.filter { ids.contains($0.id) })
     }
 
     private func explore(_ model: WorldModel) {
         switch model.exploreAction {
         case .zoomIn: return
-        case .showFlowlines: showKnownFlowlines(model)
-        case .explore, .exploreNew:
+        case .explore:
             model.clearHighlight()
             Task { await model.exploreArea(reduceMotion: reduceMotion) }
         }
-    }
-
-    /// Frames the area's revealed Flowlines and lists them; nothing is discovered again.
-    private func showKnownFlowlines(_ model: WorldModel) {
-        model.dismissExplore()
-        framed = model.flowlines.flatMap(\.coordinates)
-        withAnimation(.snappy) { sheet.showDiscoveries() }
     }
 
     /// Frames an area three times as large around the current one.
@@ -234,10 +208,16 @@ struct WorldView: View {
     private func sheetHeader(_ model: WorldModel, _ planner: RoutePlannerModel) -> some View {
         switch sheet.mode {
         case .browse:
-            WorldBrowseHeader(model: model)
+            WorldBrowseHeader(
+                model: model,
+                routeStops: planner.stops.count,
+                onExplore: { explore(model) },
+                onPlanRoute: { openPlanner(model, planner) }
+            )
         case .discoveries:
-            DiscoveriesHeader {
+            DiscoveriesHeader(routeStops: planner.stops.count, onPlanRoute: { openPlanner(model, planner) }) {
                 framed = []
+                model.dismissExplore()
                 withAnimation(.snappy) { sheet.closeDiscoveries() }
             }
         case .planner:
@@ -256,10 +236,16 @@ struct WorldView: View {
         case .browse:
             WorldBrowseContent(model: model, onChanged: { container.playerDataChanged() })
         case .discoveries:
-            DiscoveriesContent(model: model, planner: planner, origin: userLocation) { flowline in
-                framed = flowline.coordinates
-                model.select(.flowline, id: flowline.id)
-            }
+            DiscoveriesContent(
+                model: model,
+                planner: planner,
+                origin: userLocation,
+                onViewOnMap: { flowline in
+                    framed = flowline.coordinates
+                    model.select(.flowline, id: flowline.id)
+                },
+                onZoomOut: { zoomOut(model) }
+            )
         case .planner:
             RoutePlannerPanel(
                 planner: planner,

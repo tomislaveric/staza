@@ -44,25 +44,6 @@ export const selectFlowlinesToReveal = <T extends RevealCandidate>(
 
 export const exploreAllowed = (bounds: GeoBounds): boolean => viewportWidthMeters(bounds) <= MAX_EXPLORE_WIDTH_METERS;
 
-/** Derived "explored" state of a viewport; there is no stored explored-area record. */
-export interface FlowlineAreaStatus {
-  exploreAllowed: boolean;
-  /** Revealed Flowlines in the area. */
-  knownFlowlines: number;
-  /** Eligible hidden Flowlines Explore would reveal (before the per-Explore cap). */
-  availableFlowlines: number;
-}
-
-export const flowlineAreaStatus = (
-  bounds: GeoBounds,
-  knownFlowlines: number,
-  hiddenCandidates: RevealCandidate[]
-): FlowlineAreaStatus => ({
-  exploreAllowed: exploreAllowed(bounds),
-  knownFlowlines,
-  availableFlowlines: availableToReveal(hiddenCandidates, new Set()).length
-});
-
 export type ExploreOutcome = "discovered" | "already_explored_new" | "already_explored" | "nothing_new";
 
 /** First reveal, top-up of an explored area, an explored area without news, or nothing at all. */

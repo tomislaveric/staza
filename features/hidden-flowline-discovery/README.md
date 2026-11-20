@@ -5,7 +5,8 @@
 > Reveals now come only from the dedicated **Explore this area** action
 > (`POST /api/world/explore`, all eligible Flowlines in the area, capped at 12) and from
 > rides. Generate no longer reveals and no longer returns `revealedFlowlineIds`.
-> `GET /api/world` replaces `hiddenFlowlineCount` with `areaStatus`. The "Plan route via
+> `GET /api/world` drops `hiddenFlowlineCount` and returns only completed Flowlines;
+> Explore returns the area's revealed ones (`known`). The "Plan route via
 > this Flowline" entry became **Add to route** in the manual planner, which accepts
 > several Flowlines. The ride label reads "New Flowline discovered". Storage, backfill,
 > lifetime and the no-geometry-leak rule are unchanged.

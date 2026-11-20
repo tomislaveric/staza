@@ -41,27 +41,20 @@ struct WorldDetailBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
-            FlowChips {
-                StazaChip(selection.statusLabel, systemImage: selection.done ? "checkmark.circle.fill" : "circle.dashed", tint: selection.done ? StazaColor.success : StazaColor.textSubtle)
-                if case .flowline(let flowline) = selection {
-                    FlowlineCharacterChip(flowline: flowline)
-                }
-                if isQuestTarget {
-                    StazaChip("world.detail.questTarget", systemImage: "scope", tint: StazaColor.accent)
+            HStack(alignment: .top, spacing: StazaSpacing.sm) {
+                chips
+                Spacer(minLength: 0)
+                if let onToggleRoute {
+                    Button(action: onToggleRoute) {
+                        Label(inRoute ? "world.route.added" : "world.route.add", systemImage: inRoute ? "checkmark" : "plus").labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(inRoute ? .stazaSecondary : .stazaPrimary)
+                    .accessibilityAddTraits(inRoute ? .isSelected : [])
+                    .accessibilityIdentifier("worldAddToRoute")
                 }
             }
             if case .flowline(let flowline) = selection {
                 flowlineFacts(flowline)
-            }
-            if let onToggleRoute {
-                Button(action: onToggleRoute) {
-                    Label(inRoute ? "world.route.added" : "world.route.add", systemImage: inRoute ? "checkmark" : "plus")
-                }
-                .buttonStyle(inRoute ? .stazaSecondaryWide : .stazaPrimaryWide)
-                .accessibilityAddTraits(inRoute ? .isSelected : [])
-                .accessibilityIdentifier("worldAddToRoute")
-            }
-            if case .flowline(let flowline) = selection {
                 DisclosureGroup("world.detail.viewDetails") { details(flowline) }
                     .font(StazaFont.subheadline.weight(.medium))
                     .tint(StazaColor.textMuted)
@@ -72,6 +65,18 @@ struct WorldDetailBody: View {
         .padding(.horizontal, StazaSpacing.md)
         .padding(.bottom, StazaSpacing.lg)
         .accessibilityIdentifier("worldDetailSheet")
+    }
+
+    private var chips: some View {
+        FlowChips {
+            StazaChip(selection.statusLabel, systemImage: selection.done ? "checkmark.circle.fill" : "circle.dashed", tint: selection.done ? StazaColor.success : StazaColor.textSubtle)
+            if case .flowline(let flowline) = selection {
+                FlowlineCharacterChip(flowline: flowline)
+            }
+            if isQuestTarget {
+                StazaChip("world.detail.questTarget", systemImage: "scope", tint: StazaColor.accent)
+            }
+        }
     }
 
     /// Length, the primary character's score and road quality: never more than two scores at once.

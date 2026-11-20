@@ -31,25 +31,12 @@ struct WorldFlowline: Decodable, Equatable, Identifiable, Sendable {
     }
 }
 
-struct WorldStats: Decodable, Equatable, Sendable {
-    let totalCollectibles: Int
-    let discoveredCount: Int
-    let remainingCount: Int
-}
-
 struct WorldViewport: Decodable, Equatable, Sendable {
     let collectibles: [WorldCollectible]?
     let fartleks: [WorldFlowline]?
     let truncated: Bool?
-    var stats: WorldStats? = nil
-    var areaStatus: AreaStatus? = nil
-}
-
-/// Explore state of the visible area: revealed Flowlines in it and eligible ones still hidden.
-struct AreaStatus: Decodable, Equatable, Sendable {
-    let exploreAllowed: Bool
-    let knownFlowlines: Int
-    let availableFlowlines: Int
+    /// The viewport is narrow enough to explore.
+    var exploreAllowed: Bool? = nil
 }
 
 /// The World-relevant part of `GET /api/player/capabilities`.

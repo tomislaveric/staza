@@ -7,8 +7,11 @@ final class WorldModel {
     private(set) var basemap: Basemap?
     private(set) var basemapFailed = false
     private(set) var collectibles: [WorldCollectible] = []
+    /// Completed Flowlines in the viewport plus every Flowline Explore showed this session.
     private(set) var flowlines: [WorldFlowline] = []
-    private(set) var areaStatus: AreaStatus?
+    /// The last explored area's revealed Flowlines: what the discoveries sheet lists.
+    private(set) var discoveries: [WorldFlowline] = []
+    private(set) var exploreAllowed = false
     /// The Explore card: running, a result, or a failure. `nil` when dismissed.
     private(set) var exploreState: ExploreState?
     /// Newly revealed Flowlines not drawn yet while the reveal is staggered.
@@ -17,9 +20,11 @@ final class WorldModel {
     private(set) var truncated = false
     private(set) var viewportFailed = false
     private(set) var bounds: WorldBounds?
-    /// The area `areaStatus` describes; Explore reveals exactly this area so the CTA and the outcome agree.
+    /// The last loaded viewport; Explore reveals exactly this area.
     private var areaBounds: WorldBounds?
-    private(set) var stats: WorldStats?
+    /// The viewport only sends completed Flowlines; revealed ones stay on the map once Explore loaded them.
+    private var completedFlowlines: [WorldFlowline] = []
+    private var exploredFlowlines: [WorldFlowline] = []
     private(set) var instances: [QuestInstance] = []
     private(set) var capabilities = WorldCapabilities.empty
     private(set) var highlightedInstanceId: String?
@@ -49,7 +54,7 @@ final class WorldModel {
         WorldFilters.flowlines(flowlines, selected: selectedFilters).filter { !revealing.contains($0.id) }
     }
 
-    var exploreAction: ExploreAction { ExploreAction(areaStatus) }
+    var exploreAction: ExploreAction { ExploreAction(exploreAllowed: exploreAllowed) }
     var isExploring: Bool { exploreState == .exploring }
 
     /// Quest targets drawn on the map: the highlighted exploration's, else every active one's.
@@ -92,11 +97,11 @@ final class WorldModel {
             // A newer viewport request started meanwhile; its response wins.
             guard generation == viewportGeneration else { return }
             collectibles = viewport.collectibles ?? []
-            flowlines = viewport.fartleks ?? []
-            areaStatus = viewport.areaStatus
+            completedFlowlines = viewport.fartleks ?? []
+            mergeFlowlines()
+            exploreAllowed = viewport.exploreAllowed ?? false
             areaBounds = bounds
             truncated = viewport.truncated ?? false
-            stats = viewport.stats
             viewportFailed = false
         } catch is CancellationError {
             return
@@ -108,15 +113,13 @@ final class WorldModel {
 
     /// Explore this area: reveals the visible area's eligible Flowlines. Never plans a route.
     func exploreArea(reduceMotion: Bool = false) async {
-        guard let bounds = areaBounds, !isExploring, exploreAction == .explore || exploreAction == .exploreNew else { return }
+        guard let bounds = areaBounds, !isExploring, exploreAction == .explore else { return }
         exploreState = .exploring
         do {
             let result: ExploreResult = try await api.post("/api/world/explore", body: ExploreRequest(bbox: bounds.queryValue))
-            if let status = areaStatus {
-                areaStatus = AreaStatus(exploreAllowed: status.exploreAllowed, knownFlowlines: result.knownCount, availableFlowlines: result.availableCount)
-            }
+            discoveries = result.known.isEmpty ? result.revealed : result.known
             exploreState = .result(result)
-            await reveal(result.revealed, reduceMotion: reduceMotion)
+            await reveal(result, reduceMotion: reduceMotion)
         } catch is CancellationError {
             exploreState = nil
         } catch {
@@ -126,19 +129,25 @@ final class WorldModel {
 
     func dismissExplore() { exploreState = nil }
 
-    /// Adds newly revealed Flowlines and lets them appear one after another, at once with reduced motion.
-    private func reveal(_ revealed: [WorldFlowline], reduceMotion: Bool) async {
-        let known = Set(flowlines.map(\.id))
-        let fresh = revealed.filter { !known.contains($0.id) }
-        guard !fresh.isEmpty else { return }
+    /// Already known Flowlines show at once; newly revealed ones appear one after another, at once with reduced motion.
+    private func reveal(_ result: ExploreResult, reduceMotion: Bool) async {
+        let shown = Set(flowlines.map(\.id))
+        let fresh = result.revealed.filter { !shown.contains($0.id) }
         if !reduceMotion { revealing.formUnion(fresh.map(\.id)) }
-        flowlines += fresh
-        guard !reduceMotion else { return }
+        let explored = Set(exploredFlowlines.map(\.id))
+        exploredFlowlines += (result.known + result.revealed).filter { !explored.contains($0.id) }.uniqued()
+        mergeFlowlines()
+        guard !reduceMotion, !fresh.isEmpty else { return }
         for flowline in fresh {
             revealing.remove(flowline.id)
             try? await Task.sleep(for: .milliseconds(140))
         }
         revealing = []
+    }
+
+    private func mergeFlowlines() {
+        let completed = Set(completedFlowlines.map(\.id))
+        flowlines = completedFlowlines + exploredFlowlines.filter { !completed.contains($0.id) }
     }
 
     private static func message(_ error: Error) -> String? {
@@ -298,4 +307,11 @@ enum ExploreState: Equatable, Sendable {
     case result(ExploreResult)
     /// A failure, with the server's message when it sent one.
     case failed(String?)
+}
+
+private extension Array where Element == WorldFlowline {
+    func uniqued() -> [WorldFlowline] {
+        var seen = Set<String>()
+        return filter { seen.insert($0.id).inserted }
+    }
 }

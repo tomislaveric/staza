@@ -4818,13 +4818,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fahre den gesamten Abschnitt in einer Aktivität."
+            "value" : "In einer Aktivität ganz fahren."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Complete the full segment in one activity."
+            "value" : "Ride it fully in one activity."
           }
         }
       }
@@ -4930,13 +4930,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Straßenqualität"
+            "value" : "Straße"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Road quality"
+            "value" : "Road"
           }
         }
       }
@@ -4946,13 +4946,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Details ansehen"
+            "value" : "Details"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "View details"
+            "value" : "Details"
           }
         }
       }
@@ -4978,13 +4978,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hier wurden noch keine Flowlines entdeckt. Erkunde dieses Gebiet, um sie aufzudecken."
+            "value" : "Noch keine Flowlines. Erkunde, um sie aufzudecken."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No Flowlines discovered here yet. Explore this area to reveal them."
+            "value" : "No Flowlines yet. Explore to reveal them."
           }
         }
       }
@@ -5010,13 +5010,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bergpässe"
+            "value" : "Pässe"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mountain passes"
+            "value" : "Passes"
           }
         }
       }
@@ -5074,13 +5074,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beste Ausdauer"
+            "value" : "Ausdauer"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Best Endurance"
+            "value" : "Endurance"
           }
         }
       }
@@ -5090,13 +5090,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bester Flow"
+            "value" : "Flow"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Best Flow"
+            "value" : "Flow"
           }
         }
       }
@@ -5106,7 +5106,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In der Nähe"
+            "value" : "Nähe"
           }
         },
         "en" : {
@@ -5122,7 +5122,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ungefahren"
+            "value" : "Offen"
           }
         },
         "en" : {
@@ -5138,13 +5138,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In diesem Gebiet entdeckt"
+            "value" : "Entdeckungen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Discovered in this area"
+            "value" : "Discoveries"
           }
         }
       }
@@ -5170,7 +5170,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aussichtspunkte"
+            "value" : "Aussichten"
           }
         },
         "en" : {
@@ -5389,22 +5389,6 @@
         }
       }
     },
-    "world.explore.another" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anderes Gebiet erkunden"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Explore another area"
-          }
-        }
-      }
-    },
     "world.explore.breakdown.endurance %lld" : {
       "localizations" : {
         "de" : {
@@ -5458,45 +5442,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dieses Gebiet erkunden"
+            "value" : "Erkunden"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Explore this area"
-          }
-        }
-      }
-    },
-    "world.explore.cta.exploreNew" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nach neuen Flowlines suchen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Explore for new Flowlines"
-          }
-        }
-      }
-    },
-    "world.explore.cta.show" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flowlines zeigen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show Flowlines"
+            "value" : "Explore"
           }
         }
       }
@@ -5506,13 +5458,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zum Erkunden hineinzoomen"
+            "value" : "Näher zoomen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zoom in to explore"
+            "value" : "Zoom in"
           }
         }
       }
@@ -5557,34 +5509,18 @@
         }
       }
     },
-    "world.explore.done" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fertig"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
-          }
-        }
-      }
-    },
     "world.explore.error.title" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gebiet konnte nicht erkundet werden"
+            "value" : "Erkunden fehlgeschlagen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Couldn't explore this area"
+            "value" : "Explore failed"
           }
         }
       }
@@ -5594,13 +5530,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gebiet bereits erkundet"
+            "value" : "Schon erkundet"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Area already explored"
+            "value" : "Already explored"
           }
         }
       }
@@ -5610,13 +5546,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gebiet wird erkundet …"
+            "value" : "Erkunde …"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exploring this area…"
+            "value" : "Exploring…"
           }
         }
       }
@@ -5682,13 +5618,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Versuche ein größeres Gebiet oder eine andere Region."
+            "value" : "Zoome heraus oder suche woanders."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Try exploring a wider area or another region."
+            "value" : "Zoom out or try elsewhere."
           }
         }
       }
@@ -5698,61 +5634,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hier gibt es nichts Neues zu entdecken"
+            "value" : "Nichts Neues hier"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nothing new discovered here"
-          }
-        }
-      }
-    },
-    "world.explore.planRoute" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Route planen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plan a route"
-          }
-        }
-      }
-    },
-    "world.explore.showKnown" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bekannte Flowlines zeigen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show known Flowlines"
-          }
-        }
-      }
-    },
-    "world.explore.viewDiscoveries" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entdeckungen ansehen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View discoveries"
+            "value" : "Nothing new here"
           }
         }
       }
@@ -5762,7 +5650,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Herauszoomen"
+            "value" : "Rauszoomen"
           }
         },
         "en" : {
@@ -6249,38 +6137,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This area"
-          }
-        }
-      }
-    },
-    "world.stats.flowlines %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Flowlines"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Flowlines"
-          }
-        }
-      }
-    },
-    "world.stats.found %lld %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld von %2$lld gefunden"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld of %2$lld found"
           }
         }
       }

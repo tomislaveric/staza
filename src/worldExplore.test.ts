@@ -31,7 +31,7 @@ const fakeWorld = (all: Fartlek[], revealedAtStart: string[] = []) => {
     revealed,
     dependencies: {
       reveals: {
-        countRevealedWithinBounds: async () => all.filter((item) => revealed.has(item.id)).length,
+        listRevealedWithinBounds: async () => all.filter((item) => revealed.has(item.id)),
         listHiddenCandidatesWithinBounds: async () => all.filter((item) => !revealed.has(item.id)).map(candidate),
         reveal: async (_player: string, ids: string[]) => {
           const fresh = ids.filter((id) => !revealed.has(id));
@@ -68,6 +68,7 @@ describe("exploreArea", () => {
     expect(first).toMatchObject({ outcome: "already_explored_new", knownCount: 2, summary: { total: 1 } });
     const second = await exploreArea("p1", body, world.dependencies);
     expect(second).toMatchObject({ outcome: "already_explored", revealed: [], knownCount: 2 });
+    expect(second.known.map((item) => item.id)).toEqual(["a", "n"]);
   });
 
   it("reports nothing new in an empty area and rejects areas that are too wide", async () => {

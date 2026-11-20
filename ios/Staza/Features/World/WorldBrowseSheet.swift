@@ -1,16 +1,24 @@
 import SwiftUI
 
-/// Sheet header while browsing: visible-area discovery counts. Explore and Plan route live on the map.
+/// Sheet header while browsing: Explore and Plan route; no counts that change with every pan.
 struct WorldBrowseHeader: View {
     let model: WorldModel
+    let routeStops: Int
+    let onExplore: () -> Void
+    let onPlanRoute: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
-            Text("world.sheet.title")
-                .font(StazaFont.title3)
-                .foregroundStyle(StazaColor.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-            summary
+        HStack(alignment: .center, spacing: StazaSpacing.sm) {
+            VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                Text("world.sheet.title")
+                    .font(StazaFont.title3)
+                    .foregroundStyle(StazaColor.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                summary
+            }
+            Spacer(minLength: StazaSpacing.xs)
+            ExploreButton(action: model.exploreAction, isExploring: model.isExploring, onExplore: onExplore)
+            PlanRouteButton(routeStops: routeStops, onPlanRoute: onPlanRoute)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, StazaSpacing.md)
@@ -24,28 +32,6 @@ struct WorldBrowseHeader: View {
             Label("world.viewportFailed", systemImage: "exclamationmark.triangle.fill")
                 .font(StazaFont.footnote)
                 .foregroundStyle(StazaColor.danger)
-        } else if let stats = model.stats {
-            HStack(spacing: StazaSpacing.sm) {
-                Label {
-                    Text("world.stats.found \(stats.discoveredCount) \(stats.totalCollectibles)")
-                } icon: {
-                    Circle().fill(StazaColor.success).frame(width: 8, height: 8)
-                }
-                Label {
-                    Text("world.stats.flowlines \(model.flowlines.count)")
-                } icon: {
-                    Capsule().fill(StazaColor.rarityRare).frame(width: 12, height: 3)
-                }
-            }
-            .labelStyle(SwatchLabelStyle())
-            .font(StazaFont.footnote.monospacedDigit())
-            .foregroundStyle(StazaColor.textMuted)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("worldStats")
-        } else {
-            Text("world.loading").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
         }
     }
 }
@@ -254,14 +240,5 @@ private struct FilterChip: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityHint(locked ? Text("world.filter.locked.hint") : Text(verbatim: ""))
         .sensoryFeedback(.selection, trigger: selected)
-    }
-}
-
-private struct SwatchLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: StazaSpacing.xs) {
-            configuration.icon
-            configuration.title
-        }
     }
 }
