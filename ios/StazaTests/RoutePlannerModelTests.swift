@@ -64,8 +64,8 @@ final class RoutePlannerModelTests: XCTestCase {
         await planner.route()
         XCTAssertEqual(planner.failure, .noStops)
         for id in ["1", "2", "3", "4", "5"] { planner.toggle(.flowline(flowline(id))) }
-        XCTAssertEqual(planner.stops.count, 4)
-        XCTAssertEqual(planner.failure, .limit(.flowline, 4))
+        XCTAssertEqual(planner.stops.count, 5)
+        XCTAssertNil(planner.failure)
         planner.setRouteType(.pointToPoint)
         await planner.route()
         XCTAssertEqual(planner.failure, .missingEnd)

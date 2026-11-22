@@ -8,13 +8,10 @@ const peak = collectibleStop({ id: "peak-1", name: "Peak", type: "peak", latitud
 const point = waypointStop({ lat: 47.1, lon: 9.05 });
 
 describe("route planner stops", () => {
-  it("toggles stops and enforces the per-kind limits", () => {
-    const limits = { maxRouteTargets: 1, maxRouteWaypoints: 1, maxRouteFlowlines: 1 };
-    const { stops } = toggleStop([flowline], peak, limits);
+  it("toggles stops without a limit", () => {
+    const stops = toggleStop([flowline], peak);
     expect(stops).toEqual([flowline, peak]);
-    expect(toggleStop(stops, peak, limits).stops).toEqual([flowline]);
-    expect(toggleStop(stops, flowlineStop({ id: "f2", name: "Other" }), limits))
-      .toEqual({ stops, error: "A route can include at most 1 Flowlines." });
+    expect(toggleStop(stops, peak)).toEqual([flowline]);
   });
 
   it("applies the server's routed order and keeps unmentioned stops last", () => {

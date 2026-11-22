@@ -94,7 +94,7 @@ Out:
   qualifying tag falls back to its highest score.
 - **Planner:** manual. Staza orders the stops (cheapest insertion + 2-opt), and the
   user can reorder them; once reordered, the order is kept (`keepOrder`). Limits per
-  route: 4 Flowlines, 12 collectibles, 8 waypoints. The existing automatic generator stays only as an optional
+  route: 4 Flowlines, 12 collectibles, 8 waypoints (all removed later by explore-sessions-and-saved-explorations). The existing automatic generator stays only as an optional
   **Suggest route** action inside the planner. It uses revealed Flowlines only.
 - **End of planning:** **Start Exploration** still persists one QuestInstance and one
   PlannedRoute. Each included Flowline adds one `flowline_rule` objective.

@@ -746,22 +746,18 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderDetail();
   }
 
-  const plannerLimits = () => planner?.limits ?? createPlannerState().limits;
-
   function toggleFlowlineStop(id) {
     const fartlek = fartlekById(id) ?? undefined;
     const existing = currentStops().find((stop) => stop.kind === "flowline" && stop.id === id);
     const stop = existing ?? (fartlek ? flowlineStop(fartlek) : undefined);
     if (!stop) return;
-    const { stops, error } = toggleStop(currentStops(), stop, plannerLimits());
-    setStops(stops, error);
+    setStops(toggleStop(currentStops(), stop));
   }
 
   function toggleCollectibleStop(id) {
     const collectible = collectibleById(id);
     if (!collectible) return;
-    const { stops, error } = toggleStop(currentStops(), collectibleStop(collectible), plannerLimits());
-    setStops(stops, error);
+    setStops(toggleStop(currentStops(), collectibleStop(collectible)));
   }
 
   /** A collectible's "Add to route": adds it and opens the planner. */
@@ -770,9 +766,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     if (!collectible) return;
     const stop = collectibleStop(collectible);
     if (!currentStops().some((item) => item.kind === "collectible" && item.id === id)) {
-      const { stops, error } = toggleStop(currentStops(), stop, plannerLimits());
-      draftStops = stops;
-      if (error) setStatus(error);
+      draftStops = toggleStop(currentStops(), stop);
     }
     openPlanner();
   }
@@ -832,8 +826,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
 
   function addPlannerWaypoint(point) {
     if (planner?.adding !== "waypoint" || planner.status !== "idle") return;
-    const { stops, error } = toggleStop(planner.stops, waypointStop(point), planner.limits);
-    setStops(stops, error);
+    setStops(toggleStop(planner.stops, waypointStop(point)));
   }
 
   function locatePlannerStart() {
@@ -875,7 +868,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       Object.assign(planner, {
         status: "idle",
         proposal: result.proposal,
-        limits: result.limits ?? planner.limits,
         stops: planner.keepOrder ? planner.stops : orderStops(planner.stops, result.proposal.stopOrder)
       });
       worldMap.fitTo(geometryPoints(result.proposal.geometry));

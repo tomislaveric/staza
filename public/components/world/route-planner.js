@@ -24,7 +24,6 @@ export const createPlannerState = ({ start, stops = [] } = {}) => ({
   status: "idle",
   proposal: undefined,
   dropped: [],
-  limits: { maxRouteTargets: 12, maxRouteWaypoints: 8, maxRouteFlowlines: 4 },
   error: undefined
 });
 
@@ -52,21 +51,9 @@ export const waypointStop = (point) => ({ kind: "waypoint", lat: point.lat, lon:
 
 export const hasStop = (stops, stop) => stops.some((item) => stopKey(item) === stopKey(stop));
 
-/** Adds or removes a stop. Returns the new stop list and an error when a limit is reached. */
-export const toggleStop = (stops, stop, limits) => {
-  if (hasStop(stops, stop)) return { stops: stops.filter((item) => stopKey(item) !== stopKey(stop)) };
-  const count = (kind) => stops.filter((item) => item.kind === kind).length;
-  if (stop.kind === "flowline" && count("flowline") >= limits.maxRouteFlowlines) {
-    return { stops, error: `A route can include at most ${limits.maxRouteFlowlines} Flowlines.` };
-  }
-  if (stop.kind === "collectible" && count("collectible") >= limits.maxRouteTargets) {
-    return { stops, error: `A route can include at most ${limits.maxRouteTargets} collectibles.` };
-  }
-  if (stop.kind === "waypoint" && count("waypoint") >= limits.maxRouteWaypoints) {
-    return { stops, error: `A route can include at most ${limits.maxRouteWaypoints} map points.` };
-  }
-  return { stops: [...stops, stop] };
-};
+/** Adds or removes a stop. The player's route has no stop limits. */
+export const toggleStop = (stops, stop) =>
+  hasStop(stops, stop) ? stops.filter((item) => stopKey(item) !== stopKey(stop)) : [...stops, stop];
 
 export const moveStop = (stops, index, offset) => {
   const target = index + offset;

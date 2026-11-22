@@ -2424,54 +2424,6 @@
         }
       }
     },
-    "planner.error.limit.collectibles %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eine Route kann höchstens %lld Sammelobjekte enthalten."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A route can include at most %lld collectibles."
-          }
-        }
-      }
-    },
-    "planner.error.limit.flowlines %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eine Route kann höchstens %lld Flowlines enthalten."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A route can include at most %lld Flowlines."
-          }
-        }
-      }
-    },
-    "planner.error.limit.waypoints %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eine Route kann höchstens %lld Kartenpunkte enthalten."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A route can include at most %lld map points."
-          }
-        }
-      }
-    },
     "planner.error.noRoute" : {
       "localizations" : {
         "de" : {

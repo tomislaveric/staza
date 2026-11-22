@@ -56,10 +56,11 @@ export const PLANNING_LIMITS = {
   /** Total wall-clock budget of one planning action. */
   planningDeadlineMs: 20_000,
   maxProposals: 3,
-  /** Targets one route may contain, generated or customized. */
-  maxRouteTargets: 12,
-  /** Route-only map points a customized route may pass through. */
-  maxRouteWaypoints: 8,
+  /**
+   * Anti-abuse ceiling on the stops one planning request may carry. Not a product rule: players
+   * choose freely what their route includes, and this should never be reached in normal use.
+   */
+  maxRequestStops: 100,
   /** Eligible targets kept per objective after spatial ranking. */
   maxPoolTargetsPerObjective: 12,
   maxPoolTargets: 16,

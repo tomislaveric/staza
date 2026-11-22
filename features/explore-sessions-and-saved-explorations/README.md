@@ -73,6 +73,11 @@ Out:
     Collectibles and the opportunity Flowlines the route rides in full.
   - The route opens in the editor, where the player can add or remove Flowlines and
     Collectibles, add waypoints, reorder and reroute.
+  - **No route limits.** The player builds their own route: the former per-route caps
+    (4 Flowlines, 12 Collectibles, 8 map points) are removed on server, web and iOS, and
+    planner responses no longer carry `limits`. Only the area's opportunities can be added.
+    The server keeps an anti-abuse ceiling of 100 stops per planning request
+    (`maxRequestStops`, "This route has too many stops."), which normal use never reaches.
 - **Save Exploration** is the explicit persistence step.
   - It stores the QuestInstance with `status = planned`, the PlannedRoute and the
     objectives (one `flowline_rule` per Flowline, plus the collectible objectives).

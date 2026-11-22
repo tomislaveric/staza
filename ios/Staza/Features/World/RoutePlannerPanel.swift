@@ -306,9 +306,6 @@ struct RoutePlannerPanel: View {
         case .noStops: Text("planner.error.noStops")
         case .noRoute: Text("planner.error.noRoute")
         case .noSuggestion: Text("planner.error.noSuggestion")
-        case .limit(.flowline, let max): Text("planner.error.limit.flowlines \(max)")
-        case .limit(.collectible, let max): Text("planner.error.limit.collectibles \(max)")
-        case .limit(.waypoint, let max): Text("planner.error.limit.waypoints \(max)")
         case .server(let message?): Text(verbatim: message)
         case .server(nil): Text("planner.error.generic")
         }

@@ -9,9 +9,6 @@ import { policyForSport } from "./sport.js";
 import type { CandidateStop, FlowlineGeometry, LatLon, QuestRouteTarget, RoutePlanningInput } from "./types.js";
 import { traversedFlowlines } from "./validation.js";
 
-/** Most Flowlines one manual route may ride; each adds up to three routing points. */
-export const MAX_ROUTE_FLOWLINES = 4;
-
 /** One player-chosen stop: a collectible or route-only map point, or a Flowline ridden in full. */
 export type ManualStop =
   | { kind: "target"; target: QuestRouteTarget }

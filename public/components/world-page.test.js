@@ -435,8 +435,7 @@ describe("mounted World page interactions", () => {
             routeProposal("proposal-balanced", "balanced", ["peak-unfound"], { recommended: true })
           ],
           catalog: { collectibles: [collectibles[0], collectibles[1]], flowlines: [fartleks[0]] },
-          truncated: false,
-          limits: { maxRouteTargets: 12 }
+          truncated: false
         };
       }
       else if (url === "/api/explorations/plan" && options?.method === "POST") {

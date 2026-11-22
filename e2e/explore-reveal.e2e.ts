@@ -45,8 +45,7 @@ const stubWorld = async (page: Page) => {
         includedTargetIds: ["c-castle"], traversedFlowlines: [{ id: "f-rhine", name: "Rheintal Flowline", lengthMeters: 3800 }]
       }],
       catalog: { collectibles: [castle], flowlines: opportunities },
-      truncated: false,
-      limits: { maxRouteTargets: 12, maxRouteWaypoints: 8 }
+      truncated: false
     });
   });
   await page.route(/\/api\/explorations\/save$/, (route) => {

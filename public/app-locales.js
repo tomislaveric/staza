@@ -745,6 +745,7 @@ const germanCopy = {
   "Explore an area, generate a route and save it as an Exploration.": "Erkunde ein Gebiet, erstelle eine Route und speichere sie als Erkundung.",
   "Exploration progressed: ": "Erkundung fortgeschritten: ",
   "Progress is kept. Your next activities can complete it.": "Der Fortschritt bleibt erhalten. Deine nächsten Aktivitäten können sie abschließen.",
+  "This route has too many stops.": "Diese Route hat zu viele Stopps.",
   Language: "Sprache",
   LANGUAGE: "SPRACHE"
 };
@@ -818,9 +819,6 @@ export const translateAppTextNode = (text, locale) => {
     [/^(\d+) Flowlines discovered$/, "$1 Flowlines entdeckt"],
     [/^Plan route · (\d+)$/, "Route planen · $1"],
     [/^Map point (-?[\d.]+), (-?[\d.]+)$/, "Kartenpunkt $1, $2"],
-    [/^A route can include at most (\d+) Flowlines\.$/, "Eine Route kann höchstens $1 Flowlines enthalten."],
-    [/^A route can include at most (\d+) collectibles\.$/, "Eine Route kann höchstens $1 Sammelobjekte enthalten."],
-    [/^A route can include at most (\d+) map points\.$/, "Eine Route kann höchstens $1 Kartenpunkte enthalten."],
     [/^1 new Flowline$/, "1 neue Flowline"],
     [/^(\d+) new Flowlines$/, "$1 neue Flowlines"],
     [/^(\d+) revisited$/, "$1 erneut besucht"],

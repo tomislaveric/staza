@@ -12,7 +12,7 @@ import { profileForSport } from "../routePlanning/sport.js";
 import { buildExplorationTargets, buildFlowlineGeometries, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
 import { PLANNER_VERSION, type QuestRouteTarget, type RoutePlanningInput, type RouteProposal } from "../routePlanning/types.js";
 import type { GeoBounds } from "../worldQuery.js";
-import { MAX_ROUTE_FLOWLINES, planManualRoute, startToNearestStopM, type ManualStop } from "../routePlanning/manual.js";
+import { planManualRoute, startToNearestStopM, type ManualStop } from "../routePlanning/manual.js";
 import { describeExploration, explorationObjectives, flowlineObjective, withObjectiveIds } from "./objectives.js";
 import { parseExplorationId, parseGenerateRequest, parsePlanRequest, parseRerouteRequest } from "./request.js";
 import type { ExplorationSessionStore } from "./sessionStore.js";
@@ -118,7 +118,6 @@ export interface GeneratedExploration {
   /** Eligible destinations (collectibles) and the area's plannable Flowlines: rendered for the selected route and while adding destinations. */
   catalog: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[] };
   truncated: boolean;
-  limits: { maxRouteTargets: number; maxRouteWaypoints: number };
   warnings: ExplorationWarning[];
 }
 
@@ -127,7 +126,6 @@ export interface PlannedExploration {
   proposal: PublicRouteProposal;
   catalog: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[] };
   truncated: boolean;
-  limits: { maxRouteTargets: number; maxRouteWaypoints: number; maxRouteFlowlines: number };
 }
 
 /** The frozen area's collectibles (destinations must lie inside it) and its plannable Flowlines. */
@@ -268,7 +266,6 @@ export class ExplorationService {
       proposals: planned.map((entry) => toPublic(entry.proposal)),
       catalog: { collectibles: session.collectibles, flowlines: session.flowlines },
       truncated: session.truncated,
-      limits: { maxRouteTargets: PLANNING_LIMITS.maxRouteTargets, maxRouteWaypoints: PLANNING_LIMITS.maxRouteWaypoints },
       warnings
     };
   }
@@ -342,8 +339,7 @@ export class ExplorationService {
       explorationId: session.id,
       proposal: toPublic(proposal),
       catalog: { collectibles: world.collectibles, flowlines: world.flowlines },
-      truncated: world.truncated,
-      limits: { maxRouteTargets: PLANNING_LIMITS.maxRouteTargets, maxRouteWaypoints: PLANNING_LIMITS.maxRouteWaypoints, maxRouteFlowlines: MAX_ROUTE_FLOWLINES }
+      truncated: world.truncated
     };
   }
 

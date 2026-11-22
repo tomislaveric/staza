@@ -1,6 +1,5 @@
 import { UserInputError } from "../errors.js";
 import { distanceBetween } from "../routePlanning/geo.js";
-import { MAX_ROUTE_FLOWLINES } from "../routePlanning/manual.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import { isRecord, isUuid, parseLatLon, parseProposalId, parseRoutePlanningInput } from "../routePlanning/request.js";
 import type { LatLon, RoutePlanningInput } from "../routePlanning/types.js";
@@ -83,6 +82,8 @@ export interface RerouteRequest {
   waypoints: LatLon[];
 }
 
+const TOO_MANY_STOPS = "This route has too many stops.";
+
 /** `{ proposalId, targetIds }`: the exact edited target set of one proposal. */
 export const parseRerouteRequest = (body: unknown): RerouteRequest => {
   const proposalId = parseProposalId(body);
@@ -91,9 +92,6 @@ export const parseRerouteRequest = (body: unknown): RerouteRequest => {
     throw new UserInputError("Route targets must be a list of target ids.");
   }
   const targetIds = [...new Set(ids as string[])];
-  if (targetIds.length > PLANNING_LIMITS.maxRouteTargets) {
-    throw new UserInputError(`A route can include at most ${PLANNING_LIMITS.maxRouteTargets} targets.`);
-  }
   const rawWaypoints = isRecord(body) ? body.waypoints : undefined;
   if (rawWaypoints !== undefined && !Array.isArray(rawWaypoints)) throw new UserInputError("Route waypoints must be a list of coordinates.");
   const waypoints = new Map<string, LatLon>();
@@ -101,9 +99,7 @@ export const parseRerouteRequest = (body: unknown): RerouteRequest => {
     const point = parseLatLon(value, "Waypoint");
     waypoints.set(`${point.lat.toFixed(6)},${point.lon.toFixed(6)}`, point);
   }
-  if (waypoints.size > PLANNING_LIMITS.maxRouteWaypoints) {
-    throw new UserInputError(`A route can include at most ${PLANNING_LIMITS.maxRouteWaypoints} map points.`);
-  }
+  if (targetIds.length + waypoints.size > PLANNING_LIMITS.maxRequestStops) throw new UserInputError(TOO_MANY_STOPS);
   if (targetIds.length === 0 && waypoints.size === 0) throw new UserInputError("A route needs at least one destination or map point.");
   return { proposalId, targetIds, waypoints: [...waypoints.values()] };
 };
@@ -152,16 +148,7 @@ export const parsePlanRequest = (body: unknown): PlanRequest => {
   }
   const collectibleIds = stops.flatMap((stop) => (stop.kind === "collectible" ? [stop.id] : []));
   const waypoints = stops.flatMap((stop) => (stop.kind === "waypoint" ? [stop.point] : []));
-  const flowlineCount = stops.filter((stop) => stop.kind === "flowline").length;
-  if (collectibleIds.length > PLANNING_LIMITS.maxRouteTargets) {
-    throw new UserInputError(`A route can include at most ${PLANNING_LIMITS.maxRouteTargets} collectibles.`);
-  }
-  if (waypoints.length > PLANNING_LIMITS.maxRouteWaypoints) {
-    throw new UserInputError(`A route can include at most ${PLANNING_LIMITS.maxRouteWaypoints} map points.`);
-  }
-  if (flowlineCount > MAX_ROUTE_FLOWLINES) {
-    throw new UserInputError(`A route can include at most ${MAX_ROUTE_FLOWLINES} Flowlines.`);
-  }
+  if (stops.length > PLANNING_LIMITS.maxRequestStops) throw new UserInputError(TOO_MANY_STOPS);
   return {
     area,
     input: parseRoutePlanningInput({ routeType: "round_trip", ...body, constraint: areaConstraint(area) }),

@@ -134,13 +134,13 @@ describe("exploration requests", () => {
     expect(() => parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 } })).toThrow(UserInputError);
   });
 
-  it("accepts a bounded, de-duplicated target list for rerouting", () => {
+  it("accepts a de-duplicated target list for rerouting", () => {
     const proposalId = "0b8f1c1e-3c3a-4c1e-9f5e-1c2d3e4f5a6b";
     expect(parseRerouteRequest({ proposalId, targetIds: ["a", "b", "a"] })).toEqual({ proposalId, targetIds: ["a", "b"], waypoints: [] });
     expect(() => parseRerouteRequest({ proposalId, targetIds: [] })).toThrow(UserInputError);
     expect(() => parseRerouteRequest({ proposalId, targetIds: [1] })).toThrow(UserInputError);
     expect(() => parseRerouteRequest({ proposalId: "nope", targetIds: ["a"] })).toThrow(UserInputError);
-    const tooMany = Array.from({ length: PLANNING_LIMITS.maxRouteTargets + 1 }, (_value, index) => `t${index}`);
+    const tooMany = Array.from({ length: PLANNING_LIMITS.maxRequestStops + 1 }, (_value, index) => `t${index}`);
     expect(() => parseRerouteRequest({ proposalId, targetIds: tooMany })).toThrow(UserInputError);
   });
 });
@@ -203,7 +203,7 @@ describe("ExplorationService", () => {
     expect(result.proposals[0]).not.toHaveProperty("stops");
     expect(result.catalog.collectibles.map((item) => item.id)).toEqual(["c-near", "c-mid", "c-east", "c-far"]);
     expect(result.catalog.flowlines.map((item) => item.id)).toEqual(["f-near", "f-west", "f-east"]);
-    expect(result.limits.maxRouteTargets).toBe(PLANNING_LIMITS.maxRouteTargets);
+    expect(result).not.toHaveProperty("limits");
     const catalogIds = new Set(["c-near", "c-mid", "c-east", "c-far"]);
     for (const proposal of result.proposals) expect(contents(proposal).every((id) => catalogIds.has(id))).toBe(true);
     expect(created).toHaveLength(0);

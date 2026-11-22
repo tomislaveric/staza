@@ -72,11 +72,8 @@ final class RoutePlannerModel {
     enum MapMode: Equatable { case pickStart, pickEnd, addFlowline, addCollectible, addWaypoint }
     enum Failure: Equatable {
         case missingStart, missingEnd, noStops, noRoute, noSuggestion
-        case limit(PlannerStop.Kind, Int)
         case server(String?)
     }
-
-    static let limits: [PlannerStop.Kind: Int] = [.flowline: 4, .collectible: 12, .waypoint: 8]
 
     private(set) var isActive = false
     private(set) var status = Status.idle
@@ -177,16 +174,11 @@ final class RoutePlannerModel {
         return true
     }
 
-    /// Adds or removes a stop, respecting the per-kind limits.
+    /// Adds or removes a stop. The player's route has no stop limits.
     func toggle(_ stop: PlannerStop) {
         guard isIdle else { return }
         if contains(stop) {
             remove(stop)
-            return
-        }
-        let limit = Self.limits[stop.kind] ?? .max
-        guard stops.filter({ $0.kind == stop.kind }).count < limit else {
-            failure = .limit(stop.kind, limit)
             return
         }
         edit { stops.append(stop) }
