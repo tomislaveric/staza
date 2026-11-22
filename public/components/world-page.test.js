@@ -301,6 +301,7 @@ describe("mounted World page interactions", () => {
       targetProgress: objective.targets.map((target) => ({ ...target, complete: false }))
     }))
   };
+  const plannedInstance = { ...activeInstance, status: "planned", startedAt: undefined };
   const remoteCollectible = { ...collectibles[0], id: "remote-place", name: "Remote Place", latitude: 55, longitude: 12 };
   const remoteFlowline = {
     ...fartleks[0], id: "remote-flowline", name: "Remote Flowline",
@@ -335,15 +336,17 @@ describe("mounted World page interactions", () => {
   const planProposal = (overrides = {}) => routeProposal("proposal-plan", "balanced", ["viewpoint-found"], {
     customized: true, flowlineIds: ["fartlek-1"], stopOrder: ["viewpoint-found", "flowline:fartlek-1"], ...overrides
   });
+  const sessionCollectible = { id: "waterfall-session", name: "Hidden Falls", type: "landmark", primaryCategory: "waterfall", found: false, latitude: 50.2, longitude: 9.2 };
   const discovered = {
     outcome: "discovered",
-    revealed: [
+    flowlines: [
       { ...fartleks[0], id: "fresh-1", name: "Rheintal Flowline", flowScore: 84, roadQualityScore: 91, character: { primary: "flow", tags: ["flow"] } },
       { ...fartleks[0], id: "fresh-2", name: "Long Valley", enduranceScore: 80, character: { primary: "endurance", tags: ["endurance"] } }
     ],
-    knownCount: 2,
+    collectibles: [sessionCollectible],
+    collectiblesTruncated: false,
     availableCount: 0,
-    summary: { total: 2, byCharacter: { flow: 1, endurance: 1, explore: 0 } }
+    summary: { total: 2, byCharacter: { flow: 1, endurance: 1, explore: 0 }, collectibles: 1 }
   };
 
   /** A host whose buttons exist while its markup contains their data attribute; clicks call the bound handler. */
@@ -394,14 +397,16 @@ describe("mounted World page interactions", () => {
     const hosts = Object.fromEntries([
       "map", "status", "stats", "quests", "detail", "collectible-list", "locate", "explore-cta", "explore-card"
     ].map((name) => [`[data-world-${name}]`, element()]));
-    const questCancelButton = { ...element(), dataset: { questCancel: "instance-1" } };
+    const questDeleteButton = { ...element(), dataset: { questDelete: "instance-1" } };
+    const questStartButton = { ...element(), dataset: { questStart: "instance-1" } };
     const questSelectButton = { ...element(), dataset: { questSelect: "instance:instance-1" } };
     const remoteQuestSelectButton = { ...element(), dataset: { questSelect: "instance:instance-remote" } };
     const detail = fakeHost(hosts["[data-world-detail]"]);
     const cta = fakeHost(hosts["[data-world-explore-cta]"]);
     const card = fakeHost(hosts["[data-world-explore-card]"]);
     const questHost = hosts["[data-world-quests]"];
-    questHost.querySelectorAll = (selector) => selector === "[data-quest-cancel]" ? [questCancelButton]
+    questHost.querySelectorAll = (selector) => selector === "[data-quest-delete]" ? [questDeleteButton]
+      : selector === "[data-quest-start]" && questHost.innerHTML.includes("data-quest-start=") ? [questStartButton]
       : selector === "[data-quest-select]" ? [questSelectButton, remoteQuestSelectButton] : [];
     const mountPoint = {
       innerHTML: "",
@@ -438,9 +443,13 @@ describe("mounted World page interactions", () => {
         if (planError) return { ok: false, status: 422, json: async () => planError };
         body = { explorationId: "plan-1", proposal: planProposal(), catalog: { collectibles, flowlines: fartleks }, truncated: false };
       }
-      else if (url === "/api/explorations/confirm" && options?.method === "POST") {
+      else if (url === "/api/explorations/save" && options?.method === "POST") {
+        activeInstances = [plannedInstance];
+        body = { instance: plannedInstance, plannedRoute };
+      }
+      else if (url === "/api/quest-instances/instance-1/start" && options?.method === "POST") {
         activeInstances = [activeInstance];
-        body = { instance: activeInstance, plannedRoute };
+        body = { instance: activeInstance };
       }
       else if (url.endsWith("/planned-route")) {
         if (!url.includes("/instance-1/")) return { ok: false, status: 404, json: async () => ({ error: "No planned route." }) };
@@ -458,7 +467,7 @@ describe("mounted World page interactions", () => {
       getBounds: () => ({ west: 8, south: 49, east: 11, north: 52 }),
       getView: () => ({ center: { lat: 50.5, lon: 9.5 }, zoom: 8 }),
       setCollectibles: vi.fn(), setFartleks: vi.fn(), setDetailPanelOpen: vi.fn(),
-      setRoute: vi.fn(), setAlternateRoutes: vi.fn(), fitTo: vi.fn(), setRouteEndpoints: vi.fn(),
+      setRoute: vi.fn(), setAlternateRoutes: vi.fn(), setSavedRoutes: vi.fn(), fitTo: vi.fn(), setRouteEndpoints: vi.fn(),
       setPickHandler: vi.fn(), setMapClickHandler: vi.fn(), showPointTooltip: vi.fn(), isPicking: vi.fn(() => false),
       setHomePosition: vi.fn(), flyTo: vi.fn()
     };
@@ -479,16 +488,16 @@ describe("mounted World page interactions", () => {
         detail.bound["[data-flowline-add-route]:click"]();
         page.openPlanner();
         detail.bound["[data-planner-route]:click"]();
-        await vi.waitFor(() => expect(detail.innerHTML).toContain("data-planner-confirm"));
+        await vi.waitFor(() => expect(detail.innerHTML).toContain("data-planner-save"));
       },
-      startExploration: async () => {
+      saveExploration: async () => {
         await page.route();
-        detail.bound["[data-planner-confirm]:click"]();
-        await vi.waitFor(() => expect(questHost.innerHTML).toContain('data-quest-cancel="instance-1"'));
+        detail.bound["[data-planner-save]:click"]();
+        await vi.waitFor(() => expect(questHost.innerHTML).toContain('data-quest-delete="instance-1"'));
       },
       calls: (url, method) => fetchMock.mock.calls.filter(([calledUrl, options]) =>
         calledUrl === url && (!method || options?.method === method)),
-      buttons, map, fetchMock, cta, exploreCard: card, questCancelButton, questSelectButton, remoteQuestSelectButton,
+      buttons, map, fetchMock, cta, exploreCard: card, questDeleteButton, questStartButton, questSelectButton, remoteQuestSelectButton,
       callbacks: createMap.mock.calls[0][1],
       localStorage,
       savedHome: () => savedHomeValue ? JSON.parse(savedHomeValue) : undefined,
@@ -628,26 +637,26 @@ describe("mounted World page interactions", () => {
     ]);
   });
 
-  it("explores the visible area by revealing Flowlines only, then summarizes the discovery", async () => {
+  it("explores the visible area as a temporary session and summarizes its opportunities", async () => {
     const page = await mount();
     expect(page.fartlekIds()).toEqual(["fartlek-1", "fartlek-2"]);
     page.explore();
     expect(page.exploreCard.innerHTML).toContain("Exploring this area\u2026");
     expect(page.cta.innerHTML).toMatch(/data-world-explore="explore" disabled/);
-    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("2 Flowlines discovered"));
+    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("3 opportunities"));
     expect(JSON.parse(page.calls("/api/world/explore", "POST")[0][1].body)).toEqual({ bbox: "8.00000,49.00000,11.00000,52.00000" });
     expect(page.exploreCard.innerHTML).toMatch(/<strong>1<\/strong> <span>high-flow<\/span>/);
-    expect(page.exploreCard.innerHTML).toMatch(/<strong>1<\/strong> <span>endurance<\/span>/);
-    expect(page.exploreCard.innerHTML).not.toContain("exploration</span>");
-    expect(page.exploreCard.innerHTML).toContain("View discoveries");
-    expect(page.exploreCard.innerHTML).toContain("Plan a route");
+    expect(page.exploreCard.innerHTML).toMatch(/<strong>1<\/strong> <span>collectible<\/span>/);
+    expect(page.exploreCard.innerHTML).toContain("data-explore-generate");
+    expect(page.exploreCard.innerHTML).toContain("View opportunities");
     expect(page.fartlekIds()).toEqual(["fartlek-1", "fartlek-2", "fresh-1", "fresh-2"]);
+    expect(page.collectibleIds()).toContain("waterfall-session");
     expect(page.cta.innerHTML).toContain(">Explore this area<");
     expect(page.fetchMock.mock.calls.some(([url]) => url.startsWith("/api/explorations"))).toBe(false);
-    expect(page.map.setRoute).not.toHaveBeenCalledWith(expect.objectContaining({ geometry: expect.anything() }));
     page.exploreCard.bound["[data-explore-close]:click"]();
     expect(page.exploreCard.hidden).toBe(true);
-    expect(page.fartlekIds()).toContain("fresh-1");
+    expect(page.fartlekIds()).not.toContain("fresh-1");
+    expect(page.collectibleIds()).not.toContain("waterfall-session");
   });
 
   it("asks to zoom in while the area is too wide to explore", async () => {
@@ -657,38 +666,44 @@ describe("mounted World page interactions", () => {
     expect(zoomedOut.calls("/api/world/explore")).toHaveLength(0);
   });
 
-  it("encourages a wider search when nothing new was discovered", async () => {
-    const page = await mount({ exploreResult: { outcome: "nothing_new", revealed: [], knownCount: 0, availableCount: 0, summary: { total: 0, byCharacter: {} } } });
+  it("encourages a wider search when there is nothing to explore", async () => {
+    const page = await mount({ exploreResult: { outcome: "nothing_new", flowlines: [], collectibles: [], availableCount: 0, summary: { total: 0, byCharacter: {}, collectibles: 0 } } });
     page.explore();
-    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("Nothing new discovered here"));
+    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("Nothing new to explore here"));
     expect(page.exploreCard.innerHTML).toContain("Try exploring a wider area or another region.");
-    expect(page.exploreCard.innerHTML).not.toContain("No Flowlines found");
     expect(page.collectibleIds()).toEqual(collectibles.map((item) => item.id));
     page.card("[data-explore-zoom-out]");
     expect(page.map.flyTo).toHaveBeenCalledWith(9.5, 50.5, 6);
   });
 
-  it("offers the known Flowlines when the area was already explored", async () => {
-    const known = { ...fartleks[0], id: "known-1", name: "Known Flowline" };
-    const page = await mount({ exploreResult: { outcome: "already_explored", revealed: [], known: [known], knownCount: 1, availableCount: 0, summary: { total: 0, byCharacter: {} } } });
-    expect(page.fartlekIds()).not.toContain("known-1");
-    page.explore();
-    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("Area already explored"));
-    expect(page.exploreCard.innerHTML).toContain("1 Flowline known");
-    expect(page.fartlekIds()).toContain("known-1");
-    page.card("[data-explore-show-known]");
-    expect(page.detail.innerHTML).toContain("Discovered in this area");
-    expect(page.detail.innerHTML).toContain("Known Flowline");
-    expect(page.map.fitTo).toHaveBeenCalled();
-    expect(page.exploreCard.hidden).toBe(true);
-  });
-
-  it("lists discoveries by tab and adds Flowlines to the route draft", async () => {
+  it("generates a route from the session's opportunities and saves it as a planned Exploration", async () => {
     const page = await mount();
     page.explore();
-    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("View discoveries"));
+    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("data-explore-generate"));
+    page.card("[data-explore-generate]");
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("data-planner-save"));
+    const body = JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body);
+    expect(body).toMatchObject({ start: { lat: 50.5, lon: 9.5 }, area: { bbox: "8.00000,49.00000,11.00000,52.00000" } });
+    expect(page.detail.innerHTML).toContain('data-planner-stop="peak-unfound"');
+    expect(page.detail.innerHTML).toContain('data-planner-stop="flowline:fartlek-1"');
+    expect(page.fartlekIds()).toContain("fresh-1");
+
+    page.bound("[data-planner-save]:click")();
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-start="instance-1"'));
+    expect(JSON.parse(page.calls("/api/explorations/save", "POST")[0][1].body)).toEqual({ proposalId: "proposal-balanced" });
+    expect(page.calls("/api/quest-instances/instance-1/start")).toHaveLength(0);
+    expect(page.quests.innerHTML).toContain(">Planned</small>");
+    expect(page.map.setSavedRoutes).toHaveBeenLastCalledWith([expect.objectContaining({ id: "instance-1", geometry: routeGeometry })]);
+    expect(page.fartlekIds()).not.toContain("fresh-1");
+    expect(page.collectibleIds()).not.toContain("waterfall-session");
+  });
+
+  it("lists the session's opportunities by tab and adds Flowlines to the route draft", async () => {
+    const page = await mount();
+    page.explore();
+    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("View opportunities"));
     page.card("[data-explore-discoveries]");
-    expect(page.detail.innerHTML).toContain("Discovered in this area");
+    expect(page.detail.innerHTML).toContain("Opportunities in this area");
     expect(page.detail.innerHTML).toContain('data-discoveries-sort="flow" aria-pressed="true"');
     expect(page.detail.innerHTML.indexOf("Rheintal Flowline")).toBeLessThan(page.detail.innerHTML.indexOf("Long Valley"));
     page.setDataset("[data-discoveries-sort]", { discoveriesSort: "endurance" });
@@ -704,6 +719,8 @@ describe("mounted World page interactions", () => {
     page.bound("[data-flowline-add-route]:click")();
     expect(page.detail.innerHTML).toContain('data-flowline-add-route="fresh-1" aria-pressed="true"');
     expect(page.cta.innerHTML).toContain("Plan route \u00b7 1");
+    page.bound("[data-discoveries-close]:click")();
+    expect(page.fartlekIds()).not.toContain("fresh-1");
   });
 
   it("shows a Flowline card with its primary character and plans a route that includes it", async () => {
@@ -757,7 +774,7 @@ describe("mounted World page interactions", () => {
     });
   });
 
-  it("asks for a start before routing and offers an optional suggested route", async () => {
+  it("asks for a start before routing and offers a generated route", async () => {
     const page = await mount();
     page.openPlanner();
     expect(page.detail.innerHTML).toContain("Click the map to set your start.");
@@ -766,7 +783,7 @@ describe("mounted World page interactions", () => {
     page.bound("[data-planner-suggest]:click")();
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain('data-planner-stop="peak-unfound"'));
     expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body)).toMatchObject({ start: { lat: 50, lon: 9 }, routeType: "round_trip" });
-    expect(page.detail.innerHTML).toContain("data-planner-confirm");
+    expect(page.detail.innerHTML).toContain("data-planner-save");
   });
 
   it("keeps the stops and explains a failed route", async () => {
@@ -778,7 +795,7 @@ describe("mounted World page interactions", () => {
     page.bound("[data-planner-route]:click")();
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("No suitable route was found."));
     expect(page.detail.innerHTML).toContain('data-planner-stop="flowline:fartlek-1"');
-    expect(page.detail.innerHTML).not.toContain("data-planner-confirm");
+    expect(page.detail.innerHTML).not.toContain("data-planner-save");
   });
 
   it("closes the planner without persisting and keeps the picks as a draft", async () => {
@@ -794,12 +811,15 @@ describe("mounted World page interactions", () => {
     expect(page.map.setRouteEndpoints).toHaveBeenLastCalledWith({});
   });
 
-  it("starts exactly the routed plan as an exploration", async () => {
+  it("saves exactly the routed plan, then starts it separately", async () => {
     const page = await mount({ savedHome: { latitude: 50, longitude: 9 } });
-    await page.startExploration();
-    expect(JSON.parse(page.calls("/api/explorations/confirm", "POST")[0][1].body)).toEqual({ proposalId: "proposal-plan" });
+    await page.saveExploration();
+    expect(JSON.parse(page.calls("/api/explorations/save", "POST")[0][1].body)).toEqual({ proposalId: "proposal-plan" });
     expect(page.quests.innerHTML).toContain("Planned route");
-    expect(page.detail.innerHTML).not.toContain("data-planner-confirm");
+    expect(page.detail.innerHTML).not.toContain("data-planner-save");
+    page.questStartButton.handlers.click();
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain(">Started</small>"));
+    expect(page.calls("/api/quest-instances/instance-1/start", "POST")).toHaveLength(1);
     expect(page.cta.innerHTML).toContain(">Plan route<");
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
   });
@@ -844,23 +864,30 @@ describe("mounted World page interactions", () => {
     expect(page.status.textContent).toContain("Location permission was denied");
   });
 
-  it("confirms cancellation and deletes the started exploration", async () => {
+  it("confirms deletion and removes the saved Exploration and its route from the map", async () => {
     const page = await mount({ savedHome: { latitude: 50, longitude: 9 } });
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
-    await page.startExploration();
-    page.questCancelButton.handlers.click();
-    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Explore an area to reveal Flowlines"));
+    await page.saveExploration();
+    page.questDeleteButton.handlers.click();
+    await vi.waitFor(() => expect(page.quests.innerHTML).toContain("Explore an area, generate a route"));
     expect(page.calls("/api/quest-instances/instance-1", "DELETE")).toHaveLength(1);
-    expect(globalThis.confirm).toHaveBeenCalledWith("Cancel this exploration and delete its progress? This cannot be undone.");
+    expect(globalThis.confirm).toHaveBeenCalledWith("Delete this exploration and its route? XP you already earned is kept. This cannot be undone.");
     expect(page.map.setRoute).toHaveBeenLastCalledWith(undefined);
+    expect(page.map.setSavedRoutes).toHaveBeenLastCalledWith([]);
   });
 
-  it("does not cancel an exploration when the user declines confirmation", async () => {
+  it("does not delete an exploration when the user declines confirmation", async () => {
     const page = await mount({ savedHome: { latitude: 50, longitude: 9 } });
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
-    await page.startExploration();
-    page.questCancelButton.handlers.click();
+    await page.saveExploration();
+    page.questDeleteButton.handlers.click();
     expect(page.calls("/api/quest-instances/instance-1")).toHaveLength(0);
-    expect(page.quests.innerHTML).toContain('aria-label="Cancel exploration"');
+    expect(page.quests.innerHTML).toContain('aria-label="Delete exploration"');
+  });
+
+  it("draws the saved Exploration routes the World snapshot returns", async () => {
+    const page = await mount();
+    page.changeViewport({ collectibles, fartleks, exploreAllowed: true, explorationRoutes: [{ id: "saved-1", title: "Loop", status: "completed", geometry: routeGeometry }] });
+    await vi.waitFor(() => expect(page.map.setSavedRoutes).toHaveBeenLastCalledWith([expect.objectContaining({ id: "saved-1" })]));
   });
 });

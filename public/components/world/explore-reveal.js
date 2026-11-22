@@ -15,8 +15,8 @@ export const characterScore = (flowline, tag) =>
 export const flowlineCharacter = (flowline) => flowline.character ?? { primary: "flow", tags: [] };
 
 /**
- * The map CTA. Explore loads the area's known Flowlines and reveals new ones; it never repeats a
- * discovery, so the same button also shows an already explored area.
+ * The map CTA. Explore shows the area's opportunities for this session only: nothing is saved
+ * until the player saves an Exploration, so exploring the same area again shows them again.
  */
 export const exploreCta = (exploreAllowed) => exploreAllowed
   ? { action: "explore", label: "Explore this area" }
@@ -24,7 +24,7 @@ export const exploreCta = (exploreAllowed) => exploreAllowed
 
 const plural = (count, singular, pluralForm) => `${count} ${count === 1 ? singular : pluralForm}`;
 
-export const discoveredText = (count) => plural(count, "Flowline discovered", "Flowlines discovered");
+export const opportunityText = (count) => plural(count, "opportunity", "opportunities");
 
 /** "3 high-flow · 2 endurance · 2 exploration": only characters that occur. */
 export const characterBreakdown = (byCharacter = {}) => characterOrder
@@ -35,7 +35,7 @@ const closeButton = '<button type="button" class="world-detail-close" data-explo
 
 /**
  * The card shown after Explore. `state.phase` is "exploring" while the request runs; otherwise
- * `state.result` is the server's explore response.
+ * `state.result` is the server's explore response. Generating a route is the primary next step.
  */
 export const ExploreResultCard = (state) => {
   if (state.phase === "exploring") {
@@ -50,7 +50,7 @@ export const ExploreResultCard = (state) => {
   const { result } = state;
   if (result.outcome === "nothing_new") {
     return `<section class="world-explore-card" aria-live="polite" data-explore-outcome="nothing_new">
-      <header><h2>Nothing new discovered here</h2>${closeButton}</header>
+      <header><h2>Nothing new to explore here</h2>${closeButton}</header>
       <p>Try exploring a wider area or another region.</p>
       <div class="world-explore-card-actions">
         <button type="button" data-explore-zoom-out>Zoom out</button>
@@ -58,41 +58,31 @@ export const ExploreResultCard = (state) => {
       </div>
     </section>`;
   }
-  if (result.outcome === "already_explored") {
-    return `<section class="world-explore-card" aria-live="polite" data-explore-outcome="already_explored">
-      <header><h2>Area already explored</h2>${closeButton}</header>
-      <p>${escapeHtml(plural(result.knownCount, "Flowline known", "Flowlines known"))}</p>
-      <div class="world-explore-card-actions">
-        <button type="button" class="is-primary" data-explore-show-known>Show known Flowlines</button>
-      </div>
-    </section>`;
-  }
-  const total = result.summary.total;
-  const knownBefore = result.knownCount - total;
-  const breakdown = characterBreakdown(result.summary.byCharacter);
+  const flowlines = result.summary?.total ?? result.flowlines?.length ?? 0;
+  const collectibles = result.summary?.collectibles ?? result.collectibles?.length ?? 0;
+  const breakdown = characterBreakdown(result.summary?.byCharacter);
   return `<section class="world-explore-card is-reveal" aria-live="polite" data-explore-outcome="${escapeHtml(result.outcome)}">
     <header>
       <div>
-        ${result.outcome === "already_explored_new" ? "<p class=\"world-detail-meta\"><small>Area already explored</small></p>" : ""}
-        <h2>${escapeHtml(discoveredText(total))}</h2>
+        <p class="world-detail-meta"><small>Opportunities in this area</small></p>
+        <h2>${escapeHtml(opportunityText(flowlines + collectibles))}</h2>
       </div>
       ${closeButton}
     </header>
-    ${result.outcome === "already_explored_new"
-      ? `<p>${escapeHtml(plural(knownBefore, "Flowline known", "Flowlines known"))} \u00b7 ${escapeHtml(plural(total, "new opportunity", "new opportunities"))}</p>`
-      : ""}
-    ${breakdown.length ? `<ul class="world-explore-breakdown" aria-label="Discovered by character">
+    <ul class="world-explore-breakdown" aria-label="Opportunities">
       ${breakdown.map(({ tag, count, label }) => `<li class="is-${tag}"><strong>${count}</strong> <span>${escapeHtml(label)}</span></li>`).join("")}
-    </ul>` : ""}
+      ${collectibles ? `<li class="is-collectibles"><strong>${collectibles}</strong> <span>${collectibles === 1 ? "collectible" : "collectibles"}</span></li>` : ""}
+    </ul>
+    <p class="route-planner-note">Shown for this session only. Save an Exploration to keep a route.</p>
     <div class="world-explore-card-actions">
-      <button type="button" data-explore-discoveries>View discoveries</button>
-      <button type="button" class="is-primary" data-explore-plan>Plan a route</button>
-      <button type="button" data-explore-close>Done</button>
+      <button type="button" class="is-primary" data-explore-generate>Generate route</button>
+      <button type="button" data-explore-discoveries>View opportunities</button>
+      <button type="button" data-explore-close>Close</button>
     </div>
   </section>`;
 };
 
-/** Collectible counts for the discoveries panel, by category. */
+/** Collectible counts for the opportunities panel, by category. */
 export const areaCounts = (collectibles, flowlines) => {
   const counts = { flowlines: flowlines.length, place: 0, peak: 0, viewpoint: 0, castle: 0, mountain_pass: 0 };
   for (const item of collectibles) {
@@ -157,15 +147,15 @@ const addButton = (flowline, routeStopIds) => {
   return `<button type="button" data-flowline-add-route="${escapeHtml(flowline.id)}" aria-pressed="${added}">${added ? "Added to route" : "Add to route"}</button>`;
 };
 
-/** "View discoveries": what this area offers, with the revealed Flowlines sorted by one tab. */
+/** "View opportunities": what this Explore session found, with its Flowlines sorted by one tab. */
 export const DiscoveriesPanel = ({ flowlines, collectibles, sort = "flow", origin, routeStopIds = [] }) => {
   const counts = areaCounts(collectibles, flowlines);
   const sorted = sortDiscoveries(flowlines, sort, origin);
   return `
-    <section class="world-detail discoveries-panel" aria-label="Discovered in this area">
+    <section class="world-detail discoveries-panel" aria-label="Opportunities in this area">
       <header>
-        <h2>Discovered in this area</h2>
-        <button type="button" class="world-detail-close" data-discoveries-close aria-label="Close discoveries">\u00d7</button>
+        <h2>Opportunities in this area</h2>
+        <button type="button" class="world-detail-close" data-discoveries-close aria-label="Close opportunities">\u00d7</button>
       </header>
       <dl class="discoveries-counts">
         ${countLabels.filter(([key]) => key === "flowlines" || counts[key] > 0)
@@ -175,7 +165,7 @@ export const DiscoveriesPanel = ({ flowlines, collectibles, sort = "flow", origi
         ${discoverySorts.filter(([value]) => value !== "nearby" || origin)
           .map(([value, label]) => `<button type="button" data-discoveries-sort="${value}" aria-pressed="${sort === value}">${label}</button>`).join("")}
       </div>
-      ${sorted.length ? `<ol class="discoveries-list" aria-label="Discovered Flowlines">
+      ${sorted.length ? `<ol class="discoveries-list" aria-label="Flowline opportunities">
         ${sorted.map((flowline) => `
           <li class="discovery-card" data-discovery="${escapeHtml(flowline.id)}">
             <p class="discovery-card-title"><b class="fartlek-swatch" aria-hidden="true"></b><strong data-user-content>${escapeHtml(flowline.name)}</strong>
@@ -186,15 +176,16 @@ export const DiscoveriesPanel = ({ flowlines, collectibles, sort = "flow", origi
               ${addButton(flowline, routeStopIds)}
             </div>
           </li>`).join("")}
-      </ol>` : '<p class="route-planner-note">No Flowlines discovered here yet. Explore this area to reveal them.</p>'}
+      </ol>` : '<p class="route-planner-note">No Flowline opportunities here. Explore another area to find some.</p>'}
       <div class="world-explore-card-actions">
-        <button type="button" class="is-primary" data-discoveries-plan>Plan a route</button>
+        <button type="button" class="is-primary" data-discoveries-generate>Generate route</button>
+        <button type="button" data-discoveries-plan>Plan a route</button>
       </div>
     </section>
   `;
 };
 
-/** Staggered, subtle appearance of newly revealed Flowlines; immediate with reduced motion. */
+/** Staggered, subtle appearance of an Explore session's Flowlines; immediate with reduced motion. */
 export const revealSequence = (flowlines, { reducedMotion = false, stepMs = 140 } = {}) =>
   flowlines.map((flowline, index) => ({ flowline, delayMs: reducedMotion ? 0 : index * stepMs }));
 

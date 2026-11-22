@@ -37,7 +37,9 @@ struct WorldView: View {
         guard let model, let planner else { return }
         async let quests: Void = model.loadQuestTargets()
         async let capabilities: Void = model.loadCapabilities()
-        _ = await (quests, capabilities)
+        // Saved Exploration routes come with the viewport.
+        async let viewport: Void = model.reloadViewport()
+        _ = await (quests, capabilities, viewport)
         await model.loadPlannedRoutes()
         planner.showPlannedRoute(model.preferredPlannedRoute)
     }
@@ -50,6 +52,7 @@ struct WorldView: View {
                     styleURL: url,
                     collectibles: model.visibleCollectibles,
                     flowlines: model.visibleFlowlines,
+                    explorationRoutes: model.explorationRoutes,
                     questTargets: planner.isActive ? plannerTargets(planner) : (revealedTargets(model) ?? model.mapQuestTargets),
                     route: planner.displayedRoute,
                     selectedCollectibleId: model.selection.flatMap { selection -> String? in
@@ -83,7 +86,11 @@ struct WorldView: View {
             }
             .onChange(of: planner.isActive) { _, active in
                 withAnimation(.snappy) { active ? sheet.startPlanner() : sheet.endPlanner() }
-                if !active { planner.showPlannedRoute(model.preferredPlannedRoute) }
+                if !active {
+                    // Closing or saving the route ends the Explore session.
+                    model.endExploreSession()
+                    planner.showPlannedRoute(model.preferredPlannedRoute)
+                }
             }
             .onChange(of: planner.proposal?.id) { _, proposal in
                 if proposal != nil { withAnimation(.snappy) { sheet.revealMap() } }
@@ -120,11 +127,13 @@ struct WorldView: View {
 
     // MARK: Explore
 
-    /// Explore finished: the sheet opens the discoveries at half height and the map frames what was found.
+    /// Explore finished: the sheet opens the result at half height and the map frames the opportunities.
     private func exploreFinished(_ state: ExploreState?, _ model: WorldModel) {
         guard let state, state != .exploring, !(planner?.isActive ?? false) else { return }
-        if case .result(let result) = state, !model.discoveries.isEmpty {
-            framed = (result.revealed.isEmpty ? model.discoveries : result.revealed).flatMap(\.coordinates)
+        if case .result = state {
+            let points = model.sessionFlowlines.flatMap(\.coordinates)
+                + model.sessionCollectibles.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+            if !points.isEmpty { framed = points }
         }
         withAnimation(.snappy) {
             sheet.showDiscoveries()
@@ -132,10 +141,10 @@ struct WorldView: View {
         }
     }
 
-    /// Newly revealed Flowlines stay emphasised while their discoveries are open.
+    /// Opportunity Flowlines stay emphasised while the Explore result is open.
     private func revealedTargets(_ model: WorldModel) -> QuestTargets? {
-        guard sheet.mode == .discoveries, case .result(let result)? = model.exploreState else { return nil }
-        let ids = Set((result.revealed.isEmpty ? model.discoveries : result.revealed).map(\.id))
+        guard sheet.mode == .discoveries, case .result? = model.exploreState else { return nil }
+        let ids = Set(model.sessionFlowlines.map(\.id))
         guard !ids.isEmpty else { return nil }
         return QuestTargets(collectibles: [], flowlines: model.visibleFlowlines.filter { ids.contains($0.id) })
     }
@@ -160,7 +169,14 @@ struct WorldView: View {
         ]
     }
 
-    /// "Plan a route": opens the manual planner with the stops added so far. Never builds a route itself.
+    /// "Generate route": opens the route editor and generates a route in the explored area.
+    private func generateRoute(_ model: WorldModel, _ planner: RoutePlannerModel) {
+        guard let bounds = model.sessionBounds ?? model.bounds else { return }
+        openPlanner(model, planner)
+        Task { await planner.suggest(in: bounds, catalog: model.collectible(id:)) }
+    }
+
+    /// "Plan a route": opens the route editor with the stops added so far; the Explore session stays open.
     private func openPlanner(_ model: WorldModel, _ planner: RoutePlannerModel) {
         model.dismissExplore()
         model.selection = nil
@@ -217,7 +233,7 @@ struct WorldView: View {
         case .discoveries:
             DiscoveriesHeader(routeStops: planner.stops.count, onPlanRoute: { openPlanner(model, planner) }) {
                 framed = []
-                model.dismissExplore()
+                model.endExploreSession()
                 withAnimation(.snappy) { sheet.closeDiscoveries() }
             }
         case .planner:
@@ -240,6 +256,8 @@ struct WorldView: View {
                 model: model,
                 planner: planner,
                 origin: userLocation,
+                onGenerate: { generateRoute(model, planner) },
+                onViewOpportunities: { withAnimation(.snappy) { sheet.detent = .large } },
                 onViewOnMap: { flowline in
                     framed = flowline.coordinates
                     model.select(.flowline, id: flowline.id)
@@ -251,11 +269,11 @@ struct WorldView: View {
                 planner: planner,
                 userLocation: userLocation,
                 onSuggest: {
-                    guard let bounds = model.bounds else { return }
+                    guard let bounds = model.sessionBounds ?? model.bounds else { return }
                     Task { await planner.suggest(in: bounds, catalog: model.collectible(id:)) }
                 },
-                onConfirm: {
-                    Task { if await planner.confirm() { container.playerDataChanged() } }
+                onSave: {
+                    Task { if await planner.save() { container.playerDataChanged() } }
                 }
             )
         case .detail(let selection):

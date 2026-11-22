@@ -2360,22 +2360,6 @@
         }
       }
     },
-    "planner.confirm" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erkundung starten"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start Exploration"
-          }
-        }
-      }
-    },
     "planner.disclaimer" : {
       "localizations" : {
         "de" : {
@@ -2776,6 +2760,22 @@
         }
       }
     },
+    "planner.save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkundung speichern"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Exploration"
+          }
+        }
+      }
+    },
     "planner.selectOnMap" : {
       "localizations" : {
         "de" : {
@@ -3005,13 +3005,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Route vorschlagen"
+            "value" : "Route erstellen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Suggest route"
+            "value" : "Generate route"
           }
         }
       }
@@ -4978,13 +4978,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Noch keine Flowlines. Erkunde, um sie aufzudecken."
+            "value" : "Keine Flowline-Möglichkeiten in diesem Gebiet."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No Flowlines yet. Explore to reveal them."
+            "value" : "No Flowline opportunities in this area."
           }
         }
       }
@@ -5138,13 +5138,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Entdeckungen"
+            "value" : "Möglichkeiten"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Discoveries"
+            "value" : "Opportunities"
           }
         }
       }
@@ -5181,50 +5181,50 @@
         }
       }
     },
-    "world.explorations.cancel" : {
+    "world.explorations.delete" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erkundung abbrechen"
+            "value" : "Löschen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cancel exploration"
+            "value" : "Delete"
           }
         }
       }
     },
-    "world.explorations.cancel.confirm" : {
+    "world.explorations.delete.confirm" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erkundung abbrechen"
+            "value" : "Erkundung löschen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cancel exploration"
+            "value" : "Delete exploration"
           }
         }
       }
     },
-    "world.explorations.cancel.title" : {
+    "world.explorations.delete.title" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diese Erkundung abbrechen?"
+            "value" : "Diese Erkundung löschen?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cancel this exploration?"
+            "value" : "Delete this exploration?"
           }
         }
       }
@@ -5234,13 +5234,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erkunde ein Gebiet, um Flowlines aufzudecken, und plane dann eine Route, um eine Erkundung zu starten."
+            "value" : "Erkunde ein Gebiet, erstelle eine Route und speichere sie als Erkundung."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Explore an area to reveal Flowlines, then plan a route to start an exploration."
+            "value" : "Explore an area, generate a route and save it as an exploration."
           }
         }
       }
@@ -5277,22 +5277,6 @@
         }
       }
     },
-    "world.explorations.retry" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erneut versuchen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try again"
-          }
-        }
-      }
-    },
     "world.explorations.show" : {
       "localizations" : {
         "de" : {
@@ -5314,13 +5298,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hebt die Ziele dieser Erkundung auf der Karte hervor."
+            "value" : "Hebt die Route und Ziele dieser Erkundung auf der Karte hervor."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Highlights this exploration’s targets on the map."
+            "value" : "Highlights this exploration’s route and targets on the map."
           }
         }
       }
@@ -5341,18 +5325,34 @@
         }
       }
     },
-    "world.explorations.status.active" : {
+    "world.explorations.start" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aktiv"
+            "value" : "Starten"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Active"
+            "value" : "Start"
+          }
+        }
+      }
+    },
+    "world.explorations.status.active" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gestartet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Started"
           }
         }
       }
@@ -5373,18 +5373,34 @@
         }
       }
     },
-    "world.explorations.status.failed" : {
+    "world.explorations.status.partiallyCompleted" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nicht geschafft"
+            "value" : "Teilweise abgeschlossen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Not completed"
+            "value" : "Partially completed"
+          }
+        }
+      }
+    },
+    "world.explorations.status.planned" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geplant"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planned"
           }
         }
       }
@@ -5437,6 +5453,46 @@
         }
       }
     },
+    "world.explore.collectibles %lld" : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Sammelobjekt"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Sammelobjekte"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld collectible"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld collectibles"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "world.explore.cta.explore" : {
       "localizations" : {
         "de" : {
@@ -5477,13 +5533,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld Flowline entdeckt"
+                  "value" : "%lld Flowline zum Fahren"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld Flowlines entdeckt"
+                  "value" : "%lld Flowlines zum Fahren"
                 }
               }
             }
@@ -5495,13 +5551,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld Flowline discovered"
+                  "value" : "%lld Flowline to ride"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld Flowlines discovered"
+                  "value" : "%lld Flowlines to ride"
                 }
               }
             }
@@ -5525,22 +5581,6 @@
         }
       }
     },
-    "world.explore.explored.title" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schon erkundet"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Already explored"
-          }
-        }
-      }
-    },
     "world.explore.exploring" : {
       "localizations" : {
         "de" : {
@@ -5557,58 +5597,18 @@
         }
       }
     },
-    "world.explore.known %lld" : {
-      "localizations" : {
-        "de" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Flowline bekannt"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Flowlines bekannt"
-                }
-              }
-            }
-          }
-        },
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Flowline known"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Flowlines known"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "world.explore.knownNew %lld %lld" : {
+    "world.explore.generate" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$lld bekannt · %2$lld neu"
+            "value" : "Route erstellen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$lld known · %2$lld new"
+            "value" : "Generate route"
           }
         }
       }
@@ -5641,6 +5641,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nothing new here"
+          }
+        }
+      }
+    },
+    "world.explore.session.hint" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur sichtbar, solange dieses Gebiet offen ist. Speichere eine Erkundung, um eine Route zu behalten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shown only while this area is open. Save an exploration to keep a route."
+          }
+        }
+      }
+    },
+    "world.explore.viewOpportunities" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Möglichkeiten ansehen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View opportunities"
           }
         }
       }

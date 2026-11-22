@@ -72,33 +72,56 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertTrue(transport.requests.isEmpty)
     }
 
-    func testSuggestReplacesStopsWithTheRecommendedCollectibles() async throws {
-        let catalog = #"{"collectibles":[{"id":"a","name":"A","latitude":48,"longitude":11,"found":false},{"id":"b","name":"B","latitude":48,"longitude":11,"found":false}]}"#
-        let transport = StubTransport([.init(status: 200, body: #"{"explorationId":"e1","proposals":[\#(proposal("p1", targets: ["b", "a"]))],"catalog":\#(catalog)}"#)])
+    func testGenerateReplacesStopsWithTheRecommendedCollectiblesAndRiddenOpportunities() async throws {
+        let line = #""geometry":{"type":"LineString","coordinates":[[11.1,48.1],[11.2,48.2]]}"#
+        let flowlines = #"[{"id":"f1","name":"Open",\#(line),"completed":false},{"id":"f2","name":"Done",\#(line),"completed":true},{"id":"f3","name":"Skipped",\#(line),"completed":false}]"#
+        let catalog = #"{"collectibles":[{"id":"a","name":"A","latitude":48,"longitude":11,"found":false},{"id":"b","name":"B","latitude":48,"longitude":11,"found":false}],"flowlines":\#(flowlines)}"#
+        let traversed = #","traversedFlowlines":[{"id":"f1","name":"Open"},{"id":"f2","name":"Done"}]"#
+        let transport = StubTransport([.init(status: 200, body: #"{"explorationId":"e1","proposals":[\#(proposal("p1", targets: ["b", "a"], extra: traversed))],"catalog":\#(catalog)}"#)])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
         planner.toggle(.waypoint(GeoPoint(lat: 48.2, lon: 11.2)))
         await planner.suggest(in: WorldBounds(west: 11, south: 48, east: 11.5, north: 48.5)) { _ in nil }
-        XCTAssertEqual(planner.stops.map(\.key), ["b", "a"])
+        XCTAssertEqual(planner.stops.map(\.key), ["b", "a", "flowline:f1"])
         XCTAssertEqual(planner.proposal?.id, "p1")
         XCTAssertEqual(transport.requests.first?.url?.path, "/api/explorations/generate")
         XCTAssertNil(try json(transport.requests.first)["stops"])
     }
 
-    func testConfirmClosesPlannerAndKeepsPlannedRoute() async {
-        let route = #"{"plannedRoute":{"questInstanceId":"q","distanceM":1,"durationS":1,"geometry":{"type":"LineString","coordinates":[[11,48],[11.1,48.1]]},"start":{"lat":48,"lon":11}}}"#
-        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([
+    func testSaveStoresAPlannedExplorationAndClosesPlanner() async throws {
+        let saved = #"{"instance":{"id":"q","title":"Ride","description":"","status":"planned","difficulty":"easy","rewardXp":10,"objectives":[]},"plannedRoute":{"questInstanceId":"q","distanceM":1,"durationS":1,"geometry":{"type":"LineString","coordinates":[[11,48],[11.1,48.1]]},"start":{"lat":48,"lon":11}}}"#
+        let transport = StubTransport([
             .init(status: 200, body: #"{"explorationId":"e1","proposal":\#(proposal("p1"))}"#),
-            .init(status: 200, body: route)
-        ])))
+            .init(status: 200, body: saved)
+        ])
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
         planner.toggle(.collectible(collectible("a")))
         await planner.route()
-        let confirmed = await planner.confirm()
-        XCTAssertTrue(confirmed)
+        let didSave = await planner.save()
+        XCTAssertTrue(didSave)
+        XCTAssertEqual(transport.requests.last?.url?.path, "/api/explorations/save")
+        XCTAssertEqual(try json(transport.requests.last)["proposalId"] as? String, "p1")
         XCTAssertFalse(planner.isActive)
         XCTAssertTrue(planner.stops.isEmpty)
-        XCTAssertEqual(planner.displayedRoute.count, 2)
+        XCTAssertTrue(planner.displayedRoute.isEmpty, "a saved route is drawn with the saved routes, not as the planner's route")
+        XCTAssertEqual(planner.status, .idle)
+    }
+
+    func testFailedSaveKeepsThePlannerOpen() async {
+        let transport = StubTransport([
+            .init(status: 200, body: #"{"explorationId":"e1","proposal":\#(proposal("p1"))}"#),
+            .init(status: 500, body: #"{"error":"Boom"}"#)
+        ])
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
+        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.toggle(.collectible(collectible("a")))
+        await planner.route()
+        let didSave = await planner.save()
+        XCTAssertFalse(didSave)
+        XCTAssertTrue(planner.isActive)
+        XCTAssertEqual(planner.proposal?.id, "p1")
+        XCTAssertNotNil(planner.failure)
     }
 
     func testUnprocessableRouteReportsNoRoute() async {

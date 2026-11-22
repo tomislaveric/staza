@@ -36,6 +36,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Explore reveal and manual planner](features/explore-reveal-and-manual-planner/README.md)
   — Explore this area reveals the area's Flowlines as a game moment, and a separate
   manual planner connects the chosen Flowlines and collectibles into a route.
+- [Explore sessions and saved Explorations](features/explore-sessions-and-saved-explorations/README.md)
+  — Explore shows temporary opportunities only, Save Exploration persists a planned route
+  (dotted on World), Start is separate, and activities accumulate progress.
 - [Explore this Area](features/explore-this-area/README.md) — route-first exploration:
   choose start and ride length, pick one of several generated routes from the frozen map
   area, tweak its targets, and confirm it as a single exploration.

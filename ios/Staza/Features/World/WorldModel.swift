@@ -6,25 +6,32 @@ import Observation
 final class WorldModel {
     private(set) var basemap: Basemap?
     private(set) var basemapFailed = false
+    /// The player's collected collectibles plus the open Explore session's uncollected ones.
     private(set) var collectibles: [WorldCollectible] = []
-    /// Completed Flowlines in the viewport plus every Flowline Explore showed this session.
+    /// Completed Flowlines in the viewport plus the open Explore session's opportunities.
     private(set) var flowlines: [WorldFlowline] = []
-    /// The last explored area's revealed Flowlines: what the discoveries sheet lists.
-    private(set) var discoveries: [WorldFlowline] = []
+    /// Saved Exploration routes in the viewport, drawn whatever their status.
+    private(set) var explorationRoutes: [ExplorationRoute] = []
+    /// The open Explore session's opportunity Flowlines: what the opportunities sheet lists.
+    private(set) var sessionFlowlines: [WorldFlowline] = []
+    /// The open Explore session's uncollected collectibles.
+    private(set) var sessionCollectibles: [WorldCollectible] = []
+    /// The explored area while an Explore session is open; generated routes stay inside it.
+    private(set) var sessionBounds: WorldBounds?
     private(set) var exploreAllowed = false
     /// The Explore card: running, a result, or a failure. `nil` when dismissed.
     private(set) var exploreState: ExploreState?
-    /// Newly revealed Flowlines not drawn yet while the reveal is staggered.
+    /// Opportunity Flowlines not drawn yet while their appearance is staggered.
     private(set) var revealing: Set<String> = []
     private(set) var questTargets = QuestTargets.empty
     private(set) var truncated = false
     private(set) var viewportFailed = false
     private(set) var bounds: WorldBounds?
-    /// The last loaded viewport; Explore reveals exactly this area.
+    /// The last loaded viewport; Explore explores exactly this area.
     private var areaBounds: WorldBounds?
-    /// The viewport only sends completed Flowlines; revealed ones stay on the map once Explore loaded them.
+    /// The persistent world of the viewport: collected collectibles and completed Flowlines.
+    private var collectedCollectibles: [WorldCollectible] = []
     private var completedFlowlines: [WorldFlowline] = []
-    private var exploredFlowlines: [WorldFlowline] = []
     private(set) var instances: [QuestInstance] = []
     private(set) var capabilities = WorldCapabilities.empty
     private(set) var highlightedInstanceId: String?
@@ -57,8 +64,11 @@ final class WorldModel {
     var exploreAction: ExploreAction { ExploreAction(exploreAllowed: exploreAllowed) }
     var isExploring: Bool { exploreState == .exploring }
 
-    /// Quest targets drawn on the map: the highlighted exploration's, else every active one's.
-    var mapQuestTargets: QuestTargets { highlightedTargets ?? questTargets }
+    var hasExploreSession: Bool { sessionBounds != nil }
+
+    /// Quest targets drawn on the map: only the highlighted exploration's. Unvisited targets are not
+    /// part of the persistent world.
+    var mapQuestTargets: QuestTargets { highlightedTargets ?? .empty }
 
     private let api: APIClient
     private var viewportTask: Task<Void, Never>?
@@ -96,9 +106,10 @@ final class WorldModel {
             let viewport: WorldViewport = try await api.get("/api/world", query: [URLQueryItem(name: "bbox", value: bounds.queryValue)])
             // A newer viewport request started meanwhile; its response wins.
             guard generation == viewportGeneration else { return }
-            collectibles = viewport.collectibles ?? []
+            collectedCollectibles = viewport.collectibles ?? []
             completedFlowlines = viewport.fartleks ?? []
-            mergeFlowlines()
+            explorationRoutes = viewport.explorationRoutes ?? []
+            mergeWorld()
             exploreAllowed = viewport.exploreAllowed ?? false
             areaBounds = bounds
             truncated = viewport.truncated ?? false
@@ -111,15 +122,25 @@ final class WorldModel {
         }
     }
 
-    /// Explore this area: reveals the visible area's eligible Flowlines. Never plans a route.
+    /// Reloads the current viewport, e.g. after an Exploration was saved or deleted.
+    func reloadViewport() async {
+        guard let bounds else { return }
+        await loadViewport(bounds)
+    }
+
+    /// Explore this area: opens a session showing the area's opportunities. Persists nothing and
+    /// replaces any previous session.
     func exploreArea(reduceMotion: Bool = false) async {
         guard let bounds = areaBounds, !isExploring, exploreAction == .explore else { return }
+        endExploreSession()
         exploreState = .exploring
         do {
             let result: ExploreResult = try await api.post("/api/world/explore", body: ExploreRequest(bbox: bounds.queryValue))
-            discoveries = result.known.isEmpty ? result.revealed : result.known
+            sessionBounds = bounds
+            sessionFlowlines = result.flowlines.uniqued()
+            sessionCollectibles = result.collectibles
             exploreState = .result(result)
-            await reveal(result, reduceMotion: reduceMotion)
+            await reveal(reduceMotion: reduceMotion)
         } catch is CancellationError {
             exploreState = nil
         } catch {
@@ -127,27 +148,39 @@ final class WorldModel {
         }
     }
 
+    /// Hides the Explore card; the session's opportunities stay, e.g. while planning a route.
     func dismissExplore() { exploreState = nil }
 
-    /// Already known Flowlines show at once; newly revealed ones appear one after another, at once with reduced motion.
-    private func reveal(_ result: ExploreResult, reduceMotion: Bool) async {
+    /// Ends the Explore session: its opportunities leave the map.
+    func endExploreSession() {
+        exploreState = nil
+        sessionBounds = nil
+        sessionFlowlines = []
+        sessionCollectibles = []
+        revealing = []
+        mergeWorld()
+    }
+
+    /// Opportunity Flowlines appear one after another, at once with reduced motion.
+    private func reveal(reduceMotion: Bool) async {
         let shown = Set(flowlines.map(\.id))
-        let fresh = result.revealed.filter { !shown.contains($0.id) }
+        let fresh = sessionFlowlines.filter { !shown.contains($0.id) }
         if !reduceMotion { revealing.formUnion(fresh.map(\.id)) }
-        let explored = Set(exploredFlowlines.map(\.id))
-        exploredFlowlines += (result.known + result.revealed).filter { !explored.contains($0.id) }.uniqued()
-        mergeFlowlines()
+        mergeWorld()
         guard !reduceMotion, !fresh.isEmpty else { return }
         for flowline in fresh {
+            guard hasExploreSession else { break }
             revealing.remove(flowline.id)
             try? await Task.sleep(for: .milliseconds(140))
         }
         revealing = []
     }
 
-    private func mergeFlowlines() {
+    private func mergeWorld() {
         let completed = Set(completedFlowlines.map(\.id))
-        flowlines = completedFlowlines + exploredFlowlines.filter { !completed.contains($0.id) }
+        flowlines = completedFlowlines + sessionFlowlines.filter { !completed.contains($0.id) }
+        let collected = Set(collectedCollectibles.map(\.id))
+        collectibles = collectedCollectibles + sessionCollectibles.filter { !collected.contains($0.id) }
     }
 
     private static func message(_ error: Error) -> String? {
@@ -192,9 +225,9 @@ final class WorldModel {
         }
     }
 
-    /// Planned routes of active explorations, used for their summaries and the map route.
+    /// Planned routes of saved explorations, used for their summaries and the selected exploration's route.
     func loadPlannedRoutes() async {
-        let ids = Array(activeInstanceIds.prefix(10))
+        let ids = Array(instances.map(\.id).prefix(20))
         var loaded: [String: PlannedRoute] = [:]
         await withTaskGroup(of: (String, PlannedRoute?).self) { group in
             for id in ids {
@@ -207,10 +240,9 @@ final class WorldModel {
         plannedRoutes = loaded
     }
 
-    /// The planned route of the highlighted exploration, else of the first active one that has one.
+    /// The planned route of the highlighted exploration. Every saved route is drawn dotted anyway.
     var preferredPlannedRoute: PlannedRoute? {
-        if let highlightedInstanceId { return plannedRoutes[highlightedInstanceId] }
-        return activeInstanceIds.lazy.compactMap { self.plannedRoutes[$0] }.first
+        highlightedInstanceId.flatMap { plannedRoutes[$0] }
     }
 
     func loadCapabilities() async {
@@ -244,17 +276,21 @@ final class WorldModel {
         highlightedTargets = nil
     }
 
-    /// Cancels an active exploration. Returns whether it succeeded.
+    /// Deletes a saved exploration of any status; its route leaves the map. Returns whether it succeeded.
     @discardableResult
-    func cancel(_ instanceId: String) async -> Bool {
-        await mutate(instanceId) { try await self.api.delete("/api/quest-instances/\(instanceId)") }
+    func delete(_ instanceId: String) async -> Bool {
+        await mutate(instanceId) {
+            try await self.api.delete("/api/quest-instances/\(instanceId)")
+            self.explorationRoutes.removeAll { $0.id == instanceId }
+            self.plannedRoutes[instanceId] = nil
+        }
     }
 
-    /// Restarts a failed exploration. Returns whether it succeeded.
+    /// Starts a planned exploration. Returns whether it succeeded.
     @discardableResult
-    func retry(_ instanceId: String) async -> Bool {
+    func start(_ instanceId: String) async -> Bool {
         await mutate(instanceId) {
-            let _: EmptyResponse = try await self.api.post("/api/quest-instances/\(instanceId)/retry")
+            let _: EmptyResponse = try await self.api.post("/api/quest-instances/\(instanceId)/start")
         }
     }
 

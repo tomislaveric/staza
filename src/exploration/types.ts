@@ -11,7 +11,7 @@ export interface ExplorationAreaContext {
 
 /**
  * One ephemeral exploration: the frozen area, the ride the player asked for and the eligible
- * targets resolved once from the area. Lives only in server memory until a route is confirmed;
+ * targets resolved once from the area. Lives only in server memory until a route is saved;
  * which targets a route contains is decided by the planner and later by the player's edits.
  */
 export interface ExplorationSession {

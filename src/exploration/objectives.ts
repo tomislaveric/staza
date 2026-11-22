@@ -29,7 +29,7 @@ export const explorationObjectives = (targets: QuestRouteTarget[]): QuestObjecti
   return objectives;
 };
 
-/** Objective of a route planned through a revealed Flowline: ride it once, in full, in the activity. */
+/** Objective of a route planned through a Flowline: ride it once, in full, after the Exploration started. */
 export const flowlineObjective = (flowline: { id: string; name: string }): QuestObjective => ({
   id: `flowline-${flowline.id}`,
   type: "flowline_rule",

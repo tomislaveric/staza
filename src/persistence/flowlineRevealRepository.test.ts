@@ -37,23 +37,31 @@ describePersistence("FlowlineRevealRepository", () => {
     await pool?.end();
   });
 
-  it("reveals per player, idempotently, and only for existing Flowlines", async () => {
-    expect(await repository!.reveal(playerId, ["flow-b", "flow-a", "flow-a", "missing"], "explore")).toEqual(["flow-a", "flow-b"]);
+  it("records ride reveals per player, idempotently, and only for existing Flowlines", async () => {
+    expect(await repository!.reveal(playerId, ["flow-b", "flow-a", "flow-a", "missing"], "ride")).toEqual(["flow-a", "flow-b"]);
     expect(await repository!.reveal(playerId, ["flow-a"], "ride")).toEqual([]);
     expect(await repository!.revealedIds(playerId, ["flow-a", "flow-outside"])).toEqual(new Set(["flow-a"]));
     expect(await repository!.revealedIds(otherPlayerId, ["flow-a"])).toEqual(new Set());
-    const sources = await pool!.query("SELECT source FROM player_flowline_reveals WHERE fartlek_id = 'flow-a'");
-    expect(sources.rows).toEqual([{ source: "explore" }]);
+    await expect(pool!.query(
+      "INSERT INTO player_flowline_reveals (player_id, fartlek_id, source) VALUES ($1, 'flow-outside', 'explore')",
+      [playerId]
+    )).rejects.toThrow();
   });
 
-  it("lists revealed Flowlines in the viewport, counts them and lists hidden candidates without geometry", async () => {
-    expect((await repository!.listHiddenCandidatesWithinBounds(playerId, bounds)).map((row) => row.id).sort()).toEqual(["flow-a", "flow-b"]);
-    await repository!.reveal(playerId, ["flow-b", "flow-outside"], "explore");
-    const listed = await repository!.listRevealedWithinBoundsLimited(playerId, bounds);
-    expect(listed).toMatchObject({ truncated: false, fartleks: [{ id: "flow-b" }] });
-    expect(await repository!.countRevealedWithinBounds(playerId, bounds)).toBe(1);
-    expect(await repository!.listHiddenCandidatesWithinBounds(playerId, bounds)).toEqual([{ id: "flow-a", flowScore: 80 }]);
-    expect(await repository!.listHiddenCandidatesWithinBounds(otherPlayerId, bounds)).toHaveLength(2);
+  it("lists opportunity candidates the player has not completed, without geometry", async () => {
+    expect((await repository!.listOpportunityCandidatesWithinBounds(playerId, bounds)).map((row) => row.id).sort()).toEqual(["flow-a", "flow-b"]);
+    await pool!.query(
+      "INSERT INTO activities (id, player_id, source_type, started_at, xp_earned, collected_count) VALUES ('ride-0', $1, 'fit', now(), 0, 0)",
+      [playerId]
+    );
+    await pool!.query(
+      `INSERT INTO fartlek_completions (id, fartlek_id, player_id, activity_id, completed_at, elapsed_time_s, average_speed_mps,
+         fartlek_length_m_snapshot, fartlek_geometry_version_snapshot)
+       VALUES ('00000000-0000-4000-8000-0000000000c0', 'flow-b', $1, 'ride-0', now(), 300, 5, 1500, 1)`,
+      [playerId]
+    );
+    expect(await repository!.listOpportunityCandidatesWithinBounds(playerId, bounds)).toEqual([{ id: "flow-a", flowScore: 80 }]);
+    expect(await repository!.listOpportunityCandidatesWithinBounds(otherPlayerId, bounds)).toHaveLength(2);
     expect((await repository!.listByIds(["flow-b", "missing"])).map((row) => row.id)).toEqual(["flow-b"]);
   });
 
@@ -68,7 +76,7 @@ describePersistence("FlowlineRevealRepository", () => {
        VALUES ('00000000-0000-4000-8000-0000000000c1', 'flow-a', $1, 'ride-1', now(), 300, 5, 1500, 1)`,
       [playerId]
     );
-    await repository!.reveal(playerId, ["flow-b"], "explore");
+    await repository!.reveal(playerId, ["flow-b"], "ride");
     expect(await repository!.listCompletedWithinBoundsLimited(playerId, bounds)).toMatchObject({ truncated: false, fartleks: [{ id: "flow-a" }] });
     expect((await repository!.listCompletedWithinBoundsLimited(otherPlayerId, bounds)).fartleks).toEqual([]);
   });

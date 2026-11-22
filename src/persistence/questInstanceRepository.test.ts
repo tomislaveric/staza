@@ -70,7 +70,7 @@ const totalXp = async () => (await pool!.query("SELECT total_xp FROM players WHE
 const confirmExploration = async (): Promise<string> => {
   const proposalId = randomUUID();
   const id = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
-  await pool!.query("UPDATE quest_instances SET started_at = $2 WHERE id = $1", [id, startedBefore]);
+  await repository!.start(playerId, id, startedBefore);
   return id;
 };
 
@@ -85,7 +85,7 @@ describePersistence("QuestInstanceRepository", () => {
     await pool?.end();
   });
 
-  it("creates an exploration with its route atomically and shows no progress until an activity resolves it", async () => {
+  it("saves an exploration as planned with its route atomically", async () => {
     const proposalId = randomUUID();
     const instanceId = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
 
@@ -95,7 +95,7 @@ describePersistence("QuestInstanceRepository", () => {
       templateId: EXPLORATION_TEMPLATE.id,
       suggestionId: proposalId,
       title: "Exploration: Peak A, Peak B +1",
-      status: "active",
+      status: "planned",
       difficulty: "medium",
       rewardXp: 250,
       attemptCount: 1,
@@ -109,6 +109,23 @@ describePersistence("QuestInstanceRepository", () => {
       includedTargetIds: ["peak-a", "peak-b", "peak-c"]
     });
     expect(await repository!.getPlannedRoute("00000000-0000-4000-8000-0000000000e2", instanceId)).toBeUndefined();
+    expect(instance.startedAt).toBeUndefined();
+  });
+
+  it("ignores activities while planned and lists saved routes overlapping a viewport", async () => {
+    const proposalId = randomUUID();
+    const instanceId = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
+    await rideWith("planned-ride", ["peak-a"]);
+    expect((await repository!.listForPlayer(playerId))[0].status).toBe("planned");
+
+    const inside = { minLongitude: 8.15, minLatitude: 49.15, maxLongitude: 8.3, maxLatitude: 49.3 };
+    const outside = { minLongitude: 9, minLatitude: 50, maxLongitude: 9.1, maxLatitude: 50.1 };
+    expect(await repository!.listRoutesWithinBounds(playerId, inside)).toMatchObject([{ id: instanceId, status: "planned" }]);
+    expect(await repository!.listRoutesWithinBounds(playerId, outside)).toEqual([]);
+
+    await repository!.start(playerId, instanceId, startedBefore);
+    await expect(repository!.start(playerId, instanceId)).rejects.toThrow("planned explorations");
+    expect((await repository!.listForPlayer(playerId))[0]).toMatchObject({ status: "active", startedAt: startedBefore.toISOString() });
   });
 
   it("completes in one activity, granting the reward exactly once", async () => {
@@ -123,29 +140,32 @@ describePersistence("QuestInstanceRepository", () => {
     expect(await totalXp()).toBe(30 + 250);
   });
 
-  it("fails when targets are spread across activities and can be retried", async () => {
+  it("accumulates progress across activities after the start", async () => {
     const instanceId = await confirmExploration();
-    await rideWith("quest-part-1", ["peak-a", "peak-b"]);
+    await rideWith("before-start", ["peak-c"], "2026-04-01T08:00:00Z");
+    expect((await repository!.listForPlayer(playerId))[0].status).toBe("active");
+
+    const first = await rideWith("quest-part-1", ["peak-a", "peak-b"]);
+    expect(first.activity.replay!.outcome!.quests).toMatchObject([{ questId: instanceId, result: "progressed", xp: 0 }]);
     let [instance] = await repository!.listForPlayer(playerId);
     expect(instance).toMatchObject({
-      status: "failed", resolvedActivityId: "quest-part-1",
+      status: "partially_completed", resolvedActivityId: "quest-part-1",
       objectives: [{ progress: { completed: 2, required: 3, complete: false } }]
     });
-    expect(await totalXp()).toBe(20);
 
-    // The second half cannot complete a failed attempt.
-    await rideWith("quest-part-2", ["peak-c"], "2026-06-02T08:00:00Z");
-    expect((await repository!.listForPlayer(playerId))[0].status).toBe("failed");
+    // Reaching nothing new leaves the exploration untouched.
+    const repeat = await rideWith("quest-repeat", ["peak-a"], "2026-06-01T12:00:00Z");
+    expect(repeat.activity.replay!.outcome!.quests).toEqual([]);
 
-    await repository!.retry(playerId, instanceId, startedBefore);
-    await expect(repository!.retry(playerId, instanceId)).rejects.toThrow("failed quests");
+    const second = await rideWith("quest-part-2", ["peak-c"], "2026-06-02T08:00:00Z");
+    expect(second.activity.replay!.outcome!.quests).toMatchObject([{ questId: instanceId, result: "completed", xp: 250 }]);
     [instance] = await repository!.listForPlayer(playerId);
-    expect(instance).toMatchObject({ status: "active", attemptCount: 2 });
-    const { activity } = await rideWith("quest-retry", ["peak-a", "peak-b", "peak-c"], "2026-06-03T08:00:00Z");
-    expect((await repository!.listForPlayer(playerId))[0].status).toBe("completed");
-    // Peaks claimed on the failed attempts are revisits: only the quest reward is new XP.
-    expect(activity.replay!.outcome!.collectibles).toEqual({ newCount: 0, revisitCount: 3 });
-    expect(await totalXp()).toBe(20 + 10 + 250);
+    expect(instance).toMatchObject({ status: "completed", resolvedActivityId: "quest-part-2" });
+    // peak-c was first collected before the start: only peaks a, b and the reward are new XP.
+    expect(await totalXp()).toBe(30 + 250);
+
+    await rideWith("quest-after", ["peak-a", "peak-b", "peak-c"], "2026-06-03T08:00:00Z");
+    expect(await totalXp()).toBe(30 + 250);
   });
 
   it("returns the same exploration when a proposal is confirmed twice", async () => {
@@ -164,12 +184,17 @@ describePersistence("QuestInstanceRepository", () => {
     expect(await repository!.listForPlayer(playerId)).toEqual([]);
   });
 
-  it("deletes the planned route with its cancelled exploration", async () => {
+  it("deletes an exploration of any status with its planned route", async () => {
     const proposalId = randomUUID();
     const instanceId = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
     await repository!.cancel(playerId, instanceId);
     expect(await repository!.listForPlayer(playerId)).toEqual([]);
     const remaining = await pool!.query("SELECT 1 FROM planned_routes WHERE quest_instance_id = $1", [instanceId]);
     expect(remaining.rowCount).toBe(0);
+
+    const completedId = await confirmExploration();
+    await rideWith("done", ["peak-a", "peak-b", "peak-c"]);
+    await repository!.cancel(playerId, completedId);
+    expect(await repository!.listForPlayer(playerId)).toEqual([]);
   });
 });

@@ -9,22 +9,30 @@ describe("exploreCta", () => {
 });
 
 describe("ExploreResultCard", () => {
-  it("separates known Flowlines from the newly revealed ones when an explored area has new opportunities", () => {
+  it("summarizes the session's opportunities and leads with Generate route", () => {
     const markup = ExploreResultCard({ phase: "result", result: {
-      outcome: "already_explored_new", revealed: [], knownCount: 9, availableCount: 0,
-      summary: { total: 2, byCharacter: { explore: 2 } }
+      outcome: "discovered", flowlines: [], collectibles: [], availableCount: 0,
+      summary: { total: 2, byCharacter: { explore: 2 }, collectibles: 3 }
     } });
-    expect(markup).toContain("Area already explored");
-    expect(markup).toContain("2 Flowlines discovered");
-    expect(markup).toContain("7 Flowlines known \u00b7 2 new opportunities");
+    expect(markup).toContain("5 opportunities");
     expect(markup).toMatch(/<strong>2<\/strong> <span>exploration<\/span>/);
+    expect(markup).toMatch(/<strong>3<\/strong> <span>collectibles<\/span>/);
+    expect(markup).toMatch(/class="is-primary" data-explore-generate>Generate route/);
+    expect(markup).toContain("data-explore-discoveries");
+    expect(markup).not.toContain("already explored");
   });
 
-  it("speaks of a single discovery in the singular", () => {
+  it("speaks of a single opportunity in the singular", () => {
     const markup = ExploreResultCard({ phase: "result", result: {
-      outcome: "discovered", revealed: [], knownCount: 1, availableCount: 0, summary: { total: 1, byCharacter: { flow: 1 } }
+      outcome: "discovered", flowlines: [], collectibles: [], summary: { total: 1, byCharacter: { flow: 1 }, collectibles: 0 }
     } });
-    expect(markup).toContain("1 Flowline discovered");
+    expect(markup).toContain("1 opportunity");
+  });
+
+  it("offers to zoom out when the area has nothing to explore", () => {
+    const markup = ExploreResultCard({ phase: "result", result: { outcome: "nothing_new", flowlines: [], collectibles: [] } });
+    expect(markup).toContain("data-explore-zoom-out");
+    expect(markup).not.toContain("data-explore-generate");
   });
 });
 

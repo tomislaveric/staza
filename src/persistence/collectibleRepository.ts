@@ -115,7 +115,15 @@ export class CollectibleRepository {
     };
   }
 
-  async listWithinBounds(bounds: GeoBounds, limit: number): Promise<{ collectibles: Collectible[]; truncated: boolean }> {
+  /**
+   * Collectibles in `bounds`, nearest to its center first. `filter.onlyIds` keeps just those ids
+   * (the player's collected ones on World); `filter.exceptIds` drops them (Explore opportunities).
+   */
+  async listWithinBounds(
+    bounds: GeoBounds,
+    limit: number,
+    filter: { onlyIds?: Iterable<string>; exceptIds?: Iterable<string> } = {}
+  ): Promise<{ collectibles: Collectible[]; truncated: boolean }> {
     const ranges = splitBoundsAtAntimeridian(bounds);
     const center = boundsCenter(bounds);
     const clauses = ranges.map((_range, index) => {
@@ -124,11 +132,20 @@ export class CollectibleRepository {
     });
     const parameters: unknown[] = [bounds.minLatitude, bounds.maxLatitude];
     for (const range of ranges) parameters.push(range.minLongitude, range.maxLongitude);
+    const idClauses: string[] = [];
+    if (filter.onlyIds) {
+      parameters.push([...new Set(filter.onlyIds)]);
+      idClauses.push(`AND id = ANY($${parameters.length}::text[])`);
+    }
+    if (filter.exceptIds) {
+      parameters.push([...new Set(filter.exceptIds)]);
+      idClauses.push(`AND NOT (id = ANY($${parameters.length}::text[]))`);
+    }
     parameters.push(center.latitude, center.longitude, limit + 1);
     const centerLatitudeParameter = parameters.length - 2;
     const result = await this.pool.query<CollectibleRow>(
       `SELECT ${SELECT_COLUMNS} FROM collectibles
-       WHERE latitude >= $1 AND latitude <= $2 AND (${clauses.join(" OR ")})
+       WHERE latitude >= $1 AND latitude <= $2 AND (${clauses.join(" OR ")}) ${idClauses.join(" ")}
        ORDER BY (latitude - $${centerLatitudeParameter}) ^ 2 + (longitude - $${centerLatitudeParameter + 1}) ^ 2, id
        LIMIT $${parameters.length}`,
       parameters

@@ -260,15 +260,21 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   }
 
   let selectedFilters = [];
+  /** Rendered collectibles: the player's collected ones plus the Explore session's opportunities. */
   let collectibles = [];
+  let worldCollectibles = [];
   let pendingQuestId;
   let truncated = false;
-  /** Completed Flowlines in the viewport plus every Flowline Explore showed this session. */
+  /** Rendered Flowlines: completed ones in the viewport plus the Explore session's opportunities. */
   let fartleks = [];
   let completedFartleks = [];
-  let exploredFartleks = [];
-  /** The last explored area's revealed Flowlines: what the discoveries panel lists. */
-  let discoveries = [];
+  /**
+   * The Explore session: opportunities shown only until it ends (close, new Explore, save).
+   * Nothing in it is persisted; `{ bbox, view, flowlines, collectibles }` or undefined.
+   */
+  let session;
+  /** Every saved Exploration route in view; drawn dotted whatever its status. */
+  let explorationRoutes = [];
   let exploreAllowed = false;
   let availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
   let selection;
@@ -283,7 +289,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   /** Explore this area: undefined, or the exploring / result / error card. */
   let explore;
   let exploreToken = 0;
-  /** Newly revealed Flowlines that are still waiting for their staggered appearance. */
+  /** Session Flowlines that are still waiting for their staggered appearance. */
   const revealing = new Set();
   /** Side panel replacing the detail card: "discoveries" or "planner". */
   let panel;
@@ -386,9 +392,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       closeExploreCard();
       worldMap.flyTo(view.center.lon, view.center.lat, Math.max(0, view.zoom - 2));
     });
-    on("[data-explore-show-known]", () => showKnownFlowlines());
+    on("[data-explore-generate]", () => void generateRoute());
     on("[data-explore-discoveries]", () => openDiscoveries());
-    on("[data-explore-plan]", () => openPlanner());
   };
 
   const hideDetail = () => {
@@ -401,13 +406,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     .filter((instance) => instance.objectives.some(({ objective }) =>
       objective.type !== "flowline_rule" && objective.targets.some((target) => target.id === collectibleId)))
     .map((instance) => ({ id: `instance:${instance.id}`, title: instance.title }));
-
-  const visibleCollectibles = () => {
-    const bounds = worldMap?.getBounds();
-    return visibleWorldCollectibles(collectibles).filter((item) => !bounds || boundsContain(bounds, {
-      west: item.longitude, east: item.longitude, south: item.latitude, north: item.latitude
-    }));
-  };
 
   const showPanel = (markup) => {
     detailHost.hidden = false;
@@ -430,8 +428,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     }
     if (panel === "discoveries") {
       showPanel(DiscoveriesPanel({
-        flowlines: discoveries,
-        collectibles: visibleCollectibles(),
+        flowlines: session?.flowlines ?? [],
+        collectibles: session?.collectibles ?? [],
         sort: discoveriesSort,
         origin: homePosition,
         routeStopIds: routeFlowlineIds()
@@ -439,8 +437,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       detailHost.querySelector("[data-discoveries-close]")?.addEventListener("click", () => {
         panel = undefined;
         selection = undefined;
-        renderCollectibles();
-        renderDetail();
+        endSession();
       });
       detailHost.querySelectorAll("[data-discoveries-sort]").forEach((button) => button.addEventListener("click", () => {
         discoveriesSort = button.dataset.discoveriesSort;
@@ -453,6 +450,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         renderCollectibles();
         worldMap.fitTo(geometryPoints(fartlek.geometry));
       }));
+      detailHost.querySelector("[data-discoveries-generate]")?.addEventListener("click", () => void generateRoute());
       detailHost.querySelector("[data-discoveries-plan]")?.addEventListener("click", () => openPlanner());
       bindRouteButtons();
       return;
@@ -494,11 +492,11 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   const renderSidePanels = () => {
     statsHost.innerHTML = WorldStats(truncated);
     questHost.innerHTML = QuestList(questInstances, pendingQuestId, selectedQuestKey, plannedRoutes);
-    questHost.querySelectorAll("[data-quest-retry]").forEach((button) => {
-      button.addEventListener("click", () => void retryQuest(button.dataset.questRetry));
+    questHost.querySelectorAll("[data-quest-start]").forEach((button) => {
+      button.addEventListener("click", () => void startQuest(button.dataset.questStart));
     });
-    questHost.querySelectorAll("[data-quest-cancel]").forEach((button) => {
-      button.addEventListener("click", () => void cancelQuest(button.dataset.questCancel));
+    questHost.querySelectorAll("[data-quest-delete]").forEach((button) => {
+      button.addEventListener("click", () => void deleteQuest(button.dataset.questDelete));
     });
     questHost.querySelectorAll("[data-quest-select]").forEach((button) => {
       button.addEventListener("click", () => void selectQuest(button.dataset.questSelect));
@@ -650,34 +648,43 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderDetail();
   };
 
-  /* ---------- Explore this area: reveal Flowlines, never plan ---------- */
+  /* ---------- Explore this area: a temporary session of opportunities ---------- */
 
   function closeExploreCard() {
     exploreToken += 1;
     explore = undefined;
-    renderControls();
+    endSession();
   }
 
-  /** The viewport only sends completed Flowlines; explored ones stay on the map for the session. */
-  function mergeFartleks() {
+  /** Persistent world (collected / completed) plus the session's opportunities, without duplicates. */
+  function mergeWorld() {
     const completed = new Set(completedFartleks.map((fartlek) => fartlek.id));
-    fartleks = [...completedFartleks, ...exploredFartleks.filter((fartlek) => !completed.has(fartlek.id))];
+    fartleks = [...completedFartleks, ...(session?.flowlines ?? []).filter((fartlek) => !completed.has(fartlek.id))];
+    const collected = new Set(worldCollectibles.map((collectible) => collectible.id));
+    collectibles = [...worldCollectibles, ...(session?.collectibles ?? []).filter((collectible) => !collected.has(collectible.id))];
+    availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
+    selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
   }
 
-  /** Known Flowlines show at once; newly revealed ones appear one after another (at once with reduced motion). */
-  function revealOnMap(known, flowlines) {
-    const shown = new Set(fartleks.map((fartlek) => fartlek.id));
-    const explored = new Set(exploredFartleks.map((fartlek) => fartlek.id));
-    for (const flowline of [...known, ...flowlines]) {
-      if (explored.has(flowline.id)) continue;
-      explored.add(flowline.id);
-      exploredFartleks.push(flowline);
+  /** Ends the Explore session: its opportunities disappear; nothing was saved. */
+  function endSession() {
+    if (session) {
+      session = undefined;
+      revealing.clear();
+      mergeWorld();
+      if (selection && !(selection.kind === "fartlek" ? fartlekById(selection.id) : collectibleById(selection.id))) selection = undefined;
+      renderFilters();
     }
-    mergeFartleks();
-    flowlines = flowlines.filter((flowline) => !shown.has(flowline.id));
-    availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
+    renderCollectibles();
+    renderDetail();
+  }
+
+  /** Session Flowlines appear one after another (at once with reduced motion). */
+  function showSession() {
+    const shown = new Set(fartleks.map((fartlek) => fartlek.id));
+    mergeWorld();
     renderFilters();
-    const steps = revealSequence(flowlines, { reducedMotion: prefersReducedMotion() });
+    const steps = revealSequence(session.flowlines.filter((flowline) => !shown.has(flowline.id)), { reducedMotion: prefersReducedMotion() });
     for (const { flowline, delayMs } of steps) {
       if (delayMs === 0) continue;
       revealing.add(flowline.id);
@@ -695,29 +702,25 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     const token = ++exploreToken;
     selection = undefined;
     panel = undefined;
+    session = undefined;
+    revealing.clear();
+    mergeWorld();
     explore = { phase: "exploring" };
     renderCollectibles();
     renderDetail();
+    const bbox = boundsToParameter(worldMap.getBounds());
+    const view = worldMap.getView();
     try {
-      const result = await jsonRequest("POST", "/api/world/explore", { bbox: boundsToParameter(worldMap.getBounds()) });
+      const result = await jsonRequest("POST", "/api/world/explore", { bbox });
       if (token !== exploreToken) return;
-      discoveries = result.known?.length ? result.known : result.revealed;
       explore = { phase: "result", result };
-      revealOnMap(result.known ?? [], result.revealed);
+      session = { bbox, view, flowlines: result.flowlines ?? [], collectibles: result.collectibles ?? [] };
+      showSession();
     } catch (error) {
       if (token !== exploreToken) return;
       explore = { phase: "error", error: error.message };
     }
     renderControls();
-  }
-
-  /** "Show known Flowlines": frames the explored area's Flowlines and lists them. */
-  function showKnownFlowlines() {
-    exploreToken += 1;
-    explore = undefined;
-    const points = discoveries.flatMap((fartlek) => geometryPoints(fartlek.geometry));
-    if (points.length) worldMap.fitTo(points);
-    openDiscoveries();
   }
 
   function openDiscoveries() {
@@ -775,7 +778,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   }
 
   /** Opens the manual planner; earlier "Add to route" picks become its first stops. */
-  function openPlanner() {
+  function openPlanner({ start } = {}) {
     if (!worldMap || planner) return;
     exploreToken += 1;
     explore = undefined;
@@ -784,7 +787,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     selectedQuestKey = undefined;
     selectedQuestTargets = { collectibles: [], flowlines: [] };
     planner = createPlannerState({
-      start: homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined,
+      start: start ?? (homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined),
       stops: draftStops
     });
     setStatus(undefined);
@@ -792,12 +795,30 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderAll();
   }
 
-  /** Closes the planner without persisting anything; its stops stay as the route draft. */
+  /** Closes the planner without persisting anything; the Explore session ends with it. */
   function closePlanner() {
     plannerToken += 1;
     draftStops = planner?.stops ?? draftStops;
     planner = undefined;
-    renderAll();
+    syncRouteLayers();
+    endSession();
+  }
+
+  /** Inside the explored area the generated route starts at home, otherwise at the explored view's center. */
+  const generateStart = () => {
+    const [west, south, east, north] = session.bbox.split(",").map(Number);
+    if (homePosition && boundsContain({ west, south, east, north }, {
+      west: homePosition.longitude, east: homePosition.longitude, south: homePosition.latitude, north: homePosition.latitude
+    })) return { lat: homePosition.latitude, lon: homePosition.longitude };
+    return { lat: session.view.center.lat, lon: session.view.center.lon };
+  };
+
+  /** "Generate route": the primary step after Explore; opens the editor with a route over the session's opportunities. */
+  async function generateRoute() {
+    if (!session || planner) return;
+    draftStops = [];
+    openPlanner({ start: generateStart() });
+    await suggestRoute();
   }
 
   function pickPlannerPoint(point) {
@@ -865,11 +886,12 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderAll();
   }
 
-  /** "Suggest route": optional; proposes collectibles for the visible area, which the player can then edit. */
+  /** "Generate route": proposes stops for the explored (or visible) area, which the player can then edit. */
   async function suggestRoute() {
     if (!planner || planner.status !== "idle") return;
-    const view = worldMap.getView();
-    const { body, error } = buildSuggestRequest(planner, { bbox: boundsToParameter(worldMap.getBounds()), center: view.center, zoom: view.zoom });
+    const view = session?.view ?? worldMap.getView();
+    const bbox = session?.bbox ?? boundsToParameter(worldMap.getBounds());
+    const { body, error } = buildSuggestRequest(planner, { bbox, center: view.center, zoom: view.zoom });
     if (error) {
       planner.error = error;
       renderDetail();
@@ -883,10 +905,18 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       if (token !== plannerToken || !planner) return;
       const suggestion = result.proposals.find((proposal) => proposal.recommended) ?? result.proposals[0];
       if (!suggestion) throw new Error("No route could be suggested here. Add stops yourself.");
-      const stops = suggestion.includedTargetIds
-        .map((id) => result.catalog.collectibles.find((item) => item.id === id))
+      const opportunities = new Map(result.catalog.flowlines.filter((flowline) => !flowline.completed).map((flowline) => [flowline.id, flowline]));
+      const flowlineStops = [...new Set((suggestion.traversedFlowlines ?? []).map((flowline) => flowline.id))]
+        .map((id) => opportunities.get(id))
         .filter(Boolean)
-        .map(collectibleStop);
+        .map(flowlineStop);
+      const stops = [
+        ...suggestion.includedTargetIds
+          .map((id) => result.catalog.collectibles.find((item) => item.id === id))
+          .filter(Boolean)
+          .map(collectibleStop),
+        ...flowlineStops
+      ];
       Object.assign(planner, { status: "idle", stops, keepOrder: false, routeType: "round_trip", proposal: suggestion });
       worldMap.fitTo(geometryPoints(suggestion.geometry));
     } catch (suggestError) {
@@ -896,27 +926,39 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderAll();
   }
 
-  /** "Start Exploration": persists the routed plan as a QuestInstance with its PlannedRoute. */
-  async function confirmPlan() {
+  const reloadQuestInstances = async () => {
+    questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
+  };
+
+  /** "Save Exploration": the only persistence step; saves the routed plan as a planned Exploration. */
+  async function savePlan() {
     if (!planner?.proposal || planner.status !== "idle") return;
     const token = ++plannerToken;
-    Object.assign(planner, { status: "confirming", error: undefined });
+    Object.assign(planner, { status: "saving", error: undefined });
     renderDetail();
     try {
-      const { instance, plannedRoute } = await jsonRequest("POST", "/api/explorations/confirm", { proposalId: planner.proposal.id });
+      const { instance, plannedRoute } = await jsonRequest("POST", "/api/explorations/save", { proposalId: planner.proposal.id });
       if (token !== plannerToken || !planner) return;
       plannedRoutes.set(instance.id, plannedRoute ?? null);
-      questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
+      if (plannedRoute?.geometry && !explorationRoutes.some((route) => route.id === instance.id)) {
+        explorationRoutes = [...explorationRoutes, { id: instance.id, title: instance.title, status: instance.status, geometry: plannedRoute.geometry }];
+        worldMap.setSavedRoutes(explorationRoutes);
+      }
+      await reloadQuestInstances();
       planner = undefined;
       draftStops = [];
+      session = undefined;
+      revealing.clear();
+      mergeWorld();
+      renderFilters();
       renderAll();
       await selectQuest(`instance:${instance.id}`);
-    } catch (confirmError) {
+    } catch (saveError) {
       if (token !== plannerToken || !planner) return;
       Object.assign(planner, {
         status: "idle",
-        error: explorationErrorMessage(confirmError),
-        ...(expiredCodes.has(confirmError.code) ? { proposal: undefined } : {})
+        error: explorationErrorMessage(saveError),
+        ...(expiredCodes.has(saveError.code) ? { proposal: undefined } : {})
       });
       renderAll();
     }
@@ -963,16 +1005,17 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     }));
     on("[data-planner-route]", () => void routePlanner());
     on("[data-planner-suggest]", () => void suggestRoute());
-    on("[data-planner-confirm]", () => void confirmPlan());
+    on("[data-planner-save]", () => void savePlan());
   }
 
-  async function retryQuest(instanceId) {
+  /** "Start Exploration": separate from saving; activities count from now on. */
+  async function startQuest(instanceId) {
     if (pendingQuestId) return;
     pendingQuestId = instanceId;
     renderSidePanels();
     try {
-      await fetch(`/api/quest-instances/${encodeURIComponent(instanceId)}/retry`, { method: "POST" }).then(responseJson);
-      questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
+      await fetch(`/api/quest-instances/${encodeURIComponent(instanceId)}/start`, { method: "POST" }).then(responseJson);
+      await reloadQuestInstances();
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -981,9 +1024,10 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     }
   }
 
-  async function cancelQuest(instanceId) {
+  /** Deletes a saved Exploration of any status; its route leaves the map. XP already earned stays. */
+  async function deleteQuest(instanceId) {
     if (pendingQuestId || !globalThis.confirm(
-      "Cancel this exploration and delete its progress? This cannot be undone."
+      "Delete this exploration and its route? XP you already earned is kept. This cannot be undone."
     )) return;
     pendingQuestId = instanceId;
     renderSidePanels();
@@ -992,8 +1036,10 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         method: "DELETE",
         headers: { "Content-Type": "application/json" }
       }).then(responseJson);
-      questInstances = (await fetch("/api/quest-instances").then(responseJson)).instances;
+      await reloadQuestInstances();
       plannedRoutes.delete(instanceId);
+      explorationRoutes = explorationRoutes.filter((route) => route.id !== instanceId);
+      worldMap?.setSavedRoutes(explorationRoutes);
       if (selectedQuestKey === `instance:${instanceId}`) {
         selectedQuestKey = undefined;
         selectedQuestTargets = { collectibles: [], flowlines: [] };
@@ -1023,17 +1069,17 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         // Keep nearby items already shown so a capped reload never makes icons vanish or swap.
         const keep = scaleBounds(area, 1.5);
         const loadedIds = new Set(snapshot.collectibles.map((item) => item.id));
-        const retained = collectibles.filter((item) => !loadedIds.has(item.id)
+        const retained = worldCollectibles.filter((item) => !loadedIds.has(item.id)
           && boundsContain(keep, { west: item.longitude, east: item.longitude, south: item.latitude, north: item.latitude }));
-        collectibles = [...snapshot.collectibles, ...retained];
+        worldCollectibles = [...snapshot.collectibles, ...retained];
       }
       truncated = loadedArea.truncated || snapshot.fartlekTruncated === true;
       completedFartleks = snapshot.fartleks ?? [];
-      mergeFartleks();
+      explorationRoutes = snapshot.explorationRoutes ?? [];
+      worldMap?.setSavedRoutes(explorationRoutes);
+      mergeWorld();
       exploreAllowed = snapshot.exploreAllowed === true;
-      availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
-      selectedFilters = selectedFilters.filter((filter) => availableFilters.has(filter));
-      setStatus(collectibles.length === 0 && fartleks.length === 0 ? "Nothing curated here yet." : undefined);
+      setStatus(undefined);
       if (selection?.kind === "collectible" && !collectibleById(selection.id)) selection = undefined;
       if (selection?.kind === "fartlek" && !fartlekById(selection.id)) selection = undefined;
       renderFilters();

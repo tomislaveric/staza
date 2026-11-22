@@ -1,5 +1,14 @@
 # explore-reveal-and-manual-planner
 
+> **Amended by
+> [explore-sessions-and-saved-explorations](../explore-sessions-and-saved-explorations/README.md).**
+> Explore no longer persists reveals: it returns the area's Flowline and uncollected
+> Collectible opportunities for a temporary session only (`discovered` | `nothing_new`;
+> `known` and `already_explored*` are gone). **Generate route** is the primary action after
+> Explore, and the planner ends with **Save Exploration** (`planned`). Starting is a separate
+> action in the Explorations list. Progress accumulates across activities
+> (`partially_completed` → `completed`); `failed` and Retry are removed.
+
 ## Goal
 
 **Explore shows opportunities. Plan route only helps connect them.**

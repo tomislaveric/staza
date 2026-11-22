@@ -93,16 +93,19 @@ describe("Started explorations", () => {
     expect(markup).toContain("Complete");
     expect(markup).toContain("Not complete");
     expect(markup).toContain('<b class="fartlek-swatch is-completed" aria-hidden="true"></b>');
-    expect(markup).toContain('aria-label="Cancel exploration"');
-    expect(markup).toContain('title="Cancel exploration"');
-    expect(markup).toContain(">✕</button>");
+    expect(markup).toContain('aria-label="Delete exploration"');
+    expect(markup).toContain(">Started</small>");
+    expect(markup).not.toContain("data-quest-start=");
   });
 
-  it("does not offer cancellation for completed quests", () => {
-    const markup = QuestList([instance({ status: "completed" })], undefined);
-    expect(markup).toContain("Complete");
-    expect(markup).not.toContain("data-quest-cancel=");
-    expect(markup).toContain("One — 33 km/h");
+  it("offers Start only for planned Explorations and Delete for every status", () => {
+    const statuses = ["planned", "active", "partially_completed", "completed"];
+    const markups = statuses.map((status) => QuestList([instance({ status })], undefined));
+    expect(markups.map((markup) => markup.includes('data-quest-start="instance-1"'))).toEqual([true, false, false, false]);
+    expect(markups.every((markup) => markup.includes('data-quest-delete="instance-1"'))).toBe(true);
+    expect(markups.map((markup) => markup.match(/quest-status-chip[^>]*>([^<]+)</)[1]))
+      .toEqual(["Planned", "Started", "Partially completed", "Completed"]);
+    expect(markups.some((markup) => markup.includes("Retry"))).toBe(false);
   });
 
   it("hides unmet optional-target labels after a quest is completed", () => {
@@ -158,12 +161,11 @@ describe("Started explorations", () => {
     expect(markup).toContain("Complete");
     expect(markup).not.toContain("<script>");
     expect(markup).toContain("&lt;script&gt;");
-    expect(markup).not.toContain("data-quest-cancel=");
   });
 
   it("renders useful empty states without fabricating quests", () => {
     const markup = QuestList([], undefined);
-    expect(markup).toContain("Explore an area to reveal Flowlines, then plan a route to start an exploration.");
+    expect(markup).toContain("Explore an area, generate a route and save it as an Exploration.");
   });
 
   it("shows per-target Mountain Pass progress on started quests", () => {

@@ -1624,6 +1624,9 @@ button.home-tile {
 .outcome-quest.is-failed {
     border-left-color: #ff9a9a;
 }
+.outcome-quest.is-progressed {
+    border-left-color: rgb(232 184 10 / 45%);
+}
 .outcome-criteria li.is-missed b {
     color: #ff9a9a;
 }

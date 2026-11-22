@@ -937,6 +937,64 @@ export const migrations: Migration[] = [{
       ON CONFLICT DO NOTHING;
     `);
   }
+}, {
+  id: "042_saved_explorations",
+  async up(client) {
+    // Explore only shows temporary opportunities now; only rides reveal Flowlines permanently.
+    // Explorations are saved as planned, started separately and accumulate progress.
+    await client.query(`
+      DELETE FROM player_flowline_reveals WHERE source = 'explore';
+      ALTER TABLE player_flowline_reveals
+        DROP CONSTRAINT IF EXISTS player_flowline_reveals_source_check,
+        ADD CONSTRAINT player_flowline_reveals_source_check CHECK (source = 'ride');
+
+      ALTER TABLE quest_instances
+        DROP CONSTRAINT IF EXISTS quest_instances_status_check,
+        DROP CONSTRAINT IF EXISTS quest_instances_resolution_check,
+        ALTER COLUMN started_at DROP NOT NULL,
+        ALTER COLUMN started_at DROP DEFAULT;
+      UPDATE quest_instances SET
+        status = CASE WHEN EXISTS (
+          SELECT 1 FROM jsonb_array_elements(COALESCE(attempt_result->'objectives', '[]'::jsonb)) AS state
+          WHERE COALESCE((state->'progress'->>'completed')::int, 0) > 0
+        ) THEN 'partially_completed' ELSE 'active' END
+      WHERE status = 'failed';
+      UPDATE quest_instances SET attempt_result = NULL, resolved_activity_id = NULL WHERE status = 'active';
+      ALTER TABLE quest_instances
+        DROP COLUMN failed_at,
+        ADD CONSTRAINT quest_instances_status_check
+          CHECK (status IN ('planned', 'active', 'partially_completed', 'completed')),
+        ADD CONSTRAINT quest_instances_resolution_check
+          CHECK ((status = 'planned' AND started_at IS NULL AND completed_at IS NULL)
+            OR (status IN ('active', 'partially_completed') AND started_at IS NOT NULL AND completed_at IS NULL)
+            OR (status = 'completed' AND completed_at IS NOT NULL));
+
+      ALTER TABLE planned_routes
+        ADD COLUMN min_lat DOUBLE PRECISION,
+        ADD COLUMN min_lon DOUBLE PRECISION,
+        ADD COLUMN max_lat DOUBLE PRECISION,
+        ADD COLUMN max_lon DOUBLE PRECISION;
+      UPDATE planned_routes AS route SET
+        min_lat = bounds.min_lat, min_lon = bounds.min_lon, max_lat = bounds.max_lat, max_lon = bounds.max_lon
+      FROM (
+        SELECT id,
+          min((point->>1)::float8) AS min_lat, min((point->>0)::float8) AS min_lon,
+          max((point->>1)::float8) AS max_lat, max((point->>0)::float8) AS max_lon
+        FROM planned_routes, jsonb_array_elements(geometry->'coordinates') AS point
+        GROUP BY id
+      ) AS bounds
+      WHERE bounds.id = route.id;
+      UPDATE planned_routes SET
+        min_lat = LEAST(start_lat, end_lat), min_lon = LEAST(start_lon, end_lon),
+        max_lat = GREATEST(start_lat, end_lat), max_lon = GREATEST(start_lon, end_lon)
+      WHERE min_lat IS NULL;
+      ALTER TABLE planned_routes
+        ALTER COLUMN min_lat SET NOT NULL,
+        ALTER COLUMN min_lon SET NOT NULL,
+        ALTER COLUMN max_lat SET NOT NULL,
+        ALTER COLUMN max_lon SET NOT NULL;
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

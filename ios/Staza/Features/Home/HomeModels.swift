@@ -29,12 +29,16 @@ struct QuestInstance: Decodable, Equatable, Identifiable, Sendable {
     let id: String
     let title: String
     let description: String
+    /// `planned`, `active`, `partially_completed` or `completed`; unknown values are kept as is.
     let status: String
     let difficulty: String
     let rewardXp: Double
     let objectives: [Objective]
+    /// Absent while the Exploration is planned.
+    var startedAt: String? = nil
 
     var isActive: Bool { status == "active" }
+    var isPlanned: Bool { status == "planned" }
 
     /// Overall completion across objectives, 0...1.
     var completionFraction: Double {

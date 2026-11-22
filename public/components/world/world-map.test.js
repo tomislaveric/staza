@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   ALTERNATES_SOURCE_ID,
   ROUTE_SOURCE_ID,
+  SAVED_ROUTES_SOURCE_ID,
   alternateRouteLayers,
   alternateRoutesToGeoJson,
   createHomeMarkerElement,
   homeScaleZoom,
   routeLayers,
   routeToGeoJson,
+  savedRouteLayers,
+  savedRoutesToGeoJson,
   worldMapInitialView
 } from "./world-map.js";
 
@@ -98,5 +101,24 @@ describe("saved World map home", () => {
     expect(marker.attributes).toEqual({ role: "img", "aria-label": "Saved home location" });
     expect(marker.child.src).toBe("/assets/nav-home.svg");
     expect(marker.child.attributes["aria-hidden"]).toBe("true");
+  });
+});
+
+describe("saved Exploration routes", () => {
+  it("draws every saved route as one dotted, low-prominence line without status styling", () => {
+    const [layer] = savedRouteLayers();
+    expect(savedRouteLayers()).toHaveLength(1);
+    expect(layer.source).toBe(SAVED_ROUTES_SOURCE_ID);
+    expect(layer.paint["line-dasharray"]).toBeDefined();
+    expect(layer.paint["line-opacity"]).toBeLessThan(0.6);
+    expect(JSON.stringify(layer.paint)).not.toContain("status");
+  });
+
+  it("maps routes with geometry to features", () => {
+    const geometry = { type: "LineString", coordinates: [[9, 47], [9.1, 47.1]] };
+    expect(savedRoutesToGeoJson([
+      { id: "a", status: "planned", geometry },
+      { id: "b", status: "completed", geometry: { type: "LineString", coordinates: [] } }
+    ]).features).toEqual([{ type: "Feature", properties: { explorationId: "a" }, geometry }]);
   });
 });

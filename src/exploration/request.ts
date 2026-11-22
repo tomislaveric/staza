@@ -32,7 +32,7 @@ export interface GenerateRequest {
   input: RoutePlanningInput;
   /** A collectible every route must visit ("Route to"). */
   destinationId?: string;
-  /** A revealed Flowline every route must ride ("Plan route via this Flowline"). */
+  /** A plannable Flowline of the area every route must ride ("Plan route via this Flowline"). */
   destinationFlowlineId?: string;
 }
 

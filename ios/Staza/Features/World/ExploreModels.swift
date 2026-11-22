@@ -31,11 +31,17 @@ struct RouteProposal: Decodable, Equatable, Identifiable, Sendable {
     var droppedWaypoints: [GeoPoint]? = nil
     /// Manual route stop order: collectible ids, `waypoint:<lat>,<lon>` and `flowline:<id>`.
     var stopOrder: [String]? = nil
+    /// Flowlines a generated route rides; the opportunity ones become its Flowline stops.
+    var traversedFlowlines: [TraversedFlowline]? = nil
+
+    struct TraversedFlowline: Decodable, Equatable, Sendable {
+        let id: String
+    }
 }
 
 struct ExplorationCatalog: Decodable, Equatable, Sendable {
     let collectibles: [WorldCollectible]
-    /// Flowlines of the area the player has revealed.
+    /// Plannable Flowlines of the area: its opportunities and the player's completed ones.
     var flowlines: [WorldFlowline]? = nil
 }
 
@@ -59,7 +65,9 @@ struct PlannedRoute: Decodable, Equatable, Sendable {
     let start: GeoPoint
 }
 
-struct ConfirmedExploration: Decodable, Sendable {
+/// `POST /api/explorations/save`: the saved, not yet started Exploration.
+struct SavedExploration: Decodable, Sendable {
+    let instance: QuestInstance?
     let plannedRoute: PlannedRoute?
 }
 
@@ -76,7 +84,7 @@ struct PlanArea: Encodable, Equatable, Sendable {
     }
 }
 
-/// "Suggest route": the old generator, bounded to the visible area and the player's revealed Flowlines.
+/// "Generate route": the generator, bounded to the explored area and its opportunities.
 struct SuggestRequest: Encodable, Sendable {
     let area: PlanArea
     let sport: String
@@ -94,6 +102,6 @@ struct PlanRequest: Encodable, Sendable {
     let stops: [PlannerStop]
 }
 
-struct ConfirmRequest: Encodable, Sendable {
+struct SaveRequest: Encodable, Sendable {
     let proposalId: String
 }

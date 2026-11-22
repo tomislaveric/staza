@@ -22,34 +22,66 @@ final class WorldModelTests: XCTestCase {
         XCTAssertFalse(model.viewportFailed)
     }
 
-    func testExploreShowsKnownAndRevealedFlowlinesOnTopOfCompletedOnes() async throws {
+    func testLoadsSavedExplorationRoutesAndToleratesTheirAbsence() async {
+        let route = #"{"id":"q1","title":"Ride","status":"planned","geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]}}"#
+        let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"explorationRoutes":[\#(route)]"#)
+        let transport = StubTransport([.init(status: 200, body: body), .init(status: 200, body: world)])
+        let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
+        let bounds = WorldBounds(west: 7, south: 46, east: 9, north: 48)
+        await model.loadViewport(bounds)
+        XCTAssertEqual(model.explorationRoutes.map(\.id), ["q1"])
+        XCTAssertEqual(model.explorationRoutes.first?.geometry.clCoordinates.count, 2)
+        await model.loadViewport(bounds)
+        XCTAssertTrue(model.explorationRoutes.isEmpty)
+        XCTAssertFalse(model.viewportFailed)
+    }
+
+    func testExploreSessionShowsOpportunitiesUntilItEnds() async throws {
         let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"exploreAllowed":true"#)
             .replacingOccurrences(of: #""completed":false"#, with: #""completed":true"#)
         let line = #""geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]},"completed":false"#
-        let known = #"{"id":"k1","name":"Known",\#(line)}"#
-        let revealed = #"{"id":"f2","name":"Rheintal",\#(line),"flowScore":84,"roadQualityScore":91,"character":{"primary":"flow","tags":["flow","explore"]}}"#
-        let explored = #"{"outcome":"already_explored_new","revealed":[\#(revealed)],"known":[\#(known),\#(revealed)],"knownCount":2,"availableCount":0,"summary":{"total":1,"byCharacter":{"flow":1}}}"#
+        let opportunity = #"{"id":"f2","name":"Rheintal",\#(line),"flowScore":84,"roadQualityScore":91,"character":{"primary":"flow","tags":["flow","explore"]}}"#
+        let collectible = #"{"id":"c9","name":"Tower","latitude":47.05,"longitude":8.05,"found":false,"primaryCategory":"viewpoint"}"#
+        let explored = #"{"outcome":"discovered","flowlines":[\#(opportunity)],"collectibles":[\#(collectible)],"collectiblesTruncated":false,"availableCount":0,"summary":{"total":1,"byCharacter":{"flow":1,"endurance":0,"explore":0},"collectibles":1}}"#
         let transport = StubTransport([.init(status: 200, body: body), .init(status: 200, body: explored), .init(status: 200, body: body)])
         let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
         let bounds = WorldBounds(west: 7, south: 46, east: 9, north: 48)
         await model.loadViewport(bounds)
-        XCTAssertEqual(model.flowlines.map(\.id), ["f1"], "the map starts with completed Flowlines only")
+        XCTAssertEqual(model.flowlines.map(\.id), ["f1"], "the map starts with the persistent world only")
         XCTAssertEqual(model.exploreAction, .explore)
 
         await model.exploreArea(reduceMotion: true)
         XCTAssertEqual(transport.requests.last?.url?.path, "/api/world/explore")
         let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(transport.requests.last?.httpBody)) as? [String: Any])
         XCTAssertEqual(sent["bbox"] as? String, bounds.queryValue)
-        XCTAssertEqual(model.visibleFlowlines.map(\.id), ["f1", "k1", "f2"])
-        XCTAssertEqual(model.discoveries.map(\.id), ["k1", "f2"])
+        XCTAssertEqual(model.visibleFlowlines.map(\.id), ["f1", "f2"])
+        XCTAssertEqual(model.collectibles.map(\.id), ["c1", "c9"])
+        XCTAssertEqual(model.sessionFlowlines.map(\.id), ["f2"])
+        XCTAssertEqual(model.sessionBounds, bounds)
         XCTAssertEqual(model.flowline(id: "f2")?.resolvedCharacter.tags, [.flow, .explore])
         guard case .result(let result) = model.exploreState else { return XCTFail("expected a result") }
         XCTAssertEqual(result.breakdown, [ExploreResult.Count(tag: .flow, count: 1)])
+        XCTAssertEqual(result.summary.collectibles, 1)
 
         await model.loadViewport(bounds)
-        XCTAssertEqual(model.flowlines.map(\.id), ["f1", "k1", "f2"], "explored Flowlines stay on the map after a pan")
+        XCTAssertEqual(model.flowlines.map(\.id), ["f1", "f2"], "opportunities stay while the session is open")
         model.dismissExplore()
         XCTAssertNil(model.exploreState)
+        XCTAssertTrue(model.hasExploreSession, "hiding the card keeps the session, e.g. for the planner")
+
+        model.endExploreSession()
+        XCTAssertEqual(model.flowlines.map(\.id), ["f1"])
+        XCTAssertEqual(model.collectibles.map(\.id), ["c1"])
+        XCTAssertFalse(model.hasExploreSession)
+    }
+
+    func testExploreResultToleratesUnknownOutcome() throws {
+        let json = #"{"outcome":"something_new","flowlines":[],"collectibles":[],"collectiblesTruncated":false,"availableCount":3,"summary":{"total":0,"byCharacter":{}}}"#
+        let result = try JSONDecoder().decode(ExploreResult.self, from: Data(json.utf8))
+        XCTAssertEqual(result.outcome, .discovered)
+        XCTAssertNil(result.summary.collectibles)
+        let nothing = try JSONDecoder().decode(ExploreResult.self, from: Data(json.replacingOccurrences(of: "something_new", with: "nothing_new").utf8))
+        XCTAssertEqual(nothing.outcome, .nothingNew)
     }
 
     func testExploreActionFollowsViewportWidth() {
@@ -110,7 +142,7 @@ final class WorldModelTests: XCTestCase {
         XCTAssertEqual(model.selection?.id, "flowline:f1")
     }
 
-    private let instances = #"{"instances":[{"id":"q1","title":"Ride","description":"","status":"active","difficulty":"easy","rewardXp":10,"objectives":[{"progress":{"completed":1,"required":2,"complete":false},"objective":{"type":"collectible_targets","targets":[{"id":"c1"},{"id":"c2"}]}}]},{"id":"q2","title":"Old","description":"","status":"failed","difficulty":"easy","rewardXp":10,"objectives":[]}]}"#
+    private let instances = #"{"instances":[{"id":"q1","title":"Ride","description":"","status":"active","difficulty":"easy","rewardXp":10,"objectives":[{"progress":{"completed":1,"required":2,"complete":false},"objective":{"type":"collectible_targets","targets":[{"id":"c1"},{"id":"c2"}]}}]},{"id":"q2","title":"Saved","description":"","status":"planned","difficulty":"easy","rewardXp":10,"objectives":[]},{"id":"q3","title":"Half","description":"","status":"partially_completed","startedAt":"2026-11-01T08:00:00.000Z","difficulty":"easy","rewardXp":10,"objectives":[]}]}"#
     private let targets = #"{"collectibles":[{"id":"c1","name":"Peak","latitude":47.1,"longitude":8.2,"found":false}],"flowlines":[]}"#
 
     func testCapabilitiesSplitGrantedAndLockedFilters() async {
@@ -129,6 +161,11 @@ final class WorldModelTests: XCTestCase {
         let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
         await model.loadQuestTargets()
         XCTAssertEqual(model.activeInstanceIds, ["q1"])
+        XCTAssertEqual(model.instances.map(\.status), ["active", "planned", "partially_completed"])
+        XCTAssertTrue(model.instances[1].isPlanned)
+        XCTAssertNil(model.instances[1].startedAt)
+        XCTAssertEqual(model.instances[2].startedAt, "2026-11-01T08:00:00.000Z")
+        XCTAssertTrue(model.mapQuestTargets.collectibles.isEmpty, "unvisited targets only show for the selected exploration")
         XCTAssertEqual(model.instances.first?.targetProgress.completed, 1)
         XCTAssertEqual(model.instances.first?.targetProgress.total, 2)
 
@@ -142,27 +179,36 @@ final class WorldModelTests: XCTestCase {
         XCTAssertNil(model.highlightedTargets)
     }
 
-    func testCancelAndRetryCallEndpointsThenReload() async {
+    func testStartAndDeleteCallEndpointsThenReload() async {
+        let route = #"{"id":"q2","title":"Saved","status":"planned","geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]}}"#
+        let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"explorationRoutes":[\#(route)]"#)
+        let started = #"{"instance":{"id":"q2","title":"Saved","description":"","status":"active","startedAt":"2026-11-20T10:00:00.000Z","difficulty":"easy","rewardXp":10,"objectives":[]}}"#
         let transport = StubTransport([
-            .init(status: 204, body: ""), .init(status: 200, body: instances), .init(status: 200, body: targets),
+            .init(status: 200, body: body),
+            .init(status: 200, body: started), .init(status: 200, body: instances), .init(status: 200, body: targets),
             .init(status: 204, body: ""), .init(status: 200, body: instances), .init(status: 200, body: targets)
         ])
         let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
-        let cancelled = await model.cancel("q1")
-        let retried = await model.retry("q2")
-        XCTAssertTrue(cancelled && retried)
-        XCTAssertEqual(transport.requests[0].httpMethod, "DELETE")
-        XCTAssertEqual(transport.requests[0].url?.path, "/api/quest-instances/q1")
-        XCTAssertEqual(transport.requests[3].httpMethod, "POST")
-        XCTAssertEqual(transport.requests[3].url?.path, "/api/quest-instances/q2/retry")
-        XCTAssertEqual(model.instances.count, 2)
+        await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
+        let didStart = await model.start("q2")
+        XCTAssertTrue(didStart)
+        XCTAssertEqual(transport.requests[1].httpMethod, "POST")
+        XCTAssertEqual(transport.requests[1].url?.path, "/api/quest-instances/q2/start")
+        XCTAssertEqual(model.explorationRoutes.map(\.id), ["q2"])
+
+        let deleted = await model.delete("q2")
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(transport.requests[4].httpMethod, "DELETE")
+        XCTAssertEqual(transport.requests[4].url?.path, "/api/quest-instances/q2")
+        XCTAssertTrue(model.explorationRoutes.isEmpty, "a deleted exploration leaves the map")
+        XCTAssertEqual(model.instances.count, 3)
         XCTAssertNil(model.pendingInstanceId)
     }
 
-    func testFailedCancelIsReported() async {
+    func testFailedDeleteIsReported() async {
         let model = WorldModel(api: APIClient(baseURL: baseURL, transport: StubTransport([.init(status: 500, body: "{}")])))
-        let cancelled = await model.cancel("q1")
-        XCTAssertFalse(cancelled)
+        let deleted = await model.delete("q1")
+        XCTAssertFalse(deleted)
         XCTAssertTrue(model.instanceActionFailed)
     }
 }

@@ -23,7 +23,8 @@ const outcome = (overrides = {}) => ({
   flowlines: { completedCount: 1, newCount: 1 },
   quests: [
     { result: "completed", title: "Warm up", chainTitle: "Chain", difficulty: "easy", xp: 200, next: { title: "Next one", xp: 250 } },
-    { result: "failed", title: "Long one", criteria: [{ label: "Distance", current: 12, required: 30, met: false, unit: "km" }] }
+    { result: "failed", title: "Long one", criteria: [{ label: "Distance", current: 12, required: 30, met: false, unit: "km" }] },
+    { result: "progressed", title: "Castle loop", criteria: [{ label: "Castles", current: 1, required: 3, met: false }] }
   ],
   ...overrides
 });
@@ -38,6 +39,8 @@ describe("activity outcome", () => {
     const html = ActivityOutcome(outcome());
     expect(html).toContain('data-outcome-quest="completed"');
     expect(html).toContain('data-outcome-quest="failed"');
+    expect(html).toContain('data-outcome-quest="progressed"');
+    expect(html).toContain("Exploration progressed: ");
     expect(html).toContain("12 / 30 km");
     expect(html).not.toContain("Now unlockable");
     expect(ActivityOutcome(outcome({ quests: [] }))).toBe("");

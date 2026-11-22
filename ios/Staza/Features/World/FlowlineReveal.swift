@@ -30,25 +30,30 @@ extension WorldFlowline {
     }
 }
 
-/// `POST /api/world/explore`: what Explore this area revealed.
+/// `POST /api/world/explore`: the area's opportunities for this Explore session only. Nothing is persisted.
 struct ExploreResult: Decodable, Equatable, Sendable {
     enum Outcome: String, Decodable, Sendable {
         case discovered
-        case alreadyExploredNew = "already_explored_new"
-        case alreadyExplored = "already_explored"
         case nothingNew = "nothing_new"
+
+        /// Unknown outcomes from newer servers read as `discovered`.
+        init(from decoder: Decoder) throws {
+            let value = try decoder.singleValueContainer().decode(String.self)
+            self = Outcome(rawValue: value) ?? .discovered
+        }
     }
     struct Summary: Decodable, Equatable, Sendable {
         let total: Int
         var byCharacter: [String: Int] = [:]
+        var collectibles: Int? = nil
     }
     let outcome: Outcome
-    let revealed: [WorldFlowline]
-    /// Every revealed Flowline in the area, including `revealed`.
-    var known: [WorldFlowline] = []
-    /// Revealed Flowlines in the area, including the ones revealed just now.
-    let knownCount: Int
-    /// Eligible Flowlines still hidden after the reveal cap.
+    /// Eligible unridden Flowlines in the area.
+    let flowlines: [WorldFlowline]
+    /// Uncollected collectibles in the area.
+    let collectibles: [WorldCollectible]
+    var collectiblesTruncated: Bool? = nil
+    /// Eligible Flowlines left out by the cap.
     let availableCount: Int
     let summary: Summary
 
@@ -57,7 +62,7 @@ struct ExploreResult: Decodable, Equatable, Sendable {
         let count: Int
     }
 
-    /// Newly revealed Flowlines per primary character, in the fixed tag order, without zero counts.
+    /// Opportunity Flowlines per primary character, in the fixed tag order, without zero counts.
     var breakdown: [Count] {
         FlowlineTag.allCases.compactMap { tag in
             let count = summary.byCharacter[tag.rawValue] ?? 0

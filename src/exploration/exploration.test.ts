@@ -53,15 +53,6 @@ const flowline = (id: string, from: [number, number], to: [number, number], over
   } as WorldFartlek;
 };
 
-/** In-memory per-player Flowline reveals; `initial` are already revealed. */
-const memoryReveals = (initial: string[] = []) => {
-  const revealed = new Set(initial);
-  return {
-    revealed,
-    revealedIds: async (_playerId: string, ids: string[]) => new Set(ids.filter((id) => revealed.has(id)))
-  };
-};
-
 describe("buildExplorationTargets", () => {
   it("keeps published, visible, categorized collectibles as destinations and never Flowlines", () => {
     const { targets, truncated } = buildExplorationTargets([
@@ -167,7 +158,6 @@ describe("ExplorationService", () => {
     routing?: RouteProvider | null;
     collectibles?: WorldCollectible[];
     flowlines?: WorldFartlek[];
-    reveals?: ReturnType<typeof memoryReveals>;
   } = {}) => {
     const created: Array<{ playerId: string; exploration: NewExploration; route: NewPlannedRoute }> = [];
     const routeCalls: unknown[] = [];
@@ -181,7 +171,6 @@ describe("ExplorationService", () => {
         truncated: false
       }),
       ...(routing ? { routing } : {}),
-      reveals: options.reveals ?? memoryReveals((options.flowlines ?? worldFlowlines).map((item) => item.id)),
       sessions: new ExplorationSessionStore(),
       proposals: new ProposalStore(),
       explorations: {
@@ -233,7 +222,7 @@ describe("ExplorationService", () => {
     expect(JSON.stringify(routeCalls)).not.toContain('"through"');
   });
 
-  it("routes an area without collectibles as route-only loops that confirm without objectives", async () => {
+  it("routes an area without collectibles as route-only loops that save without objectives", async () => {
     const { service, created } = setup({ collectibles: [collectible("hidden", 1, 1, { visibility: "hidden" })] });
     const result = await service.generate("p1", generateBody);
     expect(result.proposals.length).toBeGreaterThan(0);
@@ -242,7 +231,7 @@ describe("ExplorationService", () => {
       expect(proposal.waypoints!.length).toBeGreaterThan(0);
     }
     const proposal = result.proposals.find((entry) => entry.recommended)!;
-    await service.confirm("p1", { proposalId: proposal.id });
+    await service.save("p1", { proposalId: proposal.id });
     expect(created[0].exploration.objectives).toEqual([]);
 
     const rerouted = await service.reroute("p1", result.explorationId, { proposalId: proposal.id, targetIds: [], waypoints: [at(2, 2)] });
@@ -250,53 +239,60 @@ describe("ExplorationService", () => {
     await expect(service.reroute("p1", result.explorationId, { proposalId: proposal.id, targetIds: [] })).rejects.toThrow();
   });
 
-  it("routes a loop through one chosen collectible and confirms it as that objective", async () => {
+  it("routes a loop through one chosen collectible and saves it as that objective", async () => {
     const { service, created } = setup();
     const result = await service.generate("p1", { ...generateBody, destinationId: "c-mid" });
     expect(result.proposals.length).toBeGreaterThan(0);
     for (const proposal of result.proposals) expect(proposal.includedTargetIds).toEqual(["c-mid"]);
-    await service.confirm("p1", { proposalId: result.proposals[0].id });
+    await service.save("p1", { proposalId: result.proposals[0].id });
     expect(created[0].exploration.objectives.flatMap((objective) => objective.targets.map((target) => target.id))).toEqual(["c-mid"]);
     await expect(service.generate("p1", { ...generateBody, destinationId: "nope" })).rejects.toThrow();
   });
 
-  describe("hidden Flowlines", () => {
+  describe("Flowline opportunities", () => {
     const filler = (id: string, northKm: number) => flowline(id, [northKm, -8], [northKm, -7], { flowScore: 50 });
-    const scored = [
+    // The area loader offers only plannable Flowlines (opportunities and completed ones); f-east is not.
+    const plannable = [
       flowline("f-near", [2, 0], [3, 0], { flowScore: 90 }),
       flowline("f-west", [-1.5, -3], [1.5, -3], { flowScore: 80 }),
-      flowline("f-east", [0.2, 0.2], [0.8, 0.8], { flowScore: 10 }),
       filler("f-x1", -8), filler("f-x2", -6), filler("f-x3", -4)
     ];
 
-    it("never reveals while planning and plans only with revealed Flowlines", async () => {
-      const reveals = memoryReveals(["f-near", "f-west"]);
-      const { service } = setup({ flowlines: scored, reveals });
+    it("plans only with the area's plannable Flowlines and has no reveal state", async () => {
+      const { service } = setup({ flowlines: plannable });
       const result = await service.generate("p1", generateBody);
       expect(result).not.toHaveProperty("revealedFlowlineIds");
-      expect(result.catalog.flowlines.map((item) => item.id)).toEqual(["f-near", "f-west"]);
-      for (const proposal of result.proposals) {
-        expect(proposal.traversedFlowlines.map((item) => item.id)).not.toContain("f-east");
-      }
-      expect(reveals.revealed).toEqual(new Set(["f-near", "f-west"]));
+      expect(result.catalog.flowlines.map((item) => item.id)).toEqual(["f-near", "f-west", "f-x1", "f-x2", "f-x3"]);
     });
 
-    it("plans routes that ride a chosen revealed Flowline and confirms it as a Flowline objective", async () => {
-      const { service, created } = setup({ flowlines: scored });
+    it("plans routes that ride a chosen Flowline and saves it as a Flowline objective", async () => {
+      const { service, created } = setup({ flowlines: plannable });
       const result = await service.generate("p1", { ...generateBody, destinationFlowlineId: "f-west" });
       expect(result.proposals.length).toBeGreaterThan(0);
       for (const proposal of result.proposals) {
         expect(proposal.traversedFlowlines.map((item) => item.id)).toContain("f-west");
       }
-      await service.confirm("p1", { proposalId: result.proposals[0].id });
-      expect(created[0].exploration.title).toBe("Exploration: f-west");
-      expect(created[0].exploration.objectives).toEqual([
+      await service.save("p1", { proposalId: result.proposals[0].id });
+      expect(created[0].exploration.title).toMatch(/f-west/);
+      expect(created[0].exploration.objectives).toContainEqual(
         { id: "flowline-f-west", type: "flowline_rule", requiredCount: 1, targets: [{ id: "f-west", name: "f-west" }] }
-      ]);
+      );
     });
 
-    it("rejects hidden Flowlines and combined destinations", async () => {
-      const { service } = setup({ flowlines: scored, reveals: memoryReveals(["f-west"]) });
+    it("saves the opportunity Flowlines a generated route rides as stops, never completed ones", async () => {
+      const completedWest = plannable.map((item) => (item.id === "f-west" ? { ...item, completed: true, completionCount: 1 } : item));
+      const { service, created } = setup({ flowlines: completedWest });
+      const result = await service.generate("p1", generateBody);
+      const proposal = result.proposals.find((entry) => entry.traversedFlowlines.length > 0) ?? result.proposals[0];
+      await service.save("p1", { proposalId: proposal.id });
+      const saved = created[0].exploration.objectives
+        .filter((objective) => objective.type === "flowline_rule")
+        .map((objective) => objective.targets[0].id);
+      expect(saved.sort()).toEqual(proposal.traversedFlowlines.map((item) => item.id).filter((id) => id !== "f-west").sort());
+    });
+
+    it("rejects Flowlines the area does not offer and combined destinations", async () => {
+      const { service } = setup({ flowlines: plannable });
       await expect(service.generate("p1", { ...generateBody, destinationFlowlineId: "f-east" })).rejects.toBeInstanceOf(UserInputError);
       await expect(service.generate("p1", { ...generateBody, destinationFlowlineId: "f-west", destinationId: "c-mid" }))
         .rejects.toBeInstanceOf(UserInputError);
@@ -308,7 +304,7 @@ describe("ExplorationService", () => {
       area: { bbox, center: area.center, zoom: 11 }, start: at(0, 0), routeType: "round_trip", stops, ...extra
     });
 
-    it("routes exactly the chosen Flowlines and collectibles and confirms one objective per Flowline", async () => {
+    it("routes exactly the chosen Flowlines and collectibles and saves one objective per Flowline", async () => {
       const { service, created } = setup();
       const result = await service.plan("p1", planBody([
         { kind: "flowline", id: "f-near" },
@@ -319,7 +315,7 @@ describe("ExplorationService", () => {
       expect(result.proposal.stopOrder?.sort()).toEqual(["c-mid", "flowline:f-near", "flowline:f-west"]);
       expect(contents(result.proposal)).not.toContain("c-near");
       expect(created).toHaveLength(0);
-      await service.confirm("p1", { proposalId: result.proposal.id });
+      await service.save("p1", { proposalId: result.proposal.id });
       const objectives = created[0].exploration.objectives;
       expect(objectives.filter((objective) => objective.type === "flowline_rule").map((objective) => objective.targets[0].id).sort())
         .toEqual(["f-near", "f-west"]);
@@ -333,8 +329,8 @@ describe("ExplorationService", () => {
       expect(result.proposal.stopOrder).toEqual(["c-east", "flowline:f-near", "c-near"]);
     });
 
-    it("rejects hidden Flowlines, unknown collectibles and empty plans", async () => {
-      const { service } = setup({ reveals: memoryReveals(["f-near"]) });
+    it("rejects Flowlines the area does not offer, unknown collectibles and empty plans", async () => {
+      const { service } = setup({ flowlines: [flowline("f-near", [2, 0], [3, 0])] });
       await expect(service.plan("p1", planBody([{ kind: "flowline", id: "f-west" }]))).rejects.toBeInstanceOf(UserInputError);
       await expect(service.plan("p1", planBody([{ kind: "collectible", id: "nope" }]))).rejects.toBeInstanceOf(UserInputError);
       await expect(service.plan("p1", planBody([]))).rejects.toBeInstanceOf(UserInputError);
@@ -358,7 +354,7 @@ describe("ExplorationService", () => {
     expect(new Set(contents(proposal))).toEqual(new Set(edited));
     expect(contents(proposal)).not.toContain(removed);
     for (const other of proposals) {
-      expect(await service.confirm("p1", { proposalId: other.id })).toBe(`instance-${other.id}`);
+      expect(await service.save("p1", { proposalId: other.id })).toBe(`instance-${other.id}`);
     }
   });
 
@@ -375,17 +371,17 @@ describe("ExplorationService", () => {
       .rejects.toMatchObject({ code: "exploration_expired" });
     await expect(service.reroute("p1", next.explorationId, { proposalId: base.id, targetIds: ["c-near"] }))
       .rejects.toMatchObject({ code: "proposal_expired" });
-    await expect(service.confirm("p1", { proposalId: base.id })).rejects.toMatchObject({ code: "proposal_expired" });
+    await expect(service.save("p1", { proposalId: base.id })).rejects.toMatchObject({ code: "proposal_expired" });
   });
 
-  it("confirms one exploration with objectives derived from the route contents, idempotently", async () => {
-    const { service, created } = setup();
+  it("saves one exploration with objectives derived from the route contents, idempotently", async () => {
+    const { service, created } = setup({ flowlines: [] });
     const { explorationId, proposals } = await service.generate("p1", generateBody);
     const { proposal } = await service.reroute("p1", explorationId, { proposalId: proposals[0].id, targetIds: ["c-near", "c-mid"] });
 
-    await expect(service.confirm("p2", { proposalId: proposal.id })).rejects.toMatchObject({ code: "proposal_expired" });
-    const instanceId = await service.confirm("p1", { proposalId: proposal.id });
-    expect(await service.confirm("p1", { proposalId: proposal.id })).toBe(instanceId);
+    await expect(service.save("p2", { proposalId: proposal.id })).rejects.toMatchObject({ code: "proposal_expired" });
+    const instanceId = await service.save("p1", { proposalId: proposal.id });
+    expect(await service.save("p1", { proposalId: proposal.id })).toBe(instanceId);
     expect(created).toHaveLength(1);
     expect(created[0].exploration.proposalId).toBe(proposal.id);
     expect(created[0].exploration.objectives.map((objective) => objective.id)).toEqual(["collectibles-peak", "collectibles-place"]);
@@ -408,7 +404,6 @@ describe("ExplorationService outings", () => {
     const service = new ExplorationService({
       loadArea: async (_playerId, bounds) => ({ collectibles: world.filter((item) => inBounds(item, bounds)), flowlines: [], truncated: false }),
       routing: { route: async (request, options) => { requests.push(request); return route(request, options); } },
-      reveals: memoryReveals(),
       sessions: new ExplorationSessionStore(),
       proposals: new ProposalStore(),
       explorations: { createExploration: async (_playerId, _exploration, plannedRoute) => { created.push({ route: plannedRoute }); return "instance"; } },
@@ -428,7 +423,6 @@ describe("ExplorationService outings", () => {
     const leaky = new ExplorationService({
       loadArea: async () => ({ collectibles: [...near, ...ring], flowlines: [], truncated: false }),
       routing: { route: async (request) => straightLineRoute(request) },
-      reveals: memoryReveals(),
       sessions: new ExplorationSessionStore(),
       proposals: new ProposalStore(),
       explorations: { createExploration: async () => "instance" },
@@ -500,7 +494,7 @@ describe("ExplorationService outings", () => {
     const running = setup(near);
     const { proposals } = await running.service.generate("p1", body(20_000, { sport: "running" }));
     expect(running.requests.every((request) => (request as { profile: string }).profile === "pedestrian")).toBe(true);
-    await running.service.confirm("p1", { proposalId: proposals[0].id });
+    await running.service.save("p1", { proposalId: proposals[0].id });
     expect(running.created[0].route.profile).toBe("pedestrian");
 
     const cycling = setup(near);

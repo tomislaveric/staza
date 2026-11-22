@@ -31,9 +31,21 @@ struct WorldFlowline: Decodable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// A saved Exploration's route in `GET /api/world`; drawn the same way whatever its status.
+struct ExplorationRoute: Decodable, Equatable, Identifiable, Sendable {
+    let id: String
+    let title: String
+    let status: String
+    let geometry: LineGeometry
+}
+
 struct WorldViewport: Decodable, Equatable, Sendable {
+    /// Only the player's collected collectibles.
     let collectibles: [WorldCollectible]?
+    /// Only the player's completed Flowlines.
     let fartleks: [WorldFlowline]?
+    /// Saved Exploration routes intersecting the viewport; absent on older servers.
+    var explorationRoutes: [ExplorationRoute]? = nil
     let truncated: Bool?
     /// The viewport is narrow enough to explore.
     var exploreAllowed: Bool? = nil

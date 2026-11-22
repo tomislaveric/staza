@@ -18,7 +18,7 @@ struct RoutePlannerHeader: View {
             }
             Spacer(minLength: StazaSpacing.sm)
             SheetCloseButton { planner.close() }
-                .disabled(planner.status == .confirming)
+                .disabled(planner.status == .saving)
         }
         .padding(.horizontal, StazaSpacing.md)
         .padding(.bottom, StazaSpacing.md)
@@ -30,7 +30,7 @@ struct RoutePlannerPanel: View {
     let planner: RoutePlannerModel
     let userLocation: GeoPoint?
     let onSuggest: () -> Void
-    let onConfirm: () -> Void
+    let onSave: () -> Void
     @Environment(\.locale) private var locale
 
     var body: some View {
@@ -266,16 +266,16 @@ struct RoutePlannerPanel: View {
                 .disabled(!planner.isIdle || planner.stops.isEmpty)
                 .accessibilityIdentifier("plannerRoute")
             } else {
-                Button(action: onConfirm) {
-                    if planner.status == .confirming {
+                Button(action: onSave) {
+                    if planner.status == .saving {
                         SwiftUI.ProgressView().tint(StazaColor.onAccent)
                     } else {
-                        Label("planner.confirm", systemImage: "flag.checkered")
+                        Label("planner.save", systemImage: "square.and.arrow.down")
                     }
                 }
                 .buttonStyle(.stazaPrimaryWide)
                 .disabled(!planner.isIdle)
-                .accessibilityIdentifier("plannerConfirm")
+                .accessibilityIdentifier("plannerSave")
             }
         }
     }

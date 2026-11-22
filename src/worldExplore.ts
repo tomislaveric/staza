@@ -1,38 +1,39 @@
-import type { Fartlek, WorldFartlek } from "./domain.js";
+import type { Fartlek, WorldCollectible, WorldFartlek } from "./domain.js";
 import { UserInputError } from "./errors.js";
 import type { FlowlineCharacterTag } from "./flowlineCharacter.js";
 import {
-  availableToReveal,
+  availableOpportunities,
   exploreAllowed,
   exploreOutcome,
-  FLOWLINES_REVEALED_PER_EXPLORE,
+  FLOWLINE_OPPORTUNITIES_PER_EXPLORE,
   type ExploreOutcome,
-  type RevealCandidate
+  type OpportunityCandidate
 } from "./flowlineReveal.js";
 import { parseBoundsParameter, type GeoBounds } from "./worldQuery.js";
 
 export interface WorldExploreDependencies {
-  reveals: {
-    listRevealedWithinBounds(playerId: string, bounds: GeoBounds): Promise<Fartlek[]>;
-    listHiddenCandidatesWithinBounds(playerId: string, bounds: GeoBounds): Promise<RevealCandidate[]>;
-    reveal(playerId: string, flowlineIds: string[], source: "explore"): Promise<string[]>;
+  flowlines: {
+    /** Scores of the published Flowlines in the area the player has not completed; never geometry. */
+    listOpportunityCandidates(playerId: string, bounds: GeoBounds): Promise<OpportunityCandidate[]>;
     listByIds(flowlineIds: string[]): Promise<Fartlek[]>;
   };
+  /** The area's collectibles the player has not collected yet. */
+  listUncollectedCollectibles(playerId: string, bounds: GeoBounds): Promise<{ collectibles: WorldCollectible[]; truncated: boolean }>;
   /** Projects Flowlines with the player's completion state. */
   toWorld(playerId: string, flowlines: Fartlek[]): Promise<WorldFartlek[]>;
 }
 
+/** Temporary opportunities of one Explore session. Nothing here is persisted. */
 export interface WorldExploreResult {
   outcome: ExploreOutcome;
-  /** Flowlines this Explore revealed for the first time, best first. */
-  revealed: WorldFartlek[];
-  /** Every revealed Flowline in the area after this Explore, including `revealed`. */
-  known: WorldFartlek[];
-  /** Revealed Flowlines in the area after this Explore. */
-  knownCount: number;
-  /** Eligible Flowlines still hidden after this Explore (beyond the per-Explore cap). */
+  /** Flowline opportunities of the area, best first. */
+  flowlines: WorldFartlek[];
+  /** Uncollected collectibles of the area. */
+  collectibles: WorldCollectible[];
+  collectiblesTruncated: boolean;
+  /** Eligible Flowlines beyond the per-Explore cap. */
   availableCount: number;
-  summary: { total: number; byCharacter: Record<FlowlineCharacterTag, number> };
+  summary: { total: number; byCharacter: Record<FlowlineCharacterTag, number>; collectibles: number };
 }
 
 /** `{ bbox }` with the same "minLon,minLat,maxLon,maxLat" format as `GET /api/world`. */
@@ -45,34 +46,34 @@ export const parseExploreRequest = (body: unknown): GeoBounds => {
 };
 
 /**
- * "Explore this area": reveals the area's eligible hidden Flowlines to the player. It never
- * routes, never touches collectibles and never re-reveals known Flowlines; reveals are permanent.
+ * "Explore this area": shows the area's opportunities (eligible Flowlines the player has not
+ * ridden and uncollected collectibles) for this session only. It never writes: only saving an
+ * Exploration or an activity creates persistent world state.
  */
 export const exploreArea = async (
   playerId: string,
   body: unknown,
-  { reveals, toWorld }: WorldExploreDependencies
+  { flowlines, listUncollectedCollectibles, toWorld }: WorldExploreDependencies
 ): Promise<WorldExploreResult> => {
   const bounds = parseExploreRequest(body);
-  const [knownBefore, hidden] = await Promise.all([
-    reveals.listRevealedWithinBounds(playerId, bounds),
-    reveals.listHiddenCandidatesWithinBounds(playerId, bounds)
+  const [candidates, area] = await Promise.all([
+    flowlines.listOpportunityCandidates(playerId, bounds),
+    listUncollectedCollectibles(playerId, bounds)
   ]);
-  const available = availableToReveal(hidden, new Set());
-  const selected = available.slice(0, FLOWLINES_REVEALED_PER_EXPLORE);
-  const newlyRevealed = new Set(await reveals.reveal(playerId, selected.map((candidate) => candidate.id), "explore"));
+  const available = availableOpportunities(candidates, new Set());
+  const selected = available.slice(0, FLOWLINE_OPPORTUNITIES_PER_EXPLORE);
   const order = new Map(selected.map((candidate, index) => [candidate.id, index]));
-  const flowlines = (await reveals.listByIds([...newlyRevealed]))
+  const loaded = (await flowlines.listByIds(selected.map((candidate) => candidate.id)))
     .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-  const [revealed, knownWorld] = await Promise.all([toWorld(playerId, flowlines), toWorld(playerId, knownBefore)]);
+  const opportunities = await toWorld(playerId, loaded);
   const byCharacter: Record<FlowlineCharacterTag, number> = { flow: 0, endurance: 0, explore: 0 };
-  for (const flowline of revealed) byCharacter[flowline.character.primary] += 1;
+  for (const flowline of opportunities) byCharacter[flowline.character.primary] += 1;
   return {
-    outcome: exploreOutcome(knownBefore.length, revealed.length),
-    revealed,
-    known: [...knownWorld, ...revealed],
-    knownCount: knownBefore.length + revealed.length,
-    availableCount: available.length - revealed.length,
-    summary: { total: revealed.length, byCharacter }
+    outcome: exploreOutcome(opportunities.length + area.collectibles.length),
+    flowlines: opportunities,
+    collectibles: area.collectibles,
+    collectiblesTruncated: area.truncated,
+    availableCount: available.length - opportunities.length,
+    summary: { total: opportunities.length, byCharacter, collectibles: area.collectibles.length }
   };
 };

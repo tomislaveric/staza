@@ -46,7 +46,7 @@ import { StravaError } from "./strava/errors.js";
 import { StravaService } from "./strava/service.js";
 import { TokenCipher } from "./strava/tokenCipher.js";
 import { toWorldFartlek } from "./fartlek.js";
-import { exploreAllowed } from "./flowlineReveal.js";
+import { exploreAllowed, isPlannableFlowline } from "./flowlineReveal.js";
 import { exploreArea } from "./worldExplore.js";
 import { createWorldSnapshot } from "./world.js";
 import { THEMED_STYLE_PATH, createThemedStyleLoader, getBasemapConfig, getBasemapOrigins } from "./basemap.js";
@@ -1045,7 +1045,7 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
       const stats = await collectibleRepository.worldStats(discoveredSourceIds);
-      response.json({ collectibles: [], stats, truncated: false, fartleks: [], exploreAllowed: false });
+      response.json({ collectibles: [], stats, truncated: false, fartleks: [], explorationRoutes: [], exploreAllowed: false });
       return;
     }
     const flowlinePolicy = flowlinePolicyForBounds(bounds, config.worldFlowlineLimit);
@@ -1056,11 +1056,13 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
       skipCollectibles
         ? undefined
         : areaBounds
-          ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit)
-          : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      // Only ridden Flowlines are on the map by default; revealed ones come from Explore.
+          // World shows the experienced world only: collected collectibles. Explore shows the rest.
+          ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit, { onlyIds: discoveredSourceIds })
+          : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit, { onlyIds: discoveredSourceIds }),
+      // Only ridden Flowlines are on the map by default; opportunities come from Explore.
       flowlineRevealRepository.listCompletedWithinBoundsLimited(playerId, bounds, flowlinePolicy)
     ]);
+    const explorationRoutes = await questInstanceRepository.listRoutesWithinBounds(playerId, bounds);
     const fartleks = await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
     const world = viewport ? createWorldSnapshot(viewport.collectibles, discoveredSourceIds) : undefined;
     response.json({
@@ -1068,6 +1070,7 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
       ...(viewport ? { truncated: viewport.truncated } : { collectiblesSkipped: true }),
       fartlekTruncated: fartlekResult.truncated,
       fartleks,
+      explorationRoutes,
       exploreAllowed: exploreAllowed(bounds)
     });
   } catch (error) {
@@ -1125,16 +1128,27 @@ const explorationService = new ExplorationService({
       fartlekRepository.listWithinBounds(bounds),
       activityRepository.listDiscoveredCollectibleSourceIds(playerId)
     ]);
+    // Routes may use the area's Flowline opportunities and the player's completed Flowlines.
+    const flowlines = (await worldFartleksForPlayer(playerId, flowlineCandidates)).filter((flowline, index) => {
+      const source = flowlineCandidates[index]!;
+      return isPlannableFlowline({
+        id: source.id,
+        ...(source.flowScore === undefined ? {} : { flowScore: source.flowScore }),
+        ...(source.enduranceScore === undefined ? {} : { enduranceScore: source.enduranceScore }),
+        ...(source.exploreScore === undefined ? {} : { exploreScore: source.exploreScore }),
+        ...(source.roadQualityScore === undefined ? {} : { roadQualityScore: source.roadQualityScore }),
+        ...(source.dataConfidence === undefined ? {} : { dataConfidence: source.dataConfidence })
+      }, flowline.completed);
+    });
     return {
       collectibles: createWorldSnapshot(viewport.collectibles, discoveredSourceIds).collectibles,
-      flowlines: await worldFartleksForPlayer(playerId, flowlineCandidates),
+      flowlines,
       truncated: viewport.truncated
     };
   },
   ...(config.routingServiceUrl
     ? { routing: new RoutingClient({ baseUrl: config.routingServiceUrl, timeoutMs: config.routingServiceTimeoutMs }) }
     : {}),
-  reveals: flowlineRevealRepository,
   sessions: new ExplorationSessionStore(),
   proposals: new ProposalStore(),
   explorations: questInstanceRepository
@@ -1172,12 +1186,14 @@ const loadQuestInstance = async (playerId: string, instanceId: string) => {
 app.post("/api/world/explore", requirePlayer, requireCsrf, routeEditLimiter, async (request: UploadRequest, response, next) => {
   try {
     response.json(await exploreArea(request.user!.playerId, request.body, {
-      reveals: {
-        listRevealedWithinBounds: (playerId, bounds) =>
-          flowlineRevealRepository.listRevealedWithinBoundsLimited(playerId, bounds, { limit: config.worldFlowlineLimit }).then((result) => result.fartleks),
-        listHiddenCandidatesWithinBounds: (playerId, bounds) => flowlineRevealRepository.listHiddenCandidatesWithinBounds(playerId, bounds),
-        reveal: (playerId, ids, source) => flowlineRevealRepository.reveal(playerId, ids, source),
+      flowlines: {
+        listOpportunityCandidates: (playerId, bounds) => flowlineRevealRepository.listOpportunityCandidatesWithinBounds(playerId, bounds),
         listByIds: (ids) => flowlineRevealRepository.listByIds(ids)
+      },
+      listUncollectedCollectibles: async (playerId, bounds) => {
+        const discovered = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
+        const area = await collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit, { exceptIds: discovered });
+        return { collectibles: createWorldSnapshot(area.collectibles, discovered).collectibles, truncated: area.truncated };
       },
       toWorld: worldFartleksForPlayer
     }));
@@ -1210,10 +1226,34 @@ app.post("/api/explorations/:explorationId/reroute", requirePlayer, requireCsrf,
   }
 });
 
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+/** "Save Exploration": persists the planned route as a planned (not started) Exploration. */
+app.post("/api/explorations/save", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+  try {
+    const playerId = request.user!.playerId;
+    const instanceId = await explorationService.save(playerId, request.body);
+    const [instance, plannedRoute] = await Promise.all([
+      loadQuestInstance(playerId, instanceId),
+      questInstanceRepository.getPlannedRoute(playerId, instanceId)
+    ]);
+    response.json({ instance, plannedRoute });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Older clients' "Start Exploration" from the planner: save, then start right away. */
 app.post("/api/explorations/confirm", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
   try {
     const playerId = request.user!.playerId;
-    const instanceId = await explorationService.confirm(playerId, request.body);
+    const instanceId = await explorationService.save(playerId, request.body);
+    try {
+      await questInstanceRepository.start(playerId, instanceId);
+    } catch (error) {
+      // Repeating a confirmation returns the already started Exploration.
+      if (!(error instanceof QuestInstanceStateError)) throw error;
+    }
     const [instance, plannedRoute] = await Promise.all([
       loadQuestInstance(playerId, instanceId),
       questInstanceRepository.getPlannedRoute(playerId, instanceId)
@@ -1270,6 +1310,7 @@ app.delete("/api/quest-instances/:instanceId", requirePlayer, requireCsrf, async
   try {
     const playerId = request.user!.playerId;
     const instanceId = String(request.params.instanceId);
+    if (!isUuid(instanceId)) throw new QuestInstanceNotFoundError();
     await questInstanceRepository.cancel(playerId, instanceId);
     response.status(204).end();
   } catch (error) {
@@ -1285,10 +1326,14 @@ app.delete("/api/quest-instances/:instanceId", requirePlayer, requireCsrf, async
   }
 });
 
-app.post("/api/quest-instances/:instanceId/retry", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
+/** "Start Exploration": a saved (planned) Exploration starts counting activities from now. */
+app.post("/api/quest-instances/:instanceId/start", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
   try {
-    await questInstanceRepository.retry(request.user!.playerId, String(request.params.instanceId));
-    response.status(204).end();
+    const playerId = request.user!.playerId;
+    const instanceId = String(request.params.instanceId);
+    if (!isUuid(instanceId)) throw new QuestInstanceNotFoundError();
+    await questInstanceRepository.start(playerId, instanceId);
+    response.json({ instance: await loadQuestInstance(playerId, instanceId) });
   } catch (error) {
     if (error instanceof QuestInstanceNotFoundError) {
       response.status(404).json({ error: error.message });

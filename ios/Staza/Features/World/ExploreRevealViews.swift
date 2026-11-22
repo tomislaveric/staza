@@ -123,10 +123,12 @@ struct PlanRouteButton: View {
 
 // MARK: - Result banner
 
-/// What the last Explore found, shown at the top of the discoveries sheet.
+/// What this Explore session found, shown at the top of the opportunities sheet, with its actions.
 struct ExploreResultBanner: View {
     let state: ExploreState
     let onZoomOut: () -> Void
+    var onGenerate: () -> Void = {}
+    var onViewOpportunities: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.sm) {
@@ -158,22 +160,33 @@ struct ExploreResultBanner: View {
                 .buttonStyle(.stazaSecondary)
             }
             Text("world.explore.nothing.body").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
-        case .alreadyExplored:
-            header(Text("world.explore.explored.title"), systemImage: "checkmark.seal", tint: StazaColor.success)
-            Text("world.explore.known \(result.knownCount)").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
-        case .discovered, .alreadyExploredNew:
+        case .discovered:
             header(Text("world.explore.discovered \(result.summary.total)"), systemImage: "sparkles", tint: StazaColor.accent)
-            if result.outcome == .alreadyExploredNew {
-                Text("world.explore.knownNew \(max(0, result.knownCount - result.summary.total)) \(result.summary.total)")
-                    .font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
-            }
-            if !result.breakdown.isEmpty {
+            if !result.breakdown.isEmpty || !result.collectibles.isEmpty {
                 MoreFlowLayout {
                     ForEach(result.breakdown, id: \.tag) { entry in
                         StazaChip(entry.tag.breakdown(entry.count), systemImage: entry.tag.systemImage, tint: entry.tag.tint)
                     }
+                    if !result.collectibles.isEmpty {
+                        StazaChip("world.explore.collectibles \(result.summary.collectibles ?? result.collectibles.count)", systemImage: "mappin", tint: StazaColor.textMuted)
+                    }
                 }
                 .accessibilityElement(children: .combine)
+            }
+        }
+        Text("world.explore.session.hint").font(StazaFont.caption).foregroundStyle(StazaColor.textSubtle)
+        HStack(spacing: StazaSpacing.sm) {
+            Button(action: onGenerate) {
+                Label("world.explore.generate", systemImage: "sparkles")
+            }
+            .buttonStyle(.stazaPrimaryWide)
+            .accessibilityIdentifier("exploreGenerate")
+            if result.outcome == .discovered {
+                Button(action: onViewOpportunities) {
+                    Label("world.explore.viewOpportunities", systemImage: "list.bullet")
+                }
+                .buttonStyle(.stazaSecondary)
+                .accessibilityIdentifier("exploreViewOpportunities")
             }
         }
     }
@@ -209,21 +222,23 @@ struct DiscoveriesHeader: View {
     }
 }
 
-/// "View discoveries": what the visible area holds and its revealed Flowlines, sortable.
+/// The Explore session: what the explored area offers and its opportunity Flowlines, sortable.
 struct DiscoveriesContent: View {
     let model: WorldModel
     let planner: RoutePlannerModel
     let origin: GeoPoint?
+    var onGenerate: () -> Void = {}
+    var onViewOpportunities: () -> Void = {}
     let onViewOnMap: (WorldFlowline) -> Void
     var onZoomOut: () -> Void = {}
     @State private var sort = DiscoverySort.flow
     @Environment(\.locale) private var locale
 
     var body: some View {
-        let counts = AreaCounts(collectibles: model.collectibles, flowlines: model.discoveries)
+        let counts = AreaCounts(collectibles: model.sessionCollectibles, flowlines: model.sessionFlowlines)
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
             if let state = model.exploreState, state != .exploring {
-                ExploreResultBanner(state: state, onZoomOut: onZoomOut)
+                ExploreResultBanner(state: state, onZoomOut: onZoomOut, onGenerate: onGenerate, onViewOpportunities: onViewOpportunities)
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: StazaSpacing.sm) {
@@ -238,14 +253,14 @@ struct DiscoveriesContent: View {
             .scrollClipDisabled()
             .accessibilityIdentifier("discoveriesCounts")
 
-            if model.discoveries.isEmpty {
+            if model.sessionFlowlines.isEmpty {
                 Text("world.discoveries.empty").font(StazaFont.subheadline).foregroundStyle(StazaColor.textMuted)
             } else {
                 Picker("world.discoveries.sort", selection: $sort) {
                     ForEach(DiscoverySort.allCases) { Text(label($0)).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                ForEach(sort.sorted(model.discoveries, origin: origin)) { card($0) }
+                ForEach(sort.sorted(model.sessionFlowlines, origin: origin)) { card($0) }
             }
         }
         .padding(.horizontal, StazaSpacing.md)

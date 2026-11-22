@@ -615,6 +615,35 @@
 }
 .quest-instance-cancel:focus-visible { outline: 2px solid rgb(248 113 113 / 85%); outline-offset: 2px; }
 .quest-instance-cancel:disabled { cursor: default; opacity: .55; }
+.quest-card-select { flex: 1; }
+.quest-status-chip {
+  border: 1px solid var(--border-faint);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+.quest-status-chip.is-active, .quest-status-chip.is-partially_completed { border-color: rgb(232 184 10 / 45%); color: var(--accent-yellow); }
+.quest-status-chip.is-completed { background: rgb(232 184 10 / 14%); border-color: var(--accent-yellow); color: var(--accent-yellow); }
+.quest-instance-start {
+  background: transparent;
+  border: 1px solid rgb(232 184 10 / 45%);
+  border-radius: 6px;
+  color: var(--accent-yellow);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  justify-self: start;
+  min-height: 32px;
+  padding: 0 12px;
+}
+.quest-instance-start:hover:not(:disabled) { color: var(--text-primary); }
+.quest-instance-start:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+.quest-instance-start:disabled { cursor: default; opacity: .55; }
 .quest-card-progress { border-top: 1px solid var(--border-faint); padding-top: 7px; }
 .default-quest-empty { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin: 0; }
 .quest-card-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; }

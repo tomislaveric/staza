@@ -3,12 +3,13 @@ import { CollectibleSwatch } from "./collectible-swatch.js";
 import { formatRouteDistance, formatRouteDuration, SPORT_OPTIONS } from "./route-format.js";
 
 /**
- * Manual "Plan a route" state. The player chooses every stop - revealed Flowlines, collectibles and
- * map points - and Staza only connects them. Staza orders the stops unless the player reordered them
- * (`keepOrder`). "Suggest route" is optional and replaces the stops with a suggested set.
+ * Manual "Plan a route" state. The player edits every stop - the Explore session's Flowlines,
+ * collectibles and map points - and Staza only connects them. Staza orders the stops unless the
+ * player reordered them (`keepOrder`). "Generate route" replaces the stops with a generated set.
+ * Saving is the only persistence step; starting the saved Exploration happens from the list.
  * - `adding`: "flowline" | "collectible" | "waypoint" while the map adds that kind of stop.
  * - `picking`: "start" | "end" while the map sets that endpoint.
- * - `status`: "idle" | "routing" | "suggesting" | "confirming".
+ * - `status`: "idle" | "routing" | "suggesting" | "saving".
  * - `proposal`: the routed result for the current stops; cleared by every edit.
  */
 export const createPlannerState = ({ start, stops = [] } = {}) => ({
@@ -128,7 +129,7 @@ export const buildPlanRequest = (state) => {
   };
 };
 
-/** "Suggest route": the old generator, bounded to the visible area and the player's revealed Flowlines. */
+/** "Generate route": bounded to the explored area and the session's opportunities. */
 export const buildSuggestRequest = (state, area) => {
   if (!state.start) return { error: "Choose a start on the map." };
   return { body: { area, sport: state.sport, start: state.start, routeType: "round_trip" } };
@@ -156,11 +157,11 @@ const formatPoint = (point) => point ? `${point.lat.toFixed(4)}, ${point.lon.toF
 const statusLine = (state) => {
   if (state.error) return `<p class="route-planner-error" role="alert">${escapeHtml(state.error)}</p>`;
   if (state.status === "routing") return '<p class="route-planner-status" role="status">Connecting your stops\u2026</p>';
-  if (state.status === "suggesting") return '<p class="route-planner-status" role="status">Finding a suggestion\u2026</p>';
-  if (state.status === "confirming") return '<p class="route-planner-status" role="status">Starting exploration\u2026</p>';
+  if (state.status === "suggesting") return '<p class="route-planner-status" role="status">Generating a route\u2026</p>';
+  if (state.status === "saving") return '<p class="route-planner-status" role="status">Saving exploration\u2026</p>';
   if (state.picking === "start") return '<p class="route-planner-status" role="status">Click the map to set your start.</p>';
   if (state.picking === "end") return '<p class="route-planner-status" role="status">Click the map to set your end point.</p>';
-  if (state.adding === "flowline") return '<p class="route-planner-status" role="status">Select a revealed Flowline on the map.</p>';
+  if (state.adding === "flowline") return '<p class="route-planner-status" role="status">Select a Flowline on the map.</p>';
   if (state.adding === "collectible") return '<p class="route-planner-status" role="status">Select a collectible on the map.</p>';
   if (state.adding === "waypoint") return '<p class="route-planner-status" role="status">Click the map to add a waypoint.</p>';
   return "";
@@ -187,7 +188,7 @@ export const RoutePlannerPanel = (state) => {
     <section class="world-detail exploration-panel route-planner" aria-label="Plan a route">
       <header>
         <div>
-          <p class="world-detail-meta"><small>Connect what you discovered</small></p>
+          <p class="world-detail-meta"><small>Connect this area's opportunities</small></p>
           <h2>Plan a route</h2>
         </div>
         <button type="button" class="world-detail-close" data-planner-close aria-label="Close route planner">\u2715</button>
@@ -214,14 +215,14 @@ export const RoutePlannerPanel = (state) => {
             </li>`).join("")}
         </ol>
         <p class="route-planner-note">${state.keepOrder ? "Your order is kept." : "Staza orders the stops; move one to keep your own order."}</p>`
-        : '<p class="route-planner-note">Add revealed Flowlines, collectibles or waypoints. Staza only connects what you choose.</p>'}
+        : '<p class="route-planner-note">Add Flowlines, collectibles or waypoints. Staza only connects what you choose.</p>'}
       <div class="exploration-route-actions route-planner-add" role="group" aria-label="Add stops">
         ${Object.entries(addLabels).map(([kind, label]) => `<button type="button" data-planner-add="${kind}" aria-pressed="${state.adding === kind}"${idle ? "" : " disabled"}>${label}</button>`).join("")}
       </div>
       ${statusLine(state)}
       <div class="route-planner-commands">
         <button type="button" class="route-planner-submit" data-planner-route${idle && state.start && state.stops.length ? "" : " disabled"}>Route</button>
-        <button type="button" data-planner-suggest${idle && state.start ? "" : " disabled"}>Suggest route</button>
+        <button type="button" data-planner-suggest${idle && state.start ? "" : " disabled"}>Generate route</button>
       </div>
       ${proposal ? `
         <div class="route-planner-result" data-planner-result>
@@ -231,8 +232,8 @@ export const RoutePlannerPanel = (state) => {
             ${Number.isFinite(proposal.elevationGainM) ? `<span>\u2191 ${Math.round(proposal.elevationGainM)} m</span>` : ""}
           </p>
           ${dropped.length ? `<p class="route-planner-note">Couldn't route ${escapeHtml(dropped.map(stopName).join(", "))}, so ${dropped.length === 1 ? "it was" : "they were"} left out.</p>` : ""}
-          <p class="route-planner-note">Routes are a planning aid. Progress only counts from your recorded activities after you start.</p>
-          <button type="button" class="route-planner-confirm" data-planner-confirm${idle ? "" : " disabled"}>Start Exploration</button>
+          <p class="route-planner-note">Saving keeps this route on your World. Start it whenever you go; progress only counts from activities after you start.</p>
+          <button type="button" class="route-planner-confirm" data-planner-save${idle ? "" : " disabled"}>Save Exploration</button>
         </div>` : ""}
     </section>
   `;

@@ -2,7 +2,7 @@ import CoreLocation
 import Foundation
 import Observation
 
-/// A stop of a manual route: a revealed Flowline, a collectible or a map point.
+/// A stop of a manual route: an opportunity or completed Flowline, a collectible or a map point.
 enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
     case flowline(WorldFlowline)
     case collectible(WorldCollectible)
@@ -56,12 +56,13 @@ enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
     }
 }
 
-/// Manual "Plan a route". The player chooses every stop; Staza only connects them, ordering the stops
-/// unless the player reordered them. "Suggest route" is optional and replaces the stops.
+/// Route editor. "Generate route" proposes a route from the Explore session's opportunities; the player
+/// can then edit every stop and Staza only connects them, ordering the stops unless the player
+/// reordered them. "Save Exploration" persists the route as a planned Exploration; it never starts it.
 @MainActor
 @Observable
 final class RoutePlannerModel {
-    enum Status: Equatable { case idle, routing, suggesting, confirming }
+    enum Status: Equatable { case idle, routing, suggesting, saving }
     enum RouteType: String { case roundTrip = "round_trip", pointToPoint = "point_to_point" }
     enum Sport: String, CaseIterable, Identifiable {
         case cycling, running, hiking
@@ -99,7 +100,7 @@ final class RoutePlannerModel {
 
     var isIdle: Bool { status == .idle }
 
-    /// The route to draw: the planner's proposal, else the confirmed planned route.
+    /// The route to draw: the planner's proposal, else the selected saved route.
     var displayedRoute: [CLLocationCoordinate2D] {
         proposal?.geometry.clCoordinates ?? plannedRoute?.geometry.clCoordinates ?? []
     }
@@ -220,7 +221,8 @@ final class RoutePlannerModel {
         }
     }
 
-    /// "Suggest route": proposes collectibles in the visible area as stops, which the player can edit.
+    /// "Generate route": proposes a route in the explored area. Its stops are the included collectibles and
+    /// the opportunity Flowlines it rides; the player can edit them.
     func suggest(in bounds: WorldBounds, catalog: (String) -> WorldCollectible?) async {
         guard isIdle else { return }
         guard let start else { return fail(.missingStart) }
@@ -232,28 +234,31 @@ final class RoutePlannerModel {
                 return
             }
             let byId = Dictionary(result.catalog.collectibles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            let ridden = Set((suggestion.traversedFlowlines ?? []).map(\.id))
+            let flowlineStops = (result.catalog.flowlines ?? []).filter { !$0.completed && ridden.contains($0.id) }
             stops = suggestion.includedTargetIds.compactMap { byId[$0] ?? catalog($0) }.map(PlannerStop.collectible)
+                + flowlineStops.map(PlannerStop.flowline)
             keepOrder = false
             routeType = .roundTrip
             proposal = suggestion
         }
     }
 
-    /// "Start Exploration": persists the routed plan as a QuestInstance with its PlannedRoute.
+    /// "Save Exploration": persists the routed plan as a planned QuestInstance with its PlannedRoute and
+    /// closes the planner. Starting it is a separate action in the Explorations list.
     @discardableResult
-    func confirm() async -> Bool {
+    func save() async -> Bool {
         guard isIdle, let proposal else { return false }
-        var confirmed = false
-        await run(.confirming) { [self] in
-            let response: ConfirmedExploration = try await api.post("/api/explorations/confirm", body: ConfirmRequest(proposalId: proposal.id))
+        var saved = false
+        await run(.saving) { [self] in
+            let _: SavedExploration = try await api.post("/api/explorations/save", body: SaveRequest(proposalId: proposal.id))
             close()
-            plannedRoute = response.plannedRoute
-            confirmed = true
+            saved = true
         }
-        return confirmed
+        return saved
     }
 
-    /// Shows the planned route of the first active exploration that has one.
+    /// Shows the planned route of the first exploration that has one.
     func loadPlannedRoute(instanceIds: [String]) async {
         guard !isActive else { return }
         for id in instanceIds {

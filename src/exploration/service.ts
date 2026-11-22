@@ -17,7 +17,7 @@ import { describeExploration, explorationObjectives, flowlineObjective, withObje
 import { parseExplorationId, parseGenerateRequest, parsePlanRequest, parseRerouteRequest } from "./request.js";
 import type { ExplorationSessionStore } from "./sessionStore.js";
 
-/** Exploration persisted on confirmation; its id is the confirmed proposal id (idempotency key). */
+/** Exploration persisted when the player saves a route; its id is the saved proposal id (idempotency key). */
 export interface NewExploration {
   proposalId: string;
   title: string;
@@ -26,17 +26,18 @@ export interface NewExploration {
 }
 
 export interface ExplorationDependencies {
-  /** Eligible World objects of the frozen area for the player, nearest to the area center first; Flowlines include hidden ones. */
+  /**
+   * Plannable World objects of the frozen area for the player, nearest to the area center first:
+   * its collectibles and the Flowlines a route may use (the area's opportunities and the player's
+   * completed ones). Planning is stateless: it never depends on, or writes, reveal state.
+   */
   loadArea(playerId: string, bounds: GeoBounds): Promise<{ collectibles: WorldCollectible[]; flowlines: WorldFartlek[]; truncated: boolean }>;
-  /** Per-player Flowline reveal state: planning only ever sees revealed Flowlines and never reveals. */
-  reveals: {
-    revealedIds(playerId: string, flowlineIds: string[]): Promise<Set<string>>;
-  };
   /** Undefined when no routing service is configured. */
   routing?: RouteProvider;
   sessions: ExplorationSessionStore;
   proposals: ProposalStore;
   explorations: {
+    /** Saves a planned (not started) Exploration; idempotent per proposal id. */
     createExploration(playerId: string, exploration: NewExploration, route: NewPlannedRoute): Promise<string>;
   };
   log?: (entry: Record<string, unknown>) => void;
@@ -114,7 +115,7 @@ const insufficientAreaWarning = (input: RoutePlanningInput, proposals: RouteProp
 export interface GeneratedExploration {
   explorationId: string;
   proposals: PublicRouteProposal[];
-  /** Eligible destinations (collectibles) and the area's revealed Flowlines: rendered for the selected route and while adding destinations. */
+  /** Eligible destinations (collectibles) and the area's plannable Flowlines: rendered for the selected route and while adding destinations. */
   catalog: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[] };
   truncated: boolean;
   limits: { maxRouteTargets: number; maxRouteWaypoints: number };
@@ -129,6 +130,12 @@ export interface PlannedExploration {
   limits: { maxRouteTargets: number; maxRouteWaypoints: number; maxRouteFlowlines: number };
 }
 
+/** The frozen area's collectibles (destinations must lie inside it) and its plannable Flowlines. */
+const areaWorld = (
+  viewport: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[]; truncated: boolean },
+  inArea: (point: { latitude: number; longitude: number }) => boolean
+) => ({ collectibles: viewport.collectibles.filter(inArea), flowlines: viewport.flowlines, truncated: viewport.truncated });
+
 const planningFailure = (error: unknown): unknown => error instanceof PlanningError
   ? new ExplorationError(error.code === "routing_unavailable" ? "planning_unavailable" : error.code)
   : error;
@@ -136,7 +143,7 @@ const planningFailure = (error: unknown): unknown => error instanceof PlanningEr
 /**
  * Route-first "Explore this Area": the player describes the ride, the planner chooses target
  * combinations and returns a few route proposals, the player may customize one route's targets,
- * and only the confirmed route is persisted. Planning never changes gameplay state.
+ * and only a saved route is persisted (as a planned Exploration). Planning never changes gameplay state.
  */
 export class ExplorationService {
   constructor(private readonly dependencies: ExplorationDependencies) {}
@@ -171,16 +178,13 @@ export class ExplorationService {
     if (input.routeType === "point_to_point" && !insideBounds([input.end.lon, input.end.lat], area.bounds, 0)) {
       throw new UserInputError("The destination must be inside the explored area.");
     }
-    const viewport = await this.dependencies.loadArea(playerId, area.bounds);
     const inArea = ({ latitude, longitude }: { latitude: number; longitude: number }) => insideBounds([longitude, latitude], area.bounds, 0);
-    // Destinations must lie inside the frozen area, whatever the world query returned.
-    // Planning only ever sees revealed Flowlines and never reveals any: only Explore does.
-    const world = await this.revealedWorld(playerId, viewport, inArea);
+    const world = areaWorld(await this.dependencies.loadArea(playerId, area.bounds), inArea);
     const requiredFlowline = destinationFlowlineId
       ? buildFlowlineGeometries(world.flowlines).find((flowline) => flowline.id === destinationFlowlineId)
       : undefined;
     if (destinationFlowlineId && !requiredFlowline) {
-      throw new UserInputError("The Flowline must be revealed and inside the explored area.");
+      throw new UserInputError("The Flowline must be inside the explored area.");
     }
     const resolve = () => {
       const built = buildExplorationTargets(world.collectibles);
@@ -245,8 +249,20 @@ export class ExplorationService {
     const warnings: ExplorationWarning[] = planned.every((entry) => entry.proposal.constraintFit === "short")
       ? [insufficientAreaWarning(input, planned.map((entry) => entry.proposal))]
       : [];
-    const flowlines = requiredFlowline ? [{ id: requiredFlowline.id, name: requiredFlowline.name }] : [];
-    this.dependencies.proposals.replaceForPlayer(playerId, planned.map((entry) => this.store(session.id, entry, available, input, flowlines)));
+    // A generated route's stops are its collectibles and the opportunity Flowlines it rides.
+    const opportunities = new Set(session.flowlines.filter((flowline) => !flowline.completed).map((flowline) => flowline.id));
+    const flowlineStops = (proposal: RouteProposal) => {
+      const stops = new Map<string, { id: string; name: string }>();
+      if (requiredFlowline) stops.set(requiredFlowline.id, { id: requiredFlowline.id, name: requiredFlowline.name });
+      for (const flowline of proposal.traversedFlowlines) {
+        if (opportunities.has(flowline.id) && !stops.has(flowline.id)) stops.set(flowline.id, { id: flowline.id, name: flowline.name });
+      }
+      return [...stops.values()];
+    };
+    this.dependencies.proposals.replaceForPlayer(
+      playerId,
+      planned.map((entry) => this.store(session.id, entry, available, input, flowlineStops(entry.proposal)))
+    );
     return {
       explorationId: session.id,
       proposals: planned.map((entry) => toPublic(entry.proposal)),
@@ -254,20 +270,6 @@ export class ExplorationService {
       truncated: session.truncated,
       limits: { maxRouteTargets: PLANNING_LIMITS.maxRouteTargets, maxRouteWaypoints: PLANNING_LIMITS.maxRouteWaypoints },
       warnings
-    };
-  }
-
-  /** The frozen area's collectibles and only the player's revealed Flowlines. */
-  private async revealedWorld(
-    playerId: string,
-    viewport: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[]; truncated: boolean },
-    inArea: (point: { latitude: number; longitude: number }) => boolean
-  ) {
-    const revealed = await this.dependencies.reveals.revealedIds(playerId, viewport.flowlines.map((flowline) => flowline.id));
-    return {
-      collectibles: viewport.collectibles.filter(inArea),
-      flowlines: viewport.flowlines.filter((flowline) => revealed.has(flowline.id)),
-      truncated: viewport.truncated
     };
   }
 
@@ -284,7 +286,7 @@ export class ExplorationService {
     if (input.routeType === "point_to_point" && !insideBounds([input.end.lon, input.end.lat], area.bounds, 0)) {
       throw new UserInputError("The destination must be inside the explored area.");
     }
-    const world = await this.revealedWorld(playerId, await this.dependencies.loadArea(playerId, area.bounds), inArea);
+    const world = areaWorld(await this.dependencies.loadArea(playerId, area.bounds), inArea);
     const { targets: available } = buildExplorationTargets(world.collectibles);
     const targetsById = new Map(available.map((target) => [target.id, target]));
     const geometries = buildFlowlineGeometries(world.flowlines);
@@ -302,7 +304,7 @@ export class ExplorationService {
     const stops: ManualStop[] = request.stops.map((stop) => {
       if (stop.kind === "flowline") {
         const flowline = geometriesById.get(stop.id);
-        if (!flowline) throw new UserInputError("Flowlines must be revealed and inside the explored area.");
+        if (!flowline) throw new UserInputError("Flowlines must be inside the explored area.");
         return { kind: "flowline", flowline };
       }
       if (stop.kind === "collectible") return { kind: "target", target: withObjectives.get(stop.id)! };
@@ -347,7 +349,7 @@ export class ExplorationService {
 
   /**
    * Re-plans one proposal for an edited target set from the frozen area. Other proposals are not
-   * touched, and the base proposal stays confirmable (the player may reset to it).
+   * touched, and the base proposal stays savable (the player may reset to it).
    */
   async reroute(playerId: string, explorationIdValue: unknown, body: unknown, requestId: string = randomUUID()): Promise<{ proposal: PublicRouteProposal }> {
     const routing = this.requireRouting();
@@ -392,11 +394,11 @@ export class ExplorationService {
   }
 
   /**
-   * Persists the exploration and its route. The client sends only the proposal id; targets,
-   * geometry and objectives come from server memory, so they cannot be tampered with. Repeating
-   * a confirmation returns the same exploration.
+   * "Save Exploration": persists a planned (not started) Exploration and its route. The client
+   * sends only the proposal id; targets, geometry and objectives come from server memory, so they
+   * cannot be tampered with. Saving the same proposal again returns the same Exploration.
    */
-  async confirm(playerId: string, body: unknown): Promise<string> {
+  async save(playerId: string, body: unknown): Promise<string> {
     const proposalId = parseProposalId(body);
     const stored = this.dependencies.proposals.get(playerId, proposalId);
     if (!stored) throw new ExplorationError("proposal_expired");

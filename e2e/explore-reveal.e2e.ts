@@ -1,8 +1,8 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 /**
- * Explore → reveal → plan with stubbed World data, so the flow does not depend on which Flowlines
- * the test player has already revealed. The real page, map and client logic run unchanged.
+ * Explore → generate → save → start with stubbed World data, so the flow does not depend on the
+ * test player's history. The real page, map and client logic run unchanged.
  */
 const line = (lon: number) => ({ type: "LineString", coordinates: [[lon, 47.5], [lon + 0.02, 47.51]] });
 const flowline = (id: string, name: string, lon: number, character: "flow" | "endurance") => ({
@@ -10,39 +10,65 @@ const flowline = (id: string, name: string, lon: number, character: "flow" | "en
   flowScore: character === "flow" ? 84 : 55, enduranceScore: character === "endurance" ? 80 : 40, roadQualityScore: 91,
   character: { primary: character, tags: [character] }
 });
-const revealed = [flowline("f-rhine", "Rheintal Flowline", 8.5, "flow"), flowline("f-hills", "Hill Loop", 8.55, "endurance")];
+const opportunities = [flowline("f-rhine", "Rheintal Flowline", 8.5, "flow"), flowline("f-hills", "Hill Loop", 8.55, "endurance")];
+const castle = { id: "c-castle", name: "Hill Castle", type: "landmark", primaryCategory: "castle", found: false, latitude: 47.505, longitude: 8.51 };
+const routeGeometry = { type: "LineString", coordinates: [[8.5, 47.5], [8.52, 47.51], [8.5, 47.5]] };
+
+const objectives = [{
+  objective: { id: "flowlines", type: "flowline_rule", requiredCount: 1, targets: [{ id: "f-rhine", name: "Rheintal Flowline" }] },
+  progress: { completed: 0, required: 1, complete: false },
+  targetProgress: [{ id: "f-rhine", name: "Rheintal Flowline", complete: false }]
+}];
+const instance = (status: "planned" | "active") => ({
+  id: "00000000-0000-4000-8000-000000000001", title: "Exploration: Rheintal Flowline", description: "Complete 1 Flowline.",
+  status, ...(status === "active" ? { startedAt: "2026-04-01T10:00:00.000Z" } : {}), objectives
+});
 
 const json = (route: Route, body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 
 const stubWorld = async (page: Page) => {
-  const planBodies: Record<string, unknown>[] = [];
-  // The viewport only carries completed Flowlines; revealed ones come from Explore.
-  await page.route(/\/api\/world\?/, (route) => json(route, { collectibles: [], fartleks: [], truncated: false, exploreAllowed: true }));
-  await page.route(/\/api\/world\/explore$/, (route) => {
-    return json(route, {
-      outcome: "discovered", revealed, known: revealed, knownCount: 2, availableCount: 0,
-      summary: { total: 2, byCharacter: { flow: 1, endurance: 1, explore: 0 } }
-    });
-  });
-  await page.route(/\/api\/explorations\/plan$/, (route) => {
-    planBodies.push(route.request().postDataJSON());
+  const calls: { generate: Record<string, unknown>[]; save: Record<string, unknown>[]; start: number } = { generate: [], save: [], start: 0 };
+  let instances: ReturnType<typeof instance>[] = [];
+  // The default World carries only the player's persistent world; opportunities come from Explore.
+  await page.route(/\/api\/world\?/, (route) => json(route, { collectibles: [], fartleks: [], explorationRoutes: [], truncated: false, exploreAllowed: true }));
+  await page.route(/\/api\/world\/explore$/, (route) => json(route, {
+    outcome: "discovered", flowlines: opportunities, collectibles: [castle], collectiblesTruncated: false, availableCount: 0,
+    summary: { total: 2, byCharacter: { flow: 1, endurance: 1, explore: 0 }, collectibles: 1 }
+  }));
+  await page.route(/\/api\/explorations\/generate$/, (route) => {
+    calls.generate.push(route.request().postDataJSON());
     return json(route, {
       explorationId: "e2e-exploration",
-      proposal: {
-        id: "e2e-proposal", label: "balanced", recommended: true, distanceM: 24_000, durationS: 4_200,
-        geometry: { type: "LineString", coordinates: [[8.5, 47.5], [8.52, 47.51], [8.5, 47.5]] },
-        start: { lat: 47.5, lon: 8.5 }, includedTargetIds: [], flowlineIds: ["f-rhine"], stopOrder: ["flowline:f-rhine"]
-      }
+      proposals: [{
+        id: "e2e-proposal", label: "balanced", recommended: true, distanceM: 24_000, durationS: 4_200, geometry: routeGeometry,
+        routeType: "round_trip", start: { lat: 47.5, lon: 8.5 }, end: { lat: 47.5, lon: 8.5 },
+        includedTargetIds: ["c-castle"], traversedFlowlines: [{ id: "f-rhine", name: "Rheintal Flowline", lengthMeters: 3800 }]
+      }],
+      catalog: { collectibles: [castle], flowlines: opportunities },
+      truncated: false,
+      limits: { maxRouteTargets: 12, maxRouteWaypoints: 8 }
     });
   });
-  return planBodies;
+  await page.route(/\/api\/explorations\/save$/, (route) => {
+    calls.save.push(route.request().postDataJSON());
+    instances = [instance("planned")];
+    return json(route, { instance: instances[0], plannedRoute: { id: "r1", geometry: routeGeometry, distanceM: 24_000, durationS: 4_200, routeType: "round_trip", start: { lat: 47.5, lon: 8.5 } } });
+  });
+  await page.route(/\/api\/quest-instances$/, (route) => json(route, { instances }));
+  await page.route(/\/api\/quest-instances\/[^/]+\/start$/, (route) => {
+    calls.start += 1;
+    instances = [instance("active")];
+    return json(route, { instance: instances[0] });
+  });
+  await page.route(/\/api\/world\/quest-targets\?/, (route) => json(route, { collectibles: [], flowlines: [opportunities[0]] }));
+  return calls;
 };
 
 test.describe("explore this area", () => {
   test.use({ geolocation: { latitude: 47.5, longitude: 8.5 }, permissions: ["geolocation"] });
 
-  test("reveals Flowlines, lists discoveries and plans a route only through chosen stops", async ({ page }) => {
-    const planBodies = await stubWorld(page);
+  test("shows opportunities for the session, generates a route, saves it and starts it separately", async ({ page }) => {
+    const calls = await stubWorld(page);
     await page.goto("/world");
 
     const cta = page.locator("[data-world-explore]");
@@ -51,29 +77,23 @@ test.describe("explore this area", () => {
     await cta.click();
 
     const card = page.locator(".world-explore-card.is-reveal");
-    await expect(card).toContainText("2 Flowlines discovered");
+    await expect(card).toContainText("3 opportunities");
     await expect(card.locator(".world-explore-breakdown")).toContainText("1 high-flow");
-    await expect(card.locator(".world-explore-breakdown")).toContainText("1 endurance");
-    await expect(cta).toHaveText("Explore this area");
+    await expect(card.locator(".world-explore-breakdown")).toContainText("1 collectible");
 
-    await card.locator("[data-explore-discoveries]").click();
-    const discoveries = page.getByRole("region", { name: "Discovered in this area" });
-    await expect(discoveries.locator("[data-discovery]")).toHaveCount(2);
-    await expect(discoveries.locator("[data-discovery]").first()).toContainText("Rheintal Flowline");
-    await discoveries.locator('[data-flowline-add-route="f-rhine"]').click();
-    await expect(discoveries.locator('[data-flowline-add-route="f-rhine"]')).toHaveText("Added to route");
-
-    await discoveries.locator("[data-discoveries-plan]").click();
+    await card.locator("[data-explore-generate]").click();
+    await expect(page.locator('[data-planner-stop="c-castle"]')).toBeVisible();
     await expect(page.locator('[data-planner-stop="flowline:f-rhine"]')).toBeVisible();
-    await page.locator("[data-planner-locate]").click();
-    await page.locator("[data-planner-route]").click();
+    expect(calls.generate).toHaveLength(1);
 
-    await expect(page.locator("[data-planner-result]")).toContainText("Start Exploration");
-    expect(planBodies).toHaveLength(1);
-    expect(planBodies[0]).toMatchObject({
-      routeType: "round_trip",
-      start: { lat: 47.5, lon: 8.5 },
-      stops: [{ kind: "flowline", id: "f-rhine" }]
-    });
+    await page.locator("[data-planner-save]").click();
+    const quests = page.getByRole("region", { name: "Your explorations" });
+    await expect(quests.locator(".quest-status-chip")).toHaveText("Planned");
+    expect(calls.save).toEqual([{ proposalId: "e2e-proposal" }]);
+    expect(calls.start).toBe(0);
+
+    await quests.locator("[data-quest-start]").click();
+    await expect(quests.locator(".quest-status-chip")).toHaveText("Started");
+    expect(calls.start).toBe(1);
   });
 });

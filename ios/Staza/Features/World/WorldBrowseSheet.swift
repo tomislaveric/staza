@@ -42,7 +42,7 @@ struct WorldBrowseContent: View {
     let onChanged: () -> Void
     @Environment(\.locale) private var locale
     @State private var lockedInfo: LockedFilterInfo?
-    @State private var cancelling: QuestInstance?
+    @State private var deleting: QuestInstance?
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.lg) {
@@ -53,9 +53,9 @@ struct WorldBrowseContent: View {
         .alert(item: $lockedInfo) { info in
             Alert(title: Text(info.title), message: Text("world.filter.locked.message \(info.nodeName)"))
         }
-        .confirmationDialog("world.explorations.cancel.title", isPresented: Binding(get: { cancelling != nil }, set: { if !$0 { cancelling = nil } }), titleVisibility: .visible, presenting: cancelling) { instance in
-            Button("world.explorations.cancel.confirm", role: .destructive) {
-                Task { if await model.cancel(instance.id) { onChanged() } }
+        .confirmationDialog("world.explorations.delete.title", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible, presenting: deleting) { instance in
+            Button("world.explorations.delete.confirm", role: .destructive) {
+                Task { if await model.delete(instance.id) { onChanged() } }
             }
         }
     }
@@ -99,7 +99,7 @@ struct WorldBrowseContent: View {
     // MARK: Explorations
 
     private var sortedInstances: [QuestInstance] {
-        let rank = ["active": 0, "failed": 1, "completed": 2]
+        let rank = ["active": 0, "partially_completed": 0, "planned": 1, "completed": 2]
         return model.instances.enumerated()
             .sorted { (rank[$0.element.status] ?? 3, $0.offset) < (rank[$1.element.status] ?? 3, $1.offset) }
             .map(\.element)
@@ -164,23 +164,22 @@ struct WorldBrowseContent: View {
                 .accessibilityAddTraits(highlighted ? .isSelected : [])
                 .accessibilityHint(Text("world.explorations.show.hint"))
 
-                if instance.isActive || instance.status == "failed" {
-                    HStack {
-                        if instance.isActive {
-                            Button("world.explorations.cancel", role: .destructive) { cancelling = instance }
-                                .buttonStyle(.stazaSecondary)
-                        } else {
-                            Button {
-                                Task { if await model.retry(instance.id) { onChanged() } }
-                            } label: {
-                                Label("world.explorations.retry", systemImage: "arrow.clockwise")
-                            }
-                            .buttonStyle(.stazaSecondary)
+                HStack {
+                    if instance.isPlanned {
+                        Button {
+                            Task { if await model.start(instance.id) { onChanged() } }
+                        } label: {
+                            Label("world.explorations.start", systemImage: "flag.fill")
                         }
-                        if pending { SwiftUI.ProgressView().tint(StazaColor.accent) }
+                        .buttonStyle(.stazaPrimary)
+                        .accessibilityIdentifier("worldExplorationStart.\(instance.id)")
                     }
-                    .disabled(model.pendingInstanceId != nil)
+                    Button("world.explorations.delete", role: .destructive) { deleting = instance }
+                        .buttonStyle(.stazaSecondary)
+                        .accessibilityIdentifier("worldExplorationDelete.\(instance.id)")
+                    if pending { SwiftUI.ProgressView().tint(StazaColor.accent) }
                 }
+                .disabled(model.pendingInstanceId != nil)
             }
         }
         .animation(.snappy(duration: 0.2), value: highlighted)
@@ -189,9 +188,10 @@ struct WorldBrowseContent: View {
 
     private func statusChip(_ status: String) -> some View {
         switch status {
+        case "planned": StazaChip("world.explorations.status.planned", systemImage: "calendar", tint: StazaColor.textMuted)
         case "active": StazaChip("world.explorations.status.active", systemImage: "flag.fill", tint: StazaColor.accent)
+        case "partially_completed": StazaChip("world.explorations.status.partiallyCompleted", systemImage: "circle.lefthalf.filled", tint: StazaColor.accent)
         case "completed": StazaChip("world.explorations.status.completed", systemImage: "checkmark.seal.fill", tint: StazaColor.success)
-        case "failed": StazaChip("world.explorations.status.failed", systemImage: "xmark.octagon.fill", tint: StazaColor.danger)
         default: StazaChip(verbatim: status.capitalized)
         }
     }

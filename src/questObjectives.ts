@@ -97,3 +97,38 @@ export const evaluateQuestObjectives = (
     }
   };
 });
+
+/**
+ * Accumulates objective progress across activities: a target stays complete once any activity
+ * completed it. `previous` is the stored state (absent before the first contributing activity).
+ */
+export const mergeObjectiveStates = (
+  previous: QuestObjectiveState[] | undefined,
+  current: QuestObjectiveState[]
+): QuestObjectiveState[] => current.map((state) => {
+  const before = previous?.find((candidate) => candidate.objective.id === state.objective.id);
+  if (!before) return state;
+  const earlier = new Map(before.targetProgress.map((target) => [target.id, target]));
+  const targetProgress = state.targetProgress.map((target) => {
+    const old = earlier.get(target.id);
+    return old?.complete && !target.complete ? { ...target, ...old, complete: true } : target;
+  });
+  const sameActivity = state.objective.type === "flowline_rule" && state.objective.sameActivity === true;
+  const completed = Math.min(
+    state.objective.requiredCount,
+    Math.max(
+      before.progress.completed,
+      state.progress.completed,
+      sameActivity ? 0 : targetProgress.filter((target) => target.complete).length
+    )
+  );
+  return {
+    objective: state.objective,
+    targetProgress,
+    progress: { completed, required: state.objective.requiredCount, complete: completed >= state.objective.requiredCount }
+  };
+});
+
+/** Number of objective units completed, summed over objectives. */
+export const completedObjectiveUnits = (states: QuestObjectiveState[]): number =>
+  states.reduce((total, state) => total + state.progress.completed, 0);

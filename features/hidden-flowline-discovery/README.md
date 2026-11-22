@@ -1,6 +1,11 @@
 # hidden-flowline-discovery
 
 > **Amended by
+> [explore-sessions-and-saved-explorations](../explore-sessions-and-saved-explorations/README.md).**
+> Explore writes nothing. Existing `explore` reveals were deleted and only `ride` reveals
+> remain (they drive the "New Flowline discovered" label).
+
+> **Amended by
 > [explore-reveal-and-manual-planner](../explore-reveal-and-manual-planner/README.md).**
 > Reveals now come only from the dedicated **Explore this area** action
 > (`POST /api/world/explore`, all eligible Flowlines in the area, capped at 12) and from

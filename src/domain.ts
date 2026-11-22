@@ -405,15 +405,16 @@ export interface NextQuestSuggestion {
   xp: number;
 }
 
-/** What one activity did to a quest attempt: it either completed the quest or failed the attempt. */
+/** What one activity did to a quest: completed it, progressed an Exploration, or failed an authored attempt. */
 export interface QuestOutcome {
   questId: string;
   kind: "authored" | "exploration";
   title: string;
   chainTitle?: string;
   difficulty: QuestDifficulty;
-  result: "completed" | "failed";
-  /** Bonus XP granted; always 0 for a failed attempt. */
+  /** `progressed`: an exploration advanced without completing; authored quests complete or fail. */
+  result: "completed" | "failed" | "progressed";
+  /** Bonus XP granted; 0 unless completed. */
   xp: number;
   criteria: QuestCriterionResult[];
   next?: NextQuestSuggestion;
@@ -562,11 +563,15 @@ export interface QuestObjectiveState {
   targetProgress: QuestObjectiveTargetProgress[];
 }
 
-export type QuestInstanceStatus = "active" | "completed" | "failed";
+/**
+ * `planned`: saved, not started; activities ignore it. `active`: started, no progress yet.
+ * `partially_completed`: started, some objectives progressed. `completed`: every objective done.
+ */
+export type QuestInstanceStatus = "planned" | "active" | "partially_completed" | "completed";
 
 export interface QuestInstance {
   id: string;
-  /** Scope key: the confirmed proposal id for explorations, the suggestion id for legacy quests. */
+  /** Scope key: the saved proposal id for explorations, the suggestion id for legacy quests. */
   suggestionId: string;
   templateId: string;
   templateVersion: number;
@@ -577,17 +582,16 @@ export interface QuestInstance {
   difficulty: QuestDifficulty;
   /** Bonus XP granted on completion. */
   rewardXp: number;
-  /** Number of attempts started, including the current one. */
   attemptCount: number;
-  startedAt: string;
+  /** Absent while planned. */
+  startedAt?: string;
   completedAt?: string;
-  failedAt?: string;
-  /** The activity that completed or failed the attempt. */
+  /** The latest activity that progressed or completed the exploration. */
   resolvedActivityId?: string;
   objectives: QuestObjectiveState[];
 }
 
-/** The route a player selected when starting an exploration. Planning aid only: never affects progress. */
+/** The route a player saved with an exploration. Planning aid only: never affects progress. */
 export interface PlannedRoute {
   id: string;
   questInstanceId: string;

@@ -86,6 +86,20 @@ const objectiveGroup = (state, isCompletedQuest) => {
 
 const difficultyName = (difficulty) => (difficulty ? difficulty.charAt(0).toUpperCase() + difficulty.slice(1) : "");
 
+/** Status is shown only here; saved routes look the same on the map whatever their status. */
+export const statusLabels = {
+  planned: "Planned",
+  active: "Started",
+  partially_completed: "Partially completed",
+  completed: "Completed"
+};
+
+const rewardNote = {
+  planned: " · start it when you go",
+  active: " · your activities count from now",
+  partially_completed: " · your activities count from now"
+};
+
 const InstanceCard = (instance, pendingQuestId, selectedQuestKey, plannedRoute) => {
   const key = `instance:${instance.id}`;
   const { title, description, status } = instance;
@@ -108,18 +122,16 @@ const InstanceCard = (instance, pendingQuestId, selectedQuestKey, plannedRoute) 
             <strong data-user-content>${escapeHtml(title)}</strong>
             <span aria-hidden="true">⌖</span>
           </button>
-          ${status === "active" ? `
-            <button type="button" class="quest-instance-cancel" data-quest-cancel="${escapeHtml(instance.id)}"
-              aria-label="Cancel exploration" title="Cancel exploration"
-              ${pendingQuestId === instance.id ? "disabled" : ""}>\u2715</button>
-          ` : status === "failed" ? `
-            <button type="button" class="quest-instance-retry" data-quest-retry="${escapeHtml(instance.id)}"
-              ${pendingQuestId === instance.id ? "disabled" : ""}>Retry</button>
-          ` : "<small>Complete</small>"}
+          <small class="quest-status-chip is-${escapeHtml(status)}">${escapeHtml(statusLabels[status] ?? status)}</small>
+          <button type="button" class="quest-instance-cancel" data-quest-delete="${escapeHtml(instance.id)}"
+            aria-label="Delete exploration" title="Delete exploration"
+            ${pendingQuestId === instance.id ? "disabled" : ""}>\u2715</button>
         </span>
         <span class="quest-card-description" data-user-content>${escapeHtml(description)}</span>
-        ${instance.rewardXp ? `<span class="quest-card-reward"><small>${difficultyName(instance.difficulty)}</small> · +${instance.rewardXp} XP${status === "active" ? " · your next activity decides" : status === "failed" ? " · not completed" : ""}</span>` : ""}
+        ${instance.rewardXp ? `<span class="quest-card-reward"><small>${difficultyName(instance.difficulty)}</small> · +${instance.rewardXp} XP${rewardNote[status] ?? ""}</span>` : ""}
         ${plannedRoute ? `<span class="quest-card-route"><small>Planned route</small> ${escapeHtml(plannedRouteSummary(plannedRoute))}</span>` : ""}
+        ${status === "planned" ? `<button type="button" class="quest-instance-start" data-quest-start="${escapeHtml(instance.id)}"
+          ${pendingQuestId === instance.id ? "disabled" : ""}>Start Exploration</button>` : ""}
         ${plannedRoute ? `<a class="quest-card-gpx" href="${escapeHtml(plannedRouteGpxUrl(instance.id))}" download>Download GPX</a>` : ""}
         <ul class="quest-objective-groups">
           ${objectiveStates.map((state) => objectiveGroup(state, status === "completed")).join("")}
@@ -133,7 +145,7 @@ const InstanceCard = (instance, pendingQuestId, selectedQuestKey, plannedRoute) 
   `;
 };
 
-/** The player's started Explorations (and quests started before Explore this Area) with progress. */
+/** The player's saved Explorations, any status, with progress accumulated since they were started. */
 export const QuestList = (instances, pendingQuestId, selectedQuestKey, plannedRoutes = new Map()) => `
   <section class="quest-list" aria-label="Your explorations">
     <h2>Your Explorations</h2>
@@ -144,6 +156,6 @@ export const QuestList = (instances, pendingQuestId, selectedQuestKey, plannedRo
         selectedQuestKey,
         plannedRoutes.get(instance.id)
       )).join("")}</ol>`
-      : '<p class="default-quest-empty">Explore an area to reveal Flowlines, then plan a route to start an exploration.</p>'}
+      : '<p class="default-quest-empty">Explore an area, generate a route and save it as an Exploration.</p>'}
   </section>
 `;

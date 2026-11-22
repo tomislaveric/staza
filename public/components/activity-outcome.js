@@ -38,6 +38,12 @@ const QuestResult = (quest) => quest.result === "completed"
       <small data-user-content>${escapeHtml(quest.chainTitle ?? "Exploration")} · ${escapeHtml(quest.difficulty)} · +${formatNumber(quest.xp)} XP</small>
       ${quest.next ? `<small>Next: <span data-user-content>${escapeHtml(quest.next.title)}</span> (+${formatNumber(quest.next.xp)} XP)</small>` : ""}
     </li>`
+  : quest.result === "progressed" ? `
+    <li class="outcome-quest is-progressed" data-outcome-quest="progressed">
+      <strong>Exploration progressed: <span data-user-content>${escapeHtml(quest.title)}</span></strong>
+      <small>Progress is kept. Your next activities can complete it.</small>
+      <ul class="outcome-criteria">${quest.criteria.map(criterionLine).join("")}</ul>
+    </li>`
   : `
     <li class="outcome-quest is-failed" data-outcome-quest="failed">
       <strong>Quest not completed: <span data-user-content>${escapeHtml(quest.title)}</span></strong>

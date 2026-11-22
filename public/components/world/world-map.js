@@ -69,6 +69,34 @@ export const alternateRoutesToGeoJson = (routes = []) => ({
     .map((route) => ({ type: "Feature", properties: { proposalId: route.id }, geometry: route.geometry }))
 });
 
+const SAVED_ROUTES_SOURCE = "staza-saved-explorations";
+export const SAVED_ROUTES_SOURCE_ID = SAVED_ROUTES_SOURCE;
+
+/**
+ * Every saved Exploration route, whatever its status: one dotted, low-prominence line drawn
+ * beneath Flowlines and collectibles, so ridden and collected objects read on top.
+ */
+export const savedRouteLayers = () => [{
+  id: `${SAVED_ROUTES_SOURCE}-line`,
+  type: "line",
+  source: SAVED_ROUTES_SOURCE,
+  layout: { "line-cap": "round", "line-join": "round" },
+  paint: {
+    "line-color": STAZA_MAP_PALETTE.questRoute,
+    "line-opacity": 0.45,
+    "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 12, 2.5, 16, 4],
+    "line-dasharray": [0.2, 2]
+  }
+}];
+
+/** One LineString feature per saved Exploration route. */
+export const savedRoutesToGeoJson = (routes = []) => ({
+  type: "FeatureCollection",
+  features: routes
+    .filter((route) => route?.geometry?.coordinates?.length)
+    .map((route) => ({ type: "Feature", properties: { explorationId: route.id }, geometry: route.geometry }))
+});
+
 export {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -122,6 +150,8 @@ export const createWorldMap = async (container, {
   let styleReady = false;
   let pendingCollectibles = EMPTY_FEATURE_COLLECTION;
   let pendingFartleks = EMPTY_FEATURE_COLLECTION;
+  let pendingSavedRoutes = [];
+  const setSavedRouteData = () => map.getSource(SAVED_ROUTES_SOURCE)?.setData(savedRoutesToGeoJson(pendingSavedRoutes));
   let panelInset = 0;
   let pickHandler;
   let clickHandler;
@@ -135,6 +165,11 @@ export const createWorldMap = async (container, {
     right: BASE_PADDING + panelInset
   });
 
+  const ensureSavedRouteLayers = () => {
+    if (map.getSource(SAVED_ROUTES_SOURCE)) return;
+    map.addSource(SAVED_ROUTES_SOURCE, { type: "geojson", data: savedRoutesToGeoJson() });
+    for (const layer of savedRouteLayers()) map.addLayer(layer);
+  };
   const ensureAlternateLayers = () => {
     if (map.getSource(ALTERNATES_SOURCE)) return;
     map.addSource(ALTERNATES_SOURCE, { type: "geojson", data: alternateRoutesToGeoJson() });
@@ -156,6 +191,9 @@ export const createWorldMap = async (container, {
   await staza.ready;
   styleReady = true;
   await loadCollectibleCategoryIcons(map);
+  // Saved Exploration routes are added first, so they stay beneath every other overlay.
+  ensureSavedRouteLayers();
+  setSavedRouteData();
   ensureAlternateLayers();
   ensureRouteLayers();
   ensureEndpointLayers();
@@ -233,6 +271,12 @@ export const createWorldMap = async (container, {
       if (!styleReady) return;
       ensureFartlekLayers(map);
       setFartlekData(map, pendingFartleks);
+    },
+    /** All saved Exploration routes in view, drawn dotted beneath everything else. */
+    setSavedRoutes(routes) {
+      pendingSavedRoutes = routes ?? [];
+      if (!styleReady) return;
+      setSavedRouteData();
     },
     setRoute(route) {
       if (!styleReady) return;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { QuestObjective } from "./domain.js";
-import { evaluateQuestObjectives } from "./questObjectives.js";
+import type { QuestObjective, QuestObjectiveState } from "./domain.js";
+import { completedObjectiveUnits, evaluateQuestObjectives, mergeObjectiveStates } from "./questObjectives.js";
 
 describe("quest objective history evaluation", () => {
   it("counts distinct qualifying Flowlines using length and average-speed snapshots", () => {
@@ -106,5 +106,29 @@ describe("quest objective history evaluation", () => {
       { completed: 1, required: 2, complete: false }
     ]);
     expect(result[1].targetProgress[0]).toMatchObject({ complete: true, averageSpeedMps: 4 });
+  });
+});
+
+describe("mergeObjectiveStates", () => {
+  const objective: QuestObjective = {
+    id: "places",
+    type: "collectible_targets",
+    requiredCount: 2,
+    targets: [{ id: "a", name: "A" }, { id: "b", name: "B" }]
+  };
+  const state = (done: string[]): QuestObjectiveState => ({
+    objective,
+    targetProgress: objective.targets.map((target) => ({ ...target, complete: done.includes(target.id) })),
+    progress: { completed: done.length, required: 2, complete: done.length >= 2 }
+  });
+
+  it("keeps targets reached by earlier activities and completes once every target was reached", () => {
+    const first = mergeObjectiveStates(undefined, [state(["a"])]);
+    expect(completedObjectiveUnits(first)).toBe(1);
+    const repeat = mergeObjectiveStates(first, [state([])]);
+    expect(repeat[0].targetProgress.map((target) => target.complete)).toEqual([true, false]);
+    expect(completedObjectiveUnits(repeat)).toBe(1);
+    const done = mergeObjectiveStates(repeat, [state(["b"])]);
+    expect(done[0].progress).toEqual({ completed: 2, required: 2, complete: true });
   });
 });
