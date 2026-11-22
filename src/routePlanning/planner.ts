@@ -1,17 +1,15 @@
 import type { QuestObjective } from "../domain.js";
-import { cheapestInsertion, generateCandidates, improveOrder, makeCandidate, selectTargetPool, withoutTarget } from "./candidates.js";
-import { backtrackRatio, closeRoundTrip, detourLengthM } from "./roundTrip.js";
+import { cheapestInsertion, improveOrder, makeCandidate, withoutTarget } from "./candidates.js";
+import { closeRoundTrip } from "./roundTrip.js";
 import { buildRoutingPlan } from "./routingPlan.js";
 import { policyForSport, profileForSport } from "./sport.js";
 import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, type PlannerPolicy } from "./policy.js";
-import { proposalStops, routeTargetIds, selectProposals, toRouteProposal } from "./proposals.js";
+import { proposalStops, routeTargetIds, toRouteProposal } from "./proposals.js";
 import { RoutingError } from "./routingClient.js";
 import { objectiveProgress, scoreRoute } from "./scoring.js";
-import { buildStrategies } from "./strategies.js";
 import type {
   CandidateStop,
   FlowlineGeometry,
-  ProposalLabel,
   ProposalStop,
   LatLon,
   QuestRouteTarget,
@@ -22,7 +20,7 @@ import type {
   RoutingResult,
   ScoredRoute
 } from "./types.js";
-import { staysWithinBounds, traversedFlowlines, validateRoute } from "./validation.js";
+import { staysWithinBounds, validateRoute } from "./validation.js";
 import { insideBounds } from "./validation.js";
 import { distanceBetween } from "./geo.js";
 import type { GeoBounds } from "../worldQuery.js";
@@ -76,7 +74,7 @@ interface RoutingRun {
  */
 export const routeCandidates = async (
   queued: QueuedCandidate[],
-  { requestId, input, bounds, eligibleTargets, maxRequests, routing, policy }: {
+  { requestId, input, bounds, eligibleTargets, maxRequests, routing, policy, requireTargets = true }: {
     requestId: string;
     input: RoutePlanningInput;
     /** Frozen exploration area; routes may not leave it except for an outside start's connector. */
@@ -85,6 +83,8 @@ export const routeCandidates = async (
     maxRequests: number;
     routing: RouteProvider;
     policy: PlannerPolicy;
+    /** Discard routes that serve none of the eligible targets (default). */
+    requireTargets?: boolean;
   }
 ): Promise<RoutingRun> => {
   const targetsById = new Map(eligibleTargets.map((target) => [target.id, target]));
@@ -122,7 +122,7 @@ export const routeCandidates = async (
     const validation = validateRoute(result, eligibleTargets);
     const planned = new Set(candidate.stops.map((stop) => stop.target.id));
     const nearbyTargetIds = validation.nearbyTargetIds.filter((id) => planned.has(id));
-    if (eligibleTargets.length > 0 && validation.includedTargetIds.length + nearbyTargetIds.length === 0) {
+    if (requireTargets && eligibleTargets.length > 0 && validation.includedTargetIds.length + nearbyTargetIds.length === 0) {
       failureCodes.push("no_targets_served");
       return;
     }
@@ -181,84 +181,6 @@ export const noRouteError = (failureCodes: string[]): PlanningError => {
   return transientOnly
     ? new PlanningError("routing_unavailable", "Route planning is temporarily unavailable.")
     : new PlanningError("no_route", "No suitable route was found for this exploration.");
-};
-
-const setKey = (candidate: RouteCandidate): string => candidate.stops.map((stop) => stop.target.id).sort().join(",");
-
-export interface GenerateExplorationRoutesInput {
-  requestId: string;
-  playerId: string;
-  /** Correlation id for logs (the exploration session id). */
-  scopeId: string;
-  /** Every eligible destination of the frozen area; the planner chooses subsets itself. */
-  targets: QuestRouteTarget[];
-  /** Flowlines of the frozen area, analysed only after routing; never routing constraints. */
-  flowlines: FlowlineGeometry[];
-  input: RoutePlanningInput;
-  /** Frozen exploration area bounding destinations and route geometry. */
-  bounds?: GeoBounds;
-}
-
-/**
- * Route-first generation: builds candidates for several internal target-selection strategies
- * (peak-focused, balanced, discovery), interleaves them under one routing budget and
- * returns up to three distinct, relatively labelled proposals that may contain different
- * targets. It never touches gameplay state.
- */
-export const generateExplorationRoutes = async (
-  { requestId, playerId, scopeId, targets, flowlines, input, bounds }: GenerateExplorationRoutesInput,
-  { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
-): Promise<PlannedProposal[]> => {
-  const policy = policyForSport(basePolicy, input.sport);
-  const startedAt = now();
-  const perStrategy = buildStrategies(targets, input.constraint, policy).map((strategy) => {
-    const pool = selectTargetPool(strategy.targets, strategy.objectives, input, policy);
-    return {
-      strategy,
-      poolSize: pool.length,
-      candidates: pool.length > 0 ? generateCandidates(input, strategy.objectives, pool, policy) : []
-    };
-  });
-
-  // Round-robin across strategies so each gets routed; identical target sets are routed once.
-  const queued: QueuedCandidate[] = [];
-  const seen = new Set<string>();
-  const longest = Math.max(0, ...perStrategy.map((entry) => entry.candidates.length));
-  for (let index = 0; index < longest; index += 1) {
-    for (const { strategy, candidates } of perStrategy) {
-      const candidate = candidates[index];
-      if (!candidate || seen.has(setKey(candidate))) continue;
-      seen.add(setKey(candidate));
-      queued.push({ candidate, objectives: strategy.objectives, strategy: strategy.name });
-    }
-  }
-
-  const run = queued.length > 0
-    ? await routeCandidates(queued, { requestId, input, bounds, eligibleTargets: targets, maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy })
-    : { scored: [], failureCodes: [], routingRequests: 0, unroutable: new Set<string>() };
-  const targetsById = new Map(targets.map((target) => [target.id, target]));
-  const proposals = selectProposals(run.scored).map((selected) => ({
-    proposal: toRouteProposal(selected, input, targetsById, flowlines, policy),
-    stops: proposalStops(selected.route)
-  }));
-  log({
-    event: "exploration_route_generate",
-    requestId,
-    playerId,
-    explorationId: scopeId,
-    eligibleTargetCount: targets.length,
-    strategies: perStrategy.map(({ strategy, poolSize, candidates }) => ({ name: strategy.name, poolSize, candidates: candidates.length })),
-    candidateCount: queued.length,
-    routingRequests: run.routingRequests,
-    routingFailures: run.failureCodes.length,
-    failureCodes: [...new Set(run.failureCodes)].sort(),
-    planningDurationMs: now() - startedAt,
-    proposalCount: proposals.length
-  });
-
-  if (queued.length === 0) throw new PlanningError("no_reachable_targets", "No exploration targets are reachable with this start and ride length.");
-  if (proposals.length === 0) throw noRouteError(run.failureCodes);
-  return proposals;
 };
 
 export interface RerouteTargetsInput {
@@ -359,30 +281,10 @@ export const rerouteTargets = async (
   };
 };
 
-export interface GenerateAreaRoutesInput {
-  requestId: string;
-  playerId: string;
-  scopeId: string;
-  flowlines: FlowlineGeometry[];
-  input: RoutePlanningInput;
-  bounds: GeoBounds;
-  /** A destination every loop must pass through, with the objectives it advances. */
-  required?: { target: QuestRouteTarget; objectives: QuestObjective[] };
-  /** A revealed Flowline every loop must ride in full; routes that do not are discarded. */
-  requiredFlowline?: FlowlineGeometry;
-}
-
-/** Loop sizes of an area route: stops on an ellipse inscribed in the area, as a share of its half-extent. */
-const AREA_LOOPS = [
-  { label: "quick", stops: 2, reach: 0.4 },
-  { label: "balanced", stops: 3, reach: 0.55 },
-  { label: "adventure", stops: 4, reach: 0.7 }
-] as const;
-
 /** Largest share of an area loop that may retrace its own road. */
-const MAX_AREA_BACKTRACK = 0.25;
+export const MAX_AREA_BACKTRACK = 0.25;
 /** Local spurs and zigzags are never returned: the router's geometry is shown as is, so they cannot be trimmed. */
-const MAX_AREA_DETOUR_M = 150;
+export const MAX_AREA_DETOUR_M = 150;
 
 /** Share of the area diagonal within which a cycling Flowline point replaces a loop point. */
 const FLOWLINE_SNAP_RATIO = 0.25;
@@ -440,12 +342,6 @@ export const areaAnchors = (
   return [...anchors.values()];
 };
 
-/** Loops through a destination: side anchors beside the start-destination line, as a share of its length. */
-const DESTINATION_LOOPS = [
-  { label: "quick", sides: [0.3] },
-  { label: "balanced", sides: [-0.3, 0.3] },
-  { label: "adventure", sides: [-0.55, 0.55] }
-] as const;
 const MIN_DESTINATION_SPAN_M = 1500;
 
 /**
@@ -520,62 +416,4 @@ export const flowlineStops = (
     ...ride.map((point) => ({ target: waypointTarget(point) })),
     ...loop.slice(index + 1).filter((stop) => !rideIds.has(stop.target.id))
   ];
-};
-
-/**
- * Route generation for an area without destinations: the bbox is the only hard fact. Routes are
- * loops of three sizes through route-only anchors, so they carry no objectives or progress.
- */
-export const generateAreaRoutes = async (
-  { requestId, playerId, scopeId, flowlines, input, bounds, required, requiredFlowline }: GenerateAreaRoutesInput,
-  { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
-): Promise<PlannedProposal[]> => {
-  const policy = policyForSport(basePolicy, input.sport);
-  const startedAt = now();
-  const seen = new Set<string>();
-  const queued: QueuedCandidate[] = [];
-  const objectives = required?.objectives ?? [];
-  const shapes = requiredFlowline
-    ? DESTINATION_LOOPS.map((loop) => flowlineStops(input, bounds, flowlines, requiredFlowline, loop.sides))
-    : required
-    ? DESTINATION_LOOPS.map((loop) => destinationStops(input, bounds, flowlines, required.target, loop.sides))
-    : AREA_LOOPS.map((loop) => areaAnchors(input, bounds, flowlines, loop).map((point) => ({ target: waypointTarget(point) })));
-  for (const stops of shapes) {
-    if (stops.length === 0) continue;
-    const candidate = makeCandidate(input, objectives, stops, "custom", policy);
-    if (seen.has(candidate.key)) continue;
-    seen.add(candidate.key);
-    queued.push({ candidate, objectives });
-  }
-  const run = await routeCandidates(queued, {
-    requestId, input, bounds, eligibleTargets: required ? [required.target] : [], maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy
-  });
-  // Loops should not ride the same road out and back; keep those only when nothing better exists.
-  const ridesFlowline = run.scored.filter((route) => !requiredFlowline
-    || traversedFlowlines(route.routing, [requiredFlowline]).length > 0);
-  const direct = ridesFlowline.filter((route) => detourLengthM(route.routing.geometry.coordinates) <= MAX_AREA_DETOUR_M);
-  const loops = direct.filter((route) => backtrackRatio(route.routing.geometry.coordinates) <= MAX_AREA_BACKTRACK);
-  const usable = loops.length > 0 ? loops : direct;
-  const byLength = [...usable].sort((a, b) => a.routing.distanceM - b.routing.distanceM);
-  const labels: ProposalLabel[][] = [[], ["balanced"], ["quick", "adventure"], ["quick", "balanced", "adventure"]];
-  const best = [...usable].sort((a, b) => b.score.total - a.score.total)[0];
-  const proposals = byLength.slice(0, 3).map((route, index, list) => {
-    const proposal = toRouteProposal({ label: labels[list.length][index], route, recommended: route === best }, input,
-      new Map(required ? [[required.target.id, required.target]] : []), flowlines, policy);
-    const waypoints = route.candidate.stops.filter((stop) => stop.target.routeOnly).map((stop) => stop.target.coordinate);
-    return { proposal: { ...proposal, waypoints }, stops: proposalStops(route) };
-  });
-  log({
-    event: "exploration_area_route_generate",
-    requestId,
-    playerId,
-    explorationId: scopeId,
-    candidateCount: queued.length,
-    routingRequests: run.routingRequests,
-    failureCodes: [...new Set(run.failureCodes)].sort(),
-    planningDurationMs: now() - startedAt,
-    proposalCount: proposals.length
-  });
-  if (proposals.length === 0) throw noRouteError(run.failureCodes);
-  return proposals;
 };

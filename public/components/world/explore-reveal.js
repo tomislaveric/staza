@@ -1,6 +1,7 @@
 import { escapeHtml } from "../collected-list.js";
 import { collectibleCategory } from "./collectible-features.js";
 import { formatDistance } from "./fartlek-detail.js";
+import { DEFAULT_ROUTE_INTENT, IntentPicker } from "./route-planner.js";
 
 /** Primary riding characters of a Flowline, as named in the reveal summary and on cards. */
 export const characterOrder = ["flow", "endurance", "explore"];
@@ -15,12 +16,11 @@ export const characterScore = (flowline, tag) =>
 export const flowlineCharacter = (flowline) => flowline.character ?? { primary: "flow", tags: [] };
 
 /**
- * The map CTA. Explore shows the area's opportunities for this session only: nothing is saved
- * until the player saves an Exploration, so exploring the same area again shows them again.
+ * The map CTA, always available. Explore shows the area's opportunities for this session only:
+ * nothing is saved until the player saves an Exploration. Wide viewports explore a centered
+ * max-size frame, which the map outlines.
  */
-export const exploreCta = (exploreAllowed) => exploreAllowed
-  ? { action: "explore", label: "Explore this area" }
-  : { action: "zoom", label: "Zoom in to explore", disabled: true };
+export const exploreCta = () => ({ action: "explore", label: "Explore this area" });
 
 const plural = (count, singular, pluralForm) => `${count} ${count === 1 ? singular : pluralForm}`;
 
@@ -35,7 +35,8 @@ const closeButton = '<button type="button" class="world-detail-close" data-explo
 
 /**
  * The card shown after Explore. `state.phase` is "exploring" while the request runs; otherwise
- * `state.result` is the server's explore response. Generating a route is the primary next step.
+ * `state.result` is the server's explore response. Choosing a feel (`state.intent`, Chill by
+ * default) and generating one route is the primary next step.
  */
 export const ExploreResultCard = (state) => {
   if (state.phase === "exploring") {
@@ -73,7 +74,9 @@ export const ExploreResultCard = (state) => {
       ${breakdown.map(({ tag, count, label }) => `<li class="is-${tag}"><strong>${count}</strong> <span>${escapeHtml(label)}</span></li>`).join("")}
       ${collectibles ? `<li class="is-collectibles"><strong>${collectibles}</strong> <span>${collectibles === 1 ? "collectible" : "collectibles"}</span></li>` : ""}
     </ul>
+    ${result.area?.clamped ? '<p class="route-planner-note" data-explore-clamped>Explored the framed area in the map center.</p>' : ""}
     <p class="route-planner-note">Shown for this session only. Save an Exploration to keep a route.</p>
+    ${IntentPicker(state.intent ?? DEFAULT_ROUTE_INTENT, "data-explore-intent")}
     <div class="world-explore-card-actions">
       <button type="button" class="is-primary" data-explore-generate>Generate route</button>
       <button type="button" data-explore-discoveries>View opportunities</button>

@@ -16,6 +16,7 @@ import {
   buildSuggestRequest,
   collectibleStop,
   createPlannerState,
+  DEFAULT_ROUTE_INTENT,
   flowlineStop,
   moveStop,
   orderStops,
@@ -150,11 +151,14 @@ export const WorldStats = (truncated) => truncated
   ? '<p class="world-stats"><span class="world-stats-truncated">Zoom in to see everything here</span></p>'
   : "";
 
-/** Primary state-driven Explore CTA plus a small "Plan route" entry; hidden Flowlines are never drawn. */
-export const WorldExploreControls = (exploreAllowed, { busy = false, stopCount = 0 } = {}) => {
-  const cta = exploreCta(exploreAllowed);
+/**
+ * Primary Explore CTA plus a small "Plan route" entry; hidden Flowlines are never drawn.
+ * The CTA stays disabled until the map is ready (`ready: false`) or while exploring.
+ */
+export const WorldExploreControls = ({ busy = false, ready = true, stopCount = 0 } = {}) => {
+  const cta = exploreCta();
   return `
-    <button class="world-explore" type="button" data-world-explore="${cta.action}"${cta.disabled || busy ? " disabled" : ""}>${escapeHtml(cta.label)}</button>
+    <button class="world-explore" type="button" data-world-explore="${cta.action}"${busy || !ready ? " disabled" : ""}>${escapeHtml(cta.label)}</button>
     <button class="world-plan-route" type="button" data-world-plan>${stopCount ? `Plan route \u00b7 ${stopCount}` : "Plan route"}</button>
   `;
 };
@@ -177,7 +181,7 @@ export const WorldPage = ({ selectedFilters, lockedFilters = [] }) => `
         <div class="world-map-actions">
           <button class="world-locate" type="button" data-world-locate>LOCATE ME</button>
         </div>
-        <div class="world-explore-cta" data-world-explore-cta>${WorldExploreControls(false)}</div>
+        <div class="world-explore-cta" data-world-explore-cta>${WorldExploreControls({ ready: false })}</div>
         <div class="world-explore-card-host" data-world-explore-card hidden></div>
         <p class="world-map-status" data-world-status role="status" hidden></p>
       </div>
@@ -275,7 +279,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   let session;
   /** Every saved Exploration route in view; drawn dotted whatever its status. */
   let explorationRoutes = [];
-  let exploreAllowed = false;
   let availableFilters = availableWorldFilters(collectibles, fartleks, grantedFilters);
   let selection;
   let selectedQuestKey;
@@ -380,7 +383,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
 
   const renderControls = () => {
     ctaHost.hidden = Boolean(planner);
-    ctaHost.innerHTML = WorldExploreControls(exploreAllowed, { busy: explore?.phase === "exploring", stopCount: draftStops.length });
+    ctaHost.innerHTML = WorldExploreControls({ busy: explore?.phase === "exploring", stopCount: draftStops.length });
     ctaHost.querySelector("[data-world-explore]")?.addEventListener("click", () => void exploreArea());
     ctaHost.querySelector("[data-world-plan]")?.addEventListener("click", () => openPlanner());
     exploreCardHost.hidden = !explore || Boolean(planner);
@@ -392,6 +395,11 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       closeExploreCard();
       worldMap.flyTo(view.center.lon, view.center.lat, Math.max(0, view.zoom - 2));
     });
+    exploreCardHost.querySelectorAll("[data-explore-intent]").forEach((button) => button.addEventListener("click", () => {
+      if (explore?.phase !== "result") return;
+      explore.intent = button.dataset.exploreIntent;
+      renderControls();
+    }));
     on("[data-explore-generate]", () => void generateRoute());
     on("[data-explore-discoveries]", () => openDiscoveries());
   };
@@ -668,6 +676,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
 
   /** Ends the Explore session: its opportunities disappear; nothing was saved. */
   function endSession() {
+    worldMap?.setExploreFrame?.(undefined);
     if (session) {
       session = undefined;
       revealing.clear();
@@ -698,7 +707,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
 
   async function exploreArea() {
     if (!worldMap || planner || explore?.phase === "exploring") return;
-    if (exploreCta(exploreAllowed).disabled) return;
     const token = ++exploreToken;
     selection = undefined;
     panel = undefined;
@@ -708,13 +716,18 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     explore = { phase: "exploring" };
     renderCollectibles();
     renderDetail();
-    const bbox = boundsToParameter(worldMap.getBounds());
+    worldMap.setExploreFrame?.(undefined);
+    const viewBbox = boundsToParameter(worldMap.getBounds());
     const view = worldMap.getView();
     try {
-      const result = await jsonRequest("POST", "/api/world/explore", { bbox });
+      const result = await jsonRequest("POST", "/api/world/explore", { bbox: viewBbox });
       if (token !== exploreToken) return;
-      explore = { phase: "result", result };
-      session = { bbox, view, flowlines: result.flowlines ?? [], collectibles: result.collectibles ?? [] };
+      explore = { phase: "result", result, intent: DEFAULT_ROUTE_INTENT };
+      // Wide viewports explore a centered max-size frame; the session (and Generate) use that frame.
+      const bbox = result.area?.bbox ?? viewBbox;
+      const center = result.area?.center ?? view.center;
+      session = { bbox, view: { center, zoom: view.zoom }, flowlines: result.flowlines ?? [], collectibles: result.collectibles ?? [] };
+      if (result.area?.clamped) worldMap.setExploreFrame?.(bbox);
       showSession();
     } catch (error) {
       if (token !== exploreToken) return;
@@ -772,7 +785,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   }
 
   /** Opens the manual planner; earlier "Add to route" picks become its first stops. */
-  function openPlanner({ start } = {}) {
+  function openPlanner({ start, intent } = {}) {
     if (!worldMap || planner) return;
     exploreToken += 1;
     explore = undefined;
@@ -782,7 +795,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     selectedQuestTargets = { collectibles: [], flowlines: [] };
     planner = createPlannerState({
       start: start ?? (homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined),
-      stops: draftStops
+      stops: draftStops,
+      intent
     });
     setStatus(undefined);
     renderSidePanels();
@@ -798,20 +812,32 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     endSession();
   }
 
-  /** Inside the explored area the generated route starts at home, otherwise at the explored view's center. */
+  /**
+   * The generated route starts at the last located position when it lies in the explored area.
+   * Otherwise there is no start: the planner asks the player to tap one before generating.
+   */
   const generateStart = () => {
     const [west, south, east, north] = session.bbox.split(",").map(Number);
     if (homePosition && boundsContain({ west, south, east, north }, {
       west: homePosition.longitude, east: homePosition.longitude, south: homePosition.latitude, north: homePosition.latitude
     })) return { lat: homePosition.latitude, lon: homePosition.longitude };
-    return { lat: session.view.center.lat, lon: session.view.center.lon };
+    return undefined;
   };
 
-  /** "Generate route": the primary step after Explore; opens the editor with a route over the session's opportunities. */
+  /** "Generate route": the primary step after Explore; opens the editor with one route of the chosen feel. */
   async function generateRoute() {
     if (!session || planner) return;
+    const intent = explore?.intent ?? DEFAULT_ROUTE_INTENT;
+    const start = generateStart();
     draftStops = [];
-    openPlanner({ start: generateStart() });
+    // No start means the planner opens picking one (and Generate stays disabled until it is set).
+    if (start) openPlanner({ start, intent });
+    else {
+      openPlanner({ intent });
+      if (planner) Object.assign(planner, { start: undefined, picking: "start" });
+      renderAll();
+      return;
+    }
     await suggestRoute();
   }
 
@@ -895,7 +921,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     try {
       const result = await jsonRequest("POST", "/api/explorations/generate", body);
       if (token !== plannerToken || !planner) return;
-      const suggestion = result.proposals.find((proposal) => proposal.recommended) ?? result.proposals[0];
+      const [suggestion] = result.proposals;
       if (!suggestion) throw new Error("No route could be suggested here. Add stops yourself.");
       const opportunities = new Map(result.catalog.flowlines.filter((flowline) => !flowline.completed).map((flowline) => [flowline.id, flowline]));
       const flowlineStops = [...new Set((suggestion.traversedFlowlines ?? []).map((flowline) => flowline.id))]
@@ -940,6 +966,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       planner = undefined;
       draftStops = [];
       session = undefined;
+      worldMap.setExploreFrame?.(undefined);
       revealing.clear();
       mergeWorld();
       renderFilters();
@@ -967,6 +994,9 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       renderAll();
     };
     on("[data-planner-close]", () => closePlanner());
+    on("[data-planner-intent]", (button) => edit(() => {
+      planner.intent = button.dataset.plannerIntent;
+    }));
     on("[data-planner-sport]", (button) => edit(() => {
       planner.sport = button.dataset.plannerSport;
       planner.proposal = undefined;
@@ -1070,7 +1100,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       explorationRoutes = snapshot.explorationRoutes ?? [];
       worldMap?.setSavedRoutes(explorationRoutes);
       mergeWorld();
-      exploreAllowed = snapshot.exploreAllowed === true;
       setStatus(undefined);
       if (selection?.kind === "collectible" && !collectibleById(selection.id)) selection = undefined;
       if (selection?.kind === "fartlek" && !fartlekById(selection.id)) selection = undefined;

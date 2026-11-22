@@ -1,5 +1,10 @@
 # explore-this-area
 
+> **Generator replaced by [route-generation-v2](../route-generation-v2/README.md).** The
+> `balanced` / `peak_focus` / `discovery` strategies and multi-proposal output described here
+> are removed. Generation is one intent-weighted route (Flow / Chill / Explore) that never
+> trades route quality for collectibles.
+>
 > **Superseded in part by
 > [explore-reveal-and-manual-planner](../explore-reveal-and-manual-planner/README.md).**
 > "Explore this area" no longer generates routes: it only reveals Flowlines of the

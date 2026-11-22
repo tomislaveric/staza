@@ -61,9 +61,8 @@ struct FlowlineCharacterChip: View {
 
 // MARK: - Sheet actions
 
-/// Compact Explore button for the World sheet header; its label follows the area status.
+/// Compact Explore button for the World sheet header. Always available: a wide area is clamped to a maximum frame.
 struct ExploreButton: View {
-    let action: ExploreAction
     let isExploring: Bool
     let onExplore: () -> Void
 
@@ -80,16 +79,28 @@ struct ExploreButton: View {
             .font(StazaFont.footnote.weight(.semibold))
         }
         .buttonStyle(.stazaPrimary)
-        .disabled(action == .zoomIn || isExploring)
+        .disabled(isExploring)
         .fixedSize()
         .accessibilityIdentifier("exploreThisArea")
     }
 
     private var title: LocalizedStringKey {
-        if isExploring { return "world.explore.exploring" }
-        switch action {
-        case .zoomIn: return "world.explore.cta.zoomIn"
-        case .explore: return "world.explore.cta.explore"
+        isExploring ? "world.explore.exploring" : "world.explore.cta.explore"
+    }
+}
+
+/// Flow / Chill / Explore for "Generate route"; the names stay the same in every language.
+struct RouteIntentPicker: View {
+    @Binding var intent: RouteIntent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: StazaSpacing.xs) {
+            OverlineText("route.intent.title")
+            Picker("route.intent.title", selection: $intent) {
+                ForEach(RouteIntent.allCases) { Text(verbatim: $0.name).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text(intent.summary).font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
         }
     }
 }
@@ -127,6 +138,8 @@ struct PlanRouteButton: View {
 struct ExploreResultBanner: View {
     let state: ExploreState
     let onZoomOut: () -> Void
+    var intent: Binding<RouteIntent> = .constant(.default)
+    var clamped = false
     var onGenerate: () -> Void = {}
     var onViewOpportunities: () -> Void = {}
 
@@ -174,7 +187,14 @@ struct ExploreResultBanner: View {
                 .accessibilityElement(children: .combine)
             }
         }
+        if clamped {
+            Label("world.explore.clamped", systemImage: "viewfinder")
+                .font(StazaFont.caption)
+                .foregroundStyle(StazaColor.textMuted)
+                .accessibilityIdentifier("exploreClamped")
+        }
         Text("world.explore.session.hint").font(StazaFont.caption).foregroundStyle(StazaColor.textSubtle)
+        RouteIntentPicker(intent: intent).accessibilityIdentifier("exploreIntent")
         HStack(spacing: StazaSpacing.sm) {
             Button(action: onGenerate) {
                 Label("world.explore.generate", systemImage: "sparkles")
@@ -238,7 +258,14 @@ struct DiscoveriesContent: View {
         let counts = AreaCounts(collectibles: model.sessionCollectibles, flowlines: model.sessionFlowlines)
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
             if let state = model.exploreState, state != .exploring {
-                ExploreResultBanner(state: state, onZoomOut: onZoomOut, onGenerate: onGenerate, onViewOpportunities: onViewOpportunities)
+                ExploreResultBanner(
+                    state: state,
+                    onZoomOut: onZoomOut,
+                    intent: Binding(get: { planner.intent }, set: { planner.intent = $0 }),
+                    clamped: model.exploreFrame != nil,
+                    onGenerate: onGenerate,
+                    onViewOpportunities: onViewOpportunities
+                )
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: StazaSpacing.sm) {

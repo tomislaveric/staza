@@ -6,6 +6,7 @@ import {
   alternateRouteLayers,
   alternateRoutesToGeoJson,
   createHomeMarkerElement,
+  exploreFrameToGeoJson,
   homeScaleZoom,
   routeLayers,
   routeToGeoJson,
@@ -120,5 +121,12 @@ describe("saved Exploration routes", () => {
       { id: "a", status: "planned", geometry },
       { id: "b", status: "completed", geometry: { type: "LineString", coordinates: [] } }
     ]).features).toEqual([{ type: "Feature", properties: { explorationId: "a" }, geometry }]);
+  });
+});
+
+describe("explore frame", () => {
+  it("outlines a clamped bbox as one closed line and clears without one", () => {
+    expect(exploreFrameToGeoJson("9,47,10,48").features[0].geometry.coordinates).toEqual([[9, 47], [10, 47], [10, 48], [9, 48], [9, 47]]);
+    expect(exploreFrameToGeoJson(undefined).features).toEqual([]);
   });
 });

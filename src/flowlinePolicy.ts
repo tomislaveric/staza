@@ -5,7 +5,7 @@ export interface FlowlineViewportPolicy {
   limit: number;
 }
 
-const METERS_PER_DEGREE_LATITUDE = 111_320;
+export const METERS_PER_DEGREE_LATITUDE = 111_320;
 /** Up to this viewport width every Flowline is shown; wider viewports show a shrinking share. */
 export const FULL_DETAIL_WIDTH_METERS = 100_000;
 const MAX_MIN_LENGTH_METERS = 6_000;

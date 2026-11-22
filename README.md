@@ -190,6 +190,10 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   final MP4 validation.
 - [Robust sync](features/robust-sync/README.md) — validate the existing FIT/GPS5
   synchronization against manually verified reference events.
+- [Route generation v2](features/route-generation-v2/README.md) — Explore this area
+  works at any zoom, and Generate builds one editable route for a chosen intent
+  (Flow, Chill or Explore) that weighs route quality, Flowlines, distance and a few
+  good POIs instead of packing in collectibles.
 - [Route-Relevant World Query V1](features/route-relevant-world-query-v1/README.md)
   — cheaply limit the configured world to the padded geographic region around an
   activity route before existing precise collectible detection and presentation.

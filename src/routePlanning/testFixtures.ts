@@ -1,4 +1,4 @@
-import type { QuestObjective } from "../domain.js";
+import type { CollectibleCategory, QuestObjective } from "../domain.js";
 import { lineLengthMeters, type LonLat } from "./geo.js";
 import type { FlowlineGeometry, LatLon, QuestRouteTarget, RoutingRequest, RoutingResult } from "./types.js";
 
@@ -18,7 +18,7 @@ export const pointTarget = (
   objectiveId: string,
   northKm: number,
   eastKm: number,
-  options: { category?: "peak" | "place" | "viewpoint"; alreadyAchieved?: boolean } = {}
+  options: { category?: CollectibleCategory; alreadyAchieved?: boolean } = {}
 ): QuestRouteTarget => ({
   kind: "point",
   id,

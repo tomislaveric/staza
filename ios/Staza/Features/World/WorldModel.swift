@@ -18,7 +18,8 @@ final class WorldModel {
     private(set) var sessionCollectibles: [WorldCollectible] = []
     /// The explored area while an Explore session is open; generated routes stay inside it.
     private(set) var sessionBounds: WorldBounds?
-    private(set) var exploreAllowed = false
+    /// The explored frame, drawn on the map while a wide viewport was clamped to it.
+    private(set) var exploreFrame: WorldBounds?
     /// The Explore card: running, a result, or a failure. `nil` when dismissed.
     private(set) var exploreState: ExploreState?
     /// Opportunity Flowlines not drawn yet while their appearance is staggered.
@@ -27,7 +28,7 @@ final class WorldModel {
     private(set) var truncated = false
     private(set) var viewportFailed = false
     private(set) var bounds: WorldBounds?
-    /// The last loaded viewport; Explore explores exactly this area.
+    /// The last loaded viewport; Explore explores it, clamped by the server to a maximum frame.
     private var areaBounds: WorldBounds?
     /// The persistent world of the viewport: collected collectibles and completed Flowlines.
     private var collectedCollectibles: [WorldCollectible] = []
@@ -61,7 +62,6 @@ final class WorldModel {
         WorldFilters.flowlines(flowlines, selected: selectedFilters).filter { !revealing.contains($0.id) }
     }
 
-    var exploreAction: ExploreAction { ExploreAction(exploreAllowed: exploreAllowed) }
     var isExploring: Bool { exploreState == .exploring }
 
     var hasExploreSession: Bool { sessionBounds != nil }
@@ -110,7 +110,6 @@ final class WorldModel {
             completedFlowlines = viewport.fartleks ?? []
             explorationRoutes = viewport.explorationRoutes ?? []
             mergeWorld()
-            exploreAllowed = viewport.exploreAllowed ?? false
             areaBounds = bounds
             truncated = viewport.truncated ?? false
             viewportFailed = false
@@ -131,12 +130,14 @@ final class WorldModel {
     /// Explore this area: opens a session showing the area's opportunities. Persists nothing and
     /// replaces any previous session.
     func exploreArea(reduceMotion: Bool = false) async {
-        guard let bounds = areaBounds, !isExploring, exploreAction == .explore else { return }
+        guard let bounds = areaBounds, !isExploring else { return }
         endExploreSession()
         exploreState = .exploring
         do {
             let result: ExploreResult = try await api.post("/api/world/explore", body: ExploreRequest(bbox: bounds.queryValue))
-            sessionBounds = bounds
+            let explored = result.area?.bounds
+            sessionBounds = explored ?? bounds
+            exploreFrame = result.area?.clamped == true ? explored : nil
             sessionFlowlines = result.flowlines.uniqued()
             sessionCollectibles = result.collectibles
             exploreState = .result(result)
@@ -155,6 +156,7 @@ final class WorldModel {
     func endExploreSession() {
         exploreState = nil
         sessionBounds = nil
+        exploreFrame = nil
         sessionFlowlines = []
         sessionCollectibles = []
         revealing = []

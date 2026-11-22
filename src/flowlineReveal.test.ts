@@ -45,7 +45,7 @@ describe("isOpportunityEligible", () => {
 });
 
 describe("area status", () => {
-  it("blocks wide viewports", () => {
+  it("flags viewports wider than one Explore", () => {
     expect(exploreAllowed(bounds(0.2))).toBe(true);
     expect(exploreAllowed(bounds(2))).toBe(false);
   });

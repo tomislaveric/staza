@@ -65,6 +65,10 @@ struct RoutePlannerPanel: View {
             }
             if let hint { Label(hint, systemImage: "hand.tap").font(StazaFont.footnote).foregroundStyle(StazaColor.accent) }
 
+            RouteIntentPicker(intent: Binding(get: { planner.intent }, set: { planner.intent = $0 }))
+                .disabled(!planner.isIdle)
+                .accessibilityIdentifier("plannerIntent")
+
             stops
             result
             if let failure = planner.failure {

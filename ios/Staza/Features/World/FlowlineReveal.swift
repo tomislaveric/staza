@@ -56,6 +56,8 @@ struct ExploreResult: Decodable, Equatable, Sendable {
     /// Eligible Flowlines left out by the cap.
     let availableCount: Int
     let summary: Summary
+    /// The explored area; absent on older servers, which explore the requested viewport as is.
+    var area: ExploredArea? = nil
 
     struct Count: Equatable, Sendable {
         let tag: FlowlineTag
@@ -75,12 +77,16 @@ struct ExploreRequest: Encodable, Sendable {
     let bbox: String
 }
 
-/// The sheet's Explore button: disabled while the visible area is too wide to explore.
-enum ExploreAction: Equatable, Sendable {
-    case zoomIn, explore
+/// The area an Explore session covers. A wide viewport is clamped to a centered maximum-size frame.
+struct ExploredArea: Decodable, Equatable, Sendable {
+    let bbox: String
+    let center: GeoPoint
+    let clamped: Bool
 
-    init(exploreAllowed: Bool?) {
-        self = exploreAllowed == true ? .explore : .zoomIn
+    var bounds: WorldBounds? {
+        let values = bbox.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard values.count == 4 else { return nil }
+        return WorldBounds(west: values[0], south: values[1], east: values[2], north: values[3])
     }
 }
 

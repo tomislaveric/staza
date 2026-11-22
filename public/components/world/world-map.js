@@ -97,6 +97,32 @@ export const savedRoutesToGeoJson = (routes = []) => ({
     .map((route) => ({ type: "Feature", properties: { explorationId: route.id }, geometry: route.geometry }))
 });
 
+const EXPLORE_FRAME_SOURCE = "staza-explore-frame";
+export const EXPLORE_FRAME_SOURCE_ID = EXPLORE_FRAME_SOURCE;
+
+/** The explored frame when a wide viewport was clamped to the max Explore size: a thin dashed outline. */
+export const exploreFrameLayers = () => [{
+  id: `${EXPLORE_FRAME_SOURCE}-line`,
+  type: "line",
+  source: EXPLORE_FRAME_SOURCE,
+  layout: { "line-join": "miter" },
+  paint: { "line-color": STAZA_MAP_PALETTE.questRoute, "line-opacity": 0.8, "line-width": 2, "line-dasharray": [3, 2] }
+}];
+
+/** A closed outline of a "west,south,east,north" bbox; empty without one. */
+export const exploreFrameToGeoJson = (bbox) => {
+  const [west, south, east, north] = typeof bbox === "string" ? bbox.split(",").map(Number) : [];
+  if (![west, south, east, north].every(Number.isFinite)) return EMPTY_FEATURE_COLLECTION;
+  return {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      properties: {},
+      geometry: { type: "LineString", coordinates: [[west, south], [east, south], [east, north], [west, north], [west, south]] }
+    }]
+  };
+};
+
 export {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -151,6 +177,7 @@ export const createWorldMap = async (container, {
   let pendingCollectibles = EMPTY_FEATURE_COLLECTION;
   let pendingFartleks = EMPTY_FEATURE_COLLECTION;
   let pendingSavedRoutes = [];
+  let pendingExploreFrame;
   const setSavedRouteData = () => map.getSource(SAVED_ROUTES_SOURCE)?.setData(savedRoutesToGeoJson(pendingSavedRoutes));
   let panelInset = 0;
   let pickHandler;
@@ -169,6 +196,11 @@ export const createWorldMap = async (container, {
     if (map.getSource(SAVED_ROUTES_SOURCE)) return;
     map.addSource(SAVED_ROUTES_SOURCE, { type: "geojson", data: savedRoutesToGeoJson() });
     for (const layer of savedRouteLayers()) map.addLayer(layer);
+  };
+  const ensureExploreFrameLayers = () => {
+    if (map.getSource(EXPLORE_FRAME_SOURCE)) return;
+    map.addSource(EXPLORE_FRAME_SOURCE, { type: "geojson", data: exploreFrameToGeoJson(pendingExploreFrame) });
+    for (const layer of exploreFrameLayers()) map.addLayer(layer);
   };
   const ensureAlternateLayers = () => {
     if (map.getSource(ALTERNATES_SOURCE)) return;
@@ -194,6 +226,7 @@ export const createWorldMap = async (container, {
   // Saved Exploration routes are added first, so they stay beneath every other overlay.
   ensureSavedRouteLayers();
   setSavedRouteData();
+  ensureExploreFrameLayers();
   ensureAlternateLayers();
   ensureRouteLayers();
   ensureEndpointLayers();
@@ -277,6 +310,13 @@ export const createWorldMap = async (container, {
       pendingSavedRoutes = routes ?? [];
       if (!styleReady) return;
       setSavedRouteData();
+    },
+    /** Outlines the clamped Explore frame ("west,south,east,north") during a session; undefined clears it. */
+    setExploreFrame(bbox) {
+      pendingExploreFrame = bbox;
+      if (!styleReady) return;
+      ensureExploreFrameLayers();
+      map.getSource(EXPLORE_FRAME_SOURCE).setData(exploreFrameToGeoJson(bbox));
     },
     setRoute(route) {
       if (!styleReady) return;

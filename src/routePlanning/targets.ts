@@ -35,5 +35,20 @@ export const buildFlowlineGeometries = (flowlines: WorldFartlek[]): FlowlineGeom
       id: flowline.id,
       name: flowline.name,
       coordinates: flowline.geometry.coordinates.map(([lon, lat]) => [lon, lat] as [number, number]),
-      lengthMeters: flowline.lengthMeters
+      lengthMeters: flowline.lengthMeters,
+      ...(flowlineScores(flowline) ? { scores: flowlineScores(flowline) } : {}),
+      ...(flowline.completed ? { completed: true } : {})
     }));
+
+/** Neutral score assumed for a style a scored Flowline lacks. */
+const MISSING_STYLE_SCORE = 50;
+
+const flowlineScores = ({ flowScore, enduranceScore, exploreScore, roadQualityScore }: WorldFartlek): FlowlineGeometry["scores"] =>
+  [flowScore, enduranceScore, exploreScore, roadQualityScore].every((score) => score === undefined)
+    ? undefined
+    : {
+      flow: flowScore ?? MISSING_STYLE_SCORE,
+      endurance: enduranceScore ?? MISSING_STYLE_SCORE,
+      explore: exploreScore ?? MISSING_STYLE_SCORE,
+      roadQuality: roadQualityScore ?? MISSING_STYLE_SCORE
+    };

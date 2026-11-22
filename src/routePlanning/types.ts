@@ -1,7 +1,7 @@
 import type { CollectibleCategory, QuestObjective } from "../domain.js";
 
 /** Bumped whenever candidate generation or scoring changes meaningfully; persisted with PlannedRoutes. */
-export const PLANNER_VERSION = 4;
+export const PLANNER_VERSION = 5;
 
 export interface LatLon {
   lat: number;
@@ -47,13 +47,17 @@ export interface QuestRouteTarget {
   routeOnly?: boolean;
 }
 
-/** A Flowline's geometry, used only after routing to find the Flowlines a route happens to ride. */
+/** A Flowline's geometry: finds the Flowlines a route rides and lets generation rank Flowlines by intent. */
 export interface FlowlineGeometry {
   id: string;
   name: string;
   /** [lon, lat] pairs. */
   coordinates: [number, number][];
   lengthMeters: number;
+  /** Style scores (0..100); absent for Flowlines without analysis. */
+  scores?: { flow: number; endurance: number; explore: number; roadQuality: number };
+  /** The player already completed it: still good riding, no longer an opportunity. */
+  completed?: boolean;
 }
 
 /** A Flowline a route naturally traverses: derived, informational route metadata. */

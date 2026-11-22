@@ -4205,6 +4205,70 @@
         }
       }
     },
+    "route.intent.chill.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entspannter, moderater Mix."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A relaxed, moderate mix."
+          }
+        }
+      }
+    },
+    "route.intent.explore.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenige gute Orte, kleine Umwege."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A few good places, small detours."
+          }
+        }
+      }
+    },
+    "route.intent.flow.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flüssige Flowlines, wenige Unterbrechungen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Smooth Flowlines, few interruptions."
+          }
+        }
+      }
+    },
+    "route.intent.title" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routengefühl"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route feel"
+          }
+        }
+      }
+    },
     "sheet.detent.large" : {
       "localizations" : {
         "de" : {
@@ -5405,6 +5469,22 @@
         }
       }
     },
+    "world.explore.clamped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkundet wurde der markierte Bereich in der Kartenmitte."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Explored the framed area in the map center."
+          }
+        }
+      }
+    },
     "world.explore.collectibles %lld" : {
       "localizations" : {
         "de" : {
@@ -5457,22 +5537,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Explore"
-          }
-        }
-      }
-    },
-    "world.explore.cta.zoomIn" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Näher zoomen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zoom in"
           }
         }
       }

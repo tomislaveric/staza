@@ -84,11 +84,42 @@ struct PlanArea: Encodable, Equatable, Sendable {
     }
 }
 
-/// "Generate route": the generator, bounded to the explored area and its opportunities.
+/// The feel of a generated route. Staza never optimizes for speed.
+enum RouteIntent: String, CaseIterable, Identifiable, Encodable, Sendable {
+    /// Smooth Flowlines, few interruptions; places are secondary.
+    case flow
+    /// A relaxed, moderate mix.
+    case chill
+    /// A few good, varied places with small detours, never at the cost of route quality.
+    case explore
+
+    static let `default` = RouteIntent.chill
+    var id: String { rawValue }
+
+    /// The same name in every language.
+    var name: String {
+        switch self {
+        case .flow: "Flow"
+        case .chill: "Chill"
+        case .explore: "Explore"
+        }
+    }
+
+    var summary: LocalizedStringResource {
+        switch self {
+        case .flow: "route.intent.flow.description"
+        case .chill: "route.intent.chill.description"
+        case .explore: "route.intent.explore.description"
+        }
+    }
+}
+
+/// "Generate route": one route for the intent, bounded to the explored area and its opportunities.
 struct SuggestRequest: Encodable, Sendable {
     let area: PlanArea
     let sport: String
     let start: GeoPoint
+    let intent: RouteIntent
     let routeType = "round_trip"
 }
 

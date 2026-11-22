@@ -1,5 +1,10 @@
 # explore-sessions-and-saved-explorations
 
+> **Amended by [route-generation-v2](../route-generation-v2/README.md).** Generate route builds
+> one route for the chosen intent (Flow / Chill / Explore, default Chill) instead of picking the
+> recommended one of several proposals. It needs a start: the last located position inside the
+> explored area, otherwise the player taps one on the map.
+>
 > Amends [explore-reveal-and-manual-planner](../explore-reveal-and-manual-planner/README.md)
 > and [hidden-flowline-discovery](../hidden-flowline-discovery/README.md): Explore no longer
 > persists reveals, and Start Exploration is split into **Save** and **Start**.

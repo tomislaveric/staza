@@ -72,7 +72,7 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertTrue(transport.requests.isEmpty)
     }
 
-    func testGenerateReplacesStopsWithTheRecommendedCollectiblesAndRiddenOpportunities() async throws {
+    func testGenerateReplacesStopsWithTheRouteCollectiblesAndRiddenOpportunities() async throws {
         let line = #""geometry":{"type":"LineString","coordinates":[[11.1,48.1],[11.2,48.2]]}"#
         let flowlines = #"[{"id":"f1","name":"Open",\#(line),"completed":false},{"id":"f2","name":"Done",\#(line),"completed":true},{"id":"f3","name":"Skipped",\#(line),"completed":false}]"#
         let catalog = #"{"collectibles":[{"id":"a","name":"A","latitude":48,"longitude":11,"found":false},{"id":"b","name":"B","latitude":48,"longitude":11,"found":false}],"flowlines":\#(flowlines)}"#
@@ -81,11 +81,17 @@ final class RoutePlannerModelTests: XCTestCase {
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
         planner.toggle(.waypoint(GeoPoint(lat: 48.2, lon: 11.2)))
+        XCTAssertEqual(planner.intent, .chill, "Chill is the default feel")
+        planner.intent = .flow
         await planner.suggest(in: WorldBounds(west: 11, south: 48, east: 11.5, north: 48.5)) { _ in nil }
         XCTAssertEqual(planner.stops.map(\.key), ["b", "a", "flowline:f1"])
         XCTAssertEqual(planner.proposal?.id, "p1")
         XCTAssertEqual(transport.requests.first?.url?.path, "/api/explorations/generate")
-        XCTAssertNil(try json(transport.requests.first)["stops"])
+        let body = try json(transport.requests.first)
+        XCTAssertNil(body["stops"])
+        XCTAssertEqual(body["intent"] as? String, "flow")
+        planner.close()
+        XCTAssertEqual(planner.intent, .chill, "the feel is not kept beyond the session")
     }
 
     func testSaveStoresAPlannedExplorationAndClosesPlanner() async throws {

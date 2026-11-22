@@ -47,8 +47,6 @@ struct WorldViewport: Decodable, Equatable, Sendable {
     /// Saved Exploration routes intersecting the viewport; absent on older servers.
     var explorationRoutes: [ExplorationRoute]? = nil
     let truncated: Bool?
-    /// The viewport is narrow enough to explore.
-    var exploreAllowed: Bool? = nil
 }
 
 /// The World-relevant part of `GET /api/player/capabilities`.
@@ -95,6 +93,18 @@ struct WorldBounds: Equatable, Sendable {
         let clamp = { (value: Double, limit: Double) in min(max(value, -limit), limit) }
         return [clamp(west, 180), clamp(south, 90), clamp(east, 180), clamp(north, 90)]
             .map { String(format: "%.5f", $0) }.joined(separator: ",")
+    }
+
+    func contains(_ point: GeoPoint) -> Bool {
+        let inLatitude = point.lat >= south && point.lat <= north
+        let inLongitude = west <= east ? point.lon >= west && point.lon <= east : point.lon >= west || point.lon <= east
+        return inLatitude && inLongitude
+    }
+
+    /// The outline, closed, as map coordinates.
+    var ring: [CLLocationCoordinate2D] {
+        [(south, west), (south, east), (north, east), (north, west), (south, west)]
+            .map { CLLocationCoordinate2D(latitude: $0.0, longitude: $0.1) }
     }
 }
 

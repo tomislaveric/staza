@@ -25,8 +25,6 @@ export interface PlannerPolicy {
   heuristicSpeedMps: number;
   /** Straight-line → road distance factor for estimates before routing. */
   roadFactor: number;
-  /** Candidates whose estimate exceeds requested × this are pruned before routing. */
-  maxEstimateRatio: number;
 }
 
 export const DEFAULT_PLANNER_POLICY: PlannerPolicy = {
@@ -42,8 +40,7 @@ export const DEFAULT_PLANNER_POLICY: PlannerPolicy = {
   acceptableTolerance: 0.2,
   zeroFitTolerance: 0.6,
   heuristicSpeedMps: 5,
-  roadFactor: 1.3,
-  maxEstimateRatio: 1.6
+  roadFactor: 1.3
 };
 
 /** Hard planning limits. They bound work per user action and keep the endpoint from being a routing proxy. */
@@ -55,20 +52,11 @@ export const PLANNING_LIMITS = {
   routingConcurrency: 3,
   /** Total wall-clock budget of one planning action. */
   planningDeadlineMs: 20_000,
-  maxProposals: 3,
   /**
    * Anti-abuse ceiling on the stops one planning request may carry. Not a product rule: players
    * choose freely what their route includes, and this should never be reached in normal use.
    */
   maxRequestStops: 100,
-  /** Eligible targets kept per objective after spatial ranking. */
-  maxPoolTargetsPerObjective: 12,
-  maxPoolTargets: 16,
-  maxTargetsPerCandidate: 12,
-  /** Bounded variants that drop the costliest targets of the fullest candidate. */
-  maxReducedVariants: 2,
-  /** Seeds tried per strategy during candidate generation. */
-  maxSeeds: 6,
   maxDistanceMeters: 300_000,
   minDistanceMeters: 2_000,
   maxDurationSeconds: 12 * 3600,
@@ -82,14 +70,8 @@ export const PLANNING_LIMITS = {
   maxStoredProposalsPerPlayer: 30
 } as const;
 
-/** Proposal selection and labelling thresholds. */
+/** Proposal hint thresholds. */
 export const PROPOSAL_SELECTION = {
-  /** Two proposals are distinct when their target sets overlap less than this (Jaccard)… */
-  maxTargetOverlap: 0.6,
-  /** …or their distances differ by more than this share. */
-  minDistanceDifference: 0.15,
-  /** "Quick" must be at most this share of the Adventure distance. */
-  quickDistanceRatio: 0.85,
   /** Share of a route's destinations of one kind that earns a composition hint. */
   hintShare: 0.6,
   /** Elevation gain per km that earns the "Climb" hint. */

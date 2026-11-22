@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildPlanRequest, collectibleStop, createPlannerState, flowlineStop, moveStop, orderStops, planArea, toggleStop, waypointStop
+  buildPlanRequest, buildSuggestRequest, collectibleStop, createPlannerState, flowlineStop, moveStop, orderStops, planArea,
+  RoutePlannerPanel, ROUTE_INTENTS, toggleStop, waypointStop
 } from "./route-planner.js";
 
 const flowline = flowlineStop({ id: "f1", name: "Rheintal", geometry: { coordinates: [[9, 47], [9.1, 47.2]] } });
@@ -46,5 +47,22 @@ describe("buildPlanRequest", () => {
     expect(south).toBeLessThan(47);
     expect(east).toBeGreaterThan(9.5);
     expect(north).toBeGreaterThan(47.5);
+  });
+});
+
+describe("route intents", () => {
+  it("offers Flow, Chill and Explore with Chill preselected, never speed wording", () => {
+    expect(ROUTE_INTENTS.map((intent) => intent.label)).toEqual(["Flow", "Chill", "Explore"]);
+    expect(JSON.stringify(ROUTE_INTENTS)).not.toMatch(/fast|speed|quick/i);
+    const state = createPlannerState({ start: { lat: 47, lon: 9 } });
+    expect(state.intent).toBe("chill");
+    expect(RoutePlannerPanel(state)).toMatch(/data-planner-intent="chill" aria-pressed="true"/);
+  });
+
+  it("sends the chosen intent with Generate route", () => {
+    const area = { bbox: "9,47,9.2,47.2", center: { lat: 47.1, lon: 9.1 }, zoom: 11 };
+    expect(buildSuggestRequest(createPlannerState({ start: { lat: 47, lon: 9 }, intent: "flow" }), area).body)
+      .toEqual({ area, sport: "cycling", start: { lat: 47, lon: 9 }, routeType: "round_trip", intent: "flow" });
+    expect(buildSuggestRequest(createPlannerState(), area).error).toBe("Choose a start on the map.");
   });
 });

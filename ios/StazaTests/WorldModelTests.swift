@@ -18,7 +18,6 @@ final class WorldModelTests: XCTestCase {
         await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
         XCTAssertEqual(model.collectibles.map(\.id), ["c1"])
         XCTAssertEqual(model.flowlines.first?.coordinates.count, 2)
-        XCTAssertEqual(model.exploreAction, .zoomIn)
         XCTAssertFalse(model.viewportFailed)
     }
 
@@ -48,7 +47,6 @@ final class WorldModelTests: XCTestCase {
         let bounds = WorldBounds(west: 7, south: 46, east: 9, north: 48)
         await model.loadViewport(bounds)
         XCTAssertEqual(model.flowlines.map(\.id), ["f1"], "the map starts with the persistent world only")
-        XCTAssertEqual(model.exploreAction, .explore)
 
         await model.exploreArea(reduceMotion: true)
         XCTAssertEqual(transport.requests.last?.url?.path, "/api/world/explore")
@@ -57,7 +55,8 @@ final class WorldModelTests: XCTestCase {
         XCTAssertEqual(model.visibleFlowlines.map(\.id), ["f1", "f2"])
         XCTAssertEqual(model.collectibles.map(\.id), ["c1", "c9"])
         XCTAssertEqual(model.sessionFlowlines.map(\.id), ["f2"])
-        XCTAssertEqual(model.sessionBounds, bounds)
+        XCTAssertEqual(model.sessionBounds, bounds, "older servers explore the requested viewport")
+        XCTAssertNil(model.exploreFrame)
         XCTAssertEqual(model.flowline(id: "f2")?.resolvedCharacter.tags, [.flow, .explore])
         guard case .result(let result) = model.exploreState else { return XCTFail("expected a result") }
         XCTAssertEqual(result.breakdown, [ExploreResult.Count(tag: .flow, count: 1)])
@@ -84,10 +83,19 @@ final class WorldModelTests: XCTestCase {
         XCTAssertEqual(nothing.outcome, .nothingNew)
     }
 
-    func testExploreActionFollowsViewportWidth() {
-        XCTAssertEqual(ExploreAction(exploreAllowed: nil), .zoomIn)
-        XCTAssertEqual(ExploreAction(exploreAllowed: false), .zoomIn)
-        XCTAssertEqual(ExploreAction(exploreAllowed: true), .explore)
+    func testWideViewportExploresTheClampedFrame() async {
+        let explored = #"{"outcome":"nothing_new","flowlines":[],"collectibles":[],"availableCount":0,"summary":{"total":0,"byCharacter":{}},"area":{"bbox":"7.700000,46.550000,8.300000,47.450000","center":{"lat":47,"lon":8},"clamped":true}}"#
+        let transport = StubTransport([.init(status: 200, body: world), .init(status: 200, body: explored), .init(status: 200, body: world)])
+        let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
+        await model.loadViewport(WorldBounds(west: 5, south: 45, east: 11, north: 49))
+        await model.exploreArea(reduceMotion: true)
+        let frame = WorldBounds(west: 7.7, south: 46.55, east: 8.3, north: 47.45)
+        XCTAssertEqual(model.sessionBounds, frame, "Generate stays inside the explored frame")
+        XCTAssertEqual(model.exploreFrame, frame)
+        XCTAssertTrue(frame.contains(GeoPoint(lat: 47, lon: 8)))
+        XCTAssertFalse(frame.contains(GeoPoint(lat: 48, lon: 8)))
+        model.endExploreSession()
+        XCTAssertNil(model.exploreFrame)
     }
 
     func testDiscoverySorts() {

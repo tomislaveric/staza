@@ -1,5 +1,6 @@
 import { UserInputError } from "../errors.js";
 import { distanceBetween } from "../routePlanning/geo.js";
+import { intentLengthMeters, parseRouteIntent, type RouteIntent } from "../routePlanning/intent.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import { isRecord, isUuid, parseLatLon, parseProposalId, parseRoutePlanningInput } from "../routePlanning/request.js";
 import type { LatLon, RoutePlanningInput } from "../routePlanning/types.js";
@@ -29,6 +30,8 @@ export const parseArea = (value: unknown): ExplorationAreaContext => {
 export interface GenerateRequest {
   area: ExplorationAreaContext;
   input: RoutePlanningInput;
+  /** What the route should feel like; defaults to Chill. */
+  intent: RouteIntent;
   /** A collectible every route must visit ("Route to"). */
   destinationId?: string;
   /** A plannable Flowline of the area every route must ride ("Plan route via this Flowline"). */
@@ -46,8 +49,9 @@ export const areaConstraint = ({ bounds }: ExplorationAreaContext): { type: "dis
 };
 
 /**
- * `{ area, start, sport?, routeType?, constraint? }`: the ride only — never targets. The area's
- * size defines the ride, so route type defaults to a round trip and the length is derived from it.
+ * `{ area, start, intent?, sport?, routeType?, constraint? }`: the ride only — never targets. The
+ * area's size defines the ride, so route type defaults to a round trip and the length is derived
+ * from it, capped per intent.
  */
 export const parseGenerateRequest = (body: unknown): GenerateRequest => {
   if (!isRecord(body)) throw new UserInputError("An exploration request is required.");
@@ -62,9 +66,12 @@ export const parseGenerateRequest = (body: unknown): GenerateRequest => {
   if (destinationId && destinationFlowlineId) {
     throw new UserInputError("Choose either a destination or a Flowline, not both.");
   }
+  const intent = parseRouteIntent(body.intent);
+  const constraint = { type: "distance", value: intentLengthMeters(areaConstraint(area).value, intent) };
   return {
     area,
-    input: parseRoutePlanningInput({ routeType: "round_trip", constraint: areaConstraint(area), ...body }),
+    intent,
+    input: parseRoutePlanningInput({ routeType: "round_trip", constraint, ...body }),
     ...(destinationId ? { destinationId } : {}),
     ...(destinationFlowlineId ? { destinationFlowlineId } : {})
   };

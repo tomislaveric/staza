@@ -7,12 +7,13 @@ import * as worldMap from "./world/world-map.js";
 
 describe("WorldExploreControls", () => {
   it("renders the state-driven Explore CTA beside a small Plan route button that counts route picks", () => {
-    const markup = WorldExploreControls(true, { stopCount: 2 });
-    expect(markup).toContain('data-world-explore="explore"');
-    expect(markup).toContain(">Explore this area<");
+    const markup = WorldExploreControls({ stopCount: 2 });
+    expect(markup).toContain('data-world-explore="explore">Explore this area<');
     expect(markup).toContain("Plan route \u00b7 2");
     expect(markup).not.toMatch(/hidden Flowline/i);
-    expect(WorldExploreControls(false)).toMatch(/data-world-explore="zoom" disabled>Zoom in to explore/);
+    expect(markup).not.toContain("Zoom in to explore");
+    expect(WorldExploreControls({ busy: true })).toMatch(/data-world-explore="explore" disabled>/);
+    expect(WorldExploreControls({ ready: false }), "disabled until the map is ready").toMatch(/data-world-explore="explore" disabled>/);
   });
 });
 
@@ -316,7 +317,6 @@ describe("mounted World page interactions", () => {
     ]
   };
   const routeGeometry = { type: "LineString", coordinates: [[9, 50], [9.1, 50.1], [9, 50]] };
-  const quickGeometry = { type: "LineString", coordinates: [[9, 50], [9.05, 50.02], [9, 50]] };
   const customGeometry = { type: "LineString", coordinates: [[9, 50], [9.2, 50.2], [9, 50]] };
   const routeProposal = (id, label, includedTargetIds = ["viewpoint-found"], overrides = {}) => ({
     id, label, distanceM: 42_000, durationS: 6_000, geometry: routeGeometry,
@@ -371,7 +371,7 @@ describe("mounted World page interactions", () => {
     return base;
   };
 
-  const mount = async ({ instances = [], generateError, planError, exploreResult = discovered, savedHome, exploreAllowed = true } = {}) => {
+  const mount = async ({ instances = [], generateError, planError, exploreResult = discovered, savedHome } = {}) => {
     let savedHomeValue = savedHome ? JSON.stringify(savedHome) : null;
     const localStorage = {
       getItem: vi.fn(() => savedHomeValue),
@@ -413,7 +413,7 @@ describe("mounted World page interactions", () => {
       querySelector: (selector) => hosts[selector],
       querySelectorAll: () => Object.values(buttons)
     };
-    let viewportSnapshot = { collectibles, fartleks, truncated: false, exploreAllowed };
+    let viewportSnapshot = { collectibles, fartleks, truncated: false };
     let activeInstances = instances;
     let viewportShifts = 0;
     const fetchMock = vi.fn(async (url, options) => {
@@ -430,10 +430,7 @@ describe("mounted World page interactions", () => {
         if (generateError) return { ok: false, status: 422, json: async () => generateError };
         body = {
           explorationId: "exp-1",
-          proposals: [
-            routeProposal("proposal-quick", "quick", ["viewpoint-found"], { geometry: quickGeometry }),
-            routeProposal("proposal-balanced", "balanced", ["peak-unfound"], { recommended: true })
-          ],
+          proposals: [routeProposal("proposal-balanced", "balanced", ["peak-unfound"], { recommended: true })],
           catalog: { collectibles: [collectibles[0], collectibles[1]], flowlines: [fartleks[0]] },
           truncated: false
         };
@@ -468,7 +465,7 @@ describe("mounted World page interactions", () => {
       setCollectibles: vi.fn(), setFartleks: vi.fn(), setDetailPanelOpen: vi.fn(),
       setRoute: vi.fn(), setAlternateRoutes: vi.fn(), setSavedRoutes: vi.fn(), fitTo: vi.fn(), setRouteEndpoints: vi.fn(),
       setPickHandler: vi.fn(), setMapClickHandler: vi.fn(), showPointTooltip: vi.fn(), isPicking: vi.fn(() => false),
-      setHomePosition: vi.fn(), flyTo: vi.fn()
+      setHomePosition: vi.fn(), flyTo: vi.fn(), setExploreFrame: vi.fn()
     };
     const createMap = vi.spyOn(worldMap, "createWorldMap").mockResolvedValue(map);
     await mountWorldPage(mountPoint);
@@ -480,6 +477,7 @@ describe("mounted World page interactions", () => {
       explore: () => cta.bound["[data-world-explore]:click"](),
       openPlanner: () => cta.bound["[data-world-plan]:click"](),
       card: (selector) => card.bound[`${selector}:click`](),
+      setCardDataset: (selector, dataset) => { card.datasets[selector] = dataset; },
       /** Opens the planner with the first Flowline picked and routes it. */
       route: async () => {
         page.setDataset("[data-flowline-add-route]", { flowlineAddRoute: "fartlek-1" });
@@ -658,11 +656,21 @@ describe("mounted World page interactions", () => {
     expect(page.collectibleIds()).not.toContain("waterfall-session");
   });
 
-  it("asks to zoom in while the area is too wide to explore", async () => {
-    const zoomedOut = await mount({ exploreAllowed: false });
-    expect(zoomedOut.cta.innerHTML).toContain("Zoom in to explore");
-    zoomedOut.explore();
-    expect(zoomedOut.calls("/api/world/explore")).toHaveLength(0);
+  it("explores a wide viewport as a centered frame, outlines it and generates inside it", async () => {
+    const frame = "9.10000,50.20000,9.90000,50.80000";
+    const page = await mount({
+      savedHome: { latitude: 50.5, longitude: 9.5 },
+      exploreResult: { ...discovered, area: { bbox: frame, center: { lat: 50.5, lon: 9.5 }, clamped: true } }
+    });
+    expect(page.cta.innerHTML).not.toContain("Zoom in");
+    page.explore();
+    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("data-explore-clamped"));
+    expect(page.map.setExploreFrame).toHaveBeenLastCalledWith(frame);
+    page.card("[data-explore-generate]");
+    await vi.waitFor(() => expect(page.calls("/api/explorations/generate", "POST")).toHaveLength(1));
+    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body).area).toMatchObject({ bbox: frame, center: { lat: 50.5, lon: 9.5 } });
+    page.bound("[data-planner-close]:click")();
+    expect(page.map.setExploreFrame).toHaveBeenLastCalledWith(undefined);
   });
 
   it("encourages a wider search when there is nothing to explore", async () => {
@@ -675,14 +683,20 @@ describe("mounted World page interactions", () => {
     expect(page.map.flyTo).toHaveBeenCalledWith(9.5, 50.5, 6);
   });
 
-  it("generates a route from the session's opportunities and saves it as a planned Exploration", async () => {
-    const page = await mount();
+  it("generates one route of the chosen feel from the session and saves it as a planned Exploration", async () => {
+    const page = await mount({ savedHome: { latitude: 50, longitude: 9 } });
     page.explore();
     await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("data-explore-generate"));
+    expect(page.exploreCard.innerHTML).toMatch(/data-explore-intent="chill" aria-pressed="true"/);
+    expect(page.exploreCard.innerHTML).not.toMatch(/schnell|fast/i);
+    page.setCardDataset("[data-explore-intent]", { exploreIntent: "explore" });
+    page.card("[data-explore-intent]");
+    expect(page.exploreCard.innerHTML).toMatch(/data-explore-intent="explore" aria-pressed="true"/);
     page.card("[data-explore-generate]");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("data-planner-save"));
     const body = JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body);
-    expect(body).toMatchObject({ start: { lat: 50.5, lon: 9.5 }, area: { bbox: "8.00000,49.00000,11.00000,52.00000" } });
+    expect(body).toMatchObject({ start: { lat: 50, lon: 9 }, intent: "explore", area: { bbox: "8.00000,49.00000,11.00000,52.00000" } });
+    expect(page.detail.innerHTML).toMatch(/data-planner-intent="explore" aria-pressed="true"/);
     expect(page.detail.innerHTML).toContain('data-planner-stop="peak-unfound"');
     expect(page.detail.innerHTML).toContain('data-planner-stop="flowline:fartlek-1"');
     expect(page.fartlekIds()).toContain("fresh-1");
@@ -781,8 +795,22 @@ describe("mounted World page interactions", () => {
     expect(page.map.setRouteEndpoints).toHaveBeenLastCalledWith({ start: { lat: 50, lon: 9 }, end: undefined });
     page.bound("[data-planner-suggest]:click")();
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain('data-planner-stop="peak-unfound"'));
-    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body)).toMatchObject({ start: { lat: 50, lon: 9 }, routeType: "round_trip" });
+    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body)).toMatchObject({ start: { lat: 50, lon: 9 }, routeType: "round_trip", intent: "chill" });
     expect(page.detail.innerHTML).toContain("data-planner-save");
+  });
+
+  it("asks for a start instead of generating from the map center when none is known", async () => {
+    const page = await mount();
+    page.explore();
+    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("data-explore-generate"));
+    page.card("[data-explore-generate]");
+    expect(page.detail.innerHTML).toContain("Click the map to set your start.");
+    expect(page.detail.innerHTML).toMatch(/data-planner-suggest disabled/);
+    expect(page.calls("/api/explorations/generate")).toHaveLength(0);
+    page.map.setPickHandler.mock.lastCall[0]({ lat: 50.1, lon: 9.1 });
+    page.bound("[data-planner-suggest]:click")();
+    await vi.waitFor(() => expect(page.calls("/api/explorations/generate", "POST")).toHaveLength(1));
+    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body)).toMatchObject({ start: { lat: 50.1, lon: 9.1 } });
   });
 
   it("keeps the stops and explains a failed route", async () => {

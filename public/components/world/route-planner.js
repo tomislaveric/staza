@@ -3,6 +3,29 @@ import { CollectibleSwatch } from "./collectible-swatch.js";
 import { formatRouteDistance, formatRouteDuration, SPORT_OPTIONS } from "./route-format.js";
 
 /**
+ * What a generated route should feel like. Never named after speed: Staza does not optimize pace.
+ * The names stay Flow / Chill / Explore in every language. Chill is the default; the choice is
+ * not saved with the Exploration.
+ */
+export const ROUTE_INTENTS = [
+  { value: "flow", label: "Flow", description: "Smooth Flowlines, few interruptions." },
+  { value: "chill", label: "Chill", description: "A relaxed, moderate mix." },
+  { value: "explore", label: "Explore", description: "A few good places, small detours." }
+];
+export const DEFAULT_ROUTE_INTENT = "chill";
+
+/** The intent picker shared by the Explore card and the planner; `attribute` names the click target. */
+export const IntentPicker = (selected, attribute, { disabled = false } = {}) => `
+  <div class="route-intent-picker" role="group" aria-label="Route feel">
+    ${ROUTE_INTENTS.map((intent) => `
+      <button type="button" ${attribute}="${intent.value}" aria-pressed="${selected === intent.value}"${disabled ? " disabled" : ""}>
+        <strong translate="no">${escapeHtml(intent.label)}</strong>
+        <small>${escapeHtml(intent.description)}</small>
+      </button>`).join("")}
+  </div>
+`;
+
+/**
  * Manual "Plan a route" state. The player edits every stop - the Explore session's Flowlines,
  * collectibles and map points - and Staza only connects them. Staza orders the stops unless the
  * player reordered them (`keepOrder`). "Generate route" replaces the stops with a generated set.
@@ -11,9 +34,11 @@ import { formatRouteDistance, formatRouteDuration, SPORT_OPTIONS } from "./route
  * - `picking`: "start" | "end" while the map sets that endpoint.
  * - `status`: "idle" | "routing" | "suggesting" | "saving".
  * - `proposal`: the routed result for the current stops; cleared by every edit.
+ * - `intent`: the feel "Generate route" aims for (Flow / Chill / Explore).
  */
-export const createPlannerState = ({ start, stops = [] } = {}) => ({
+export const createPlannerState = ({ start, stops = [], intent = DEFAULT_ROUTE_INTENT } = {}) => ({
   start,
+  intent,
   end: undefined,
   routeType: "round_trip",
   sport: "cycling",
@@ -116,10 +141,12 @@ export const buildPlanRequest = (state) => {
   };
 };
 
-/** "Generate route": bounded to the explored area and the session's opportunities. */
+/** "Generate route": one route for the explored area, shaped by the chosen intent. */
 export const buildSuggestRequest = (state, area) => {
   if (!state.start) return { error: "Choose a start on the map." };
-  return { body: { area, sport: state.sport, start: state.start, routeType: "round_trip" } };
+  return {
+    body: { area, sport: state.sport, start: state.start, routeType: "round_trip", intent: state.intent ?? DEFAULT_ROUTE_INTENT }
+  };
 };
 
 /** Names of stops the routed proposal had to leave out. */
@@ -206,6 +233,7 @@ export const RoutePlannerPanel = (state) => {
       <div class="exploration-route-actions route-planner-add" role="group" aria-label="Add stops">
         ${Object.entries(addLabels).map(([kind, label]) => `<button type="button" data-planner-add="${kind}" aria-pressed="${state.adding === kind}"${idle ? "" : " disabled"}>${label}</button>`).join("")}
       </div>
+      ${IntentPicker(state.intent ?? DEFAULT_ROUTE_INTENT, "data-planner-intent", { disabled: !idle })}
       ${statusLine(state)}
       <div class="route-planner-commands">
         <button type="button" class="route-planner-submit" data-planner-route${idle && state.start && state.stops.length ? "" : " disabled"}>Route</button>

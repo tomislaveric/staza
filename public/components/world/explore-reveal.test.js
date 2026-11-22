@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ExploreResultCard, exploreCta, revealSequence, sortDiscoveries } from "./explore-reveal.js";
 
 describe("exploreCta", () => {
-  it("is disabled only while the area is too wide to explore", () => {
-    expect(exploreCta(false)).toMatchObject({ action: "zoom", disabled: true });
-    expect(exploreCta(true)).toEqual({ action: "explore", label: "Explore this area" });
+  it("is always available: wide viewports explore a centered frame", () => {
+    expect(exploreCta()).toEqual({ action: "explore", label: "Explore this area" });
   });
 });
 

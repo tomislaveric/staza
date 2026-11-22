@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, PROPOSAL_SELECTION, type PlannerPolicy } from "./policy.js";
+import { DEFAULT_PLANNER_POLICY, PROPOSAL_SELECTION, type PlannerPolicy } from "./policy.js";
 import { traversedFlowlines } from "./validation.js";
 import { constraintActual, constraintRequested } from "./scoring.js";
 import type {
@@ -19,66 +19,11 @@ import type {
 export const routeTargetIds = (route: Pick<ScoredRoute, "includedTargetIds" | "nearbyTargetIds">): string[] =>
   [...new Set([...route.includedTargetIds, ...route.nearbyTargetIds])].sort();
 
-const jaccard = (a: string[], b: string[]): number => {
-  const left = new Set(a);
-  const intersection = b.filter((id) => left.has(id)).length;
-  const union = new Set([...a, ...b]).size;
-  return union === 0 ? 1 : intersection / union;
-};
-
-export const distinctRoutes = (a: ScoredRoute, b: ScoredRoute): boolean =>
-  jaccard(routeTargetIds(a), routeTargetIds(b)) < PROPOSAL_SELECTION.maxTargetOverlap
-  || Math.abs(a.routing.distanceM - b.routing.distanceM)
-    > PROPOSAL_SELECTION.minDistanceDifference * Math.max(a.routing.distanceM, b.routing.distanceM);
-
-const byScore = (a: ScoredRoute, b: ScoredRoute) => b.score.total - a.score.total
-  || a.routing.distanceM - b.routing.distanceM || a.candidate.key.localeCompare(b.candidate.key);
-
-const targetCount = (route: ScoredRoute) => routeTargetIds(route).length;
-
 export interface SelectedProposal {
   label: ProposalLabel;
   route: ScoredRoute;
   recommended: boolean;
 }
-
-/**
- * Picks up to three meaningfully different routes — which may contain different targets — and
- * labels them relative to each other:
- * - Adventure: the route with the most targets (ties: longer).
- * - Quick: the shortest remaining route, clearly shorter than Adventure.
- * - Balanced: the best-scoring remaining route.
- * The best-scoring route overall is marked recommended. Results are ordered Quick, Balanced, Adventure.
- */
-export const selectProposals = (routes: ScoredRoute[]): SelectedProposal[] => {
-  if (routes.length === 0) return [];
-  const ranked = [...routes].sort(byScore);
-  const best = ranked[0];
-  const chosen: ScoredRoute[] = [best];
-  const isDistinct = (route: ScoredRoute) => chosen.every((entry) => distinctRoutes(entry, route));
-  const add = (route: ScoredRoute | undefined) => {
-    if (route && chosen.length < PLANNING_LIMITS.maxProposals && isDistinct(route)) chosen.push(route);
-  };
-  add([...ranked].sort((a, b) => targetCount(b) - targetCount(a) || byScore(a, b)).find(isDistinct));
-  add([...ranked].sort((a, b) => a.routing.distanceM - b.routing.distanceM || byScore(a, b)).find(isDistinct));
-  for (const route of ranked) add(route);
-
-  if (chosen.length === 1) return [{ label: "balanced", route: best, recommended: true }];
-  const adventure = [...chosen].sort((a, b) => targetCount(b) - targetCount(a)
-    || b.routing.distanceM - a.routing.distanceM || byScore(a, b))[0];
-  const rest = chosen.filter((route) => route !== adventure).sort((a, b) => a.routing.distanceM - b.routing.distanceM || byScore(a, b));
-  const labelled: Array<{ label: ProposalLabel; route: ScoredRoute }> = [{ label: "adventure", route: adventure }];
-  const quickLimit = adventure.routing.distanceM * PROPOSAL_SELECTION.quickDistanceRatio;
-  if (rest.length === 2) {
-    labelled.push({ label: "quick", route: rest[0] }, { label: "balanced", route: rest[1] });
-  } else {
-    labelled.push({ label: rest[0].routing.distanceM <= quickLimit ? "quick" : "balanced", route: rest[0] });
-  }
-  const order: ProposalLabel[] = ["quick", "balanced", "adventure"];
-  return labelled
-    .sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label))
-    .map((entry) => ({ ...entry, recommended: entry.route === best }));
-};
 
 export const summarizeTargets = (ids: string[], targets: Map<string, QuestRouteTarget>): TargetSummary => {
   const summary: TargetSummary = { peaks: 0, places: 0, other: 0 };

@@ -53,6 +53,7 @@ struct WorldView: View {
                     collectibles: model.visibleCollectibles,
                     flowlines: model.visibleFlowlines,
                     explorationRoutes: model.explorationRoutes,
+                    exploreFrame: model.exploreFrame,
                     questTargets: planner.isActive ? plannerTargets(planner) : (revealedTargets(model) ?? model.mapQuestTargets),
                     route: planner.displayedRoute,
                     selectedCollectibleId: model.selection.flatMap { selection -> String? in
@@ -150,12 +151,8 @@ struct WorldView: View {
     }
 
     private func explore(_ model: WorldModel) {
-        switch model.exploreAction {
-        case .zoomIn: return
-        case .explore:
-            model.clearHighlight()
-            Task { await model.exploreArea(reduceMotion: reduceMotion) }
-        }
+        model.clearHighlight()
+        Task { await model.exploreArea(reduceMotion: reduceMotion) }
     }
 
     /// Frames an area three times as large around the current one.
@@ -169,20 +166,27 @@ struct WorldView: View {
         ]
     }
 
-    /// "Generate route": opens the route editor and generates a route in the explored area.
+    /// "Generate route": opens the route editor and generates one route for the chosen intent in the explored
+    /// area. Without a located start inside the area, the editor asks for a start on the map first.
     private func generateRoute(_ model: WorldModel, _ planner: RoutePlannerModel) {
         guard let bounds = model.sessionBounds ?? model.bounds else { return }
-        openPlanner(model, planner)
+        let start = userLocation.flatMap { bounds.contains($0) ? $0 : nil }
+        openPlanner(model, planner, start: start)
+        guard start != nil else { return }
         Task { await planner.suggest(in: bounds, catalog: model.collectible(id:)) }
     }
 
     /// "Plan a route": opens the route editor with the stops added so far; the Explore session stays open.
     private func openPlanner(_ model: WorldModel, _ planner: RoutePlannerModel) {
+        openPlanner(model, planner, start: userLocation)
+    }
+
+    private func openPlanner(_ model: WorldModel, _ planner: RoutePlannerModel, start: GeoPoint?) {
         model.dismissExplore()
         model.selection = nil
         model.clearHighlight()
         framed = []
-        planner.open(start: userLocation)
+        planner.open(start: start)
     }
 
     /// While the planner adds Flowlines or collectibles, map taps add them as stops; otherwise they open details.

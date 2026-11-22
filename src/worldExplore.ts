@@ -3,8 +3,9 @@ import { UserInputError } from "./errors.js";
 import type { FlowlineCharacterTag } from "./flowlineCharacter.js";
 import {
   availableOpportunities,
-  exploreAllowed,
+  clampExploreBounds,
   exploreOutcome,
+  type ExploreFrame,
   FLOWLINE_OPPORTUNITIES_PER_EXPLORE,
   type ExploreOutcome,
   type OpportunityCandidate
@@ -26,6 +27,8 @@ export interface WorldExploreDependencies {
 /** Temporary opportunities of one Explore session. Nothing here is persisted. */
 export interface WorldExploreResult {
   outcome: ExploreOutcome;
+  /** The explored area: the viewport, or a centered max-size frame when it was larger. */
+  area: { bbox: string; center: ExploreFrame["center"]; clamped: boolean };
   /** Flowline opportunities of the area, best first. */
   flowlines: WorldFartlek[];
   /** Uncollected collectibles of the area. */
@@ -37,13 +40,16 @@ export interface WorldExploreResult {
 }
 
 /** `{ bbox }` with the same "minLon,minLat,maxLon,maxLat" format as `GET /api/world`. */
-export const parseExploreRequest = (body: unknown): GeoBounds => {
+/** Larger viewports are never rejected: they are clamped to a centered max-size frame. */
+export const parseExploreRequest = (body: unknown): ExploreFrame => {
   const bbox = typeof body === "object" && body !== null ? (body as Record<string, unknown>).bbox : undefined;
   const bounds = parseBoundsParameter(bbox);
   if (!bounds) throw new UserInputError("An area to explore is required.");
-  if (!exploreAllowed(bounds)) throw new UserInputError("This area is too large to explore. Zoom in and try again.");
-  return bounds;
+  return clampExploreBounds(bounds);
 };
+
+const bboxString = ({ minLongitude, minLatitude, maxLongitude, maxLatitude }: GeoBounds) =>
+  [minLongitude, minLatitude, maxLongitude, maxLatitude].map((value) => Number(value.toFixed(6))).join(",");
 
 /**
  * "Explore this area": shows the area's opportunities (eligible Flowlines the player has not
@@ -55,7 +61,8 @@ export const exploreArea = async (
   body: unknown,
   { flowlines, listUncollectedCollectibles, toWorld }: WorldExploreDependencies
 ): Promise<WorldExploreResult> => {
-  const bounds = parseExploreRequest(body);
+  const frame = parseExploreRequest(body);
+  const { bounds } = frame;
   const [candidates, area] = await Promise.all([
     flowlines.listOpportunityCandidates(playerId, bounds),
     listUncollectedCollectibles(playerId, bounds)
@@ -70,6 +77,7 @@ export const exploreArea = async (
   for (const flowline of opportunities) byCharacter[flowline.character.primary] += 1;
   return {
     outcome: exploreOutcome(opportunities.length + area.collectibles.length),
+    area: { bbox: bboxString(bounds), center: frame.center, clamped: frame.clamped },
     flowlines: opportunities,
     collectibles: area.collectibles,
     collectiblesTruncated: area.truncated,

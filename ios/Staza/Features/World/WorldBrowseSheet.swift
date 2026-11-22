@@ -17,7 +17,7 @@ struct WorldBrowseHeader: View {
                 summary
             }
             Spacer(minLength: StazaSpacing.xs)
-            ExploreButton(action: model.exploreAction, isExploring: model.isExploring, onExplore: onExplore)
+            ExploreButton(isExploring: model.isExploring, onExplore: onExplore)
             PlanRouteButton(routeStops: routeStops, onPlanRoute: onPlanRoute)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

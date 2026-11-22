@@ -669,7 +669,7 @@ const germanCopy = {
   "Download GPX": "GPX herunterladen",
   "Planned route": "Geplante Route",
   "Explore this area": "Dieses Gebiet erkunden",
-  "Zoom in to explore": "Zum Erkunden hineinzoomen",
+  "Explored the framed area in the map center.": "Erkundet wurde der markierte Bereich in der Kartenmitte.",
   "Plan route": "Route planen",
   "Plan a route": "Route planen",
   "Exploring this area…": "Gebiet wird erkundet …",
@@ -684,6 +684,10 @@ const germanCopy = {
   "Endurance": "Ausdauer",
   "Flow": "Flow",
   "Explore": "Erkunden",
+  "Route feel": "Routengefühl",
+  "Smooth Flowlines, few interruptions.": "Flüssige Flowlines, wenige Unterbrechungen.",
+  "A relaxed, moderate mix.": "Entspannter, moderater Mix.",
+  "A few good places, small detours.": "Wenige gute Orte, kleine Umwege.",
   "Road quality": "Straßenqualität",
   "Unridden": "Ungefahren",
   "Best for": "Ideal für",
@@ -859,7 +863,7 @@ export const localizeAppUi = (root, locale) => {
   let node;
   while ((node = walker.nextNode())) {
     const parent = node.parentElement;
-    if (!parent || parent.closest("script, style, [data-user-content]")) continue;
+    if (!parent || parent.closest('script, style, [data-user-content], [translate="no"]')) continue;
     const current = node.nodeValue ?? "";
     const translated = translateAppTextNode(current, locale);
     if (translated !== current) node.nodeValue = translated;

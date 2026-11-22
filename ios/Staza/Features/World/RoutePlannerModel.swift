@@ -81,6 +81,8 @@ final class RoutePlannerModel {
     private(set) var end: GeoPoint?
     private(set) var routeType = RouteType.roundTrip
     private(set) var sport = Sport.cycling
+    /// The feel "Generate route" aims for; never saved with the Exploration.
+    var intent = RouteIntent.default
     private(set) var stops: [PlannerStop] = []
     /// Set once the player reorders stops; Staza then routes them as given.
     private(set) var keepOrder = false
@@ -136,6 +138,7 @@ final class RoutePlannerModel {
         mapMode = nil
         proposal = nil
         failure = nil
+        intent = .default
     }
 
     func setSport(_ sport: Sport) { edit { self.sport = sport } }
@@ -218,10 +221,10 @@ final class RoutePlannerModel {
     func suggest(in bounds: WorldBounds, catalog: (String) -> WorldCollectible?) async {
         guard isIdle else { return }
         guard let start else { return fail(.missingStart) }
-        let request = SuggestRequest(area: PlanArea(bounds: bounds, zoom: 12), sport: sport.rawValue, start: start)
+        let request = SuggestRequest(area: PlanArea(bounds: bounds, zoom: 12), sport: sport.rawValue, start: start, intent: intent)
         await run(.suggesting) { [self] in
             let result: GeneratedExploration = try await api.post("/api/explorations/generate", body: request)
-            guard let suggestion = result.proposals.first(where: { $0.recommended == true }) ?? result.proposals.first else {
+            guard let suggestion = result.proposals.first else {
                 failure = .noSuggestion
                 return
             }

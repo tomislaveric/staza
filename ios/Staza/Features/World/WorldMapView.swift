@@ -41,6 +41,8 @@ struct WorldMapView: UIViewRepresentable {
     let flowlines: [WorldFlowline]
     /// Saved Exploration routes: dotted and low in prominence, beneath every other layer.
     var explorationRoutes: [ExplorationRoute] = []
+    /// The clamped Explore frame, outlined while its session is open.
+    var exploreFrame: WorldBounds? = nil
     let questTargets: QuestTargets
     var route: [CLLocationCoordinate2D] = []
     var selectedCollectibleId: String? = nil
@@ -89,6 +91,7 @@ struct WorldMapView: UIViewRepresentable {
         coordinator.onLocationDenied = onLocationDenied
         coordinator.data = (collectibles, flowlines, questTargets, selectedCollectibleId)
         coordinator.explorationRoutes = explorationRoutes
+        coordinator.exploreFrame = exploreFrame
         if abs(coordinator.appliedInset - bottomInset) > 0.5 {
             coordinator.appliedInset = bottomInset
             map.setContentInset(UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0), animated: true, completionHandler: nil)
@@ -115,9 +118,11 @@ struct WorldMapView: UIViewRepresentable {
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
         var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selectedId: String?) = ([], [], .empty, nil)
         var explorationRoutes: [ExplorationRoute] = []
+        var exploreFrame: WorldBounds?
 
         private let locationManager = CLLocationManager()
         private var explorationRouteSource: MLNShapeSource?
+        private var exploreFrameSource: MLNShapeSource?
         private var collectibleSource: MLNShapeSource?
         private var flowlineSource: MLNShapeSource?
         private var questFlowlineSource: MLNShapeSource?
@@ -152,6 +157,14 @@ struct WorldMapView: UIViewRepresentable {
             dotted.lineDashPattern = NSExpression(forConstantValue: [0.1, 2.2])
             style.addLayer(dotted)
             explorationRouteSource = explorationRoutes
+
+            let frame = MLNShapeSource(identifier: "world-explore-frame", shape: nil, options: nil)
+            style.addSource(frame)
+            let outline = StazaMapLayers.line(id: "world-explore-frame-line", source: frame, color: accent, opacity: 0.8,
+                                              width: NSExpression(forConstantValue: 2))
+            outline.lineDashPattern = NSExpression(forConstantValue: [2, 2])
+            style.addLayer(outline)
+            exploreFrameSource = frame
 
             let flowlines = MLNShapeSource(identifier: "world-flowlines", shape: nil, options: nil)
             style.addSource(flowlines)
@@ -256,6 +269,10 @@ struct WorldMapView: UIViewRepresentable {
             collectibleSource.shape = Self.points(data.collectibles, quest: data.quest.collectibles, selectedId: data.selectedId)
             flowlineSource.shape = Self.lines(data.flowlines)
             explorationRouteSource?.shape = Self.routes(explorationRoutes)
+            exploreFrameSource?.shape = exploreFrame.map { frame in
+                var ring = frame.ring
+                return MLNPolylineFeature(coordinates: &ring, count: UInt(ring.count))
+            }
             questFlowlineSource.shape = Self.lines(data.quest.flowlines)
         }
 

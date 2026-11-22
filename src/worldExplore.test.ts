@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Fartlek, WorldCollectible } from "./domain.js";
 import { toWorldFartlek } from "./fartlek.js";
-import type { OpportunityCandidate } from "./flowlineReveal.js";
+import { MAX_EXPLORE_HEIGHT_METERS, MAX_EXPLORE_WIDTH_METERS, type OpportunityCandidate } from "./flowlineReveal.js";
+import { viewportWidthMeters } from "./flowlinePolicy.js";
+import type { GeoBounds } from "./worldQuery.js";
 import { exploreArea } from "./worldExplore.js";
 
 const flowline = (id: string, scores: Partial<Fartlek>): Fartlek => ({
@@ -30,10 +32,12 @@ const fakeWorld = (all: Fartlek[], collectibles: WorldCollectible[] = []) => {
   const candidate = (item: Fartlek): OpportunityCandidate => ({
     id: item.id, flowScore: item.flowScore, enduranceScore: item.enduranceScore, exploreScore: item.exploreScore
   });
+  const queried: GeoBounds[] = [];
   return {
+    queried,
     dependencies: {
       flowlines: {
-        listOpportunityCandidates: async () => all.map(candidate),
+        listOpportunityCandidates: async (_player: string, bounds: GeoBounds) => { queried.push(bounds); return all.map(candidate); },
         listByIds: async (ids: string[]) => all.filter((item) => ids.includes(item.id))
       },
       listUncollectedCollectibles: async () => ({ collectibles, truncated: false }),
@@ -66,9 +70,23 @@ describe("exploreArea", () => {
     expect(Object.keys(world.dependencies)).not.toContain("reveal");
   });
 
-  it("reports nothing new in an empty area and rejects areas that are too wide", async () => {
+  it("reports nothing new in an empty area and explores the viewport itself when it fits", async () => {
     const world = fakeWorld([flowline("weak", { flowScore: 10 })]);
-    expect(await exploreArea("p1", body, world.dependencies)).toMatchObject({ outcome: "nothing_new", flowlines: [], collectibles: [] });
-    await expect(exploreArea("p1", { bbox: "5,47,12,48" }, world.dependencies)).rejects.toThrow(/Zoom in/);
+    expect(await exploreArea("p1", body, world.dependencies)).toMatchObject({
+      outcome: "nothing_new", flowlines: [], collectibles: [], area: { bbox: body.bbox, clamped: false }
+    });
+  });
+
+  it("clamps wide viewports to a centered max-size frame instead of rejecting them", async () => {
+    const world = fakeWorld([]);
+    const result = await exploreArea("p1", { bbox: "5,45,13,49" }, world.dependencies);
+    const [frame] = world.queried;
+    expect(result.area.clamped).toBe(true);
+    expect(result.area.center.lat).toBeCloseTo(47);
+    expect(result.area.center.lon).toBeCloseTo(9);
+    expect(viewportWidthMeters(frame)).toBeCloseTo(MAX_EXPLORE_WIDTH_METERS, -2);
+    expect((frame.maxLatitude - frame.minLatitude) * 111_320).toBeCloseTo(MAX_EXPLORE_HEIGHT_METERS, -2);
+    expect((frame.minLongitude + frame.maxLongitude) / 2).toBeCloseTo(9);
+    expect(result.area.bbox.split(",").map(Number)).toEqual([frame.minLongitude, frame.minLatitude, frame.maxLongitude, frame.maxLatitude].map((value) => Number(value.toFixed(6))));
   });
 });

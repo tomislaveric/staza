@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { NewPlannedRoute, QuestObjective, WorldCollectible, WorldFartlek } from "../domain.js";
 import { UserInputError } from "../errors.js";
-import { generateAreaRoutes, generateExplorationRoutes, PlanningError, rerouteTargets, waypointTarget, type PlannedProposal, type RouteProvider } from "../routePlanning/planner.js";
+import { generateIntentRoute } from "../routePlanning/intentPlanner.js";
+import { PlanningError, rerouteTargets, waypointTarget, type PlannedProposal, type RouteProvider } from "../routePlanning/planner.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import type { ProposalStore } from "../routePlanning/proposalStore.js";
 import { routeTargetIds } from "../routePlanning/proposals.js";
@@ -169,10 +170,13 @@ export class ExplorationService {
     };
   }
 
-  /** Freezes the area, resolves its eligible targets and generates the initial route proposals. */
+  /**
+   * Freezes the area, resolves its eligible targets and generates ONE route for the player's intent
+   * (Flow, Chill or Explore). The response keeps a one-entry `proposals` list for older clients.
+   */
   async generate(playerId: string, body: unknown, requestId: string = randomUUID()): Promise<GeneratedExploration> {
     const routing = this.requireRouting();
-    const { area, input, destinationId, destinationFlowlineId } = parseGenerateRequest(body);
+    const { area, input, intent, destinationId, destinationFlowlineId } = parseGenerateRequest(body);
     if (input.routeType === "point_to_point" && !insideBounds([input.end.lon, input.end.lat], area.bounds, 0)) {
       throw new UserInputError("The destination must be inside the explored area.");
     }
@@ -194,10 +198,10 @@ export class ExplorationService {
       return { ...built, flowlineGeometries };
     };
     const resolved = resolve();
-    // Without collectibles the area itself is the exploration: route-only loops, no objectives.
+    // Collectibles are optional extras; a route without them saves without objectives.
     const destination = destinationId ? resolved.targets.find((target) => target.id === destinationId) : undefined;
     if (destinationId && !destination) throw new UserInputError("The destination must be inside the explored area.");
-    if (resolved.targets.length > 0 && !requiredFlowline) assertNearTargets(input, destination ? [destination] : resolved.targets);
+    if (destination) assertNearTargets(input, [destination]);
     const sessionData = (current: typeof resolved) => {
       const ids = new Set(current.targets.map((target) => target.id));
       const flowlineIds = new Set(current.flowlineGeometries.map((flowline) => flowline.id));
@@ -220,21 +224,15 @@ export class ExplorationService {
             return { target: withObjectiveIds([destination], objectives)[0], objectives };
           })()
           : undefined;
-        return {
-          planned: current.targets.length === 0 || required || requiredFlowline
-            ? await generateAreaRoutes(
-              {
-                requestId, playerId, scopeId: session.id, flowlines: current.flowlineGeometries, input, bounds: area.bounds,
-                ...(required ? { required } : {}),
-                ...(requiredFlowline ? { requiredFlowline } : {})
-              },
-              dependencies
-            )
-            : await generateExplorationRoutes(
-              { requestId, playerId, scopeId: session.id, targets: current.targets, flowlines: current.flowlineGeometries, input, bounds: area.bounds },
-              dependencies
-            )
-        };
+        const generated = await generateIntentRoute(
+          {
+            requestId, playerId, scopeId: session.id, intent, targets: current.targets, flowlines: current.flowlineGeometries, input, bounds: area.bounds,
+            ...(required ? { required } : {}),
+            ...(requiredFlowline ? { requiredFlowline } : {})
+          },
+          dependencies
+        );
+        return { planned: [generated] };
       } catch (failure) {
         return { failure };
       }

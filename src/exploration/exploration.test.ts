@@ -127,7 +127,12 @@ describe("exploration requests", () => {
     expect(parsed.input.constraint).toEqual({ type: "distance", meters: 40_000 });
     const derived = parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 }, start: at(0, 0) });
     expect(derived.input.routeType).toBe("round_trip");
-    expect(derived.input.constraint.type === "distance" && derived.input.constraint.meters).toBeGreaterThan(40_000);
+    expect(derived.intent).toBe("chill");
+    const explore = parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 }, start: at(0, 0), intent: "explore" });
+    expect(explore.input.constraint.type === "distance" && explore.input.constraint.meters).toBeGreaterThan(40_000);
+    const lengthOf = (request: typeof derived) => (request.input.constraint.type === "distance" ? request.input.constraint.meters : 0);
+    expect(lengthOf(derived)).toBeLessThan(lengthOf(explore));
+    expect(() => parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 }, start: at(0, 0), intent: "fast" })).toThrow(UserInputError);
     expect(parsed).not.toHaveProperty("targetIds");
     expect(() => parseGenerateRequest({ area: { bbox: "0,0,5,5", center: area.center, zoom: 5 }, ...ride })).toThrow(UserInputError);
     expect(() => parseGenerateRequest({ area: { bbox, center: area.center }, ...ride })).toThrow(UserInputError);
@@ -194,11 +199,11 @@ describe("ExplorationService", () => {
   const contents = (proposal: { includedTargetIds: string[]; nearbyTargetIds: string[] }) =>
     [...proposal.includedTargetIds, ...proposal.nearbyTargetIds];
 
-  it("generates route proposals from the ride alone, with the area catalog and no persistence", async () => {
+  it("generates exactly one route from the ride alone, with the area catalog and no persistence", async () => {
     const { service, created } = setup();
     const result = await service.generate("p1", generateBody);
-    expect(result.proposals.length).toBeGreaterThan(0);
-    expect(result.proposals.filter((proposal) => proposal.recommended)).toHaveLength(1);
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0].recommended).toBe(true);
     expect(result.proposals[0]).not.toHaveProperty("score");
     expect(result.proposals[0]).not.toHaveProperty("stops");
     expect(result.catalog.collectibles.map((item) => item.id)).toEqual(["c-near", "c-mid", "c-east", "c-far"]);
@@ -211,14 +216,12 @@ describe("ExplorationService", () => {
 
   it("reports Flowlines a route rides as derived metadata, never as targets", async () => {
     const { service, routeCalls } = setup();
-    const { proposals } = await service.generate("p1", generateBody);
-    const eastRoutes = proposals.filter((proposal) => contents(proposal).includes("c-near"));
-    expect(eastRoutes.length).toBeGreaterThan(0);
-    for (const proposal of eastRoutes) expect(proposal.traversedFlowlines.map((flowline) => flowline.id)).toContain("f-east");
-    for (const proposal of proposals) {
-      expect(proposal.targetSummary).not.toHaveProperty("flowlines");
-      expect(proposal.traversedFlowlines.map((flowline) => flowline.id)).not.toContain("f-west");
-    }
+    const { proposals: [proposal] } = await service.generate("p1", { ...generateBody, intent: "explore" });
+    const ridden = proposal.traversedFlowlines.map((flowline) => flowline.id);
+    expect(ridden.length).toBeGreaterThan(0);
+    expect(ridden.every((id) => ["f-near", "f-west", "f-east"].includes(id))).toBe(true);
+    expect(contents(proposal).some((id) => id.startsWith("f-"))).toBe(false);
+    expect(proposal.targetSummary).not.toHaveProperty("flowlines");
     expect(JSON.stringify(routeCalls)).not.toContain('"through"');
   });
 
@@ -241,9 +244,9 @@ describe("ExplorationService", () => {
 
   it("routes a loop through one chosen collectible and saves it as that objective", async () => {
     const { service, created } = setup();
-    const result = await service.generate("p1", { ...generateBody, destinationId: "c-mid" });
-    expect(result.proposals.length).toBeGreaterThan(0);
-    for (const proposal of result.proposals) expect(proposal.includedTargetIds).toEqual(["c-mid"]);
+    const result = await service.generate("p1", { ...generateBody, intent: "explore", destinationId: "c-mid" });
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0].includedTargetIds).toEqual(["c-mid"]);
     await service.save("p1", { proposalId: result.proposals[0].id });
     expect(created[0].exploration.objectives.flatMap((objective) => objective.targets.map((target) => target.id))).toEqual(["c-mid"]);
     await expect(service.generate("p1", { ...generateBody, destinationId: "nope" })).rejects.toThrow();
@@ -470,7 +473,7 @@ describe("ExplorationService outings", () => {
   it("reports an insufficient area instead of silently returning a much shorter route", async () => {
     const { service } = setup(near);
     const result = await service.generate("p1", body(100_000));
-    expect(Math.max(...result.proposals.map((proposal) => proposal.distanceM))).toBeLessThan(40_000);
+    expect(result.proposals[0].distanceM).toBeLessThan(50_000);
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toMatchObject({ code: "insufficient_area", requestedType: "distance", requested: 100_000 });
     expect(result.warnings[0].message).toContain("100 km");

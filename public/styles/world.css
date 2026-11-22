@@ -173,6 +173,27 @@
   outline: 2px solid var(--accent-yellow);
   outline-offset: 2px;
 }
+/* Flow / Chill / Explore: one feel per generated route. */
+.route-intent-picker { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.route-intent-picker button {
+  background: transparent;
+  border: 1px solid var(--border-faint);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: grid;
+  font-family: var(--font-body);
+  gap: 2px;
+  padding: 6px 8px;
+  text-align: left;
+}
+.route-intent-picker strong { color: var(--text-primary); font-size: 13px; }
+.route-intent-picker small { font-size: 11px; line-height: 1.3; }
+.route-intent-picker button[aria-pressed="true"] { border-color: var(--accent-yellow); }
+.route-intent-picker button[aria-pressed="true"] strong { color: var(--accent-yellow); }
+.route-intent-picker button:hover:not(:disabled) { color: var(--text-primary); }
+.route-intent-picker button:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+.route-intent-picker button:disabled { cursor: default; opacity: .6; }
 .route-planner button:disabled { cursor: default; opacity: .55; }
 @keyframes world-reveal-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
