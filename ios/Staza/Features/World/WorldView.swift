@@ -235,11 +235,11 @@ struct WorldView: View {
                 onPlanRoute: { openPlanner(model, planner) }
             )
         case .discoveries:
-            DiscoveriesHeader(routeStops: planner.stops.count, onPlanRoute: { openPlanner(model, planner) }) {
-                framed = []
-                model.endExploreSession()
-                withAnimation(.snappy) { sheet.closeDiscoveries() }
-            }
+            DiscoveriesHeader(
+                routeStops: planner.stops.count,
+                onPlanRoute: { openPlanner(model, planner) },
+                onGenerate: { generateRoute(model, planner) }
+            )
         case .planner:
             RoutePlannerHeader(planner: planner)
         case .detail(let selection):
@@ -260,13 +260,16 @@ struct WorldView: View {
                 model: model,
                 planner: planner,
                 origin: userLocation,
-                onGenerate: { generateRoute(model, planner) },
-                onViewOpportunities: { withAnimation(.snappy) { sheet.detent = .large } },
                 onViewOnMap: { flowline in
                     framed = flowline.coordinates
                     model.select(.flowline, id: flowline.id)
                 },
-                onZoomOut: { zoomOut(model) }
+                onZoomOut: { zoomOut(model) },
+                onEnd: {
+                    framed = []
+                    model.endExploreSession()
+                    withAnimation(.snappy) { sheet.closeDiscoveries() }
+                }
             )
         case .planner:
             RoutePlannerPanel(

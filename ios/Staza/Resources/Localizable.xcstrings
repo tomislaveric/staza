@@ -4973,18 +4973,18 @@
         }
       }
     },
-    "world.discoveries.castles" : {
+    "world.discoveries.away %@" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Burgen"
+            "value" : "%@ entfernt"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Castles"
+            "value" : "%@ away"
           }
         }
       }
@@ -5005,66 +5005,18 @@
         }
       }
     },
-    "world.discoveries.flowlines" : {
+    "world.discoveries.road %lld" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Flowlines"
+            "value" : "Straße %lld"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Flowlines"
-          }
-        }
-      }
-    },
-    "world.discoveries.passes" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pässe"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Passes"
-          }
-        }
-      }
-    },
-    "world.discoveries.peaks" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gipfel"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Peaks"
-          }
-        }
-      }
-    },
-    "world.discoveries.places" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orte"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Places"
+            "value" : "Road %lld"
           }
         }
       }
@@ -5177,22 +5129,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "View on map"
-          }
-        }
-      }
-    },
-    "world.discoveries.viewpoints" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aussichten"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Viewpoints"
           }
         }
       }
@@ -5541,42 +5477,18 @@
         }
       }
     },
-    "world.explore.discovered %lld" : {
+    "world.explore.end" : {
       "localizations" : {
         "de" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Flowline zum Fahren"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Flowlines zum Fahren"
-                }
-              }
-            }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkunden beenden"
           }
         },
         "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Flowline to ride"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld Flowlines to ride"
-                }
-              }
-            }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End exploring"
           }
         }
       }
@@ -5657,38 +5569,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nothing new here"
-          }
-        }
-      }
-    },
-    "world.explore.session.hint" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nur sichtbar, solange dieses Gebiet offen ist. Speichere eine Erkundung, um eine Route zu behalten."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Shown only while this area is open. Save an exploration to keep a route."
-          }
-        }
-      }
-    },
-    "world.explore.viewOpportunities" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Möglichkeiten ansehen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View opportunities"
           }
         }
       }

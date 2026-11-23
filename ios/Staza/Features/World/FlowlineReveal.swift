@@ -23,6 +23,13 @@ extension WorldFlowline {
         }
     }
 
+    /// Meters from the player to the closest point of the line; nil without a position.
+    func distance(from origin: GeoPoint?) -> Double? {
+        guard let origin else { return nil }
+        let here = CLLocation(latitude: origin.lat, longitude: origin.lon)
+        return coordinates.map { here.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude)) }.min()
+    }
+
     /// The midpoint coordinate, used to sort discoveries by distance.
     var midpoint: CLLocationCoordinate2D? {
         let coordinates = self.coordinates
@@ -121,30 +128,6 @@ enum DiscoverySort: String, CaseIterable, Identifiable, Sendable {
                 let dLon = (mid.longitude - origin.lon) * cos(origin.lat * .pi / 180)
                 return dLat * dLat + dLon * dLon
             }, descending: false)
-        }
-    }
-}
-
-/// Collectible counts for the discoveries sheet.
-struct AreaCounts: Equatable, Sendable {
-    var flowlines = 0
-    var places = 0
-    var peaks = 0
-    var viewpoints = 0
-    var castles = 0
-    var passes = 0
-
-    init(collectibles: [WorldCollectible], flowlines: [WorldFlowline]) {
-        self.flowlines = flowlines.count
-        for item in collectibles {
-            switch item.primaryCategory {
-            case "place": places += 1
-            case "peak", "mountain": peaks += 1
-            case "viewpoint": viewpoints += 1
-            case "castle": castles += 1
-            case "mountain_pass": passes += 1
-            default: break
-            }
         }
     }
 }
