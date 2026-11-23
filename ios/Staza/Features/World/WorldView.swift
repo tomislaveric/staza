@@ -16,6 +16,8 @@ struct WorldView: View {
     @State private var framed: [CLLocationCoordinate2D] = []
     @State private var focusRequest = 0
     @State private var centering: Task<Void, Never>?
+    /// Share of the visible map a focus fit may fill; a selected item gets room around it.
+    @State private var focusFill: CGFloat = 1
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -67,6 +69,7 @@ struct WorldView: View {
                     bottomInset: sheetHeight,
                     focus: framed.isEmpty ? focus(model) : framed,
                     focusRequest: focusRequest,
+                    focusFill: focusFill,
                     onLocationDenied: { locationDenied = $0 },
                     palette: basemap.mapPalette
                 )
@@ -100,7 +103,8 @@ struct WorldView: View {
                 if proposal != nil { withAnimation(.snappy) { sheet.revealMap() } }
             }
             .onChange(of: model.highlightedInstanceId) { _, _ in
-                framed = []
+                focusFill = 1
+        framed = []
                 if !planner.isActive { planner.showPlannedRoute(model.preferredPlannedRoute) }
             }
             .alert("world.locate.denied.title", isPresented: $showsLocationAlert) {
@@ -137,7 +141,10 @@ struct WorldView: View {
         if case .result = state {
             let points = model.sessionFlowlines.flatMap(\.coordinates)
                 + model.sessionCollectibles.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-            if !points.isEmpty { framed = points }
+            if !points.isEmpty {
+                focusFill = 1
+                framed = points
+            }
         }
         withAnimation(.snappy) {
             sheet.showDiscoveries()
@@ -157,10 +164,14 @@ struct WorldView: View {
         centering = Task { @MainActor in
             try? await Task.sleep(for: Self.sheetSettleDelay(reduceMotion: reduceMotion))
             guard !Task.isCancelled else { return }
+            focusFill = Self.selectionFill
             framed = coordinates
             focusRequest += 1
         }
     }
+
+    /// A selected Flowline spans about half of the visible map.
+    private static let selectionFill: CGFloat = 0.5
 
     /// Slightly longer than the sheet's snap animation.
     private static func sheetSettleDelay(reduceMotion: Bool) -> Duration {

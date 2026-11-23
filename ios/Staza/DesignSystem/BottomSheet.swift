@@ -38,7 +38,7 @@ struct StazaBottomSheet<Header: View, Content: View>: View {
         GeometryReader { proxy in
             let heights = heights(in: proxy.size.height)
             let settled = heights[shown] ?? 0
-            let current = min(max(settled - dragOffset, heights[.peek]! * 0.85), heights[.large]! + 24)
+            let current = SheetRubberBand.height(settled - dragOffset, min: heights[.peek]!, max: heights[.large]!)
 
             VStack(spacing: 0) {
                 VStack(spacing: 0) {
@@ -47,7 +47,8 @@ struct StazaBottomSheet<Header: View, Content: View>: View {
                         .background(GeometryReader { Color.clear.preference(key: HeaderHeightKey.self, value: $0.size.height) })
                 }
                 .contentShape(Rectangle())
-                .gesture(drag(heights))
+                // Ahead of the grabber and header buttons, so the sheet follows the finger; taps still reach them.
+                .highPriorityGesture(drag(heights))
 
                 ScrollView {
                     content
@@ -56,7 +57,7 @@ struct StazaBottomSheet<Header: View, Content: View>: View {
                 }
                 .scrollDisabled(shown != maxDetent)
                 .scrollIndicators(shown == maxDetent ? .automatic : .hidden)
-                .simultaneousGesture(drag(heights), including: shown == maxDetent ? .subviews : .all)
+                .highPriorityGesture(drag(heights), including: shown == maxDetent ? .subviews : .all)
             }
             .frame(maxWidth: .infinity)
             .frame(height: current, alignment: .top)
@@ -159,4 +160,15 @@ private struct HeaderHeightKey: PreferenceKey {
 private struct ContentHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+enum SheetRubberBand {
+    /// Follows the finger between the smallest and largest height and resists beyond them, like system sheets.
+    static func height(_ height: CGFloat, min lower: CGFloat, max upper: CGFloat) -> CGFloat {
+        let resistance: CGFloat = 0.55, limit: CGFloat = 60
+        func damp(_ overshoot: CGFloat) -> CGFloat { (1 - 1 / (overshoot * resistance / limit + 1)) * limit }
+        if height > upper { return upper + damp(height - upper) }
+        if height < lower { return lower - damp(lower - height) }
+        return height
+    }
 }

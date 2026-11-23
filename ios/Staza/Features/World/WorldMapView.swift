@@ -59,6 +59,8 @@ struct WorldMapView: UIViewRepresentable {
     var focus: [CLLocationCoordinate2D] = []
     /// Bumped to fit `focus` again even when it is unchanged, e.g. re-selecting the same item.
     var focusRequest = 0
+    /// Share of the visible map (width and height) the focus may fill when fitted.
+    var focusFill: CGFloat = 1
     var onLocationDenied: (Bool) -> Void = { _ in }
     var palette: MapPalette = .standard
 
@@ -103,7 +105,7 @@ struct WorldMapView: UIViewRepresentable {
             map.setUserTrackingMode(tracking.mapMode, animated: true, completionHandler: nil)
         }
         coordinator.setRoute(route, on: map)
-        coordinator.setFocus(focus, request: focusRequest, on: map)
+        coordinator.setFocus(focus, request: focusRequest, fill: focusFill, on: map)
         coordinator.refresh()
     }
 
@@ -320,18 +322,18 @@ struct WorldMapView: UIViewRepresentable {
             fit(route, on: map)
         }
 
-        func setFocus(_ coordinates: [CLLocationCoordinate2D], request: Int, on map: MLNMapView) {
+        func setFocus(_ coordinates: [CLLocationCoordinate2D], request: Int, fill: CGFloat, on map: MLNMapView) {
             let same = request == focusRequest && coordinates.count == focus.count && zip(coordinates, focus).allSatisfy {
                 $0.latitude == $1.latitude && $0.longitude == $1.longitude
             }
             guard !same else { return }
             focus = coordinates
             focusRequest = request
-            if !coordinates.isEmpty { fit(coordinates, on: map) }
+            if !coordinates.isEmpty { fit(coordinates, fill: fill, on: map) }
         }
 
         /// Fits coordinates into the part of the map not covered by the sheet (the content inset).
-        private func fit(_ coordinates: [CLLocationCoordinate2D], on map: MLNMapView) {
+        private func fit(_ coordinates: [CLLocationCoordinate2D], fill: CGFloat = 1, on map: MLNMapView) {
             guard let first = coordinates.first else { return }
             if coordinates.count == 1 {
                 map.setCenter(first, zoomLevel: max(map.zoomLevel, 13), animated: true)
@@ -346,7 +348,13 @@ struct WorldMapView: UIViewRepresentable {
                 sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
                 ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon)
             )
-            map.setVisibleCoordinateBounds(bounds, edgePadding: UIEdgeInsets(top: 80, left: 40, bottom: 40, right: 40), animated: true, completionHandler: nil)
+            // Padding inside the content inset: the bounds take `fill` of the visible width and height.
+            let visibleWidth = map.bounds.width
+            let visibleHeight = max(map.bounds.height - map.contentInset.top - map.contentInset.bottom, 0)
+            let side = max(40, visibleWidth * (1 - fill) / 2)
+            let vertical = max(40, visibleHeight * (1 - fill) / 2)
+            let padding = UIEdgeInsets(top: max(80, vertical), left: side, bottom: vertical, right: side)
+            map.setVisibleCoordinateBounds(bounds, edgePadding: padding, animated: true, completionHandler: nil)
         }
 
         private func reportViewport(_ map: MLNMapView) {

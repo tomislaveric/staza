@@ -46,4 +46,14 @@ final class WorldSheetModelTests: XCTestCase {
         sheet.revealMap()
         XCTAssertEqual(sheet.detent, .medium)
     }
+
+    func testSheetFollowsTheFingerAndResistsPastItsLimits() {
+        XCTAssertEqual(SheetRubberBand.height(300, min: 100, max: 600), 300)
+        let over = SheetRubberBand.height(800, min: 100, max: 600)
+        XCTAssertGreaterThan(over, 600)
+        XCTAssertLessThan(over, 660)
+        let under = SheetRubberBand.height(0, min: 100, max: 600)
+        XCTAssertLessThan(under, 100)
+        XCTAssertGreaterThan(under, 40)
+    }
 }
