@@ -29,8 +29,7 @@ struct WorldDetailHeader: View {
     }
 }
 
-/// Status chips and facts about the tapped collectible or flowline. A Flowline leads with its primary
-/// character; further scores stay behind "View details".
+/// Status, tags and key facts of the tapped collectible or Flowline, each shown once.
 struct WorldDetailBody: View {
     let selection: WorldSelection
     let isQuestTarget: Bool
@@ -41,84 +40,91 @@ struct WorldDetailBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
-            HStack(alignment: .top, spacing: StazaSpacing.sm) {
+            HStack(alignment: .center, spacing: StazaSpacing.sm) {
                 chips
                 Spacer(minLength: 0)
                 if let onToggleRoute {
-                    Button(action: onToggleRoute) {
-                        Label(inRoute ? "world.route.added" : "world.route.add", systemImage: inRoute ? "checkmark" : "plus").labelStyle(.iconOnly)
-                    }
-                    .buttonStyle(inRoute ? .stazaSecondary : .stazaPrimary)
-                    .accessibilityAddTraits(inRoute ? .isSelected : [])
-                    .accessibilityIdentifier("worldAddToRoute")
+                    CircleIconButton(inRoute ? "world.route.added" : "world.route.add",
+                                     systemImage: inRoute ? "checkmark" : "plus",
+                                     tint: inRoute ? StazaColor.onAccent : StazaColor.accent,
+                                     filled: inRoute, action: onToggleRoute)
+                        .accessibilityAddTraits(inRoute ? .isSelected : [])
+                        .accessibilityIdentifier("worldAddToRoute")
                 }
             }
-            if case .flowline(let flowline) = selection {
-                flowlineFacts(flowline)
-                DisclosureGroup("world.detail.viewDetails") { details(flowline) }
-                    .font(StazaFont.subheadline.weight(.medium))
-                    .tint(StazaColor.textMuted)
-                    .foregroundStyle(StazaColor.textPrimary)
-                    .accessibilityIdentifier("worldFlowlineDetails")
-            }
+            facts
         }
         .padding(.horizontal, StazaSpacing.md)
-        .padding(.bottom, StazaSpacing.lg)
+        .padding(.bottom, StazaSpacing.md)
         .accessibilityIdentifier("worldDetailSheet")
     }
 
+    /// Status, quest target and a Flowline's further character tags (its primary one is a fact below).
     private var chips: some View {
         FlowChips {
             StazaChip(selection.statusLabel, systemImage: selection.done ? "checkmark.circle.fill" : "circle.dashed", tint: selection.done ? StazaColor.success : StazaColor.textSubtle)
-            if case .flowline(let flowline) = selection {
-                FlowlineCharacterChip(flowline: flowline)
-            }
             if isQuestTarget {
                 StazaChip("world.detail.questTarget", systemImage: "scope", tint: StazaColor.accent)
             }
-        }
-    }
-
-    /// Length, the primary character's score and road quality: never more than two scores at once.
-    @ViewBuilder
-    private func flowlineFacts(_ flowline: WorldFlowline) -> some View {
-        let character = flowline.resolvedCharacter
-        HStack(spacing: StazaSpacing.md) {
-            if let length = flowline.lengthMeters {
-                StatTile(label: "world.detail.length", value: StazaFormat.distance(meters: length, locale: locale))
-            }
-            if let score = flowline.score(for: character.primary) {
-                StatTile(label: character.primary.scoreLabel, value: "\(Int(score.rounded()))", tint: character.primary.tint)
-            }
-            if let quality = flowline.roadQualityScore {
-                StatTile(label: "world.detail.roadQuality", value: "\(Int(quality.rounded()))")
-            }
-        }
-        if character.tags.count > 1 {
-            HStack(spacing: StazaSpacing.sm) {
-                Text("world.detail.bestFor").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
-                ForEach(character.tags, id: \.self) { tag in
+            if case .flowline(let flowline) = selection {
+                let character = flowline.resolvedCharacter
+                ForEach(character.tags.filter { $0 != character.primary }, id: \.self) { tag in
                     StazaChip(tag.scoreLabel, systemImage: tag.systemImage, tint: tag.tint)
                 }
             }
-            .accessibilityElement(children: .combine)
         }
     }
 
-    private func details(_ flowline: WorldFlowline) -> some View {
-        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+    /// Flowline: length, primary score and road quality. Collectible: elevation when known.
+    @ViewBuilder
+    private var facts: some View {
+        switch selection {
+        case .flowline(let flowline):
+            let primary = flowline.resolvedCharacter.primary
             HStack(spacing: StazaSpacing.md) {
-                ForEach(FlowlineTag.allCases, id: \.self) { tag in
-                    if let score = flowline.score(for: tag) {
-                        StatTile(label: tag.scoreLabel, value: "\(Int(score.rounded()))", tint: tag.tint)
-                    }
+                if let length = flowline.lengthMeters {
+                    StatTile(label: "world.detail.length", value: StazaFormat.distance(meters: length, locale: locale))
+                }
+                if let score = flowline.score(for: primary) {
+                    StatTile(label: primary.scoreLabel, value: "\(Int(score.rounded()))", tint: primary.tint)
+                }
+                if let quality = flowline.roadQualityScore {
+                    StatTile(label: "world.detail.roadQuality", value: "\(Int(quality.rounded()))")
                 }
             }
-            if !flowline.completed {
-                Text("world.detail.completeHint").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
+        case .collectible(let item):
+            if let elevation = item.elevationMeters {
+                StatTile(label: "world.detail.elevation", value: "\(StazaFormat.number(elevation, locale: locale)) m")
             }
         }
-        .padding(.top, StazaSpacing.sm)
+    }
+}
+
+/// Small round icon button used in World lists and details, e.g. add to route or show on map.
+struct CircleIconButton: View {
+    let label: LocalizedStringKey
+    let systemImage: String
+    var tint: Color = StazaColor.textMuted
+    var filled = false
+    let action: () -> Void
+
+    init(_ label: LocalizedStringKey, systemImage: String, tint: Color = StazaColor.textMuted, filled: Bool = false,
+         action: @escaping () -> Void) {
+        self.label = label; self.systemImage = systemImage; self.tint = tint; self.filled = filled; self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 32, height: 32)
+                .background(filled ? StazaColor.accent : StazaColor.surfaceRaised, in: Circle())
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(label))
     }
 }
 

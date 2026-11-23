@@ -332,8 +332,8 @@ struct DiscoveriesContent: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            iconButton("world.discoveries.viewOnMap", systemImage: "map", tint: StazaColor.textMuted) { onViewOnMap(item.selection) }
-            iconButton(inRoute ? "world.route.added" : "world.route.add",
+            CircleIconButton("world.discoveries.viewOnMap", systemImage: "map", tint: StazaColor.textMuted) { onViewOnMap(item.selection) }
+            CircleIconButton(inRoute ? "world.route.added" : "world.route.add",
                        systemImage: inRoute ? "checkmark" : "plus",
                        tint: inRoute ? StazaColor.onAccent : StazaColor.accent,
                        filled: inRoute) { planner.toggle(stop) }
@@ -371,21 +371,6 @@ struct DiscoveriesContent: View {
         case .flowline(let flowline): .flowline(flowline)
         case .collectible(let collectible): .collectible(collectible)
         }
-    }
-
-    private func iconButton(_ label: LocalizedStringKey, systemImage: String, tint: Color, filled: Bool = false,
-                            action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(tint)
-                .frame(width: 32, height: 32)
-                .background(filled ? StazaColor.accent : StazaColor.surfaceRaised, in: Circle())
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(label))
     }
 
     /// Flowlines: length (no elevation data exists for them). Collectibles: category and elevation.

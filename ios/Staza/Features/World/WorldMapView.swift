@@ -45,7 +45,8 @@ struct WorldMapView: UIViewRepresentable {
     var exploreFrame: WorldBounds? = nil
     let questTargets: QuestTargets
     var route: [CLLocationCoordinate2D] = []
-    var selectedCollectibleId: String? = nil
+    /// The tapped collectible or Flowline; it gets the selection halo.
+    var selection: WorldSelection? = nil
     let onViewportChange: (WorldBounds) -> Void
     let onSelect: (WorldSelectionKind, String) -> Void
     /// A tap on the map that hit no collectible or Flowline.
@@ -89,7 +90,7 @@ struct WorldMapView: UIViewRepresentable {
         coordinator.onUserLocation = onUserLocation
         coordinator.onTrackingChange = { tracking = $0 }
         coordinator.onLocationDenied = onLocationDenied
-        coordinator.data = (collectibles, flowlines, questTargets, selectedCollectibleId)
+        coordinator.data = (collectibles, flowlines, questTargets, selection)
         coordinator.explorationRoutes = explorationRoutes
         coordinator.exploreFrame = exploreFrame
         if abs(coordinator.appliedInset - bottomInset) > 0.5 {
@@ -116,7 +117,7 @@ struct WorldMapView: UIViewRepresentable {
         var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
         var onMapTap: (GeoPoint) -> Void = { _ in }
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
-        var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selectedId: String?) = ([], [], .empty, nil)
+        var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selection: WorldSelection?) = ([], [], .empty, nil)
         var explorationRoutes: [ExplorationRoute] = []
         var exploreFrame: WorldBounds?
 
@@ -126,6 +127,7 @@ struct WorldMapView: UIViewRepresentable {
         private var collectibleSource: MLNShapeSource?
         private var flowlineSource: MLNShapeSource?
         private var questFlowlineSource: MLNShapeSource?
+        private var selectedFlowlineSource: MLNShapeSource?
         private var routeSource: MLNShapeSource?
         private var route: [CLLocationCoordinate2D] = []
 
@@ -177,6 +179,17 @@ struct WorldMapView: UIViewRepresentable {
             let questHighlight = StazaMapLayers.line(id: "world-quest-flowlines-highlight", source: questFlowlines, color: accent, opacity: 0.22,
                                                      width: CollectibleMapIcons.zoomStops([9: 6, 12: 8, 15: 10, 17: 12]))
             style.addLayer(questHighlight)
+
+            // The selected Flowline: a bright halo under its own line, above every other Flowline.
+            let selectedFlowline = MLNShapeSource(identifier: "world-selected-flowline", shape: nil, options: nil)
+            style.addSource(selectedFlowline)
+            let selectedColor = palette.color(\.highlightSelected)
+            style.addLayer(StazaMapLayers.line(id: "world-selected-flowline-glow", source: selectedFlowline, color: selectedColor, opacity: 0.22,
+                                               width: CollectibleMapIcons.zoomStops([9: 12, 12: 15, 15: 19, 17: 23])))
+            style.addLayer(StazaMapLayers.line(id: "world-selected-flowline-halo", source: selectedFlowline, color: selectedColor, opacity: 0.6,
+                                               width: CollectibleMapIcons.zoomStops([9: 5, 12: 7, 15: 9, 17: 11])))
+            StazaMapLayers.addFlowlines(to: style, source: selectedFlowline, id: "world-selected-flowline", palette: palette)
+            selectedFlowlineSource = selectedFlowline
 
             let routeSource = MLNShapeSource(identifier: "explore-route", shape: nil, options: nil)
             style.addSource(routeSource)
@@ -246,7 +259,7 @@ struct WorldMapView: UIViewRepresentable {
             let hitArea = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
             let groups: [(WorldSelectionKind, Set<String>)] = [
                 (.collectible, [Self.iconLayer, Self.circleLayer]),
-                (.flowline, ["world-quest-flowlines-line", "world-flowlines-line"])
+                (.flowline, ["world-selected-flowline-line", "world-quest-flowlines-line", "world-flowlines-line"])
             ]
             for (kind, layers) in groups {
                 let hit = map.visibleFeatures(in: hitArea, styleLayerIdentifiers: layers)
@@ -266,7 +279,15 @@ struct WorldMapView: UIViewRepresentable {
 
         func refresh() {
             guard let collectibleSource, let flowlineSource, let questFlowlineSource else { return }
-            collectibleSource.shape = Self.points(data.collectibles, quest: data.quest.collectibles, selectedId: data.selectedId)
+            var selectedCollectibleId: String?
+            var selectedFlowline: [WorldFlowline] = []
+            switch data.selection {
+            case .collectible(let item)?: selectedCollectibleId = item.id
+            case .flowline(let flowline)?: selectedFlowline = [flowline]
+            case nil: break
+            }
+            collectibleSource.shape = Self.points(data.collectibles, quest: data.quest.collectibles, selectedId: selectedCollectibleId)
+            selectedFlowlineSource?.shape = Self.lines(selectedFlowline)
             flowlineSource.shape = Self.lines(data.flowlines)
             explorationRouteSource?.shape = Self.routes(explorationRoutes)
             exploreFrameSource?.shape = exploreFrame.map { frame in

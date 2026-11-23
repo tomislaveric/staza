@@ -646,22 +646,6 @@
         }
       }
     },
-    "atlas.loading" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skill-Atlas wird geladen…"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loading Skill Atlas…"
-          }
-        }
-      }
-    },
     "atlas.lane.endurance" : {
       "localizations" : {
         "de" : {
@@ -742,18 +726,18 @@
         }
       }
     },
-    "atlas.nextUp" : {
+    "atlas.loading" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Als Nächstes"
+            "value" : "Skill-Atlas wird geladen…"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Next up"
+            "value" : "Loading Skill Atlas…"
           }
         }
       }
@@ -770,6 +754,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Next skill point at level %1$lld (%2$@ XP to go)"
+          }
+        }
+      }
+    },
+    "atlas.nextUp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Nächstes"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next up"
           }
         }
       }
@@ -4797,23 +4797,8 @@
         }
       }
     },
-    "world.detail.bestFor" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ideal für"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Best for"
-          }
-        }
-      }
-    },
     "world.detail.collectible" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -4825,22 +4810,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Collectible"
-          }
-        }
-      }
-    },
-    "world.detail.completeHint" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In einer Aktivität ganz fahren."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ride it fully in one activity."
           }
         }
       }
@@ -4857,6 +4826,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Completed"
+          }
+        }
+      }
+    },
+    "world.detail.elevation" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Höhe"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elevation"
           }
         }
       }
@@ -4953,22 +4938,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Road"
-          }
-        }
-      }
-    },
-    "world.detail.viewDetails" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Details"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Details"
           }
         }
       }

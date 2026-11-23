@@ -54,12 +54,9 @@ struct WorldView: View {
                     flowlines: model.visibleFlowlines,
                     explorationRoutes: model.explorationRoutes,
                     exploreFrame: model.exploreFrame,
-                    questTargets: planner.isActive ? plannerTargets(planner) : (revealedTargets(model) ?? model.mapQuestTargets),
+                    questTargets: planner.isActive ? plannerTargets(planner) : model.mapQuestTargets,
                     route: planner.displayedRoute,
-                    selectedCollectibleId: model.selection.flatMap { selection -> String? in
-                        if case .collectible(let item) = selection { return item.id }
-                        return nil
-                    },
+                    selection: model.selection,
                     onViewportChange: { model.viewportChanged($0) },
                     onSelect: { kind, id in select(kind, id: id, model, planner) },
                     onMapTap: { planner.mapTapped($0) },
@@ -74,7 +71,8 @@ struct WorldView: View {
                 .overlay(alignment: .topTrailing) { locateButton.padding(StazaSpacing.md) }
                 .accessibilityIdentifier("worldMap")
 
-                StazaBottomSheet(detent: $sheet.detent, onHeightChange: { sheetHeight = $0 }) {
+                StazaBottomSheet(detent: $sheet.detent, maxDetent: sheet.selection == nil ? .large : .medium,
+                                 onHeightChange: { sheetHeight = $0 }) {
                     sheetHeader(model, planner)
                 } content: {
                     sheetContent(model, planner)
@@ -143,13 +141,6 @@ struct WorldView: View {
     }
 
     /// Opportunity Flowlines stay emphasised while the Explore result is open.
-    private func revealedTargets(_ model: WorldModel) -> QuestTargets? {
-        guard sheet.mode == .discoveries, case .result? = model.exploreState else { return nil }
-        let ids = Set(model.sessionFlowlines.map(\.id))
-        guard !ids.isEmpty else { return nil }
-        return QuestTargets(collectibles: [], flowlines: model.visibleFlowlines.filter { ids.contains($0.id) })
-    }
-
     private func explore(_ model: WorldModel) {
         model.clearHighlight()
         Task { await model.exploreArea(reduceMotion: reduceMotion) }
