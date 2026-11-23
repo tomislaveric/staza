@@ -41,20 +41,21 @@ struct FlowlineCharacterChip: View {
 
     var body: some View {
         let primary = flowline.resolvedCharacter.primary
+        let tint = primary?.tint ?? StazaColor.textMuted
         HStack(spacing: 5) {
-            Image(systemName: primary.systemImage).font(.caption2.weight(.semibold)).accessibilityHidden(true)
-            Text(primary.scoreLabel)
-            if let score = flowline.score(for: primary) {
+            Image(systemName: primary?.systemImage ?? "point.topleft.down.to.point.bottomright.curvepath").font(.caption2.weight(.semibold)).accessibilityHidden(true)
+            Text(primary?.scoreLabel ?? "world.detail.flowline")
+            if let primary, let score = flowline.score(for: primary) {
                 Text(verbatim: "\(Int(score.rounded()))").monospacedDigit()
             }
         }
         .font(StazaFont.caption.weight(.semibold))
         .lineLimit(1)
-        .foregroundStyle(primary.tint)
+        .foregroundStyle(tint)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(primary.tint.opacity(0.16), in: Capsule())
-        .overlay(Capsule().strokeBorder(primary.tint.opacity(0.45), lineWidth: 1))
+        .background(tint.opacity(0.16), in: Capsule())
+        .overlay(Capsule().strokeBorder(tint.opacity(0.45), lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 }
@@ -111,13 +112,15 @@ struct RouteIntentPicker: View {
 /// "Plan" button that opens route planning; a badge counts the stops picked so far.
 struct PlanRouteButton: View {
     let routeStops: Int
+    /// Only the icon, e.g. in the Explore session's toolbar next to the icon-only Explore button.
+    var iconOnly = false
     let onPlanRoute: () -> Void
 
     var body: some View {
         Button(action: onPlanRoute) {
             HStack(spacing: StazaSpacing.xs) {
                 Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                Text("world.planRoute.short").lineLimit(1)
+                if !iconOnly { Text("world.planRoute.short").lineLimit(1) }
             }
                 .font(StazaFont.footnote.weight(.semibold))
                 .overlay(alignment: .topTrailing) {
@@ -204,11 +207,17 @@ struct ExploreFindings: View {
     @Binding var filters: Set<DiscoveryFilter>
 
     var body: some View {
-        if result.outcome == .discovered, !result.breakdown.isEmpty || !result.collectibles.isEmpty {
+        if result.outcome == .discovered, !result.breakdown.isEmpty || result.unclassifiedFlowlineCount > 0 || !result.collectibles.isEmpty {
             MoreFlowLayout {
                 ForEach(result.breakdown, id: \.tag) { entry in
                     pill(.character(entry.tag)) {
                         StazaChip(entry.tag.breakdown(entry.count), systemImage: entry.tag.systemImage, tint: entry.tag.tint)
+                    }
+                }
+                if result.unclassifiedFlowlineCount > 0 {
+                    pill(.plainFlowlines) {
+                        StazaChip("world.explore.breakdown.plain \(result.unclassifiedFlowlineCount)",
+                                  systemImage: "point.topleft.down.to.point.bottomright.curvepath", tint: StazaColor.textMuted)
                     }
                 }
                 if !result.collectibles.isEmpty {
@@ -250,7 +259,7 @@ struct DiscoveriesHeader: View {
 
     var body: some View {
         HStack(spacing: StazaSpacing.sm) {
-            PlanRouteButton(routeStops: routeStops, onPlanRoute: onPlanRoute)
+            PlanRouteButton(routeStops: routeStops, iconOnly: true, onPlanRoute: onPlanRoute)
             Text("world.discoveries.title")
                 .font(StazaFont.title3)
                 .foregroundStyle(StazaColor.textPrimary)
@@ -351,9 +360,9 @@ struct DiscoveriesContent: View {
         switch item {
         case .flowline(let flowline):
             let primary = flowline.resolvedCharacter.primary
-            Image(systemName: primary.systemImage)
-                .foregroundStyle(primary.tint)
-                .accessibilityLabel(Text(primary.scoreLabel))
+            Image(systemName: primary?.systemImage ?? "point.topleft.down.to.point.bottomright.curvepath")
+                .foregroundStyle(primary?.tint ?? StazaColor.textMuted)
+                .accessibilityLabel(Text(primary?.scoreLabel ?? "world.detail.flowline"))
         case .collectible(let collectible):
             Image(systemName: WorldCategory.systemImage(collectible.primaryCategory))
                 .foregroundStyle(StazaColor.textMuted)

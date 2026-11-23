@@ -28,6 +28,16 @@ describe("ExploreResultCard", () => {
     expect(markup).toContain("1 opportunity");
   });
 
+  it("counts plain Flowlines without assigning an Exploration or High-flow badge", () => {
+    const markup = ExploreResultCard({ phase: "result", result: {
+      outcome: "discovered", flowlines: [{ lengthMeters: 3000, flowScore: 82, exploreScore: 64 }],
+      collectibles: [], summary: { total: 1, byCharacter: {}, unclassifiedFlowlineCount: 1 }
+    } });
+    expect(markup).toContain("1 opportunity");
+    expect(markup).toMatch(/<strong>1<\/strong> <span>plain Flowline<\/span>/);
+    expect(markup).not.toContain('class="is-explore"');
+  });
+
   it("offers to zoom out when the area has nothing to explore", () => {
     const markup = ExploreResultCard({ phase: "result", result: { outcome: "nothing_new", flowlines: [], collectibles: [] } });
     expect(markup).toContain("data-explore-zoom-out");

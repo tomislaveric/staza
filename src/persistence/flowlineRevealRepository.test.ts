@@ -60,7 +60,7 @@ describePersistence("FlowlineRevealRepository", () => {
        VALUES ('00000000-0000-4000-8000-0000000000c0', 'flow-b', $1, 'ride-0', now(), 300, 5, 1500, 1)`,
       [playerId]
     );
-    expect(await repository!.listOpportunityCandidatesWithinBounds(playerId, bounds)).toEqual([{ id: "flow-a", flowScore: 80 }]);
+    expect(await repository!.listOpportunityCandidatesWithinBounds(playerId, bounds)).toEqual([{ id: "flow-a", lengthMeters: 1500, flowScore: 80 }]);
     expect(await repository!.listOpportunityCandidatesWithinBounds(otherPlayerId, bounds)).toHaveLength(2);
     expect((await repository!.listByIds(["flow-b", "missing"])).map((row) => row.id)).toEqual(["flow-b"]);
   });

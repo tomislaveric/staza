@@ -40,7 +40,7 @@ final class WorldModelTests: XCTestCase {
         let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"exploreAllowed":true"#)
             .replacingOccurrences(of: #""completed":false"#, with: #""completed":true"#)
         let line = #""geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]},"completed":false"#
-        let opportunity = #"{"id":"f2","name":"Rheintal",\#(line),"flowScore":84,"roadQualityScore":91,"character":{"primary":"flow","tags":["flow","explore"]}}"#
+        let opportunity = #"{"id":"f2","name":"Rheintal",\#(line),"lengthMeters":3000,"flowScore":84,"roadQualityScore":91,"character":{"primary":"flow","tags":["flow","explore"]}}"#
         let collectible = #"{"id":"c9","name":"Tower","latitude":47.05,"longitude":8.05,"found":false,"primaryCategory":"viewpoint"}"#
         let explored = #"{"outcome":"discovered","flowlines":[\#(opportunity)],"collectibles":[\#(collectible)],"collectiblesTruncated":false,"availableCount":0,"summary":{"total":1,"byCharacter":{"flow":1,"endurance":0,"explore":0},"collectibles":1}}"#
         let transport = StubTransport([.init(status: 200, body: body), .init(status: 200, body: explored), .init(status: 200, body: body)])
@@ -58,7 +58,7 @@ final class WorldModelTests: XCTestCase {
         XCTAssertEqual(model.sessionFlowlines.map(\.id), ["f2"])
         XCTAssertEqual(model.sessionBounds, bounds, "older servers explore the requested viewport")
         XCTAssertTrue(model.exploreOutline.isEmpty)
-        XCTAssertEqual(model.flowline(id: "f2")?.resolvedCharacter.tags, [.flow, .explore])
+        XCTAssertEqual(model.flowline(id: "f2")?.resolvedCharacter.tags, [.flow])
         guard case .result(let result) = model.exploreState else { return XCTFail("expected a result") }
         XCTAssertEqual(result.breakdown, [ExploreResult.Count(tag: .flow, count: 1)])
         XCTAssertEqual(result.summary.collectibles, 1)
@@ -127,6 +127,7 @@ final class WorldModelTests: XCTestCase {
         func flowline(_ id: String, flow: Double, endurance: Double) -> WorldFlowline {
             let primary: FlowlineTag = flow >= endurance ? .flow : .endurance
             return WorldFlowline(id: id, name: id, geometry: .init(coordinates: [[8, 47], [8, 47.01]]), completed: false,
+                                 lengthMeters: id == "c" ? 6000 : 3000,
                                  flowScore: flow, enduranceScore: endurance, character: FlowlineCharacter(primary: primary, tags: [primary]))
         }
         func collectible(_ id: String, _ category: String, hidden: Bool = false) -> WorldCollectible {
@@ -139,8 +140,62 @@ final class WorldModelTests: XCTestCase {
             DiscoveryItem.list(flowlines: flowlines, collectibles: collectibles, filters: filters).map(\.id)
         }
         XCTAssertEqual(ids([]), ["flowline:c", "flowline:b", "flowline:a", "collectible:x", "collectible:z", "collectible:y"])
-        XCTAssertEqual(ids([.character(.flow)]), ["flowline:b", "flowline:a"])
+        XCTAssertEqual(ids([.character(.flow)]), ["flowline:b"])
+        XCTAssertEqual(ids([.plainFlowlines]), ["flowline:a"])
         XCTAssertEqual(ids([.collectibles, .character(.endurance)]), ["flowline:c", "collectible:x", "collectible:z", "collectible:y"])
+    }
+
+    func testOpportunityRankingPreservesHistoricalThresholdSelection() {
+        let line = WorldFlowline(id: "plain", name: "Plain", geometry: .init(coordinates: [[8, 47], [8, 47.01]]),
+                                 completed: false, lengthMeters: 3000, flowScore: 69, enduranceScore: 65)
+        XCTAssertEqual(line.opportunityScore, 65)
+        XCTAssertNil(line.resolvedCharacter.primary)
+    }
+
+    func testCharacterBoundariesPrecedenceAndMissingData() {
+        let classify = FlowlineCharacter.classify
+        XCTAssertNil(classify(4999.99, 82, 100, 64).primary)
+        XCTAssertEqual(classify(4999.99, 82.01, 100, 100).primary, .flow)
+        XCTAssertEqual(classify(5000, 100, 65, 100).primary, .endurance)
+        XCTAssertEqual(classify(5000.01, 100, 64, 65).primary, .explore)
+        XCTAssertNil(classify(5000, 100, 64, 64).primary)
+        for length: Double? in [nil, 0, -1, .nan, .infinity] {
+            XCTAssertNil(classify(length, 100, 100, nil).primary)
+        }
+        for score: Double? in [nil, -1, .nan, .infinity, 101] {
+            XCTAssertNil(classify(3000, score, nil, score).primary)
+            XCTAssertNil(classify(6000, nil, score, score).primary)
+        }
+    }
+
+    func testDecodesNeutralCharacterAndPreservesCurrentServerPolicy() throws {
+        func decode(_ character: String) throws -> WorldFlowline {
+            let json = #"{"id":"plain","name":"Plain","geometry":{"type":"LineString","coordinates":[[8,47],[8.1,47.1]]},"completed":false,"lengthMeters":3000,"flowScore":90,"character":\#(character)}"#
+            return try JSONDecoder().decode(WorldFlowline.self, from: Data(json.utf8))
+        }
+        let neutral = try decode(#"{"primary":null,"tags":[],"policyVersion":2}"#)
+        XCTAssertNil(neutral.resolvedCharacter.primary)
+        XCTAssertTrue(neutral.resolvedCharacter.tags.isEmpty)
+        let server = try decode(#"{"primary":"explore","tags":["explore"],"policyVersion":2}"#)
+        XCTAssertEqual(server.resolvedCharacter.primary, .explore)
+        let legacy = try decode(#"{"primary":"endurance","tags":["endurance","flow"]}"#)
+        XCTAssertEqual(legacy.resolvedCharacter.primary, .flow)
+        let missing = try decode("null")
+        XCTAssertEqual(missing.resolvedCharacter.primary, .flow)
+    }
+
+    func testPlainSummaryAndLegacySummaryUseConsistentCharacters() throws {
+        let line = #"{"id":"plain","name":"Plain","geometry":{"type":"LineString","coordinates":[[8,47],[8.1,47.1]]},"completed":false,"lengthMeters":3000,"flowScore":82,"exploreScore":64,"character":{"primary":null,"tags":[],"policyVersion":2}}"#
+        let json = #"{"outcome":"discovered","flowlines":[\#(line)],"collectibles":[],"availableCount":0,"summary":{"total":1,"byCharacter":{"flow":0,"endurance":0,"explore":0},"unclassifiedFlowlineCount":1}}"#
+        let result = try JSONDecoder().decode(ExploreResult.self, from: Data(json.utf8))
+        XCTAssertEqual(result.unclassifiedFlowlineCount, 1)
+        XCTAssertTrue(result.breakdown.isEmpty)
+        XCTAssertEqual(DiscoveryItem.list(flowlines: result.flowlines, collectibles: [], filters: []).count, 1)
+        let legacy = json.replacingOccurrences(of: #","unclassifiedFlowlineCount":1"#, with: "")
+            .replacingOccurrences(of: #""flow":0"#, with: #""flow":1"#)
+        let oldResult = try JSONDecoder().decode(ExploreResult.self, from: Data(legacy.utf8))
+        XCTAssertEqual(oldResult.unclassifiedFlowlineCount, 1)
+        XCTAssertTrue(oldResult.breakdown.isEmpty)
     }
 
     func testViewportFailureFlagged() async {

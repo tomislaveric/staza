@@ -2,6 +2,8 @@ import { escapeHtml } from "../collected-list.js";
 import { collectibleCategory } from "./collectible-features.js";
 import { formatDistance } from "./fartlek-detail.js";
 import { DEFAULT_ROUTE_INTENT, IntentPicker } from "./route-planner.js";
+import { characterScore, flowlineCharacter } from "./flowline-character.js";
+export { characterScore, flowlineCharacter } from "./flowline-character.js";
 
 /** Primary riding characters of a Flowline, as named in the reveal summary and on cards. */
 export const characterOrder = ["flow", "endurance", "explore"];
@@ -9,11 +11,6 @@ export const characterOrder = ["flow", "endurance", "explore"];
 export const characterLabels = { flow: "High-flow", endurance: "Endurance", explore: "Exploration" };
 
 export const characterScoreLabels = { flow: "Flow", endurance: "Endurance", explore: "Explore" };
-
-export const characterScore = (flowline, tag) =>
-  tag === "flow" ? flowline.flowScore : tag === "endurance" ? flowline.enduranceScore : flowline.exploreScore;
-
-export const flowlineCharacter = (flowline) => flowline.character ?? { primary: "flow", tags: [] };
 
 /**
  * The map CTA, always available. Explore shows the area's opportunities for this session only:
@@ -61,7 +58,16 @@ export const ExploreResultCard = (state) => {
   }
   const flowlines = result.summary?.total ?? result.flowlines?.length ?? 0;
   const collectibles = result.summary?.collectibles ?? result.collectibles?.length ?? 0;
-  const breakdown = characterBreakdown(result.summary?.byCharacter);
+  const currentCounts = result.summary?.unclassifiedFlowlineCount === undefined && result.flowlines?.length
+    ? result.flowlines.reduce((counts, flowline) => {
+      const { primary } = flowlineCharacter(flowline);
+      if (primary) counts[primary] = (counts[primary] ?? 0) + 1;
+      return counts;
+    }, {})
+    : result.summary?.byCharacter;
+  const breakdown = characterBreakdown(currentCounts);
+  const plainFlowlines = result.summary?.unclassifiedFlowlineCount ??
+    (result.flowlines ?? []).filter((flowline) => flowlineCharacter(flowline).primary === null).length;
   return `<section class="world-explore-card is-reveal" aria-live="polite" data-explore-outcome="${escapeHtml(result.outcome)}">
     <header>
       <div>
@@ -72,6 +78,7 @@ export const ExploreResultCard = (state) => {
     </header>
     <ul class="world-explore-breakdown" aria-label="Opportunities">
       ${breakdown.map(({ tag, count, label }) => `<li class="is-${tag}"><strong>${count}</strong> <span>${escapeHtml(label)}</span></li>`).join("")}
+      ${plainFlowlines ? `<li class="is-plain"><strong>${plainFlowlines}</strong> <span>${plainFlowlines === 1 ? "plain Flowline" : "plain Flowlines"}</span></li>` : ""}
       ${collectibles ? `<li class="is-collectibles"><strong>${collectibles}</strong> <span>${collectibles === 1 ? "collectible" : "collectibles"}</span></li>` : ""}
     </ul>
     ${result.area?.clamped ? '<p class="route-planner-note" data-explore-clamped>Explored the framed area in the map center.</p>' : ""}
@@ -136,7 +143,7 @@ export const FlowlineFacts = (flowline) => {
   const { primary } = flowlineCharacter(flowline);
   const primaryScore = characterScore(flowline, primary);
   return `
-    <span class="flowline-character is-${primary}">${escapeHtml(characterLabels[primary])}</span>
+    <span class="flowline-character is-${primary ?? "plain"}">${escapeHtml(primary ? characterLabels[primary] : "Flowline")}</span>
     <dl class="flowline-facts">
       <div><dt>Length</dt><dd>${escapeHtml(formatDistance(flowline.lengthMeters))}</dd></div>
       ${primaryScore === undefined ? "" : `<div><dt>${escapeHtml(characterScoreLabels[primary])}</dt><dd>${Math.round(primaryScore)}</dd></div>`}

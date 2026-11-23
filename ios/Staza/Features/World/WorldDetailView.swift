@@ -85,7 +85,7 @@ struct WorldDetailBody: View {
                 if let length = flowline.lengthMeters {
                     StatTile(label: "world.detail.length", value: StazaFormat.distance(meters: length, locale: locale))
                 }
-                if let score = flowline.score(for: primary) {
+                if let primary, let score = flowline.score(for: primary) {
                     StatTile(label: primary.scoreLabel, value: "\(Int(score.rounded()))", tint: primary.tint)
                 }
                 if let quality = flowline.roadQualityScore {

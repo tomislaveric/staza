@@ -3,7 +3,8 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { buildFartlekCandidates } from "./fartlekCandidates.js";
 import { scoreFartlekCandidate } from "./fartlekScore.js";
-import { flowlineAnalysisProfile, sampleFlowlineAnalysis } from "./flowlineAnalysis.js";
+import { flowlineAnalysisProfile, legacyFlowlineCharacter, sampleFlowlineAnalysis } from "./flowlineAnalysis.js";
+import { SEGMENT_SCORING_VERSION } from "./roadSegment/scoring.js";
 import { evaluateRoadCyclingEligibility } from "./roadSegment/eligibility.js";
 import type { FartlekCandidate, ScoredFartlekCandidate } from "./fartlekModel.js";
 import { readFartlekOSMSnapshot } from "./fartlekSnapshot.js";
@@ -55,9 +56,14 @@ const argumentsFrom = (values: string[]): Arguments => {
   return result;
 };
 
-const loadCandidates = async (args: Arguments): Promise<FartlekCandidate[]> => {
+const loadCandidates = async (args: Arguments): Promise<{
+  candidates: FartlekCandidate[]; source: Record<string, unknown>;
+}> => {
   if (args.candidatesFile) {
-    return JSON.parse(await readFile(args.candidatesFile, "utf8")) as FartlekCandidate[];
+    return {
+      candidates: JSON.parse(await readFile(args.candidatesFile, "utf8")) as FartlekCandidate[],
+      source: { candidatesFile: args.candidatesFile }
+    };
   }
   if (args.snapshotFile) {
     const snapshot = await readFartlekOSMSnapshot(args.snapshotFile);
@@ -66,7 +72,7 @@ const loadCandidates = async (args: Arguments): Promise<FartlekCandidate[]> => {
       record.osmType === "node" && record.tags.traffic_sign === "city_limit");
     const controlNodes = snapshot.records.filter((record) =>
       record.osmType === "node" && record.tags.traffic_sign !== "city_limit");
-    return buildFartlekCandidates(ways, { boundaryNodes, controlNodes });
+    return { candidates: buildFartlekCandidates(ways, { boundaryNodes, controlNodes }), source: snapshot.metadata };
   }
   throw new Error("Provide --snapshot <file> or --candidates <file>.");
 };
@@ -118,7 +124,8 @@ const toGeoJSON = (rows: ScoredRow[]): string => JSON.stringify({
 
 const main = async (): Promise<void> => {
   const args = argumentsFrom(process.argv.slice(2));
-  const candidates = await loadCandidates(args);
+  const { candidates, source } = await loadCandidates(args);
+  console.log(`Offline input: ${JSON.stringify(source)}; scoringVersion=${SEGMENT_SCORING_VERSION}`);
   const limited = args.limit ? candidates.slice(0, args.limit) : candidates;
   const rows: ScoredRow[] = limited.map((candidate) => {
     const scored = scoreFartlekCandidate(candidate);
@@ -156,6 +163,9 @@ const main = async (): Promise<void> => {
     if (profile.published) {
       publishedIds.add(row.candidate.id);
       increment("publish.named");
+      const currentCharacter = profile.character.primary ?? "plain";
+      increment(`publish.character.${currentCharacter}`);
+      increment(`characterTransition.${legacyFlowlineCharacter(row.scored)}.${currentCharacter}`);
       increment(`publish.speed.${profile.speedBucket}`);
       for (const highway of profile.highwayClasses) {
         increment(`publish.highway.${highway}`);

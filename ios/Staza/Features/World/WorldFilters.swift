@@ -17,7 +17,6 @@ enum WorldFilter: String, CaseIterable, Identifiable, Sendable {
     case highFlow = "high-flow"
     case longEndurance = "long-endurance"
 
-    static let highFlowScore = 70.0
     static let longFlowlineMeters = 5000.0
     static let categories: [WorldFilter] = [.viewpoint, .peak, .castle, .waterfall, .place, .mountainPass]
     static let advanced: [WorldFilter] = [.undiscoveredOnly, .peaksOnly, .highFlow, .longEndurance]
@@ -82,7 +81,7 @@ enum WorldFilter: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .flowlines: true
         case .undiscoveredOnly: !flowline.completed
-        case .highFlow: (flowline.flowScore ?? 0) >= Self.highFlowScore
+        case .highFlow: flowline.resolvedCharacter.primary == .flow
         case .longEndurance: (flowline.lengthMeters ?? 0) >= Self.longFlowlineMeters
         default: false
         }

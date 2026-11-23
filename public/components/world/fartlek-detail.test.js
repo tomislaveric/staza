@@ -63,11 +63,23 @@ describe("FartlekDetail", () => {
     expect(markup).toMatch(/<dt>Flow<\/dt><dd>84<\/dd>/);
     expect(markup).toMatch(/<dt>Road quality<\/dt><dd>91<\/dd>/);
     expect(markup).not.toContain("<dt>Endurance</dt>");
-    expect(markup).toContain("Best for");
+    expect(markup).not.toContain("Best for");
     expect(markup).toContain('data-flowline-add-route="');
     expect(markup).toContain(">Add to route<");
     expect(markup).toContain("View details");
     expect(FartlekDetail(fartlek(), { inRoute: true })).toContain(">Added to route<");
     expect(FartlekDetail(fartlek({ character: { primary: "flow", tags: ["flow"] } }))).not.toContain("Best for");
+  });
+
+  it("shows a plain Flowline without inventing a specialist score", () => {
+    const markup = FartlekDetail(fartlek({
+      flowScore: 82, enduranceScore: 90, exploreScore: 64, roadQualityScore: 91,
+      character: { primary: null, tags: [], policyVersion: 2 }
+    }));
+    expect(markup).toContain('is-plain">Flowline</span>');
+    expect(markup).toContain("<dt>Length</dt>");
+    expect(markup).toContain("<dt>Road quality</dt>");
+    expect(markup).not.toMatch(/<dt>(Flow|Endurance|Explore)<\/dt>/);
+    expect(markup).not.toContain("undefined");
   });
 });

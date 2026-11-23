@@ -9,6 +9,7 @@ export type FlowlineRevealSource = "ride";
 
 interface CandidateRow {
   id: string;
+  length_meters: number;
   flow_score: number | null;
   suitability_score: number;
   endurance_score: number | null;
@@ -26,7 +27,7 @@ const boundsValues = (bounds: GeoBounds) => [bounds.minLongitude, bounds.maxLong
 
 /** Per-player reveal state of the globally precomputed Flowlines. */
 export class FlowlineRevealRepository {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pick<Pool, "query">) {}
 
   async revealedIds(playerId: string, fartlekIds: string[], client: Queryable = this.pool): Promise<Set<string>> {
     if (fartlekIds.length === 0) return new Set();
@@ -73,7 +74,7 @@ export class FlowlineRevealRepository {
   /** Scores of the published Flowlines in the viewport the player has not completed: Explore candidates; never geometry. */
   async listOpportunityCandidatesWithinBounds(playerId: string, bounds: GeoBounds): Promise<OpportunityCandidate[]> {
     const result = await this.pool.query<CandidateRow>(
-      `SELECT f.id, f.flow_score, f.suitability_score, f.endurance_score, f.explore_score, f.road_quality_score, f.data_confidence
+      `SELECT f.id, f.length_meters, f.flow_score, f.suitability_score, f.endurance_score, f.explore_score, f.road_quality_score, f.data_confidence
        FROM fartleks AS f
        WHERE f.status = 'published' AND ${BBOX_OVERLAP}
          AND NOT EXISTS (SELECT 1 FROM fartlek_completions AS c WHERE c.player_id = $1 AND c.fartlek_id = f.id)`,
@@ -81,6 +82,7 @@ export class FlowlineRevealRepository {
     );
     return result.rows.map((row) => ({
       id: row.id,
+      lengthMeters: row.length_meters,
       flowScore: row.flow_score ?? row.suitability_score,
       ...(row.endurance_score === null ? {} : { enduranceScore: row.endurance_score }),
       ...(row.explore_score === null ? {} : { exploreScore: row.explore_score }),

@@ -658,6 +658,8 @@ const germanCopy = {
   "collected": "gesammelt",
   "collected ·": "gesammelt ·",
   "Flowline": "Flowline",
+  "plain Flowline": "weitere Flowline",
+  "plain Flowlines": "weitere Flowlines",
   "Ride": "Fahrt",
   "Run": "Lauf",
   "Hike": "Wanderung",

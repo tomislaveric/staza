@@ -173,7 +173,7 @@ export interface WorldFartlek {
   enduranceScore?: number;
   exploreScore?: number;
   roadQualityScore?: number;
-  /** Primary riding character and every character the Flowline is good for. */
+  /** Length-aware riding character; primary is null for a plain Flowline. */
   character: FlowlineCharacter;
   status: FartlekStatus;
   source: FartlekSource;

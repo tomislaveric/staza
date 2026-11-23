@@ -40,7 +40,7 @@ export interface WorldExploreResult {
   collectiblesTruncated: boolean;
   /** Eligible Flowlines beyond the per-Explore cap (an upper bound for circular areas). */
   availableCount: number;
-  summary: { total: number; byCharacter: Record<FlowlineCharacterTag, number>; collectibles: number };
+  summary: { total: number; byCharacter: Record<FlowlineCharacterTag, number>; unclassifiedFlowlineCount: number; collectibles: number };
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
@@ -95,7 +95,12 @@ export const exploreArea = async (
     ? area.collectibles.filter((item) => pointInCircle(frame.circle!, item.longitude, item.latitude))
     : area.collectibles;
   const byCharacter: Record<FlowlineCharacterTag, number> = { flow: 0, endurance: 0, explore: 0 };
-  for (const flowline of opportunities) byCharacter[flowline.character.primary] += 1;
+  let unclassifiedFlowlineCount = 0;
+  for (const flowline of opportunities) {
+    const { primary } = flowline.character;
+    if (primary === null) unclassifiedFlowlineCount += 1;
+    else byCharacter[primary] += 1;
+  }
   return {
     outcome: exploreOutcome(opportunities.length + collectibles.length),
     area: {
@@ -108,7 +113,7 @@ export const exploreArea = async (
     collectibles,
     collectiblesTruncated: area.truncated,
     availableCount: available.length - outside - opportunities.length,
-    summary: { total: opportunities.length, byCharacter, collectibles: collectibles.length }
+    summary: { total: opportunities.length, byCharacter, unclassifiedFlowlineCount, collectibles: collectibles.length }
   };
 };
 

@@ -37,11 +37,11 @@ describe("World page data transformations", () => {
     expect(granted.has("not-a-filter")).toBe(false);
 
     const flowlines = [
-      { ...fartleks[0], flowScore: 80, lengthMeters: 6000 },
+      { ...fartleks[0], flowScore: 83, lengthMeters: 4000 },
       { ...fartleks[1], flowScore: 40, lengthMeters: 1000 }
     ];
     expect(filteredWorldFartleks(flowlines, ["high-flow"]).map((item) => item.id)).toEqual(["fartlek-1"]);
-    expect(filteredWorldFartleks(flowlines, ["long-endurance"]).map((item) => item.id)).toEqual(["fartlek-1"]);
+    expect(filteredWorldFartleks([{ ...flowlines[0], lengthMeters: 5000 }], ["long-endurance"]).map((item) => item.id)).toEqual(["fartlek-1"]);
     expect(filteredWorldFartleks(flowlines, ["undiscovered-only"]).map((item) => item.id)).toEqual(["fartlek-1"]);
     expect(filteredWorldCollectibles(collectibles, ["peaks-only"]).map((item) => item.id)).toEqual(["peak-unfound"]);
     expect(filteredWorldCollectibles(collectibles, ["high-flow"])).toEqual([]);
@@ -54,6 +54,17 @@ describe("World page data transformations", () => {
     ]);
     expect([...availableWorldFilters([], fartleks)]).toEqual(["all", "fartleks"]);
     expect([...availableWorldFilters([{ ...collectibles[0], visibility: "hidden" }], [])]).toEqual(["all"]);
+  });
+
+  it("matches the High-flow badge boundaries without changing the length-only long filter", () => {
+    const lines = [
+      { ...fartleks[0], id: "exact-score", lengthMeters: 4000, flowScore: 82 },
+      { ...fartleks[0], id: "high-flow", lengthMeters: 4999.99, flowScore: 82.01 },
+      { ...fartleks[0], id: "long", lengthMeters: 5000, flowScore: 100, enduranceScore: 10 },
+      { ...fartleks[0], id: "missing-length", lengthMeters: undefined, flowScore: 100 }
+    ];
+    expect(filteredWorldFartleks(lines, ["high-flow"]).map((item) => item.id)).toEqual(["high-flow"]);
+    expect(filteredWorldFartleks(lines, ["long-endurance"]).map((item) => item.id)).toEqual(["long"]);
   });
 
   it("makes the mountain-pass filter available only when a visible pass exists", () => {

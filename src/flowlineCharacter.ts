@@ -2,45 +2,54 @@
 export type FlowlineCharacterTag = "flow" | "endurance" | "explore";
 
 export interface FlowlineCharacter {
-  primary: FlowlineCharacterTag;
-  /** Qualifying characters, strongest first; always contains `primary`. */
+  primary: FlowlineCharacterTag | null;
+  /** One qualifying character, or none for a plain Flowline. */
   tags: FlowlineCharacterTag[];
+  policyVersion?: number;
 }
 
 export interface FlowlineScores {
+  lengthMeters?: number;
   flowScore?: number;
   enduranceScore?: number;
   exploreScore?: number;
 }
 
-/** A score at or above its threshold makes the Flowline "good for" that character. */
+export const FLOWLINE_CHARACTER_POLICY_VERSION = 2;
+export const FLOWLINE_CHARACTER_LENGTH_METERS = 5_000;
+
+/** Flow is strictly above its floor; Endurance/Explore include their threshold. */
 export const FLOWLINE_CHARACTER_THRESHOLDS: Readonly<Record<FlowlineCharacterTag, number>> = {
-  flow: 70,
+  flow: 82,
   endurance: 65,
   explore: 65
 };
 
-const ORDER: FlowlineCharacterTag[] = ["flow", "endurance", "explore"];
+const validScore = (score: number | undefined): score is number =>
+  score !== undefined && Number.isFinite(score) && score >= 0 && score <= 100;
 
 export const characterScore = (scores: FlowlineScores, tag: FlowlineCharacterTag): number | undefined =>
   tag === "flow" ? scores.flowScore : tag === "endurance" ? scores.enduranceScore : scores.exploreScore;
 
-/**
- * Tags every character whose score reaches its threshold. The primary character is the qualifying
- * tag with the highest score; when none qualifies it is the highest score overall (flow when
- * unscored), so every Flowline has exactly one primary character.
- */
 export const classifyFlowline = (scores: FlowlineScores): FlowlineCharacter => {
-  const scored = ORDER
-    .map((tag) => ({ tag, score: characterScore(scores, tag) }))
-    .filter((entry): entry is { tag: FlowlineCharacterTag; score: number } => typeof entry.score === "number")
-    .sort((a, b) => b.score - a.score || ORDER.indexOf(a.tag) - ORDER.indexOf(b.tag));
-  const tags = scored.filter((entry) => entry.score >= FLOWLINE_CHARACTER_THRESHOLDS[entry.tag]).map((entry) => entry.tag);
-  if (tags.length > 0) return { primary: tags[0], tags };
-  const primary = scored[0]?.tag ?? "flow";
-  return { primary, tags: [primary] };
+  const { lengthMeters, flowScore, enduranceScore, exploreScore } = scores;
+  const validLength = lengthMeters !== undefined && Number.isFinite(lengthMeters) && lengthMeters > 0;
+  const primary: FlowlineCharacterTag | null =
+    validLength && lengthMeters < FLOWLINE_CHARACTER_LENGTH_METERS &&
+      validScore(flowScore) && flowScore > FLOWLINE_CHARACTER_THRESHOLDS.flow ? "flow" :
+      validLength && lengthMeters >= FLOWLINE_CHARACTER_LENGTH_METERS &&
+        validScore(enduranceScore) && enduranceScore >= FLOWLINE_CHARACTER_THRESHOLDS.endurance ? "endurance" :
+        validScore(exploreScore) && exploreScore >= FLOWLINE_CHARACTER_THRESHOLDS.explore ? "explore" : null;
+  return { primary, tags: primary ? [primary] : [], policyVersion: FLOWLINE_CHARACTER_POLICY_VERSION };
 };
 
-/** Score of the Flowline's primary character; orders reveals and discoveries. */
-export const primaryScore = (scores: FlowlineScores): number =>
-  characterScore(scores, classifyFlowline(scores).primary) ?? 0;
+/** Preserve historical score selection independently of the new badge policy. */
+export const opportunityScore = (scores: FlowlineScores): number => {
+  const entries = [
+    { score: scores.flowScore, threshold: 70 },
+    { score: scores.enduranceScore, threshold: 65 },
+    { score: scores.exploreScore, threshold: 65 }
+  ].filter((entry): entry is { score: number; threshold: number } => validScore(entry.score));
+  const qualifying = entries.filter(({ score, threshold }) => score >= threshold);
+  return Math.max(0, ...(qualifying.length ? qualifying : entries).map(({ score }) => score));
+};

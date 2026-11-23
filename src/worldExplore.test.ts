@@ -30,7 +30,7 @@ const collectible = (id: string): WorldCollectible => ({
 
 const fakeWorld = (all: Fartlek[], collectibles: WorldCollectible[] = []) => {
   const candidate = (item: Fartlek): OpportunityCandidate => ({
-    id: item.id, flowScore: item.flowScore, enduranceScore: item.enduranceScore, exploreScore: item.exploreScore
+    id: item.id, lengthMeters: item.lengthMeters, flowScore: item.flowScore, enduranceScore: item.enduranceScore, exploreScore: item.exploreScore
   });
   const queried: GeoBounds[] = [];
   return {
@@ -52,14 +52,28 @@ describe("exploreArea", () => {
   it("shows eligible Flowlines best first with uncollected collectibles and summarizes them", async () => {
     const world = fakeWorld([
       flowline("a", { flowScore: 84 }),
-      flowline("b", { flowScore: 55, enduranceScore: 90 }),
+      flowline("b", { lengthMeters: 6000, flowScore: 55, enduranceScore: 90 }),
       flowline("c", { flowScore: 20 })
     ], [collectible("peak-1")]);
     const result = await exploreArea("p1", body, world.dependencies);
     expect(result.outcome).toBe("discovered");
     expect(result.flowlines.map((item) => item.id)).toEqual(["b", "a"]);
     expect(result.collectibles.map((item) => item.id)).toEqual(["peak-1"]);
-    expect(result.summary).toEqual({ total: 2, byCharacter: { flow: 1, endurance: 1, explore: 0 }, collectibles: 1 });
+    expect(result.summary).toEqual({ total: 2, byCharacter: { flow: 1, endurance: 1, explore: 0 }, unclassifiedFlowlineCount: 0, collectibles: 1 });
+  });
+
+  it("includes plain Flowlines in totals and opportunities without forcing a badge", async () => {
+    const world = fakeWorld([
+      flowline("plain", { flowScore: 82, enduranceScore: 90, exploreScore: 64 }),
+      flowline("explore", { flowScore: 82, exploreScore: 65 })
+    ]);
+    const result = await exploreArea("p1", body, world.dependencies);
+    expect(result.flowlines.map((item) => item.id)).toEqual(["plain", "explore"]);
+    expect(result.flowlines[0].character).toMatchObject({ primary: null, tags: [] });
+    expect(result.summary).toEqual({
+      total: 2, byCharacter: { flow: 0, endurance: 0, explore: 1 },
+      unclassifiedFlowlineCount: 1, collectibles: 0
+    });
   });
 
   it("is temporary: exploring the same area again shows the same opportunities", async () => {

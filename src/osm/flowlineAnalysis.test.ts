@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import type { FartlekCandidate } from "./fartlekModel.js";
 import { scoreFartlekCandidate } from "./fartlekScore.js";
-import { flowlineAnalysisProfile, sampleFlowlineAnalysis } from "./flowlineAnalysis.js";
+import { flowlineAnalysisProfile, legacyFlowlineCharacter, sampleFlowlineAnalysis } from "./flowlineAnalysis.js";
 
 const row = (id: string, highway: string, maxspeed: string, name: string | undefined = "Road") => {
   const candidate: FartlekCandidate = {
@@ -23,10 +23,21 @@ describe("Flowline curation analysis", () => {
     expect(flowlineAnalysisProfile(row("fast", "tertiary", "100").scored)).toMatchObject({
       published: false, speedBucket: ">=70"
     });
+
     const unnamed = row("unnamed", "tertiary", "50");
     delete unnamed.scored.candidate.name;
     expect(unnamed.scored.decision).toBe("AUTO_PUBLISH");
     expect(flowlineAnalysisProfile(unnamed.scored).published).toBe(false);
+  });
+
+  it("derives new labels on unchanged scores and makes historical transitions inspectable", () => {
+    const scored = row("good", "tertiary", "50").scored;
+    expect(legacyFlowlineCharacter(scored)).toBe("flow");
+    const snapshot = JSON.stringify(scored);
+    expect(flowlineAnalysisProfile(scored).character.primary).toBe("flow");
+    expect(JSON.stringify(scored)).toBe(snapshot);
+    scored.candidate.lengthMeters = 6000;
+    expect(flowlineAnalysisProfile(scored).character.primary).toBe("endurance");
   });
 
   it("samples retained and removed groups deterministically across the full population", () => {
@@ -65,9 +76,13 @@ describe("Flowline curation analysis", () => {
       ], { encoding: "utf8" });
       expect(output).toContain("2 candidate(s); 2 eligible");
       expect(output).toContain("publish.named: 1");
+      expect(output).toContain("publish.character.flow: 1");
+      expect(output).toContain("characterTransition.flow.flow: 1");
       expect(output).toContain("Named publication: 2 -> 1; removed=1, added=0");
       const exported = JSON.parse(await readFile(geojson, "utf8"));
       expect(exported.features).toHaveLength(2);
+      expect(exported.features.find((feature: { properties: { id: string } }) => feature.properties.id === "good").properties.character)
+        .toEqual({ primary: "flow", tags: ["flow"], policyVersion: 2 });
       expect(exported.features.find((feature: { properties: { id: string } }) => feature.properties.id === "fast").properties)
         .toMatchObject({ eligible: true, published: false, rejectionReason: "REJECT_HIGH_SPEED_MOTOR_ROAD" });
       await writeFile(baseline, JSON.stringify({ candidateCount: 2, geometryDigest: "wrong", publishedIds: ["good"] }));

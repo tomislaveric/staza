@@ -48,6 +48,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
 - [Flowline collection on activity replay](features/flowline-collection-on-activity-replay/README.md)
   — show completed flowlines in gold on the replay map from their completion
   timestamps, preserving the geometry recorded with new activity snapshots.
+- [Flowline riding character rules](features/flowline-riding-character-rules/README.md)
+  — classify short High-flow, long Endurance, qualifying Exploration and plain
+  Flowlines consistently across discovery, badges and map filters.
 - [GameEvent instead of Coin](features/gameevent-instead-of-coin/README.md) —
   generalize downstream Coin-passage records into typed game events.
 - [Hidden Flowline Discovery](features/hidden-flowline-discovery/README.md) —

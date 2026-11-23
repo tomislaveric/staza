@@ -11,6 +11,7 @@ import { QuestList } from "./world/quest-list.js";
 import { CollectibleDetail } from "./world/collectible-detail.js";
 import { FartlekDetail } from "./world/fartlek-detail.js";
 import { DiscoveriesPanel, exploreCta, ExploreResultCard, revealSequence } from "./world/explore-reveal.js";
+import { flowlineCharacter } from "./world/flowline-character.js";
 import {
   buildPlanRequest,
   buildSuggestRequest,
@@ -29,14 +30,13 @@ export const worldFilters = ["all", "found", "unfound", "fartleks", "viewpoint",
 
 export const advancedWorldFilters = ["undiscovered-only", "peaks-only", "high-flow", "long-endurance"];
 
-const HIGH_FLOW_SCORE = 70;
 const LONG_FLOWLINE_METERS = 5000;
 
 /** Advanced filters granted by Skill Atlas nodes; each narrows collectibles and Flowlines. */
 const grantedFilterRules = {
   "undiscovered-only": { collectible: (item) => !item.found, fartlek: (item) => !item.completed },
   "peaks-only": { collectible: (item) => collectibleCategory(item) === "peak", fartlek: () => false },
-  "high-flow": { collectible: () => false, fartlek: (item) => (item.flowScore ?? 0) >= HIGH_FLOW_SCORE },
+  "high-flow": { collectible: () => false, fartlek: (item) => flowlineCharacter(item).primary === "flow" },
   "long-endurance": { collectible: () => false, fartlek: (item) => item.lengthMeters >= LONG_FLOWLINE_METERS }
 };
 

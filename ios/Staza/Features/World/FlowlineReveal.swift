@@ -1,10 +1,30 @@
 import CoreLocation
 import Foundation
 
-/// A Flowline's character tags; `primary` is its strongest qualifying one.
+/// One length-aware specialist character, or a plain Flowline.
 struct FlowlineCharacter: Decodable, Equatable, Sendable {
-    let primary: FlowlineTag
+    let primary: FlowlineTag?
     let tags: [FlowlineTag]
+    var policyVersion: Int? = nil
+
+    static func classify(lengthMeters: Double?, flowScore: Double?, enduranceScore: Double?, exploreScore: Double?) -> Self {
+        func validScore(_ value: Double?) -> Bool {
+            guard let value else { return false }
+            return value.isFinite && (0...100).contains(value)
+        }
+        let validLength = lengthMeters.map { $0.isFinite && $0 > 0 } ?? false
+        let primary: FlowlineTag?
+        if validLength, let lengthMeters, lengthMeters < 5000, validScore(flowScore), let flowScore, flowScore > 82 {
+            primary = .flow
+        } else if validLength, let lengthMeters, lengthMeters >= 5000, validScore(enduranceScore), let enduranceScore, enduranceScore >= 65 {
+            primary = .endurance
+        } else if validScore(exploreScore), let exploreScore, exploreScore >= 65 {
+            primary = .explore
+        } else {
+            primary = nil
+        }
+        return Self(primary: primary, tags: primary.map { [$0] } ?? [], policyVersion: 2)
+    }
 }
 
 enum FlowlineTag: String, Decodable, CaseIterable, Sendable {
@@ -12,8 +32,20 @@ enum FlowlineTag: String, Decodable, CaseIterable, Sendable {
 }
 
 extension WorldFlowline {
-    /// Flowlines from older payloads carry no character; they read as flow.
-    var resolvedCharacter: FlowlineCharacter { character ?? FlowlineCharacter(primary: .flow, tags: []) }
+    var resolvedCharacter: FlowlineCharacter {
+        if let character, character.policyVersion == 2 || character.primary == nil { return character }
+        return .classify(lengthMeters: lengthMeters, flowScore: flowScore, enduranceScore: enduranceScore, exploreScore: exploreScore)
+    }
+
+    var opportunityScore: Double {
+        let entries = [(flowScore, 70.0), (enduranceScore, 65.0), (exploreScore, 65.0)]
+            .compactMap { score, threshold -> (score: Double, threshold: Double)? in
+                guard let score, score.isFinite, (0...100).contains(score) else { return nil }
+                return (score, threshold)
+            }
+        let qualifying = entries.filter { $0.score >= $0.threshold }
+        return (qualifying.isEmpty ? entries : qualifying).map(\.score).max() ?? 0
+    }
 
     func score(for tag: FlowlineTag) -> Double? {
         switch tag {
@@ -40,6 +72,7 @@ struct ExploreResult: Decodable, Equatable, Sendable {
         let total: Int
         var byCharacter: [String: Int] = [:]
         var collectibles: Int? = nil
+        var unclassifiedFlowlineCount: Int? = nil
     }
     let outcome: Outcome
     /// Eligible unridden Flowlines in the area.
@@ -61,9 +94,15 @@ struct ExploreResult: Decodable, Equatable, Sendable {
     /// Opportunity Flowlines per primary character, in the fixed tag order, without zero counts.
     var breakdown: [Count] {
         FlowlineTag.allCases.compactMap { tag in
-            let count = summary.byCharacter[tag.rawValue] ?? 0
+            let count = summary.unclassifiedFlowlineCount == nil && !flowlines.isEmpty
+                ? flowlines.filter { $0.resolvedCharacter.primary == tag }.count
+                : summary.byCharacter[tag.rawValue] ?? 0
             return count > 0 ? Count(tag: tag, count: count) : nil
         }
+    }
+
+    var unclassifiedFlowlineCount: Int {
+        summary.unclassifiedFlowlineCount ?? flowlines.filter { $0.resolvedCharacter.primary == nil }.count
     }
 }
 
@@ -117,6 +156,7 @@ struct ExploredArea: Decodable, Equatable, Sendable {
 /// A findings pill used as a filter of the Explore list.
 enum DiscoveryFilter: Hashable, Sendable {
     case character(FlowlineTag)
+    case plainFlowlines
     case collectibles
 }
 
@@ -134,16 +174,19 @@ enum DiscoveryItem: Identifiable, Equatable, Sendable {
         }
     }
 
-    /// Flowlines by their primary score, then visible collectibles by category and name.
+    /// Flowlines by opportunity score, then visible collectibles by category and name.
     /// No filter shows everything; several filters show their union.
     static func list(flowlines: [WorldFlowline], collectibles: [WorldCollectible],
                      filters: Set<DiscoveryFilter>) -> [DiscoveryItem] {
         let byName: (String, String) -> Bool = { $0.localizedStandardCompare($1) == .orderedAscending }
         let lines = flowlines
-            .filter { filters.isEmpty || filters.contains(.character($0.resolvedCharacter.primary)) }
+            .filter { flowline in
+                let filter = flowline.resolvedCharacter.primary.map { DiscoveryFilter.character($0) } ?? .plainFlowlines
+                return filters.isEmpty || filters.contains(filter)
+            }
             .sorted { left, right in
-                let l = left.score(for: left.resolvedCharacter.primary) ?? -1
-                let r = right.score(for: right.resolvedCharacter.primary) ?? -1
+                let l = left.opportunityScore
+                let r = right.opportunityScore
                 return l != r ? l > r : byName(left.name, right.name)
             }
         let places = filters.isEmpty || filters.contains(.collectibles)

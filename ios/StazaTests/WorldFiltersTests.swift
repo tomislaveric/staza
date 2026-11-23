@@ -31,7 +31,7 @@ final class WorldFiltersTests: XCTestCase {
 
     func testAdvancedFilterRules() {
         let items = [collectible("peak", found: true, category: "peak"), collectible("castle", found: false, category: "castle")]
-        let lines = [flowline("flow", score: 70), flowline("long", completed: true, length: 5000), flowline("plain", score: 10)]
+        let lines = [flowline("flow", length: 4999.99, score: 82.01), flowline("long", completed: true, length: 5000), flowline("plain", score: 10)]
 
         XCTAssertEqual(WorldFilters.collectibles(items, selected: [.undiscoveredOnly]).map(\.id), ["castle"])
         XCTAssertEqual(WorldFilters.flowlines(lines, selected: [.undiscoveredOnly]).map(\.id), ["flow", "plain"])
@@ -39,6 +39,20 @@ final class WorldFiltersTests: XCTestCase {
         XCTAssertEqual(WorldFilters.flowlines(lines, selected: [.peaksOnly]).map(\.id), [])
         XCTAssertEqual(WorldFilters.flowlines(lines, selected: [.highFlow]).map(\.id), ["flow"])
         XCTAssertEqual(WorldFilters.flowlines(lines, selected: [.longEndurance]).map(\.id), ["long"])
+    }
+
+    func testHighFlowFilterMatchesCharacterBoundariesAndLongFilterStaysLengthOnly() {
+        let lines = [
+            flowline("exact-score", length: 4000, score: 82),
+            flowline("high-flow", length: 4999.99, score: 82.01),
+            flowline("exact-length", length: 5000, score: 100),
+            flowline("missing-length", score: 100)
+        ]
+        XCTAssertEqual(WorldFilters.flowlines(lines, selected: [.highFlow]).map(\.id), ["high-flow"])
+        XCTAssertEqual(WorldFilters.flowlines(lines, selected: [.longEndurance]).map(\.id), ["exact-length"])
+        for line in lines {
+            XCTAssertEqual(WorldFilter.highFlow.matches(line), line.resolvedCharacter.primary == .flow)
+        }
     }
 
     func testMapIconNamesFollowCategoryAndFoundState() {

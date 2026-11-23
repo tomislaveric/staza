@@ -1,4 +1,4 @@
-import { primaryScore, type FlowlineScores } from "./flowlineCharacter.js";
+import { opportunityScore, type FlowlineScores } from "./flowlineCharacter.js";
 import { METERS_PER_DEGREE_LATITUDE, viewportWidthMeters } from "./flowlinePolicy.js";
 import type { GeoBounds } from "./worldQuery.js";
 
@@ -13,7 +13,7 @@ export const MAX_EXPLORE_WIDTH_METERS = 50_000;
 export const MAX_EXPLORE_HEIGHT_METERS = 100_000;
 /** Largest radius of a circular Explore area (the width limit's half). */
 export const MAX_EXPLORE_RADIUS_METERS = MAX_EXPLORE_WIDTH_METERS / 2;
-/** Minimum primary-character score of a Flowline worth showing as an opportunity. */
+/** Minimum style score of a Flowline worth showing as an opportunity, regardless of badge. */
 export const MIN_OPPORTUNITY_SCORE = 50;
 /** Minimum road quality, when scored. */
 export const MIN_OPPORTUNITY_ROAD_QUALITY = 40;
@@ -28,16 +28,16 @@ export interface OpportunityCandidate extends FlowlineScores {
 
 /** Published Flowlines Explore may show: good enough to ride and trustworthy enough to show. */
 export const isOpportunityEligible = (candidate: OpportunityCandidate): boolean =>
-  primaryScore(candidate) >= MIN_OPPORTUNITY_SCORE
+  opportunityScore(candidate) >= MIN_OPPORTUNITY_SCORE
   && (candidate.roadQualityScore === undefined || candidate.roadQualityScore >= MIN_OPPORTUNITY_ROAD_QUALITY)
   && (candidate.dataConfidence === undefined || candidate.dataConfidence >= MIN_OPPORTUNITY_DATA_CONFIDENCE);
 
-const byPrimaryScore = (a: OpportunityCandidate, b: OpportunityCandidate) =>
-  primaryScore(b) - primaryScore(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const byOpportunityScore = (a: OpportunityCandidate, b: OpportunityCandidate) =>
+  opportunityScore(b) - opportunityScore(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /** Eligible candidates not in `excludedIds` (the player's completed Flowlines), best first, ties by id. */
 export const availableOpportunities = <T extends OpportunityCandidate>(candidates: T[], excludedIds: ReadonlySet<string>): T[] =>
-  candidates.filter((candidate) => !excludedIds.has(candidate.id) && isOpportunityEligible(candidate)).sort(byPrimaryScore);
+  candidates.filter((candidate) => !excludedIds.has(candidate.id) && isOpportunityEligible(candidate)).sort(byOpportunityScore);
 
 /** The Flowline opportunities one Explore shows, up to the cap. */
 export const selectFlowlineOpportunities = <T extends OpportunityCandidate>(

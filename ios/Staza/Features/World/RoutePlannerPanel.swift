@@ -222,7 +222,7 @@ struct RoutePlannerPanel: View {
 
     private func tint(_ stop: PlannerStop) -> Color {
         switch stop {
-        case .flowline(let flowline): flowline.resolvedCharacter.primary.tint
+        case .flowline(let flowline): flowline.resolvedCharacter.primary?.tint ?? StazaColor.textMuted
         case .collectible(let item): item.found ? StazaColor.success : StazaColor.textMuted
         case .waypoint: StazaColor.accent
         }
