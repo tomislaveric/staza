@@ -22,19 +22,6 @@ extension WorldFlowline {
         case .explore: exploreScore
         }
     }
-
-    /// Meters from the player to the closest point of the line; nil without a position.
-    func distance(from origin: GeoPoint?) -> Double? {
-        guard let origin else { return nil }
-        let here = CLLocation(latitude: origin.lat, longitude: origin.lon)
-        return coordinates.map { here.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude)) }.min()
-    }
-
-    /// The midpoint coordinate, used to sort discoveries by distance.
-    var midpoint: CLLocationCoordinate2D? {
-        let coordinates = self.coordinates
-        return coordinates.isEmpty ? nil : coordinates[coordinates.count / 2]
-    }
 }
 
 /// `POST /api/world/explore`: the area's opportunities for this Explore session only. Nothing is persisted.
@@ -97,37 +84,44 @@ struct ExploredArea: Decodable, Equatable, Sendable {
     }
 }
 
-/// Tabs of the discoveries sheet.
-enum DiscoverySort: String, CaseIterable, Identifiable, Sendable {
-    case flow, endurance, unridden, nearby
-    var id: String { rawValue }
+/// A findings pill used as a filter of the Explore list.
+enum DiscoveryFilter: Hashable, Sendable {
+    case character(FlowlineTag)
+    case collectibles
+}
 
-    /// Flowlines ordered for this tab; ties keep name order so the list is stable.
-    func sorted(_ flowlines: [WorldFlowline], origin: GeoPoint?) -> [WorldFlowline] {
-        let byName: (WorldFlowline, WorldFlowline) -> Bool = { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        func score(_ tag: FlowlineTag) -> (WorldFlowline) -> Double { { $0.score(for: tag) ?? -1 } }
-        func by(_ key: @escaping (WorldFlowline) -> Double, descending: Bool = true) -> [WorldFlowline] {
-            flowlines.sorted { left, right in
-                let (l, r) = (key(left), key(right))
-                if l != r { return descending ? l > r : l < r }
-                return byName(left, right)
-            }
-        }
+/// One row of the Explore list.
+enum DiscoveryItem: Identifiable, Equatable, Sendable {
+    case flowline(WorldFlowline)
+    case collectible(WorldCollectible)
+
+    var id: String { selection.id }
+
+    var selection: WorldSelection {
         switch self {
-        case .flow: return by(score(.flow))
-        case .endurance: return by(score(.endurance))
-        case .unridden:
-            let unridden = flowlines.filter { !$0.completed }
-            let ridden = flowlines.filter(\.completed)
-            return DiscoverySort.flow.sorted(unridden, origin: origin) + DiscoverySort.flow.sorted(ridden, origin: origin)
-        case .nearby:
-            guard let origin else { return by(score(.flow)) }
-            return by({ flowline in
-                guard let mid = flowline.midpoint else { return .infinity }
-                let dLat = mid.latitude - origin.lat
-                let dLon = (mid.longitude - origin.lon) * cos(origin.lat * .pi / 180)
-                return dLat * dLat + dLon * dLon
-            }, descending: false)
+        case .flowline(let flowline): .flowline(flowline)
+        case .collectible(let item): .collectible(item)
         }
+    }
+
+    /// Flowlines by their primary score, then visible collectibles by category and name.
+    /// No filter shows everything; several filters show their union.
+    static func list(flowlines: [WorldFlowline], collectibles: [WorldCollectible],
+                     filters: Set<DiscoveryFilter>) -> [DiscoveryItem] {
+        let byName: (String, String) -> Bool = { $0.localizedStandardCompare($1) == .orderedAscending }
+        let lines = flowlines
+            .filter { filters.isEmpty || filters.contains(.character($0.resolvedCharacter.primary)) }
+            .sorted { left, right in
+                let l = left.score(for: left.resolvedCharacter.primary) ?? -1
+                let r = right.score(for: right.resolvedCharacter.primary) ?? -1
+                return l != r ? l > r : byName(left.name, right.name)
+            }
+        let places = filters.isEmpty || filters.contains(.collectibles)
+            ? WorldFilters.visible(collectibles).sorted { left, right in
+                let (l, r) = (WorldCategory.of(left), WorldCategory.of(right))
+                return l != r ? l < r : byName(left.name, right.name)
+            }
+            : []
+        return lines.map(DiscoveryItem.flowline) + places.map(DiscoveryItem.collectible)
     }
 }

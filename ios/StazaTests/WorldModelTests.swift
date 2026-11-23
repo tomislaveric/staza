@@ -98,19 +98,24 @@ final class WorldModelTests: XCTestCase {
         XCTAssertNil(model.exploreFrame)
     }
 
-    func testDiscoverySorts() {
-        func flowline(_ id: String, flow: Double, endurance: Double, completed: Bool, lon: Double) -> WorldFlowline {
-            WorldFlowline(id: id, name: id, geometry: .init(coordinates: [[lon, 47], [lon, 47.01]]), completed: completed, flowScore: flow, enduranceScore: endurance)
+    func testDiscoveryListOrdersAndFilters() {
+        func flowline(_ id: String, flow: Double, endurance: Double) -> WorldFlowline {
+            let primary: FlowlineTag = flow >= endurance ? .flow : .endurance
+            return WorldFlowline(id: id, name: id, geometry: .init(coordinates: [[8, 47], [8, 47.01]]), completed: false,
+                                 flowScore: flow, enduranceScore: endurance, character: FlowlineCharacter(primary: primary, tags: [primary]))
         }
-        let items = [
-            flowline("a", flow: 90, endurance: 10, completed: true, lon: 8.5),
-            flowline("b", flow: 50, endurance: 80, completed: false, lon: 8.0),
-            flowline("c", flow: 70, endurance: 40, completed: false, lon: 9.0)
-        ]
-        XCTAssertEqual(DiscoverySort.flow.sorted(items, origin: nil).map(\.id), ["a", "c", "b"])
-        XCTAssertEqual(DiscoverySort.endurance.sorted(items, origin: nil).map(\.id), ["b", "c", "a"])
-        XCTAssertEqual(DiscoverySort.unridden.sorted(items, origin: nil).map(\.id), ["c", "b", "a"])
-        XCTAssertEqual(DiscoverySort.nearby.sorted(items, origin: GeoPoint(lat: 47, lon: 8.9)).map(\.id), ["c", "a", "b"])
+        func collectible(_ id: String, _ category: String, hidden: Bool = false) -> WorldCollectible {
+            WorldCollectible(id: id, name: id, latitude: 47, longitude: 8, found: false, primaryCategory: category,
+                             visibility: hidden ? "hidden" : nil)
+        }
+        let flowlines = [flowline("a", flow: 60, endurance: 10), flowline("b", flow: 90, endurance: 10), flowline("c", flow: 10, endurance: 95)]
+        let collectibles = [collectible("z", "castle"), collectible("y", "viewpoint"), collectible("x", "castle"), collectible("h", "peak", hidden: true)]
+        let ids = { (filters: Set<DiscoveryFilter>) in
+            DiscoveryItem.list(flowlines: flowlines, collectibles: collectibles, filters: filters).map(\.id)
+        }
+        XCTAssertEqual(ids([]), ["flowline:c", "flowline:b", "flowline:a", "collectible:x", "collectible:z", "collectible:y"])
+        XCTAssertEqual(ids([.character(.flow)]), ["flowline:b", "flowline:a"])
+        XCTAssertEqual(ids([.collectibles, .character(.endurance)]), ["flowline:c", "collectible:x", "collectible:z", "collectible:y"])
     }
 
     func testViewportFailureFlagged() async {

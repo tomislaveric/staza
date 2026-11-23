@@ -26,15 +26,6 @@ extension FlowlineTag {
         }
     }
 
-    /// The score as plain text for fact lines, e.g. "Flow 84".
-    func scoreResource(_ score: Int) -> String.LocalizationValue {
-        switch self {
-        case .flow: "flowline.character.flow.score \(score)"
-        case .endurance: "flowline.character.endurance.score \(score)"
-        case .explore: "flowline.character.explore.score \(score)"
-        }
-    }
-
     func breakdown(_ count: Int) -> LocalizedStringKey {
         switch self {
         case .flow: "world.explore.breakdown.flow \(count)"
@@ -200,23 +191,44 @@ struct ExploreResultBanner: View {
     }
 }
 
-/// What the explored area holds, e.g. "11 High-Flow · 1 Endurance · 4 places".
+/// What the explored area holds, e.g. "11 High-Flow · 1 Endurance · 4 collectibles".
+/// Each pill filters the list; no selection shows everything.
 struct ExploreFindings: View {
     let result: ExploreResult
+    @Binding var filters: Set<DiscoveryFilter>
 
     var body: some View {
         if result.outcome == .discovered, !result.breakdown.isEmpty || !result.collectibles.isEmpty {
             MoreFlowLayout {
                 ForEach(result.breakdown, id: \.tag) { entry in
-                    StazaChip(entry.tag.breakdown(entry.count), systemImage: entry.tag.systemImage, tint: entry.tag.tint)
+                    pill(.character(entry.tag)) {
+                        StazaChip(entry.tag.breakdown(entry.count), systemImage: entry.tag.systemImage, tint: entry.tag.tint)
+                    }
                 }
                 if !result.collectibles.isEmpty {
-                    StazaChip("world.explore.collectibles \(result.summary.collectibles ?? result.collectibles.count)", systemImage: "mappin", tint: StazaColor.textMuted)
+                    pill(.collectibles) {
+                        StazaChip("world.explore.collectibles \(result.summary.collectibles ?? result.collectibles.count)",
+                                  systemImage: "mappin", tint: StazaColor.textMuted)
+                    }
                 }
             }
-            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("exploreFindings")
         }
+    }
+
+    private func pill(_ filter: DiscoveryFilter, @ViewBuilder chip: () -> StazaChip) -> some View {
+        let selected = filters.contains(filter)
+        return Button {
+            withAnimation(.snappy) {
+                if selected { filters.remove(filter) } else { filters.insert(filter) }
+            }
+        } label: {
+            chip()
+                .overlay(Capsule().strokeBorder(StazaColor.textPrimary, lineWidth: selected ? 1.5 : 0))
+                .opacity(filters.isEmpty || selected ? 1 : 0.45)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -252,16 +264,15 @@ struct DiscoveriesHeader: View {
     }
 }
 
-/// The Explore session: what the explored area offers and its opportunity Flowlines, sortable.
+/// The Explore session: what the explored area offers, filterable by its findings pills.
 struct DiscoveriesContent: View {
     let model: WorldModel
     let planner: RoutePlannerModel
-    let origin: GeoPoint?
-    let onViewOnMap: (WorldFlowline) -> Void
+    let onViewOnMap: (WorldSelection) -> Void
     var onZoomOut: () -> Void = {}
     /// Ends the Explore session; until then the sheet stays in route generation.
     var onEnd: () -> Void = {}
-    @State private var sort = DiscoverySort.flow
+    @State private var filters: Set<DiscoveryFilter> = []
     @Environment(\.locale) private var locale
 
     var body: some View {
@@ -275,19 +286,15 @@ struct DiscoveriesContent: View {
                 )
             }
 
-            if model.sessionFlowlines.isEmpty {
+            let items = DiscoveryItem.list(flowlines: model.sessionFlowlines, collectibles: model.sessionCollectibles, filters: filters)
+            if model.sessionFlowlines.isEmpty && model.sessionCollectibles.isEmpty {
                 Text("world.discoveries.empty").font(StazaFont.subheadline).foregroundStyle(StazaColor.textMuted)
             } else {
-                Picker("world.discoveries.sort", selection: $sort) {
-                    ForEach(DiscoverySort.allCases) { Text(label($0)).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                if case .result(let result) = model.exploreState { ExploreFindings(result: result) }
+                if case .result(let result) = model.exploreState { ExploreFindings(result: result, filters: $filters) }
                 VStack(spacing: 0) {
-                    let sorted = sort.sorted(model.sessionFlowlines, origin: origin)
-                    ForEach(sorted) { flowline in
-                        row(flowline)
-                        if flowline.id != sorted.last?.id { Divider().overlay(StazaColor.textSubtle.opacity(0.2)) }
+                    ForEach(items) { item in
+                        row(item)
+                        if item.id != items.last?.id { Divider().overlay(StazaColor.textSubtle.opacity(0.2)) }
                     }
                 }
             }
@@ -303,35 +310,67 @@ struct DiscoveriesContent: View {
         .accessibilityIdentifier("discoveriesSheet")
     }
 
-    /// One compact Flowline row: character icon and name, its facts below, actions on the right.
-    private func row(_ flowline: WorldFlowline) -> some View {
-        let inRoute = planner.contains(.flowline(flowline))
-        let primary = flowline.resolvedCharacter.primary
+    /// One row: icon and name, its facts below, map and add on the right. Tapping the row shows it on the map.
+    private func row(_ item: DiscoveryItem) -> some View {
+        let stop = plannerStop(item)
+        let inRoute = planner.contains(stop)
         return HStack(alignment: .center, spacing: StazaSpacing.sm) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: StazaSpacing.xs) {
-                    Image(systemName: primary.systemImage)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(primary.tint)
-                        .accessibilityLabel(Text(primary.scoreLabel))
-                    Text(verbatim: flowline.name)
-                        .font(StazaFont.subheadline.weight(.semibold))
-                        .foregroundStyle(StazaColor.textPrimary)
-                        .lineLimit(1)
+            Button { onViewOnMap(item.selection) } label: {
+                HStack(alignment: .firstTextBaseline, spacing: StazaSpacing.sm) {
+                    icon(item)
+                    VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                        Text(verbatim: name(item))
+                            .font(StazaFont.subheadline.weight(.semibold))
+                            .foregroundStyle(StazaColor.textPrimary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        let facts = facts(item)
+                        if !facts.isEmpty { MetricLine(items: facts) }
+                    }
                 }
-                MetricLine(items: facts(flowline))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            iconButton("world.discoveries.viewOnMap", systemImage: "map", tint: StazaColor.textMuted) { onViewOnMap(flowline) }
+            .buttonStyle(.plain)
+            iconButton("world.discoveries.viewOnMap", systemImage: "map", tint: StazaColor.textMuted) { onViewOnMap(item.selection) }
             iconButton(inRoute ? "world.route.added" : "world.route.add",
                        systemImage: inRoute ? "checkmark" : "plus",
                        tint: inRoute ? StazaColor.onAccent : StazaColor.accent,
-                       filled: inRoute) { planner.toggle(.flowline(flowline)) }
+                       filled: inRoute) { planner.toggle(stop) }
                 .accessibilityAddTraits(inRoute ? .isSelected : [])
         }
-        .padding(.vertical, StazaSpacing.xs)
+        .padding(.vertical, StazaSpacing.md)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("discovery.\(flowline.id)")
+        .accessibilityIdentifier("discovery.\(item.id)")
+    }
+
+    @ViewBuilder
+    private func icon(_ item: DiscoveryItem) -> some View {
+        switch item {
+        case .flowline(let flowline):
+            let primary = flowline.resolvedCharacter.primary
+            Image(systemName: primary.systemImage)
+                .foregroundStyle(primary.tint)
+                .accessibilityLabel(Text(primary.scoreLabel))
+        case .collectible(let collectible):
+            Image(systemName: WorldCategory.systemImage(collectible.primaryCategory))
+                .foregroundStyle(StazaColor.textMuted)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func name(_ item: DiscoveryItem) -> String {
+        switch item {
+        case .flowline(let flowline): flowline.name
+        case .collectible(let collectible): collectible.name
+        }
+    }
+
+    private func plannerStop(_ item: DiscoveryItem) -> PlannerStop {
+        switch item {
+        case .flowline(let flowline): .flowline(flowline)
+        case .collectible(let collectible): .collectible(collectible)
+        }
     }
 
     private func iconButton(_ label: LocalizedStringKey, systemImage: String, tint: Color, filled: Bool = false,
@@ -349,30 +388,19 @@ struct DiscoveriesContent: View {
         .accessibilityLabel(Text(label))
     }
 
-    /// Length, road quality and distance from the player; elevation is not known for Flowlines.
-    private func facts(_ flowline: WorldFlowline) -> [String] {
+    /// Flowlines: length (no elevation data exists for them). Collectibles: category and elevation.
+    private func facts(_ item: DiscoveryItem) -> [String] {
         var items: [String] = []
-        let primary = flowline.resolvedCharacter.primary
-        if let score = flowline.score(for: primary) {
-            items.append(String(localized: primary.scoreResource(Int(score.rounded())), locale: locale))
+        switch item {
+        case .flowline(let flowline):
+            if let length = flowline.lengthMeters { items.append(StazaFormat.distance(meters: length, locale: locale)) }
+            if flowline.completed { items.append(String(localized: "world.detail.completed", locale: locale)) }
+        case .collectible(let collectible):
+            items.append(Bundle.main.localizedString(forKey: WorldCategory.labelKey(collectible.primaryCategory), value: nil, table: nil))
+            if let elevation = collectible.elevationMeters {
+                items.append(String(localized: "world.discoveries.elevation \(StazaFormat.number(elevation, locale: locale))", locale: locale))
+            }
         }
-        if let length = flowline.lengthMeters { items.append(StazaFormat.distance(meters: length, locale: locale)) }
-        if let quality = flowline.roadQualityScore {
-            items.append(String(localized: "world.discoveries.road \(Int(quality.rounded()))", locale: locale))
-        }
-        if let away = flowline.distance(from: origin) {
-            items.append(String(localized: "world.discoveries.away \(StazaFormat.distance(meters: away, locale: locale))", locale: locale))
-        }
-        if flowline.completed { items.append(String(localized: "world.detail.completed", locale: locale)) }
         return items
-    }
-
-    private func label(_ sort: DiscoverySort) -> LocalizedStringKey {
-        switch sort {
-        case .flow: "world.discoveries.sort.flow"
-        case .endurance: "world.discoveries.sort.endurance"
-        case .unridden: "world.discoveries.sort.unridden"
-        case .nearby: "world.discoveries.sort.nearby"
-        }
     }
 }

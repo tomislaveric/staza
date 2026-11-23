@@ -175,16 +175,7 @@ extension WorldSelection {
 
     var kindLabel: LocalizedStringKey {
         switch self {
-        case .collectible(let item):
-            switch item.primaryCategory {
-            case "viewpoint": return "world.category.viewpoint"
-            case "peak", "mountain": return "world.category.peak"
-            case "castle": return "world.category.castle"
-            case "waterfall": return "world.category.waterfall"
-            case "place": return "world.category.place"
-            case "mountain_pass": return "world.category.mountainPass"
-            default: return "world.detail.collectible"
-            }
+        case .collectible(let item): return LocalizedStringKey(WorldCategory.labelKey(item.primaryCategory))
         case .flowline: return "world.detail.flowline"
         }
     }

@@ -259,10 +259,15 @@ struct WorldView: View {
             DiscoveriesContent(
                 model: model,
                 planner: planner,
-                origin: userLocation,
-                onViewOnMap: { flowline in
-                    framed = flowline.coordinates
-                    model.select(.flowline, id: flowline.id)
+                onViewOnMap: { selection in
+                    switch selection {
+                    case .flowline(let flowline):
+                        framed = flowline.coordinates
+                        model.select(.flowline, id: flowline.id)
+                    case .collectible(let item):
+                        framed = [item.coordinate]
+                        model.select(.collectible, id: item.id)
+                    }
                 },
                 onZoomOut: { zoomOut(model) },
                 onEnd: {

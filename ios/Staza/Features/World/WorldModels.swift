@@ -9,6 +9,11 @@ struct WorldCollectible: Decodable, Equatable, Identifiable, Sendable {
     let found: Bool
     let primaryCategory: String?
     var visibility: String? = nil
+    var elevationMeters: Double? = nil
+}
+
+extension WorldCollectible {
+    var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 }
 
 struct WorldFlowline: Decodable, Equatable, Identifiable, Sendable {

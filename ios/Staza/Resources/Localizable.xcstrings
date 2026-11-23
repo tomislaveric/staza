@@ -1191,22 +1191,6 @@
         }
       }
     },
-    "flowline.character.endurance.score %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ausdauer %lld"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Endurance %lld"
-          }
-        }
-      }
-    },
     "flowline.character.explore" : {
       "localizations" : {
         "de" : {
@@ -1223,22 +1207,6 @@
         }
       }
     },
-    "flowline.character.explore.score %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erkundung %lld"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exploration %lld"
-          }
-        }
-      }
-    },
     "flowline.character.flow" : {
       "localizations" : {
         "de" : {
@@ -1251,22 +1219,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "High-flow"
-          }
-        }
-      }
-    },
-    "flowline.character.flow.score %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "High-Flow %lld"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "High-flow %lld"
           }
         }
       }
@@ -5021,18 +4973,18 @@
         }
       }
     },
-    "world.discoveries.away %@" : {
+    "world.discoveries.elevation %@" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ entfernt"
+            "value" : "%@ m"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ away"
+            "value" : "%@ m"
           }
         }
       }
@@ -5049,102 +5001,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No Flowline opportunities in this area."
-          }
-        }
-      }
-    },
-    "world.discoveries.road %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Straße %lld"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Road %lld"
-          }
-        }
-      }
-    },
-    "world.discoveries.sort" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sortierung"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sort"
-          }
-        }
-      }
-    },
-    "world.discoveries.sort.endurance" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ausdauer"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Endurance"
-          }
-        }
-      }
-    },
-    "world.discoveries.sort.flow" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flow"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flow"
-          }
-        }
-      }
-    },
-    "world.discoveries.sort.nearby" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nähe"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nearby"
-          }
-        }
-      }
-    },
-    "world.discoveries.sort.unridden" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Offen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unridden"
           }
         }
       }

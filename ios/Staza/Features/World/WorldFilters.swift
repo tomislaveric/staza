@@ -92,6 +92,19 @@ enum WorldFilter: String, CaseIterable, Identifiable, Sendable {
 enum WorldCategory {
     static func of(_ collectible: WorldCollectible) -> String { collectible.primaryCategory ?? "coin" }
 
+    /// Localization key of the category's name.
+    static func labelKey(_ category: String?) -> String {
+        switch category {
+        case "viewpoint": "world.category.viewpoint"
+        case "peak", "mountain": "world.category.peak"
+        case "castle": "world.category.castle"
+        case "waterfall": "world.category.waterfall"
+        case "place": "world.category.place"
+        case "mountain_pass": "world.category.mountainPass"
+        default: "world.detail.collectible"
+        }
+    }
+
     static func systemImage(_ category: String?) -> String {
         switch category {
         case "viewpoint": "binoculars.fill"
