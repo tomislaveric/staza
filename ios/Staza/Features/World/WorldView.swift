@@ -15,6 +15,7 @@ struct WorldView: View {
     /// Coordinates the map frames on request, e.g. a Flowline shown from the discoveries.
     @State private var framed: [CLLocationCoordinate2D] = []
     @State private var focusRequest = 0
+    @State private var centering: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -145,13 +146,25 @@ struct WorldView: View {
     }
 
     /// Opportunity Flowlines stay emphasised while the Explore result is open.
-    /// Centers the map on a selected Flowline or collectible, above the sheet.
+    /// Centers the map on a selected Flowline or collectible once the sheet has settled at its
+    /// new height, so the fit uses the final visible area above it.
     private func center(on selection: WorldSelection) {
-        switch selection {
-        case .flowline(let flowline): framed = flowline.coordinates
-        case .collectible(let item): framed = [item.coordinate]
+        let coordinates = switch selection {
+        case .flowline(let flowline): flowline.coordinates
+        case .collectible(let item): [item.coordinate]
         }
-        focusRequest += 1
+        centering?.cancel()
+        centering = Task { @MainActor in
+            try? await Task.sleep(for: Self.sheetSettleDelay(reduceMotion: reduceMotion))
+            guard !Task.isCancelled else { return }
+            framed = coordinates
+            focusRequest += 1
+        }
+    }
+
+    /// Slightly longer than the sheet's snap animation.
+    private static func sheetSettleDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(250) : .milliseconds(450)
     }
 
     private func explore(_ model: WorldModel) {
