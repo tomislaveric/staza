@@ -57,6 +57,8 @@ struct WorldMapView: UIViewRepresentable {
     var bottomInset: CGFloat = 0
     /// Coordinates to fit into view, e.g. a highlighted exploration's targets.
     var focus: [CLLocationCoordinate2D] = []
+    /// Bumped to fit `focus` again even when it is unchanged, e.g. re-selecting the same item.
+    var focusRequest = 0
     var onLocationDenied: (Bool) -> Void = { _ in }
     var palette: MapPalette = .standard
 
@@ -101,7 +103,7 @@ struct WorldMapView: UIViewRepresentable {
             map.setUserTrackingMode(tracking.mapMode, animated: true, completionHandler: nil)
         }
         coordinator.setRoute(route, on: map)
-        coordinator.setFocus(focus, on: map)
+        coordinator.setFocus(focus, request: focusRequest, on: map)
         coordinator.refresh()
     }
 
@@ -114,6 +116,7 @@ struct WorldMapView: UIViewRepresentable {
 
         init(palette: MapPalette) { self.palette = palette }
         private var focus: [CLLocationCoordinate2D] = []
+        private var focusRequest = 0
         var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
         var onMapTap: (GeoPoint) -> Void = { _ in }
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
@@ -317,12 +320,13 @@ struct WorldMapView: UIViewRepresentable {
             fit(route, on: map)
         }
 
-        func setFocus(_ coordinates: [CLLocationCoordinate2D], on map: MLNMapView) {
-            let same = coordinates.count == focus.count && zip(coordinates, focus).allSatisfy {
+        func setFocus(_ coordinates: [CLLocationCoordinate2D], request: Int, on map: MLNMapView) {
+            let same = request == focusRequest && coordinates.count == focus.count && zip(coordinates, focus).allSatisfy {
                 $0.latitude == $1.latitude && $0.longitude == $1.longitude
             }
             guard !same else { return }
             focus = coordinates
+            focusRequest = request
             if !coordinates.isEmpty { fit(coordinates, on: map) }
         }
 

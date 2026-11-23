@@ -14,6 +14,7 @@ struct WorldView: View {
     @State private var sheetHeight: CGFloat = 0
     /// Coordinates the map frames on request, e.g. a Flowline shown from the discoveries.
     @State private var framed: [CLLocationCoordinate2D] = []
+    @State private var focusRequest = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -64,6 +65,7 @@ struct WorldView: View {
                     tracking: $tracking,
                     bottomInset: sheetHeight,
                     focus: framed.isEmpty ? focus(model) : framed,
+                    focusRequest: focusRequest,
                     onLocationDenied: { locationDenied = $0 },
                     palette: basemap.mapPalette
                 )
@@ -81,7 +83,9 @@ struct WorldView: View {
             }
             .onChange(of: model.exploreState) { _, state in exploreFinished(state, model) }
             .onChange(of: model.selection) { _, selection in
-                if let selection { withAnimation(.snappy) { sheet.showDetail(selection) } }
+                guard let selection else { return }
+                withAnimation(.snappy) { sheet.showDetail(selection) }
+                center(on: selection)
             }
             .onChange(of: planner.isActive) { _, active in
                 withAnimation(.snappy) { active ? sheet.startPlanner() : sheet.endPlanner() }
@@ -141,6 +145,15 @@ struct WorldView: View {
     }
 
     /// Opportunity Flowlines stay emphasised while the Explore result is open.
+    /// Centers the map on a selected Flowline or collectible, above the sheet.
+    private func center(on selection: WorldSelection) {
+        switch selection {
+        case .flowline(let flowline): framed = flowline.coordinates
+        case .collectible(let item): framed = [item.coordinate]
+        }
+        focusRequest += 1
+    }
+
     private func explore(_ model: WorldModel) {
         model.clearHighlight()
         Task { await model.exploreArea(reduceMotion: reduceMotion) }
@@ -252,13 +265,11 @@ struct WorldView: View {
                 planner: planner,
                 onViewOnMap: { selection in
                     switch selection {
-                    case .flowline(let flowline):
-                        framed = flowline.coordinates
-                        model.select(.flowline, id: flowline.id)
-                    case .collectible(let item):
-                        framed = [item.coordinate]
-                        model.select(.collectible, id: item.id)
+                    case .flowline(let flowline): model.select(.flowline, id: flowline.id)
+                    case .collectible(let item): model.select(.collectible, id: item.id)
                     }
+                    // Re-selecting the current item does not change the selection; center on it anyway.
+                    center(on: selection)
                 },
                 onZoomOut: { zoomOut(model) },
                 onEnd: {
