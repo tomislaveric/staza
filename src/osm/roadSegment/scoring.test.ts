@@ -28,7 +28,7 @@ const candidate = (tags: Record<string, string>[], overrides: Partial<FartlekCan
 
 describe("segment scoring model", () => {
   it("pins the integer scoring version", () => {
-    expect(SEGMENT_SCORING_VERSION).toBe(1);
+    expect(SEGMENT_SCORING_VERSION).toBe(2);
   });
 
   it("zeros every style score for an ineligible (bicycle-forbidden) segment", () => {

@@ -239,6 +239,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   activity pipeline, with an immutable journey-start boundary.
 - [Synchronization diagnostics](features/synchronization-diagnostics/README.md)
   — make FIT/GPS5 synchronization failures explicit and operationally visible.
+- [Tighten Road Cycling Flowline publication](features/tighten-road-cycling-flowline-publication/README.md)
+  — curate fewer recommended Flowlines with stricter motor-road speed, comfort
+  evidence, quality and confidence gates.
 - [UX audit remediation](features/ux-audit-remediation/README.md) — prioritized
   P0–P2 backlog from the product playthrough audit, fixed one finding per session
   to close the Activity → XP → Skill Atlas → Quest game loop.

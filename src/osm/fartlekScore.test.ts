@@ -21,8 +21,8 @@ describe("scoreFartlekCandidate", () => {
   it("AUTO_PUBLISHes a continuous, well-mapped, low-junction candidate", () => {
     const candidate = baseCandidate({
       tagsBySegment: [
-        { highway: "secondary", surface: "asphalt", smoothness: "good", bicycle: "yes", maxspeed: "80", ref: "B500" },
-        { highway: "secondary", surface: "asphalt", smoothness: "excellent", bicycle: "yes", maxspeed: "80", ref: "B500" }
+        { highway: "secondary", surface: "asphalt", smoothness: "good", bicycle: "yes", maxspeed: "50", ref: "B500" },
+        { highway: "secondary", surface: "asphalt", smoothness: "excellent", bicycle: "yes", maxspeed: "50", ref: "B500" }
       ]
     });
     const scored = scoreFartlekCandidate(candidate);

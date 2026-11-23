@@ -40,6 +40,19 @@ describe("Fartlek OSM export conversion", () => {
     )))).toBeUndefined();
   });
 
+  it("retains only the traffic attributes consumed by comfort curation", () => {
+    const tags = {
+      highway: "primary", maxspeed: "50", "maxspeed:forward": "70", "maxspeed:conditional": "30 @ (wet)",
+      lanes: "3", oneway: "yes", "cycleway:both": "lane", "cycleway:both:lane": "exclusive",
+      "cycleway:right": "lane", "cycleway:right:lane": "exclusive",
+      shoulder: "both", "shoulder:surface": "asphalt", "shoulder:width": "2"
+    };
+    expect(fartlekRecordFromExportFeature(JSON.parse(feature(
+      "w2003", { type: "LineString", coordinates: [[11, 48], [12, 49]] },
+      { ...tags, "source:lanes": "survey" }
+    )))?.tags).toEqual(tags);
+  });
+
   it("drops residential but preserves cycleway ways for strict suitability scoring", () => {
     expect(fartlekRecordFromExportFeature(JSON.parse(feature(
       "w3004",

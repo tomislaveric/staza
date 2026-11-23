@@ -35,7 +35,12 @@ export const FARTLEK_CONTROL_NODE_TAGS: [string, string][] = [
 
 export const FARTLEK_RETAINED_WAY_TAG_KEYS = new Set([
   "highway", "name", "ref", "surface", "smoothness", "bicycle", "access", "maxspeed",
-  "priority_road", "lit", "landuse", "junction"
+  "priority_road", "lit", "landuse", "junction", "lanes", "oneway",
+  "maxspeed:forward", "maxspeed:backward", "maxspeed:conditional",
+  "maxspeed:forward:conditional", "maxspeed:backward:conditional",
+  "cycleway", "cycleway:lane", "cycleway:both", "cycleway:both:lane",
+  "cycleway:left", "cycleway:left:lane", "cycleway:right", "cycleway:right:lane",
+  "shoulder", "shoulder:surface", "shoulder:width"
 ]);
 
 export const FARTLEK_RETAINED_NODE_TAG_KEYS = new Set([

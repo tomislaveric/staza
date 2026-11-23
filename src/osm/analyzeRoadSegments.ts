@@ -1,10 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { buildFartlekCandidates } from "./fartlekCandidates.js";
-import { scoreRoadCyclingSegment } from "./roadSegment/scoring.js";
-import { calculateRoadCyclingFlowlineQuality } from "./roadCyclingFlowlineQuality.js";
+import { scoreFartlekCandidate } from "./fartlekScore.js";
+import { flowlineAnalysisProfile, sampleFlowlineAnalysis } from "./flowlineAnalysis.js";
 import { evaluateRoadCyclingEligibility } from "./roadSegment/eligibility.js";
-import type { FartlekCandidate } from "./fartlekModel.js";
+import type { FartlekCandidate, ScoredFartlekCandidate } from "./fartlekModel.js";
 import { readFartlekOSMSnapshot } from "./fartlekSnapshot.js";
 
 /**
@@ -16,7 +17,7 @@ import { readFartlekOSMSnapshot } from "./fartlekSnapshot.js";
  * features carry every score for inspection in any GIS/map viewer. It never touches the database.
  *
  * Usage:
- *   npm run analyze:road-segments -- --snapshot <file> [--geojson <out.geojson>] [--limit <n>]
+ *   npm run analyze:road-segments -- --snapshot <file> [--geojson <out.geojson>] [--sample-per-group <n>]
  *   npm run analyze:road-segments -- --candidates <file.json> [--geojson <out.geojson>]
  */
 
@@ -25,21 +26,32 @@ interface Arguments {
   candidatesFile?: string;
   geojsonFile?: string;
   limit?: number;
+  samplePerGroup?: number;
+  baselineFile?: string;
 }
 
 const argumentsFrom = (values: string[]): Arguments => {
   const result: Arguments = {};
   for (let index = 0; index < values.length; index += 1) {
     const value = values[index];
-    if (value === "--snapshot" || value === "--candidates" || value === "--geojson" || value === "--limit") {
+    if (value === "--snapshot" || value === "--candidates" || value === "--geojson" || value === "--limit" ||
+      value === "--sample-per-group" || value === "--baseline-identities") {
       const argument = values[++index];
       if (!argument || argument.startsWith("--")) throw new Error(`${value} requires a value.`);
       if (value === "--snapshot") result.snapshotFile = path.resolve(argument);
       else if (value === "--candidates") result.candidatesFile = path.resolve(argument);
       else if (value === "--geojson") result.geojsonFile = path.resolve(argument);
-      else result.limit = Number.parseInt(argument, 10);
-    }
+      else if (value === "--baseline-identities") result.baselineFile = path.resolve(argument);
+      else {
+        const count = Number(argument);
+        if (!Number.isSafeInteger(count) || count <= 0) throw new Error(`${value} must be a positive integer.`);
+        if (value === "--limit") result.limit = count;
+        else result.samplePerGroup = count;
+      }
+    } else throw new Error(`Unknown argument: ${value}`);
   }
+  if (result.limit && result.baselineFile) throw new Error("Baseline comparison requires the full candidate population.");
+  if (result.samplePerGroup && !result.geojsonFile) throw new Error("--sample-per-group requires --geojson.");
   return result;
 };
 
@@ -61,6 +73,7 @@ const loadCandidates = async (args: Arguments): Promise<FartlekCandidate[]> => {
 
 interface ScoredRow {
   candidate: FartlekCandidate;
+  scored: ScoredFartlekCandidate;
   flow: number;
   endurance: number;
   explore: number;
@@ -92,7 +105,13 @@ const toGeoJSON = (rows: ScoredRow[]): string => JSON.stringify({
       enduranceScore: row.endurance,
       exploreScore: row.explore,
       roadQualityScore: row.roadQuality,
-      dataConfidence: Number(row.dataConfidence.toFixed(3))
+      dataConfidence: Number(row.dataConfidence.toFixed(3)),
+      ...flowlineAnalysisProfile(row.scored),
+      decision: row.scored.decision,
+      rejectionReason: row.scored.rejectionReason ?? null,
+      reasons: row.scored.reasons,
+      sourceWayIds: row.candidate.sourceWayIds,
+      tagsBySegment: row.candidate.tagsBySegment
     }
   }))
 });
@@ -102,10 +121,12 @@ const main = async (): Promise<void> => {
   const candidates = await loadCandidates(args);
   const limited = args.limit ? candidates.slice(0, args.limit) : candidates;
   const rows: ScoredRow[] = limited.map((candidate) => {
-    const flow = calculateRoadCyclingFlowlineQuality(candidate);
-    const scores = scoreRoadCyclingSegment(candidate, flow);
+    const scored = scoreFartlekCandidate(candidate);
+    const scores = scored.scores;
+    if (!scores) throw new Error(`Missing segment scores for ${candidate.id}.`);
     return {
       candidate,
+      scored,
       flow: scores.flow,
       endurance: scores.endurance,
       explore: scores.explore,
@@ -123,9 +144,57 @@ const main = async (): Promise<void> => {
   console.log(distribution("quality  ", eligible.map((row) => row.roadQuality)));
   console.log(distribution("confid.%", eligible.map((row) => Math.round(row.dataConfidence * 100))));
 
+  const counts = new Map<string, number>();
+  const increment = (key: string): void => { counts.set(key, (counts.get(key) ?? 0) + 1); };
+  const publishedIds = new Set<string>();
+  for (const row of rows) {
+    const profile = flowlineAnalysisProfile(row.scored);
+    increment(`speed.${profile.speedBucket}`);
+    for (const highway of profile.highwayClasses) increment(`highwaySpeed.${highway}.${profile.speedBucket}`);
+    increment(`decision.${row.scored.decision}`);
+    if (row.scored.rejectionReason) increment(`reason.${row.scored.rejectionReason}`);
+    if (profile.published) {
+      publishedIds.add(row.candidate.id);
+      increment("publish.named");
+      increment(`publish.speed.${profile.speedBucket}`);
+      for (const highway of profile.highwayClasses) {
+        increment(`publish.highway.${highway}`);
+        increment(`publish.highwaySpeed.${highway}.${profile.speedBucket}`);
+      }
+    }
+    for (const [quality, confidence] of [[80, 70], [82, 75], [85, 80]]) {
+      if (!row.scored.rejectionReason && row.candidate.name &&
+        row.scored.suitabilityScore >= quality && row.scored.mappingConfidence >= confidence) {
+        increment(`threshold.${quality}.${confidence}.named`);
+      }
+    }
+  }
+  for (const [key, count] of [...counts.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    console.log(`${key}: ${count}`);
+  }
+
+  if (args.baselineFile) {
+    const baseline: { candidateCount: number; geometryDigest: string; publishedIds: string[] } =
+      JSON.parse(await readFile(args.baselineFile, "utf8"));
+    if (!Array.isArray(baseline.publishedIds) || typeof baseline.geometryDigest !== "string") {
+      throw new Error("Baseline must contain publishedIds and geometryDigest.");
+    }
+    const digest = createHash("sha256");
+    for (const candidate of candidates) digest.update(JSON.stringify([candidate.id, candidate.coordinates]));
+    if (baseline.candidateCount !== candidates.length || baseline.geometryDigest !== digest.digest("hex")) {
+      throw new Error("Baseline comparison input mismatch: candidate identities/geometry changed.");
+    }
+    const previous = new Set(baseline.publishedIds);
+    const added = [...publishedIds].filter((id) => !previous.has(id)).length;
+    const removed = [...previous].filter((id) => !publishedIds.has(id)).length;
+    console.log(`Identical candidates/geometry verified. Named publication: ${previous.size} -> ${publishedIds.size}; ` +
+      `removed=${removed}, added=${added}, reduction=${previous.size ? (100 * (previous.size - publishedIds.size) / previous.size).toFixed(1) : "0"}%.`);
+  }
+
   if (args.geojsonFile) {
-    await writeFile(args.geojsonFile, toGeoJSON(rows), "utf8");
-    console.log(`Wrote ${rows.length} feature(s) to ${args.geojsonFile}`);
+    const sample = args.samplePerGroup ? sampleFlowlineAnalysis(rows, args.samplePerGroup) : rows;
+    await writeFile(args.geojsonFile, toGeoJSON(sample), "utf8");
+    console.log(`Wrote ${sample.length} feature(s) from ${rows.length} analyzed candidates to ${args.geojsonFile}`);
   }
 };
 

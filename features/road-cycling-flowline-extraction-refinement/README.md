@@ -1,5 +1,10 @@
 # road-cycling-flowline-extraction-refinement
 
+> Publication traffic policy and the 80/70 floors are superseded by
+> [tighten-road-cycling-flowline-publication](../tighten-road-cycling-flowline-publication/README.md):
+> motor-road speed/class comfort gates and 82/75 floors now apply. Foundational
+> eligibility, geometry, segmentation and history-safe import behavior remain.
+
 ## Goal
 
 Refine the Germany OSM Flowline pipeline so published segments are roads a serious road cyclist would generally enjoy riding. Highway class is only a candidate filter; road surface, smoothness, legal access, continuity, length, traffic context, and data confidence determine publication. Preserve full geometry and all gameplay and historical semantics.

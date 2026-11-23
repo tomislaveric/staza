@@ -13,6 +13,7 @@ import type { FartlekCandidate } from "../osm/fartlekModel.js";
 import type { Fartlek } from "../domain.js";
 import { hasCompleteFartlekOSMSelectorCoverage, readFartlekOSMSnapshot } from "../osm/fartlekSnapshot.js";
 import { buildFartlekCandidates } from "../osm/fartlekCandidates.js";
+import { flowlineAnalysisProfile } from "../osm/flowlineAnalysis.js";
 import { createDatabasePool } from "./database.js";
 import { migrate } from "./migrate.js";
 import { FartlekRepository } from "./fartlekRepository.js";
@@ -114,8 +115,8 @@ const fromCandidates = async (
     increment(`decision.${scored.decision}`);
     increment(`quality.${Math.floor(scored.suitabilityScore / 10) * 10}`);
     increment(`confidence.${Math.floor(scored.mappingConfidence / 10) * 10}`);
-    for (const qualityThreshold of [70, 75, 80, 85]) {
-      for (const confidenceThreshold of [60, 70, 80]) {
+    for (const qualityThreshold of [70, 75, 80, 82, 85]) {
+      for (const confidenceThreshold of [60, 70, 75, 80]) {
         if (!scored.rejectionReason &&
           scored.suitabilityScore >= qualityThreshold &&
           scored.mappingConfidence >= confidenceThreshold) {
@@ -124,6 +125,10 @@ const fromCandidates = async (
         }
       }
     }
+    const profile = flowlineAnalysisProfile(scored);
+    increment(`traffic.speed.${profile.speedBucket}`);
+    increment(`traffic.evidence.${profile.comfortEvidence}`);
+    for (const highway of profile.highwayClasses) increment(`traffic.highwaySpeed.${highway}.${profile.speedBucket}`);
     const highwayClasses = new Set(candidate.tagsBySegment.map((tags) =>
       (tags.highway ?? "unknown").replace(/_link$/, "")
     ));
@@ -134,6 +139,7 @@ const fromCandidates = async (
     if (scored.decision === "AUTO_PUBLISH" && candidate.name) {
       toPublish.push(fartlekFromScoredCandidate(scored));
       increment("publish.named");
+      increment(`publish.speed.${profile.speedBucket}`);
       for (const highway of highwayClasses) increment(`publish.highway.${highway}`);
     } else {
       if (scored.decision === "AUTO_PUBLISH") increment("skip.missing_name");

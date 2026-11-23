@@ -10,6 +10,7 @@
 import type { FartlekCandidate } from "../fartlekModel.js";
 import { classifyRoadSurface, type RoadSurfaceClass } from "./surface.js";
 import { classifyRoadSmoothness, type RoadSmoothnessClass } from "./smoothness.js";
+import { numericMaxspeed } from "./traffic.js";
 import {
   BICYCLE_ALLOWED,
   evaluateRoadCyclingEligibility,
@@ -53,11 +54,6 @@ export interface RoadCyclingSegmentFeatures {
 
 const average = (values: number[]): number =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-
-const numericMaxspeed = (value: string | undefined): number | undefined => {
-  const match = value?.trim().match(/^(\d+(?:\.\d+)?)\s*(?:km\/?h)?$/i);
-  return match ? Number(match[1]) : undefined;
-};
 
 const SURFACE_RANK: Record<RoadSurfaceClass, number> = {
   FORBIDDEN: 0, BAD: 1, UNKNOWN: 2, ACCEPTABLE: 3, GOOD: 4, EXCELLENT: 5

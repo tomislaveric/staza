@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FartlekCandidate } from "./fartlekModel.js";
 import { scoreFartlekCandidate } from "./fartlekScore.js";
+import { evaluateRoadCyclingTrafficComfort } from "./roadSegment/traffic.js";
 import {
   calculateRoadCyclingFlowlineDataConfidence,
   classifyRoadCyclingSmoothness,
@@ -56,8 +57,8 @@ describe("road cycling surface and smoothness classification", () => {
 describe("road cycling Flowline suitability", () => {
   it("accepts secondary asphalt, tertiary paved, and unclassified asphalt with explicit bicycle access", () => {
     const tagSets: Record<string, string>[] = [
-      { highway: "secondary", surface: "asphalt" },
-      { highway: "tertiary", surface: "paved" },
+      { highway: "secondary", surface: "asphalt", maxspeed: "50" },
+      { highway: "tertiary", surface: "paved", maxspeed: "50" },
       { highway: "unclassified", surface: "asphalt", bicycle: "yes" }
     ];
     for (const tags of tagSets) {
@@ -65,14 +66,14 @@ describe("road cycling Flowline suitability", () => {
     }
   });
 
-  it("allows a primary road with missing surface when smoothness and bicycle access add evidence", () => {
+  it("does not publish primary roads on smoothness and bicycle permission alone", () => {
     const candidateWithMissingSurface = candidate([{
       highway: "primary",
       smoothness: "good",
       bicycle: "yes"
     }]);
     const scored = scoreFartlekCandidate(candidateWithMissingSurface);
-    expect(scored.decision).toBe("AUTO_PUBLISH");
+    expect(scored.rejectionReason).toBe("REJECT_PRIMARY_TRAFFIC_COMFORT");
     expect(calculateRoadCyclingFlowlineDataConfidence(candidateWithMissingSurface)).toBeGreaterThanOrEqual(60);
   });
 
@@ -97,7 +98,8 @@ describe("road cycling Flowline suitability", () => {
     expect(isRoadCyclingAccessible({
       highway: "tertiary",
       access: "destination",
-      bicycle: "yes"
+      bicycle: "yes",
+      maxspeed: "50"
     }).allowed).toBe(true);
     expect(scoreFartlekCandidate(candidate([{
       highway: "secondary",
@@ -108,7 +110,8 @@ describe("road cycling Flowline suitability", () => {
       highway: "secondary",
       surface: "asphalt",
       access: "destination",
-      bicycle: "yes"
+      bicycle: "yes",
+      maxspeed: "50"
     }])).decision).toBe("AUTO_PUBLISH");
     expect(isRoadCyclingAccessible({ highway: "secondary", access: "no", bicycle: "yes" }).allowed).toBe(false);
   });
@@ -134,7 +137,7 @@ describe("road cycling Flowline suitability", () => {
     }])).rejectionReason).toBe("REJECT_CYCLEWAY_SURFACE_EVIDENCE");
   });
 
-  it("treats high maxspeed as a soft score penalty", () => {
+  it("hard-rejects high maxspeed carriageways", () => {
     const lowSpeed = scoreFartlekCandidate(candidate([{
       highway: "secondary",
       surface: "asphalt",
@@ -149,7 +152,7 @@ describe("road cycling Flowline suitability", () => {
       bicycle: "yes",
       maxspeed: "100"
     }]));
-    expect(highSpeed.decision).toBe("AUTO_PUBLISH");
+    expect(highSpeed.rejectionReason).toBe("REJECT_HIGH_SPEED_MOTOR_ROAD");
     expect(highSpeed.suitabilityScore).toBeLessThan(lowSpeed.suitabilityScore);
   });
 
@@ -160,8 +163,8 @@ describe("road cycling Flowline suitability", () => {
       bicycle: "yes"
     }])).rejectionReason).toBe("REJECT_LINK_STANDALONE");
     expect(scoreFartlekCandidate(candidate([
-      { highway: "secondary", surface: "asphalt", bicycle: "yes" },
-      { highway: "secondary_link", surface: "asphalt", bicycle: "yes" }
+      { highway: "secondary", surface: "asphalt", bicycle: "yes", maxspeed: "50" },
+      { highway: "secondary_link", surface: "asphalt", bicycle: "yes", maxspeed: "50" }
     ], { linkLengthMeters: 200 })).decision).toBe("AUTO_PUBLISH");
     expect(scoreFartlekCandidate(candidate([
       { highway: "secondary", surface: "asphalt", bicycle: "yes" },
@@ -173,16 +176,24 @@ describe("road cycling Flowline suitability", () => {
     ], { lengthMeters: 1_000, linkLengthMeters: 250 })).rejectionReason).toBe("REJECT_LINK_DOMINATED");
     expect(shouldPublishRoadCyclingFlowline({
       qualityScore: 100,
-      dataConfidence: 69
+      dataConfidence: 74,
+      trafficComfort: evaluateRoadCyclingTrafficComfort(candidate([]))
     })).toBe(false);
     expect(shouldPublishRoadCyclingFlowline({
-      qualityScore: 79,
-      dataConfidence: 100
+      qualityScore: 81,
+      dataConfidence: 100,
+      trafficComfort: evaluateRoadCyclingTrafficComfort(candidate([]))
     })).toBe(false);
     expect(shouldPublishRoadCyclingFlowline({
-      qualityScore: 80,
-      dataConfidence: 70
+      qualityScore: 82,
+      dataConfidence: 75,
+      trafficComfort: evaluateRoadCyclingTrafficComfort(candidate([]))
     })).toBe(true);
+    expect(shouldPublishRoadCyclingFlowline({
+      qualityScore: 100,
+      dataConfidence: 100,
+      trafficComfort: evaluateRoadCyclingTrafficComfort(candidate([{ highway: "tertiary", maxspeed: "100" }]))
+    })).toBe(false);
   });
 
   it("rejects unsupported highway classes even when manually supplied", () => {

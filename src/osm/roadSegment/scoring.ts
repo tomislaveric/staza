@@ -19,7 +19,7 @@ import type { RoadSurfaceClass } from "./surface.js";
 import type { RoadSmoothnessClass } from "./smoothness.js";
 
 /** Integer scoring version persisted with each segment; bump when formulas/features/weights change. */
-export const SEGMENT_SCORING_VERSION = 1;
+export const SEGMENT_SCORING_VERSION = 2;
 
 export interface SegmentQualityScores {
   flow: number;
@@ -156,9 +156,9 @@ export const scoreExplore = (features: RoadCyclingSegmentFeatures): number => {
 };
 
 /**
- * Combined scorer. Flow and dataConfidence come from the canonical Flowline quality calculation so
- * flow stays byte-for-byte compatible with historical publication; the remaining scores are derived
- * from the shared feature model. Injected to avoid a circular import with the quality module.
+ * Combined scorer. Flow and dataConfidence use the canonical Flowline quality calculation;
+ * publication-only traffic gates do not change foundational eligibility or the other style
+ * formulas. Injected to avoid a circular import with the quality module.
  */
 export const scoreRoadCyclingSegment = (
   candidate: FartlekCandidate,

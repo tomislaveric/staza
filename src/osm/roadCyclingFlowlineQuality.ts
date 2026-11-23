@@ -22,6 +22,11 @@ import {
   type RoadCyclingAccessResult
 } from "./roadSegment/eligibility.js";
 import { scoreRoadCyclingSegment, type SegmentQualityScores } from "./roadSegment/scoring.js";
+import {
+  evaluateRoadCyclingTrafficComfort,
+  numericMaxspeed,
+  type RoadCyclingTrafficComfort
+} from "./roadSegment/traffic.js";
 
 // Re-exported so existing importers keep a single, stable entry point while the canonical
 // definitions now live in the reusable `roadSegment/` model.
@@ -34,8 +39,8 @@ export {
 };
 export type { RoadSurfaceSuitability, RoadSmoothnessSuitability, RoadCyclingAccessResult };
 
-export const ROAD_CYCLING_MIN_QUALITY_SCORE = 80;
-export const ROAD_CYCLING_MIN_DATA_CONFIDENCE = 70;
+export const ROAD_CYCLING_MIN_QUALITY_SCORE = 82;
+export const ROAD_CYCLING_MIN_DATA_CONFIDENCE = 75;
 
 const highwayClassConfidence = (highway: string | undefined): number => {
   switch (highway) {
@@ -67,11 +72,6 @@ const smoothnessConfidence = (tags: Record<string, string>): number => {
   if (smoothness === "ACCEPTABLE") return 84;
   if (smoothness === "BAD") return 0;
   return tags.smoothness ? 35 : 60;
-};
-
-const numericMaxspeed = (value: string | undefined): number | undefined => {
-  const match = value?.trim().match(/^(\d+(?:\.\d+)?)\s*(?:km\/?h)?$/i);
-  return match ? Number(match[1]) : undefined;
 };
 
 const average = (values: number[]): number =>
@@ -125,7 +125,6 @@ const interruptionQualityPoints = (count: number, length: number): number => {
 const highwayQualityPoints = (tagsBySegment: Record<string, string>[]): number =>
   average(tagsBySegment.map((tags) => {
     switch (normalizeTag(tags.highway)) {
-      case "primary":
       case "cycleway":
         return 5;
       case "secondary":
@@ -161,7 +160,8 @@ export const calculateRoadCyclingFlowlineDataConfidence = (candidate: FartlekCan
   const profileConsistency = new Set(tagsBySegment.map((tags) => roadCyclingCompatibilityKey(tags))).size === 1
     ? 100
     : 60;
-  return Math.round(average(perWay) * 0.9 + profileConsistency * 0.1);
+  return Math.max(0, Math.round(average(perWay) * 0.9 + profileConsistency * 0.1) -
+    evaluateRoadCyclingTrafficComfort(candidate).confidencePenalty);
 };
 
 export interface RoadCyclingFlowlineQuality {
@@ -170,6 +170,7 @@ export interface RoadCyclingFlowlineQuality {
   dataConfidence: number;
   reasons: string[];
   rejectionReason?: string;
+  trafficComfort: RoadCyclingTrafficComfort;
   /** Full independent score set (flow/endurance/explore/roadQuality + dataConfidence 0..1). */
   scores: SegmentQualityScores;
 }
@@ -179,6 +180,7 @@ export const calculateRoadCyclingFlowlineQuality = (
   candidate: FartlekCandidate
 ): RoadCyclingFlowlineQuality => {
   const rejectionReason = roadCyclingRejectionReason(candidate);
+  const trafficComfort = evaluateRoadCyclingTrafficComfort(candidate);
   if (rejectionReason) {
     const dataConfidence = calculateRoadCyclingFlowlineDataConfidence(candidate);
     return {
@@ -186,6 +188,7 @@ export const calculateRoadCyclingFlowlineQuality = (
       dataConfidence,
       reasons: [rejectionReason],
       rejectionReason,
+      trafficComfort,
       scores: scoreRoadCyclingSegment(candidate, { qualityScore: 0, dataConfidence })
     };
   }
@@ -223,7 +226,7 @@ export const calculateRoadCyclingFlowlineQuality = (
   const score = Math.max(0, Math.min(100, Math.round(
     surfacePoints + accessQualityPoints(tags) + continuityPoints + lengthQualityPoints(candidate.lengthMeters) +
     interruptionPoints + highwayQualityPoints(tags) + maxspeedQualityPoints(tags) +
-    smoothnessPoints / 2 + namePoints + urbanPoints - priorityRoadPenalty
+    smoothnessPoints / 2 + namePoints + urbanPoints - priorityRoadPenalty - trafficComfort.qualityPenalty
   )));
   const dataConfidence = calculateRoadCyclingFlowlineDataConfidence(candidate);
   const reasons = [
@@ -232,22 +235,29 @@ export const calculateRoadCyclingFlowlineQuality = (
     `ACCESS_CONFIDENCE_${Math.round(average(tags.map((segment) => isRoadCyclingAccessible(segment).confidence)))}`,
     `CONTINUITY_${distinctProfiles.size === 1 ? "CONSISTENT" : "MIXED"}`,
     `INTERRUPTIONS_${interruptionPoints >= 7 ? "LOW" : interruptionPoints >= 4 ? "MODERATE" : "HIGH"}`,
-    `MAXSPEED_${maxspeedQualityPoints(tags) >= 5 ? "LOW" : maxspeedQualityPoints(tags) >= 3 ? "MODERATE" : "HIGH"}`,
+    `MAXSPEED_BASE_POINTS_${maxspeedQualityPoints(tags)}`,
     `QUALITY_SCORE_${score}`,
     `DATA_CONFIDENCE_${dataConfidence}`
   ];
+  reasons.push(...trafficComfort.reasons);
+  reasons.push(`TRAFFIC_QUALITY_PENALTY_${trafficComfort.qualityPenalty}`,
+    `TRAFFIC_CONFIDENCE_PENALTY_${trafficComfort.confidencePenalty}`);
+  if (trafficComfort.rejectionReason) reasons.push(trafficComfort.rejectionReason);
   if (priorityRoadPenalty) reasons.push("PRIORITY_ROAD_TRAFFIC_CONTEXT_PENALTY");
   return {
     qualityScore: score,
     dataConfidence,
     reasons,
+    trafficComfort,
+    ...(trafficComfort.rejectionReason ? { rejectionReason: trafficComfort.rejectionReason } : {}),
     scores: scoreRoadCyclingSegment(candidate, { qualityScore: score, dataConfidence })
   };
 };
 
 export const shouldPublishRoadCyclingFlowline = (
-  quality: Pick<RoadCyclingFlowlineQuality, "qualityScore" | "dataConfidence" | "rejectionReason">
+  quality: Pick<RoadCyclingFlowlineQuality, "qualityScore" | "dataConfidence" | "rejectionReason" | "trafficComfort">
 ): boolean =>
   !quality.rejectionReason &&
+  quality.trafficComfort.allowed &&
   quality.qualityScore >= ROAD_CYCLING_MIN_QUALITY_SCORE &&
   quality.dataConfidence >= ROAD_CYCLING_MIN_DATA_CONFIDENCE;
