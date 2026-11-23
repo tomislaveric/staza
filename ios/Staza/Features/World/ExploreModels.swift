@@ -99,7 +99,7 @@ enum RouteIntent: String, CaseIterable, Identifiable, Encodable, Sendable {
     /// The same name in every language.
     var name: String {
         switch self {
-        case .flow: "Flow"
+        case .flow: "Glide"
         case .chill: "Chill"
         case .explore: "Explore"
         }

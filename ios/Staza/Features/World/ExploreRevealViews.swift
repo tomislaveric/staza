@@ -26,6 +26,15 @@ extension FlowlineTag {
         }
     }
 
+    /// The score as plain text for fact lines, e.g. "Flow 84".
+    func scoreResource(_ score: Int) -> String.LocalizationValue {
+        switch self {
+        case .flow: "flowline.character.flow.score \(score)"
+        case .endurance: "flowline.character.endurance.score \(score)"
+        case .explore: "flowline.character.explore.score \(score)"
+        }
+    }
+
     func breakdown(_ count: Int) -> LocalizedStringKey {
         switch self {
         case .flow: "world.explore.breakdown.flow \(count)"
@@ -89,7 +98,7 @@ struct ExploreButton: View {
     }
 }
 
-/// Flow / Chill / Explore for "Generate route"; the names stay the same in every language.
+/// Glide / Chill / Explore for "Generate route"; the names stay the same in every language.
 struct RouteIntentPicker: View {
     @Binding var intent: RouteIntent
 
@@ -134,7 +143,7 @@ struct PlanRouteButton: View {
 
 // MARK: - Result banner
 
-/// What this Explore session found, shown at the top of the opportunities sheet: its pills and the route feel.
+/// The top of the Explore sheet: errors or "nothing new", the clamp note and the route feel.
 struct ExploreResultBanner: View {
     let state: ExploreState
     let onZoomOut: () -> Void
@@ -172,17 +181,7 @@ struct ExploreResultBanner: View {
             }
             Text("world.explore.nothing.body").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
         case .discovered:
-            if !result.breakdown.isEmpty || !result.collectibles.isEmpty {
-                MoreFlowLayout {
-                    ForEach(result.breakdown, id: \.tag) { entry in
-                        StazaChip(entry.tag.breakdown(entry.count), systemImage: entry.tag.systemImage, tint: entry.tag.tint)
-                    }
-                    if !result.collectibles.isEmpty {
-                        StazaChip("world.explore.collectibles \(result.summary.collectibles ?? result.collectibles.count)", systemImage: "mappin", tint: StazaColor.textMuted)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-            }
+            EmptyView()
         }
         if clamped {
             Label("world.explore.clamped", systemImage: "viewfinder")
@@ -201,9 +200,30 @@ struct ExploreResultBanner: View {
     }
 }
 
+/// What the explored area holds, e.g. "11 High-Flow · 1 Endurance · 4 places".
+struct ExploreFindings: View {
+    let result: ExploreResult
+
+    var body: some View {
+        if result.outcome == .discovered, !result.breakdown.isEmpty || !result.collectibles.isEmpty {
+            MoreFlowLayout {
+                ForEach(result.breakdown, id: \.tag) { entry in
+                    StazaChip(entry.tag.breakdown(entry.count), systemImage: entry.tag.systemImage, tint: entry.tag.tint)
+                }
+                if !result.collectibles.isEmpty {
+                    StazaChip("world.explore.collectibles \(result.summary.collectibles ?? result.collectibles.count)", systemImage: "mappin", tint: StazaColor.textMuted)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("exploreFindings")
+        }
+    }
+}
+
 // MARK: - Discoveries
 
-/// The Explore session's toolbar: "Generate route" replaces the close button; the session ends from the list.
+/// The Explore session's toolbar: picked stops, the title and an icon-only "Generate route".
+/// It replaces the close button; the session ends from the bottom of the list.
 struct DiscoveriesHeader: View {
     let routeStops: Int
     let onPlanRoute: () -> Void
@@ -211,21 +231,20 @@ struct DiscoveriesHeader: View {
 
     var body: some View {
         HStack(spacing: StazaSpacing.sm) {
+            PlanRouteButton(routeStops: routeStops, onPlanRoute: onPlanRoute)
             Text("world.discoveries.title")
                 .font(StazaFont.title3)
                 .foregroundStyle(StazaColor.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity)
                 .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: StazaSpacing.xs)
-            PlanRouteButton(routeStops: routeStops, onPlanRoute: onPlanRoute)
             Button(action: onGenerate) {
-                Label("world.explore.generate", systemImage: "sparkles")
-                    .font(StazaFont.footnote.weight(.semibold))
-                    .lineLimit(1)
+                Image(systemName: "sparkles").font(StazaFont.footnote.weight(.semibold))
             }
             .buttonStyle(.stazaPrimary)
             .fixedSize()
+            .accessibilityLabel(Text("world.explore.generate"))
             .accessibilityIdentifier("exploreGenerate")
         }
         .padding(.horizontal, StazaSpacing.md)
@@ -263,6 +282,7 @@ struct DiscoveriesContent: View {
                     ForEach(DiscoverySort.allCases) { Text(label($0)).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                if case .result(let result) = model.exploreState { ExploreFindings(result: result) }
                 VStack(spacing: 0) {
                     let sorted = sort.sorted(model.sessionFlowlines, origin: origin)
                     ForEach(sorted) { flowline in
@@ -283,21 +303,25 @@ struct DiscoveriesContent: View {
         .accessibilityIdentifier("discoveriesSheet")
     }
 
-    /// One compact Flowline row: name and actions, then its character pill and facts.
+    /// One compact Flowline row: character icon and name, its facts below, actions on the right.
     private func row(_ flowline: WorldFlowline) -> some View {
         let inRoute = planner.contains(.flowline(flowline))
+        let primary = flowline.resolvedCharacter.primary
         return HStack(alignment: .center, spacing: StazaSpacing.sm) {
-            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                Text(verbatim: flowline.name)
-                    .font(StazaFont.subheadline.weight(.semibold))
-                    .foregroundStyle(StazaColor.textPrimary)
-                    .lineLimit(1)
-                HStack(spacing: StazaSpacing.sm) {
-                    FlowlineCharacterChip(flowline: flowline)
-                    MetricLine(items: facts(flowline))
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: StazaSpacing.xs) {
+                    Image(systemName: primary.systemImage)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(primary.tint)
+                        .accessibilityLabel(Text(primary.scoreLabel))
+                    Text(verbatim: flowline.name)
+                        .font(StazaFont.subheadline.weight(.semibold))
+                        .foregroundStyle(StazaColor.textPrimary)
+                        .lineLimit(1)
                 }
+                MetricLine(items: facts(flowline))
             }
-            Spacer(minLength: StazaSpacing.xs)
+            .frame(maxWidth: .infinity, alignment: .leading)
             iconButton("world.discoveries.viewOnMap", systemImage: "map", tint: StazaColor.textMuted) { onViewOnMap(flowline) }
             iconButton(inRoute ? "world.route.added" : "world.route.add",
                        systemImage: inRoute ? "checkmark" : "plus",
@@ -305,7 +329,7 @@ struct DiscoveriesContent: View {
                        filled: inRoute) { planner.toggle(.flowline(flowline)) }
                 .accessibilityAddTraits(inRoute ? .isSelected : [])
         }
-        .padding(.vertical, StazaSpacing.sm)
+        .padding(.vertical, StazaSpacing.xs)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("discovery.\(flowline.id)")
     }
@@ -328,6 +352,10 @@ struct DiscoveriesContent: View {
     /// Length, road quality and distance from the player; elevation is not known for Flowlines.
     private func facts(_ flowline: WorldFlowline) -> [String] {
         var items: [String] = []
+        let primary = flowline.resolvedCharacter.primary
+        if let score = flowline.score(for: primary) {
+            items.append(String(localized: primary.scoreResource(Int(score.rounded())), locale: locale))
+        }
         if let length = flowline.lengthMeters { items.append(StazaFormat.distance(meters: length, locale: locale)) }
         if let quality = flowline.roadQualityScore {
             items.append(String(localized: "world.discoveries.road \(Int(quality.rounded()))", locale: locale))

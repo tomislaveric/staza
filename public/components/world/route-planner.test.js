@@ -52,7 +52,7 @@ describe("buildPlanRequest", () => {
 
 describe("route intents", () => {
   it("offers Flow, Chill and Explore with Chill preselected, never speed wording", () => {
-    expect(ROUTE_INTENTS.map((intent) => intent.label)).toEqual(["Flow", "Chill", "Explore"]);
+    expect(ROUTE_INTENTS.map((intent) => intent.label)).toEqual(["Glide", "Chill", "Explore"]);
     expect(JSON.stringify(ROUTE_INTENTS)).not.toMatch(/fast|speed|quick/i);
     const state = createPlannerState({ start: { lat: 47, lon: 9 } });
     expect(state.intent).toBe("chill");

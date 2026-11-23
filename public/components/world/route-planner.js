@@ -4,11 +4,11 @@ import { formatRouteDistance, formatRouteDuration, SPORT_OPTIONS } from "./route
 
 /**
  * What a generated route should feel like. Never named after speed: Staza does not optimize pace.
- * The names stay Flow / Chill / Explore in every language. Chill is the default; the choice is
+ * The names stay Glide / Chill / Explore (Glide, so it never clashes with the Flow score) in every language. Chill is the default; the choice is
  * not saved with the Exploration.
  */
 export const ROUTE_INTENTS = [
-  { value: "flow", label: "Flow", description: "Smooth Flowlines, few interruptions." },
+  { value: "flow", label: "Glide", description: "Smooth Flowlines, few interruptions." },
   { value: "chill", label: "Chill", description: "A relaxed, moderate mix." },
   { value: "explore", label: "Explore", description: "A few good places, small detours." }
 ];

@@ -1191,6 +1191,22 @@
         }
       }
     },
+    "flowline.character.endurance.score %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausdauer %lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Endurance %lld"
+          }
+        }
+      }
+    },
     "flowline.character.explore" : {
       "localizations" : {
         "de" : {
@@ -1207,6 +1223,22 @@
         }
       }
     },
+    "flowline.character.explore.score %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkundung %lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exploration %lld"
+          }
+        }
+      }
+    },
     "flowline.character.flow" : {
       "localizations" : {
         "de" : {
@@ -1219,6 +1251,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "High-flow"
+          }
+        }
+      }
+    },
+    "flowline.character.flow.score %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "High-Flow %lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "High-flow %lld"
           }
         }
       }
@@ -5106,13 +5154,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Möglichkeiten"
+            "value" : "Erkunden"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Opportunities"
+            "value" : "Explore"
           }
         }
       }

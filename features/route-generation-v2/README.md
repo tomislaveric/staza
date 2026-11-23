@@ -3,7 +3,7 @@
 > Amends [explore-sessions-and-saved-explorations](../explore-sessions-and-saved-explorations/README.md)
 > and [explore-reveal-and-manual-planner](../explore-reveal-and-manual-planner/README.md):
 > Explore this area works at any zoom, and **Generate route** builds exactly one route for a
-> chosen intent (Flow, Chill or Explore).
+> chosen intent (Glide, Chill or Explore).
 
 ## Goal
 
@@ -13,7 +13,7 @@ collectibles fit on it.
 ```text
 World → move/zoom the map → (optional start; last Locate me wins)
 → Explore this area (always enabled)
-→ choose intent: Flow | Chill (default) | Explore
+→ choose intent: Glide | Chill (default) | Explore
 → Generate route (exactly one route) → editor → Save Exploration
 ```
 
@@ -60,9 +60,10 @@ Out:
 
 ## Decisions
 
-- **Intents are Flow, Chill and Explore** in every language. No "Schnell fahren", "fast" or
+- **Intents are Glide, Chill and Explore** in every language (API value `flow` for Glide; renamed
+  from "Flow" so it never clashes with the Flowline Flow score and filter). No "Schnell fahren", "fast" or
   speed wording: Staza does not optimize speed.
-  - **Flow:** prioritize Flowline quality, minimize interruptions, POIs secondary.
+  - **Glide:** prioritize Flowline quality, minimize interruptions, POIs secondary.
   - **Chill:** balanced route quality, lower complexity, moderate distance, POIs optional.
   - **Explore:** more WorldObjects and more variety, small detours allowed, but never at the
     cost of route quality.
