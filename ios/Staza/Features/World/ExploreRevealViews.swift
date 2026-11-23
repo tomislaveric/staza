@@ -64,6 +64,8 @@ struct FlowlineCharacterChip: View {
 /// Compact Explore button for the World sheet header. Always available: a wide area is clamped to a maximum frame.
 struct ExploreButton: View {
     let isExploring: Bool
+    /// Only the magnifier, e.g. "explore again" in the Explore session's toolbar.
+    var iconOnly = false
     let onExplore: () -> Void
 
     var body: some View {
@@ -74,13 +76,14 @@ struct ExploreButton: View {
                 } else {
                     Image(systemName: "sparkle.magnifyingglass")
                 }
-                Text(title).lineLimit(1)
+                if !iconOnly { Text(title).lineLimit(1) }
             }
             .font(StazaFont.footnote.weight(.semibold))
         }
         .buttonStyle(.stazaPrimary)
         .disabled(isExploring)
         .fixedSize()
+        .accessibilityLabel(Text(title))
         .accessibilityIdentifier("exploreThisArea")
     }
 
@@ -105,14 +108,17 @@ struct RouteIntentPicker: View {
     }
 }
 
-/// Icon-only "Plan route" button; a badge counts the stops picked so far.
+/// "Plan" button that opens route planning; a badge counts the stops picked so far.
 struct PlanRouteButton: View {
     let routeStops: Int
     let onPlanRoute: () -> Void
 
     var body: some View {
         Button(action: onPlanRoute) {
-            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+            HStack(spacing: StazaSpacing.xs) {
+                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                Text("world.planRoute.short").lineLimit(1)
+            }
                 .font(StazaFont.footnote.weight(.semibold))
                 .overlay(alignment: .topTrailing) {
                     if routeStops > 0 {
@@ -234,12 +240,13 @@ struct ExploreFindings: View {
 
 // MARK: - Discoveries
 
-/// The Explore session's toolbar: picked stops, the title and an icon-only "Generate route".
-/// It replaces the close button; the session ends from the bottom of the list.
+/// The Explore session's toolbar: route planning with its stop count, the title, and "explore again"
+/// for wherever the map has been moved to. Routes are generated from route planning.
 struct DiscoveriesHeader: View {
     let routeStops: Int
+    let isExploring: Bool
     let onPlanRoute: () -> Void
-    let onGenerate: () -> Void
+    let onExplore: () -> Void
 
     var body: some View {
         HStack(spacing: StazaSpacing.sm) {
@@ -251,13 +258,7 @@ struct DiscoveriesHeader: View {
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity)
                 .accessibilityAddTraits(.isHeader)
-            Button(action: onGenerate) {
-                Image(systemName: "sparkles").font(StazaFont.footnote.weight(.semibold))
-            }
-            .buttonStyle(.stazaPrimary)
-            .fixedSize()
-            .accessibilityLabel(Text("world.explore.generate"))
-            .accessibilityIdentifier("exploreGenerate")
+            ExploreButton(isExploring: isExploring, iconOnly: true, onExplore: onExplore)
         }
         .padding(.horizontal, StazaSpacing.md)
         .padding(.bottom, StazaSpacing.md)
@@ -307,6 +308,7 @@ struct DiscoveriesContent: View {
         }
         .padding(.horizontal, StazaSpacing.md)
         .padding(.bottom, StazaSpacing.lg)
+        .onChange(of: model.exploreState) { _, _ in filters = [] }
         .accessibilityIdentifier("discoveriesSheet")
     }
 

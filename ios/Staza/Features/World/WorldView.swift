@@ -196,17 +196,12 @@ struct WorldView: View {
 
     /// "Generate route": opens the route editor and generates one route for the chosen intent in the explored
     /// area. Without a located start inside the area, the editor asks for a start on the map first.
-    private func generateRoute(_ model: WorldModel, _ planner: RoutePlannerModel) {
-        guard let bounds = model.sessionBounds ?? model.bounds else { return }
-        let start = userLocation.flatMap { bounds.contains($0) ? $0 : nil }
-        openPlanner(model, planner, start: start)
-        guard start != nil else { return }
-        Task { await planner.suggest(in: bounds, catalog: model.collectible(id:)) }
-    }
-
     /// "Plan a route": opens the route editor with the stops added so far; the Explore session stays open.
+    /// During a session the player's position is the start only inside the explored area; otherwise
+    /// the planner asks for a start on the map.
     private func openPlanner(_ model: WorldModel, _ planner: RoutePlannerModel) {
-        openPlanner(model, planner, start: userLocation)
+        let start = model.sessionBounds.map { bounds in userLocation.flatMap { bounds.contains($0) ? $0 : nil } } ?? userLocation
+        openPlanner(model, planner, start: start)
     }
 
     private func openPlanner(_ model: WorldModel, _ planner: RoutePlannerModel, start: GeoPoint?) {
@@ -265,8 +260,9 @@ struct WorldView: View {
         case .discoveries:
             DiscoveriesHeader(
                 routeStops: planner.stops.count,
+                isExploring: model.isExploring,
                 onPlanRoute: { openPlanner(model, planner) },
-                onGenerate: { generateRoute(model, planner) }
+                onExplore: { explore(model) }
             )
         case .planner:
             RoutePlannerHeader(planner: planner)

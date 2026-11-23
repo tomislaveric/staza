@@ -5398,22 +5398,6 @@
         }
       }
     },
-    "world.explore.generate" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Route erstellen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Generate route"
-          }
-        }
-      }
-    },
     "world.explore.nothing.body" : {
       "localizations" : {
         "de" : {
@@ -5878,6 +5862,22 @@
         }
       }
     },
+    "world.planRoute.short" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan"
+          }
+        }
+      }
+    },
     "world.route.add" : {
       "localizations" : {
         "de" : {
@@ -5931,13 +5931,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dieser Bereich"
+            "value" : "Bereich"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This area"
+            "value" : "Area"
           }
         }
       }
