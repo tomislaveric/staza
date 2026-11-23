@@ -283,7 +283,7 @@ struct DiscoveriesContent: View {
                     state: state,
                     onZoomOut: onZoomOut,
                     intent: Binding(get: { planner.intent }, set: { planner.intent = $0 }),
-                    clamped: model.exploreFrame != nil
+                    clamped: model.exploreClamped
                 )
             }
 

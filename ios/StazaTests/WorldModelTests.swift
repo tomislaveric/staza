@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 @testable import Staza
 
@@ -56,7 +57,7 @@ final class WorldModelTests: XCTestCase {
         XCTAssertEqual(model.collectibles.map(\.id), ["c1", "c9"])
         XCTAssertEqual(model.sessionFlowlines.map(\.id), ["f2"])
         XCTAssertEqual(model.sessionBounds, bounds, "older servers explore the requested viewport")
-        XCTAssertNil(model.exploreFrame)
+        XCTAssertTrue(model.exploreOutline.isEmpty)
         XCTAssertEqual(model.flowline(id: "f2")?.resolvedCharacter.tags, [.flow, .explore])
         guard case .result(let result) = model.exploreState else { return XCTFail("expected a result") }
         XCTAssertEqual(result.breakdown, [ExploreResult.Count(tag: .flow, count: 1)])
@@ -91,11 +92,35 @@ final class WorldModelTests: XCTestCase {
         await model.exploreArea(reduceMotion: true)
         let frame = WorldBounds(west: 7.7, south: 46.55, east: 8.3, north: 47.45)
         XCTAssertEqual(model.sessionBounds, frame, "Generate stays inside the explored frame")
-        XCTAssertEqual(model.exploreFrame, frame)
+        XCTAssertTrue(model.exploreClamped)
+        XCTAssertEqual(model.exploreOutline.count, 5, "the clamped frame is outlined")
         XCTAssertTrue(frame.contains(GeoPoint(lat: 47, lon: 8)))
         XCTAssertFalse(frame.contains(GeoPoint(lat: 48, lon: 8)))
         model.endExploreSession()
-        XCTAssertNil(model.exploreFrame)
+        XCTAssertTrue(model.exploreOutline.isEmpty)
+        XCTAssertFalse(model.exploreClamped)
+    }
+
+    func testExploresTheVisibleCircleAndOutlinesIt() async throws {
+        let explored = #"{"outcome":"nothing_new","flowlines":[],"collectibles":[],"availableCount":0,"summary":{"total":0,"byCharacter":{}},"area":{"bbox":"7.986742,46.991015,8.013258,47.008985","center":{"lat":47,"lon":8},"clamped":false,"circle":{"center":{"lat":47,"lon":8},"radiusMeters":1000}}}"#
+        let transport = StubTransport([.init(status: 200, body: world), .init(status: 200, body: explored), .init(status: 200, body: world)])
+        let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
+        await model.loadViewport(WorldBounds(west: 7.9, south: 46.9, east: 8.1, north: 47.1))
+        let circle = ExploreCircle(center: GeoPoint(lat: 47, lon: 8), radiusMeters: 1000)
+        model.exploreCircle = circle
+        await model.exploreArea(reduceMotion: true)
+
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(transport.requests.last?.httpBody)) as? [String: Any])
+        let sentCircle = try XCTUnwrap(sent["circle"] as? [String: Any])
+        XCTAssertEqual(sentCircle["radiusMeters"] as? Double, 1000)
+        XCTAssertEqual(sent["bbox"] as? String, circle.bounds.queryValue, "older servers explore the circle's square")
+        XCTAssertFalse(model.exploreClamped)
+        let outline = model.exploreOutline
+        XCTAssertGreaterThan(outline.count, 32)
+        for point in outline {
+            let meters = CLLocation(latitude: 47, longitude: 8).distance(from: CLLocation(latitude: point.latitude, longitude: point.longitude))
+            XCTAssertEqual(meters, 1000, accuracy: 10)
+        }
     }
 
     func testDiscoveryListOrdersAndFilters() {

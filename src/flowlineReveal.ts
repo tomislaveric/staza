@@ -11,6 +11,8 @@ export const FLOWLINE_OPPORTUNITIES_PER_EXPLORE = 12;
 export const MAX_EXPLORE_WIDTH_METERS = 50_000;
 /** Tallest area one Explore covers (portrait phones see more height than width). */
 export const MAX_EXPLORE_HEIGHT_METERS = 100_000;
+/** Largest radius of a circular Explore area (the width limit's half). */
+export const MAX_EXPLORE_RADIUS_METERS = MAX_EXPLORE_WIDTH_METERS / 2;
 /** Minimum primary-character score of a Flowline worth showing as an opportunity. */
 export const MIN_OPPORTUNITY_SCORE = 50;
 /** Minimum road quality, when scored. */
@@ -53,12 +55,70 @@ export const isPlannableFlowline = (candidate: OpportunityCandidate, completed: 
 
 export const exploreAllowed = (bounds: GeoBounds): boolean => viewportWidthMeters(bounds) <= MAX_EXPLORE_WIDTH_METERS;
 
+export interface ExploreCircle {
+  center: { lat: number; lon: number };
+  radiusMeters: number;
+}
+
 export interface ExploreFrame {
   bounds: GeoBounds;
   center: { lat: number; lon: number };
-  /** True when the viewport was larger than one Explore and was cut to a centered frame. */
+  /** True when the requested area was larger than one Explore and was cut to the maximum size. */
   clamped: boolean;
+  /** A circular area: only what lies inside it is explored; `bounds` encloses it. */
+  circle?: ExploreCircle;
 }
+
+const wrapLongitude = (lon: number) => (lon > 180 ? lon - 360 : lon < -180 ? lon + 360 : lon);
+const metersPerDegreeLongitude = (latitude: number) =>
+  METERS_PER_DEGREE_LATITUDE * Math.max(Math.cos((latitude * Math.PI) / 180), 1e-6);
+
+/** A circular Explore area, its radius capped at MAX_EXPLORE_RADIUS_METERS. */
+export const clampExploreCircle = (circle: ExploreCircle): ExploreFrame => {
+  const clamped = circle.radiusMeters > MAX_EXPLORE_RADIUS_METERS;
+  const radiusMeters = Math.min(circle.radiusMeters, MAX_EXPLORE_RADIUS_METERS);
+  const { lat, lon } = circle.center;
+  const halfLat = radiusMeters / METERS_PER_DEGREE_LATITUDE;
+  const halfLon = radiusMeters / metersPerDegreeLongitude(lat);
+  return {
+    bounds: {
+      minLatitude: Math.max(-90, lat - halfLat),
+      maxLatitude: Math.min(90, lat + halfLat),
+      minLongitude: wrapLongitude(lon - halfLon),
+      maxLongitude: wrapLongitude(lon + halfLon)
+    },
+    center: { lat, lon },
+    clamped,
+    circle: { center: { lat, lon }, radiusMeters }
+  };
+};
+
+/** Local planar meters around the circle's center; accurate at Explore sizes. */
+const toLocal = (circle: ExploreCircle, [lon, lat]: [number, number]) => {
+  let deltaLon = lon - circle.center.lon;
+  if (deltaLon > 180) deltaLon -= 360;
+  if (deltaLon < -180) deltaLon += 360;
+  return { x: deltaLon * metersPerDegreeLongitude(circle.center.lat), y: (lat - circle.center.lat) * METERS_PER_DEGREE_LATITUDE };
+};
+
+export const pointInCircle = (circle: ExploreCircle, lon: number, lat: number): boolean => {
+  const { x, y } = toLocal(circle, [lon, lat]);
+  return Math.hypot(x, y) <= circle.radiusMeters;
+};
+
+/** True when any part of the line (vertices or segments between them) lies inside the circle. */
+export const lineTouchesCircle = (circle: ExploreCircle, coordinates: [number, number][]): boolean => {
+  const points = coordinates.map((coordinate) => toLocal(circle, coordinate));
+  if (points.some(({ x, y }) => Math.hypot(x, y) <= circle.radiusMeters)) return true;
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1], b = points[index];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, -(a.x * dx + a.y * dy) / lengthSquared));
+    if (Math.hypot(a.x + t * dx, a.y + t * dy) <= circle.radiusMeters) return true;
+  }
+  return false;
+};
 
 /**
  * The area one "Explore this area" covers: the viewport itself, or — when it is larger than
@@ -72,7 +132,7 @@ export const clampExploreBounds = (bounds: GeoBounds): ExploreFrame => {
   const centerLat = (bounds.minLatitude + bounds.maxLatitude) / 2;
   const rawCenterLon = bounds.minLongitude + lonSpan / 2;
   const centerLon = rawCenterLon > 180 ? rawCenterLon - 360 : rawCenterLon;
-  const metersPerDegreeLon = METERS_PER_DEGREE_LATITUDE * Math.max(Math.cos((centerLat * Math.PI) / 180), 1e-6);
+  const metersPerDegreeLon = metersPerDegreeLongitude(centerLat);
   const maxLonSpan = MAX_EXPLORE_WIDTH_METERS / metersPerDegreeLon;
   const maxLatSpan = MAX_EXPLORE_HEIGHT_METERS / METERS_PER_DEGREE_LATITUDE;
   const latSpan = bounds.maxLatitude - bounds.minLatitude;
@@ -80,13 +140,12 @@ export const clampExploreBounds = (bounds: GeoBounds): ExploreFrame => {
   if (!clamped) return { bounds, center: { lat: centerLat, lon: centerLon }, clamped };
   const halfLon = Math.min(lonSpan, maxLonSpan) / 2;
   const halfLat = Math.min(latSpan, maxLatSpan) / 2;
-  const wrap = (lon: number) => (lon > 180 ? lon - 360 : lon < -180 ? lon + 360 : lon);
   return {
     bounds: {
       minLatitude: centerLat - halfLat,
       maxLatitude: centerLat + halfLat,
-      minLongitude: wrap(centerLon - halfLon),
-      maxLongitude: wrap(centerLon + halfLon)
+      minLongitude: wrapLongitude(centerLon - halfLon),
+      maxLongitude: wrapLongitude(centerLon + halfLon)
     },
     center: { lat: centerLat, lon: centerLon },
     clamped

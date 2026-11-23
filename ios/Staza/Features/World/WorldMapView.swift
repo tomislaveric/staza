@@ -41,13 +41,15 @@ struct WorldMapView: UIViewRepresentable {
     let flowlines: [WorldFlowline]
     /// Saved Exploration routes: dotted and low in prominence, beneath every other layer.
     var explorationRoutes: [ExplorationRoute] = []
-    /// The clamped Explore frame, outlined while its session is open.
-    var exploreFrame: WorldBounds? = nil
+    /// The explored area (circle or clamped frame), outlined while its session is open.
+    var exploreOutline: [CLLocationCoordinate2D] = []
     let questTargets: QuestTargets
     var route: [CLLocationCoordinate2D] = []
     /// The tapped collectible or Flowline; it gets the selection halo.
     var selection: WorldSelection? = nil
     let onViewportChange: (WorldBounds) -> Void
+    /// The circle the next Explore covers: the largest one fitting the visible map above the sheet.
+    var onExploreCircleChange: (ExploreCircle?) -> Void = { _ in }
     let onSelect: (WorldSelectionKind, String) -> Void
     /// A tap on the map that hit no collectible or Flowline.
     var onMapTap: (GeoPoint) -> Void = { _ in }
@@ -89,6 +91,7 @@ struct WorldMapView: UIViewRepresentable {
     func updateUIView(_ map: MLNMapView, context: Context) {
         let coordinator = context.coordinator
         coordinator.onViewportChange = onViewportChange
+        coordinator.onExploreCircleChange = onExploreCircleChange
         coordinator.onSelect = onSelect
         coordinator.onMapTap = onMapTap
         coordinator.onUserLocation = onUserLocation
@@ -96,10 +99,13 @@ struct WorldMapView: UIViewRepresentable {
         coordinator.onLocationDenied = onLocationDenied
         coordinator.data = (collectibles, flowlines, questTargets, selection)
         coordinator.explorationRoutes = explorationRoutes
-        coordinator.exploreFrame = exploreFrame
+        coordinator.exploreOutline = exploreOutline
         if abs(coordinator.appliedInset - bottomInset) > 0.5 {
             coordinator.appliedInset = bottomInset
-            map.setContentInset(UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0), animated: true, completionHandler: nil)
+            map.setContentInset(UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0), animated: true) { [weak coordinator, weak map] in
+                guard let coordinator, let map else { return }
+                coordinator.reportExploreCircle(map)
+            }
         }
         if WorldTracking(map.userTrackingMode) != tracking {
             map.setUserTrackingMode(tracking.mapMode, animated: true, completionHandler: nil)
@@ -111,6 +117,7 @@ struct WorldMapView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MLNMapViewDelegate, CLLocationManagerDelegate {
         var onViewportChange: (WorldBounds) -> Void = { _ in }
+        var onExploreCircleChange: (ExploreCircle?) -> Void = { _ in }
         var onTrackingChange: (WorldTracking) -> Void = { _ in }
         var onLocationDenied: (Bool) -> Void = { _ in }
         var appliedInset: CGFloat = 0
@@ -124,7 +131,7 @@ struct WorldMapView: UIViewRepresentable {
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
         var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selection: WorldSelection?) = ([], [], .empty, nil)
         var explorationRoutes: [ExplorationRoute] = []
-        var exploreFrame: WorldBounds?
+        var exploreOutline: [CLLocationCoordinate2D] = []
 
         private let locationManager = CLLocationManager()
         private var explorationRouteSource: MLNShapeSource?
@@ -295,10 +302,8 @@ struct WorldMapView: UIViewRepresentable {
             selectedFlowlineSource?.shape = Self.lines(selectedFlowline)
             flowlineSource.shape = Self.lines(data.flowlines)
             explorationRouteSource?.shape = Self.routes(explorationRoutes)
-            exploreFrameSource?.shape = exploreFrame.map { frame in
-                var ring = frame.ring
-                return MLNPolylineFeature(coordinates: &ring, count: UInt(ring.count))
-            }
+            var outline = exploreOutline
+            exploreFrameSource?.shape = outline.isEmpty ? nil : MLNPolylineFeature(coordinates: &outline, count: UInt(outline.count))
             questFlowlineSource.shape = Self.lines(data.quest.flowlines)
         }
 
@@ -363,6 +368,27 @@ struct WorldMapView: UIViewRepresentable {
             DispatchQueue.main.async { [onUserLocation] in onUserLocation(point) }
             let bounds = map.visibleCoordinateBounds
             onViewportChange(WorldBounds(west: bounds.sw.longitude, south: bounds.sw.latitude, east: bounds.ne.longitude, north: bounds.ne.latitude))
+            reportExploreCircle(map)
+        }
+
+        /// Space kept clear around the Explore circle: map edges, the sheet, and the locate button row.
+        private static let circleSidePadding: CGFloat = 20
+        private static let circleTopClearance: CGFloat = 64
+
+        /// The largest circle fitting the visible map above the sheet, aligned to its top.
+        func reportExploreCircle(_ map: MLNMapView) {
+            let top = map.safeAreaInsets.top + Self.circleTopClearance
+            let width = map.bounds.width - 2 * Self.circleSidePadding
+            let height = map.bounds.height - top - map.contentInset.bottom - Self.circleSidePadding
+            let radius = min(width, height) / 2
+            guard radius > 40 else { return onExploreCircleChange(nil) }
+            let centerPoint = CGPoint(x: map.bounds.midX, y: top + radius)
+            let center = map.convert(centerPoint, toCoordinateFrom: map)
+            let edge = map.convert(CGPoint(x: centerPoint.x + radius, y: centerPoint.y), toCoordinateFrom: map)
+            let meters = CLLocation(latitude: center.latitude, longitude: center.longitude)
+                .distance(from: CLLocation(latitude: edge.latitude, longitude: edge.longitude))
+            guard CLLocationCoordinate2DIsValid(center), meters > 0 else { return onExploreCircleChange(nil) }
+            onExploreCircleChange(ExploreCircle(center: GeoPoint(lat: center.latitude, lon: center.longitude), radiusMeters: meters))
         }
 
         private static let circleLayer = "world-collectibles-circle"

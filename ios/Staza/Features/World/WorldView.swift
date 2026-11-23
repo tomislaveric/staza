@@ -57,11 +57,12 @@ struct WorldView: View {
                     collectibles: model.visibleCollectibles,
                     flowlines: model.visibleFlowlines,
                     explorationRoutes: model.explorationRoutes,
-                    exploreFrame: model.exploreFrame,
+                    exploreOutline: model.exploreOutline,
                     questTargets: planner.isActive ? plannerTargets(planner) : model.mapQuestTargets,
                     route: planner.displayedRoute,
                     selection: model.selection,
                     onViewportChange: { model.viewportChanged($0) },
+                    onExploreCircleChange: { model.exploreCircle = $0 },
                     onSelect: { kind, id in select(kind, id: id, model, planner) },
                     onMapTap: { planner.mapTapped($0) },
                     onUserLocation: { userLocation = $0 },
@@ -139,7 +140,9 @@ struct WorldView: View {
     private func exploreFinished(_ state: ExploreState?, _ model: WorldModel) {
         guard let state, state != .exploring, !(planner?.isActive ?? false) else { return }
         if case .result = state {
-            let points = model.sessionFlowlines.flatMap(\.coordinates)
+            // The whole explored area stays in view; without an outline, everything it found.
+            let points = !model.exploreOutline.isEmpty ? model.exploreOutline
+                : model.sessionFlowlines.flatMap(\.coordinates)
                 + model.sessionCollectibles.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
             if !points.isEmpty {
                 focusFill = 1
@@ -194,8 +197,6 @@ struct WorldView: View {
         ]
     }
 
-    /// "Generate route": opens the route editor and generates one route for the chosen intent in the explored
-    /// area. Without a located start inside the area, the editor asks for a start on the map first.
     /// "Plan a route": opens the route editor with the stops added so far; the Explore session stays open.
     /// During a session the player's position is the start only inside the explored area; otherwise
     /// the planner asks for a start on the map.

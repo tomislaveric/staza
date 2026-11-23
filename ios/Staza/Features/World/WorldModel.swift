@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import Observation
 
@@ -18,8 +19,13 @@ final class WorldModel {
     private(set) var sessionCollectibles: [WorldCollectible] = []
     /// The explored area while an Explore session is open; generated routes stay inside it.
     private(set) var sessionBounds: WorldBounds?
-    /// The explored frame, drawn on the map while a wide viewport was clamped to it.
-    private(set) var exploreFrame: WorldBounds?
+    /// The explored area's outline, drawn on the map while its session is open: the explored circle,
+    /// or the frame a wide viewport was clamped to.
+    private(set) var exploreOutline: [CLLocationCoordinate2D] = []
+    /// The explored area was cut to the largest size one Explore covers.
+    private(set) var exploreClamped = false
+    /// The circle Explore explores next: the largest one fitting the visible map, reported by the map.
+    var exploreCircle: ExploreCircle?
     /// The Explore card: running, a result, or a failure. `nil` when dismissed.
     private(set) var exploreState: ExploreState?
     /// Opportunity Flowlines not drawn yet while their appearance is staggered.
@@ -134,10 +140,15 @@ final class WorldModel {
         endExploreSession()
         exploreState = .exploring
         do {
-            let result: ExploreResult = try await api.post("/api/world/explore", body: ExploreRequest(bbox: bounds.queryValue))
+            let requested = exploreCircle?.bounds ?? bounds
+            let request = ExploreRequest(bbox: requested.queryValue, circle: exploreCircle)
+            let result: ExploreResult = try await api.post("/api/world/explore", body: request)
             let explored = result.area?.bounds
-            sessionBounds = explored ?? bounds
-            exploreFrame = result.area?.clamped == true ? explored : nil
+            sessionBounds = explored ?? requested
+            exploreClamped = result.area?.clamped == true
+            exploreOutline = if let circle = result.area?.circle { circle.ring() }
+                else if exploreClamped, let explored { explored.ring }
+                else { [] }
             sessionFlowlines = result.flowlines.uniqued()
             sessionCollectibles = result.collectibles
             exploreState = .result(result)
@@ -156,7 +167,8 @@ final class WorldModel {
     func endExploreSession() {
         exploreState = nil
         sessionBounds = nil
-        exploreFrame = nil
+        exploreOutline = []
+        exploreClamped = false
         sessionFlowlines = []
         sessionCollectibles = []
         revealing = []

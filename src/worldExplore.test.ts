@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Fartlek, WorldCollectible } from "./domain.js";
 import { toWorldFartlek } from "./fartlek.js";
-import { MAX_EXPLORE_HEIGHT_METERS, MAX_EXPLORE_WIDTH_METERS, type OpportunityCandidate } from "./flowlineReveal.js";
+import { MAX_EXPLORE_HEIGHT_METERS, MAX_EXPLORE_RADIUS_METERS, MAX_EXPLORE_WIDTH_METERS, type OpportunityCandidate } from "./flowlineReveal.js";
 import { viewportWidthMeters } from "./flowlinePolicy.js";
 import type { GeoBounds } from "./worldQuery.js";
 import { exploreArea } from "./worldExplore.js";
@@ -88,5 +88,36 @@ describe("exploreArea", () => {
     expect((frame.maxLatitude - frame.minLatitude) * 111_320).toBeCloseTo(MAX_EXPLORE_HEIGHT_METERS, -2);
     expect((frame.minLongitude + frame.maxLongitude) / 2).toBeCloseTo(9);
     expect(result.area.bbox.split(",").map(Number)).toEqual([frame.minLongitude, frame.minLatitude, frame.maxLongitude, frame.maxLatitude].map((value) => Number(value.toFixed(6))));
+  });
+
+  it("explores only what lies inside a circle and reports the circle", async () => {
+    const at = (id: string, coordinates: [number, number][]) => flowline(id, {
+      flowScore: 90, geometry: { type: "LineString", coordinates }
+    });
+    const world = fakeWorld(
+      [
+        at("inside", [[9.5, 47.5], [9.501, 47.501]]),
+        at("crossing", [[9.45, 47.505], [9.55, 47.505]]),
+        at("outside", [[9.6, 47.6], [9.61, 47.61]])
+      ],
+      [collectible("near"), { ...collectible("far"), latitude: 47.6, longitude: 9.6 }]
+    );
+    const circle = { center: { lat: 47.5, lon: 9.5 }, radiusMeters: 1000 };
+    const result = await exploreArea("p1", { circle }, world.dependencies);
+    expect(result.flowlines.map((item) => item.id).sort()).toEqual(["crossing", "inside"]);
+    expect(result.collectibles.map((item) => item.id)).toEqual(["near"]);
+    expect(result.availableCount).toBe(0);
+    expect(result.area).toMatchObject({ circle, clamped: false, center: circle.center });
+    const [bounds] = world.queried;
+    expect((bounds.maxLatitude - bounds.minLatitude) * 111_320).toBeCloseTo(2000, -1);
+  });
+
+  it("caps a circle's radius and rejects invalid circles", async () => {
+    const world = fakeWorld([]);
+    const result = await exploreArea("p1", { circle: { center: { lat: 47, lon: 9 }, radiusMeters: 200_000 } }, world.dependencies);
+    expect(result.area.clamped).toBe(true);
+    expect(result.area.circle?.radiusMeters).toBe(MAX_EXPLORE_RADIUS_METERS);
+    await expect(exploreArea("p1", { circle: { center: { lat: 47 }, radiusMeters: 10 } }, world.dependencies)).rejects.toThrow();
+    await expect(exploreArea("p1", { circle: { center: { lat: 47, lon: 9 }, radiusMeters: 0 } }, world.dependencies)).rejects.toThrow();
   });
 });

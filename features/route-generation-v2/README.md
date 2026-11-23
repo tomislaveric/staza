@@ -147,6 +147,11 @@ removed (`strategies.ts` is deleted). `PLANNER_VERSION` is bumped to 5.
 - `POST /api/world/explore` clamps instead of rejecting a large area and returns the explored
   `area`. `exploreAllowed` stays in the `/api/world` viewport response for older clients. The
   generate area limit (2° span) accepts every clamped frame.
+- `POST /api/world/explore` also accepts `circle: { center: { lat, lon }, radiusMeters }`, which
+  takes precedence over `bbox`. The radius is capped at `MAX_EXPLORE_RADIUS_METERS` (half the
+  width limit, `clamped: true` when cut). Only Flowlines reaching into the circle and collectibles
+  inside it are returned, and `area.circle` echoes the explored circle. Clients that send only
+  `bbox` (web) keep the rectangle.
 
 ## Clients
 
@@ -163,6 +168,10 @@ removed (`strategies.ts` is deleted). `PLANNER_VERSION` is bumped to 5.
   opens picking a start and Generate stays disabled until it is set.
 - `suggestRoute` sends `intent` and uses the single proposal.
 - en/de strings.
+
+**iOS** explores a circle: the largest circle that fits the visible map above the sheet, with
+padding, aligned to its top below the map controls. It sends the circle together with its
+enclosing `bbox` for older servers. The explored circle is outlined and framed during the session.
 
 **iOS** (`ExploreRevealViews.swift`, `ExploreModels.swift`, `RoutePlannerModel.swift`,
 `WorldMapView.swift`, `WorldModel.swift`, `Localizable.xcstrings`): the same behaviour, mirrored.

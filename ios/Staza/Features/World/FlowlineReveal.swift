@@ -67,15 +67,45 @@ struct ExploreResult: Decodable, Equatable, Sendable {
     }
 }
 
+/// Servers that know circles explore `circle`; older ones fall back to `bbox`.
 struct ExploreRequest: Encodable, Sendable {
     let bbox: String
+    var circle: ExploreCircle? = nil
 }
 
-/// The area an Explore session covers. A wide viewport is clamped to a centered maximum-size frame.
+/// A circular Explore area.
+struct ExploreCircle: Codable, Equatable, Sendable {
+    let center: GeoPoint
+    let radiusMeters: Double
+
+    private static let metersPerDegreeLatitude = 111_320.0
+
+    /// Closed outline for drawing and framing the circle.
+    func ring(segments: Int = 72) -> [CLLocationCoordinate2D] {
+        let metersPerDegreeLongitude = Self.metersPerDegreeLatitude * max(cos(center.lat * .pi / 180), 1e-6)
+        return (0...segments).map { index in
+            let angle = Double(index) / Double(segments) * 2 * .pi
+            return CLLocationCoordinate2D(
+                latitude: center.lat + radiusMeters * sin(angle) / Self.metersPerDegreeLatitude,
+                longitude: center.lon + radiusMeters * cos(angle) / metersPerDegreeLongitude
+            )
+        }
+    }
+
+    /// The square enclosing the circle.
+    var bounds: WorldBounds {
+        let halfLat = radiusMeters / Self.metersPerDegreeLatitude
+        let halfLon = radiusMeters / (Self.metersPerDegreeLatitude * max(cos(center.lat * .pi / 180), 1e-6))
+        return WorldBounds(west: center.lon - halfLon, south: center.lat - halfLat, east: center.lon + halfLon, north: center.lat + halfLat)
+    }
+}
+
+/// The area an Explore session covers: a circle, or a viewport clamped to a centered maximum-size frame.
 struct ExploredArea: Decodable, Equatable, Sendable {
     let bbox: String
     let center: GeoPoint
     let clamped: Bool
+    var circle: ExploreCircle? = nil
 
     var bounds: WorldBounds? {
         let values = bbox.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
