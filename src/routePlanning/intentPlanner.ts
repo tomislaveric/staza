@@ -1,4 +1,5 @@
 import { budgetMeters, estimateTour, makeCandidate } from "./candidates.js";
+import { distanceBetween } from "./geo.js";
 import {
   areaAnchors,
   destinationStops,
@@ -19,7 +20,7 @@ import { DEFAULT_PLANNER_POLICY, PLANNING_LIMITS, type PlannerPolicy } from "./p
 import { proposalStops, routeTargetIds, toRouteProposal } from "./proposals.js";
 import { backtrackRatio, detourLengthM } from "./roundTrip.js";
 import { policyForSport } from "./sport.js";
-import type { CandidateStop, FlowlineGeometry, QuestRouteTarget, RoutePlanningInput, ScoredRoute } from "./types.js";
+import type { CandidateStop, FlowlineGeometry, LatLon, QuestRouteTarget, RoutePlanningInput, ScoredRoute } from "./types.js";
 import { insideBounds, traversedFlowlines } from "./validation.js";
 import type { QuestObjective } from "../domain.js";
 import type { GeoBounds } from "../worldQuery.js";
@@ -28,7 +29,13 @@ import type { GeoBounds } from "../worldQuery.js";
 const LOOP_SIDES = [-0.3, 0.3] as const;
 /** Area-loop reaches tried to match the ride length: a share of the area's half-extent. */
 const AREA_LOOP_REACHES = [0.35, 0.5, 0.65, 0.8] as const;
+/** Tighter area loops, tried only when no first-pass route was usable. */
+const FALLBACK_LOOP_REACHES = [0.2] as const;
 const AREA_LOOP_STOPS = 3;
+/** A start at least this far outside the area rides there and back on different sides. */
+const MIN_CORRIDOR_M = 2000;
+/** Side offset of the way there and back, as a share of the start-area distance. */
+const CORRIDOR_SIDE = 0.3;
 /** A Flowline skeleton may exceed the ride length by this share before it is not used. */
 const SKELETON_LENGTH_TOLERANCE = 0.3;
 /** Flowlines considered for chaining, best fit first. */
@@ -91,6 +98,39 @@ const insertBlock = (input: RoutePlanningInput, skeleton: Skeleton, blocks: Cand
 
 const flowlineInside = (flowline: FlowlineGeometry, bounds: GeoBounds) => flowline.coordinates.every((point) => insideBounds(point, bounds));
 
+const areaLoops = (input: RoutePlanningInput, bounds: GeoBounds, flowlines: FlowlineGeometry[], reaches: readonly number[]): CandidateStop[][] =>
+  reaches.map((reach) => areaAnchors(input, bounds, flowlines, { stops: AREA_LOOP_STOPS, reach }).map((point) => ({ target: waypointTarget(point) })));
+
+/**
+ * A round trip from a start outside the area would ride the same connector there and back. This
+ * adds one route-only point beside that connector on each side (way there on one, way back on
+ * the other), in the orientation that suits the loop's order best.
+ */
+const withCorridor = (input: RoutePlanningInput, bounds: GeoBounds, stops: CandidateStop[], roadFactor: number): CandidateStop[] => {
+  const { start } = input;
+  if (input.routeType !== "round_trip" || stops.length === 0) return stops;
+  const entry: LatLon = {
+    lat: Math.min(bounds.maxLatitude, Math.max(bounds.minLatitude, start.lat)),
+    lon: Math.min(bounds.maxLongitude, Math.max(bounds.minLongitude, start.lon))
+  };
+  const distanceM = distanceBetween(start, entry);
+  if (distanceM < MIN_CORRIDOR_M) return stops;
+  const scale = Math.cos((start.lat * Math.PI) / 180) || 1;
+  const dx = (entry.lon - start.lon) * scale;
+  const dy = entry.lat - start.lat;
+  const length = Math.hypot(dx, dy) || 1;
+  const offset = (distanceM * CORRIDOR_SIDE) / 111_320;
+  const side = (sign: number) => waypointTarget({
+    lat: (start.lat + entry.lat) / 2 + (dx / length) * sign * offset,
+    lon: (start.lon + entry.lon) / 2 - ((dy / length) * sign * offset) / scale
+  });
+  const options = [[side(-1), side(1)], [side(1), side(-1)]].map(([there, back]) => {
+    const looped = [{ target: there }, ...stops, { target: back }];
+    return { looped, estimate: estimateTour(input.start, input.end, looped, roadFactor) };
+  });
+  return options.sort((a, b) => a.estimate - b.estimate)[0].looped;
+};
+
 /**
  * Route skeletons before collectibles: a pinned destination or Flowline, a chain of the area's
  * best-fitting Flowlines (cycling only), and an area loop sized to the ride length as fallback.
@@ -142,8 +182,7 @@ const buildSkeletons = (
   }
 
   if (input.routeType === "round_trip") {
-    const loops = AREA_LOOP_REACHES.map((reach) =>
-      areaAnchors(input, bounds, flowlines, { stops: AREA_LOOP_STOPS, reach }).map((point) => ({ target: waypointTarget(point) })));
+    const loops = areaLoops(input, bounds, flowlines, AREA_LOOP_REACHES);
     const closest = [...loops].sort((a, b) => Math.abs(estimate(a) - budget) - Math.abs(estimate(b) - budget))[0];
     skeletons.push({ name: "area", stops: closest, rides: new Map() });
   } else {
@@ -222,8 +261,9 @@ export const generateIntentRoute = async (
 
   const queued: QueuedCandidate[] = [];
   const seen = new Set<string>();
-  const enqueue = (skeleton: string, variant: string, stops: CandidateStop[]) => {
-    const candidate = makeCandidate(input, objectives, stops, "custom", policy);
+  const enqueue = (skeleton: string, variant: string, stops: CandidateStop[], corridor = true) => {
+    const routed = corridor ? withCorridor(input, bounds, stops, policy.roadFactor) : stops;
+    const candidate = makeCandidate(input, objectives, routed, "custom", policy);
     if (seen.has(candidate.key)) return;
     seen.add(candidate.key);
     queued.push({ candidate, objectives, strategy: `${skeleton}:${variant}` });
@@ -242,10 +282,28 @@ export const generateIntentRoute = async (
     }
     enqueue(skeleton.name, "skeleton", skeleton.stops);
   }
+  // If the side roads do not route, the direct way there and back is still a route.
+  const area = skeletons.find((skeleton) => skeleton.name === "area");
+  if (area) enqueue("area", "direct", area.stops, false);
 
-  const run = await routeCandidates(queued, {
-    requestId, input, bounds, eligibleTargets: targets, maxRequests: PLANNING_LIMITS.maxRoutingRequests, routing, policy, requireTargets: false
+  const routeQueued = (entries: QueuedCandidate[], maxRequests: number) => routeCandidates(entries, {
+    requestId, input, bounds, eligibleTargets: targets, maxRequests, routing, policy, requireTargets: false
   });
+  const run = await routeQueued(queued, PLANNING_LIMITS.maxRoutingRequests);
+  // Roads often bend out of a small area, and loop points may fall into water or forest. When no
+  // route was usable, try the remaining, tighter area loops with the unused routing budget, so a
+  // route is found wherever there are roads.
+  const remaining = PLANNING_LIMITS.maxRoutingRequests - run.routingRequests;
+  const retryable = run.failureCodes.length > 0 && !run.failureCodes.includes("rate_limited");
+  if (run.scored.length === 0 && !pinned && input.routeType === "round_trip" && remaining > 0 && retryable) {
+    const fallbackStart = queued.length;
+    const loops = areaLoops(input, bounds, flowlines, [...FALLBACK_LOOP_REACHES, ...AREA_LOOP_REACHES]);
+    for (const stops of loops) enqueue("area", "skeleton", stops);
+    const fallback = await routeQueued(queued.slice(fallbackStart), remaining);
+    run.scored.push(...fallback.scored);
+    run.failureCodes.push(...fallback.failureCodes);
+    run.routingRequests += fallback.routingRequests;
+  }
   const targetsById = new Map(targets.map((target) => [target.id, target]));
   const evaluated: Evaluated[] = run.scored
     .filter((route) => !required || routeTargetIds(route).includes(required.target.id))

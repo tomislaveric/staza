@@ -51,6 +51,36 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertEqual(try json(transport.requests.last)["keepOrder"] as? Bool, true)
     }
 
+    func testRemovingOrMovingStopsReroutesOnceAfterAPause() async throws {
+        let transport = StubTransport([
+            .init(status: 200, body: #"{"explorationId":"e1","proposal":\#(proposal("p1"))}"#),
+            .init(status: 200, body: #"{"explorationId":"e2","proposal":\#(proposal("p2"))}"#)
+        ])
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport), rerouteDelay: .milliseconds(100))
+        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        let a = PlannerStop.collectible(collectible("a")), b = PlannerStop.collectible(collectible("b"))
+        let c = PlannerStop.flowline(flowline("c"))
+        [a, b, c].forEach(planner.toggle)
+        planner.remove(c)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(transport.requests.isEmpty, "edits before the first route do not route")
+
+        planner.toggle(c)
+        await planner.route()
+        XCTAssertEqual(planner.proposal?.id, "p1")
+        planner.focus(c)
+        XCTAssertEqual(planner.focusedStop?.key, c.key)
+        planner.move(from: IndexSet(integer: planner.stops.count - 1), to: 0)
+        planner.move(from: IndexSet(integer: 1), to: 0)
+        planner.remove(c)
+        XCTAssertNil(planner.focusedStopKey, "removing the focused stop clears the highlight")
+        XCTAssertNil(planner.proposal)
+        for _ in 0..<40 where planner.proposal == nil { try await Task.sleep(for: .milliseconds(25)) }
+        XCTAssertEqual(planner.proposal?.id, "p2")
+        XCTAssertEqual(transport.requests.count, 2, "quick edits trigger one recalculation")
+        XCTAssertEqual(try json(transport.requests.last)["keepOrder"] as? Bool, true)
+    }
+
     func testValidationAndLimits() async {
         let transport = StubTransport([])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
@@ -132,12 +162,17 @@ final class RoutePlannerModelTests: XCTestCase {
         let transport = StubTransport([.init(status: 200, body: #"{"explorationId":"e1","proposals":[\#(proposal("p1", targets: ["b", "a"], extra: traversed))],"catalog":\#(catalog)}"#)])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
+        XCTAssertFalse(planner.suggestReplacesOwnStops)
         planner.toggle(.waypoint(GeoPoint(lat: 48.2, lon: 11.2)))
+        XCTAssertTrue(planner.suggestReplacesOwnStops, "generating would discard the player's stop")
         XCTAssertEqual(planner.intent, .chill, "Chill is the default feel")
         planner.intent = .flow
         await planner.suggest(in: WorldBounds(west: 11, south: 48, east: 11.5, north: 48.5)) { _ in nil }
         XCTAssertEqual(planner.stops.map(\.key), ["b", "a", "flowline:f1"])
         XCTAssertEqual(planner.proposal?.id, "p1")
+        XCTAssertFalse(planner.suggestReplacesOwnStops, "suggested stops can be regenerated without asking")
+        planner.remove(planner.stops[0])
+        XCTAssertTrue(planner.suggestReplacesOwnStops, "an edited suggestion is the player's own")
         XCTAssertEqual(transport.requests.first?.url?.path, "/api/explorations/generate")
         let body = try json(transport.requests.first)
         XCTAssertNil(body["stops"])
@@ -180,6 +215,13 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertTrue(planner.isActive)
         XCTAssertEqual(planner.proposal?.id, "p1")
         XCTAssertNotNil(planner.failure)
+    }
+
+    func testUnprocessableSuggestionReportsNoSuggestionInsteadOfUnconnectedStops() async {
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([.init(status: 422, body: #"{"error":"x"}"#)])))
+        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        await planner.suggest(in: WorldBounds(west: 11, south: 48, east: 11.5, north: 48.5)) { _ in nil }
+        XCTAssertEqual(planner.failure, .noSuggestion)
     }
 
     func testUnprocessableRouteReportsNoRoute() async {

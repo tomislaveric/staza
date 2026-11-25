@@ -129,6 +129,13 @@ planning deadline.
    variety for the intent. Stop at the POI budget and the per-POI estimated detour.
 3. **Route** a few variants: the skeleton only, the skeleton with POIs, and with fewer POIs. Reuse
    `routeCandidates`, the detour and backtrack filters, and bbox enforcement.
+   When no routed round trip is usable (it leaves the area or a loop point is unroutable; not when
+   rate limited), tighter area loops
+   (reach 0.2–0.8) are routed with the remaining budget, so Generate finds a route wherever there
+   are roads, even without collectibles.
+   A round trip from a start more than 2 km outside the area adds one route-only point beside the
+   way there and one on the other side of the way back, so it rides a loop instead of the same
+   road out and back. The plain connector stays as a fallback variant.
 4. **Pick** the best route by intent score above the quality floor. Return one proposal. Its stops
    are its collectibles plus the opportunity Flowlines it rides in full (as today).
 5. "Route to" (`destinationId`) and "via this Flowline" (`destinationFlowlineId`) become pinned
@@ -177,10 +184,16 @@ enclosing `bbox` for older servers. The explored circle is outlined and framed d
 `WorldMapView.swift`, `WorldModel.swift`, `Localizable.xcstrings`): the same behaviour, mirrored.
 `RouteIntent` names are not localized; `ExploreAction`/`exploreAllowed` are removed and the
 explored `area` is decoded (optional for older servers). The World route planner presents sport,
-route feeling, stops, route shape and then a missing-start prompt in one scrollable sheet. Flowline
+route feeling, route shape, stops and then a missing-start prompt in one scrollable sheet. Flowline
 and collectible map taps toggle stops directly; empty-map taps add waypoints unless start or end
 selection is active; while picking a start or end, any map tap sets that point. A valid existing start is shown as a compact status, and a missing start is
-picked only after the player asks for it.
+picked only after the player asks for it. Tapping a stop highlights and centers it on the map; removing or
+moving a stop recalculates a calculated route after a short pause.
+Generate uses the Explore session area, otherwise only the map area visible above the sheet (the
+whole viewport when the sheet covers almost all of it). A failed Generate says no route was found in
+this map area instead of reporting unconnected stops.
+The planned route is drawn as a dashed blue line (`plannedRoute` in the shared map palette) without
+glow, so it does not read like a ridden route and Flowlines stay visible underneath.
 
 ## Implementation plan
 

@@ -26,6 +26,8 @@ final class WorldModel {
     private(set) var exploreClamped = false
     /// The circle Explore explores next: the largest one fitting the visible map, reported by the map.
     var exploreCircle: ExploreCircle?
+    /// The map area above the sheet, reported by the map; "Generate route" plans inside it.
+    var visibleArea: WorldBounds?
     /// The Explore card: running, a result, or a failure. `nil` when dismissed.
     private(set) var exploreState: ExploreState?
     /// Opportunity Flowlines not drawn yet while their appearance is staggered.

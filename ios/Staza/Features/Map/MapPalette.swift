@@ -5,6 +5,7 @@ import UIKit
 struct MapPalette: Decodable, Equatable, Sendable {
     var casing = "#0b0c0f"
     var questRoute = "#e8b80a"
+    var plannedRoute = "#4c8dff"
     var alternateRoute = "#c9b46a"
     var activityRoute = "#5ec8c2"
     var activityRouteSubdued = "#4a4f59"
@@ -31,6 +32,7 @@ struct MapPalette: Decodable, Equatable, Sendable {
         let defaults = MapPalette.standard
         casing = value(.casing, defaults.casing)
         questRoute = value(.questRoute, defaults.questRoute)
+        plannedRoute = value(.plannedRoute, defaults.plannedRoute)
         alternateRoute = value(.alternateRoute, defaults.alternateRoute)
         activityRoute = value(.activityRoute, defaults.activityRoute)
         activityRouteSubdued = value(.activityRouteSubdued, defaults.activityRouteSubdued)
@@ -46,7 +48,7 @@ struct MapPalette: Decodable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case casing, questRoute, alternateRoute, activityRoute, activityRouteSubdued, position, positionCore
+        case casing, questRoute, plannedRoute, alternateRoute, activityRoute, activityRouteSubdued, position, positionCore
         case flowline, flowlineCompleted, highlight, highlightSelected
         case collectibleVisited, collectibleUnvisited, collectibleUnvisitedRing
     }

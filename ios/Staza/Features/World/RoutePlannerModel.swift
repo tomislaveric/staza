@@ -86,7 +86,13 @@ final class RoutePlannerModel {
     private(set) var stops: [PlannerStop] = []
     /// Set once the player reorders stops; Staza then routes them as given.
     private(set) var keepOrder = false
+    /// Whether the stops are exactly what "Generate route" proposed, so replacing them loses no player choice.
+    private(set) var stopsAreSuggested = false
     private(set) var mapMode: MapMode?
+    /// The stop the player tapped in the list; the map highlights and centers it.
+    private(set) var focusedStopKey: String?
+    /// Bumped on every focus tap so re-tapping the focused stop centers it again.
+    private(set) var focusRequest = 0
     /// The route for the current stops; every edit clears it.
     private(set) var proposal: RouteProposal?
     private(set) var failure: Failure?
@@ -94,8 +100,14 @@ final class RoutePlannerModel {
 
     private let api: APIClient
     private var token = 0
+    /// How long reordering or removing stops may pause before the shown route is recalculated.
+    private let rerouteDelay: Duration
+    private var reroute: Task<Void, Never>?
 
-    init(api: APIClient) { self.api = api }
+    init(api: APIClient, rerouteDelay: Duration = .milliseconds(800)) {
+        self.api = api
+        self.rerouteDelay = rerouteDelay
+    }
 
     var isIdle: Bool { status == .idle }
 
@@ -115,6 +127,18 @@ final class RoutePlannerModel {
 
     func contains(_ stop: PlannerStop) -> Bool { stops.contains { $0.key == stop.key } }
 
+    var focusedStop: PlannerStop? { stops.first { $0.key == focusedStopKey } }
+
+    /// Highlights a stop on the map and asks the map to center it.
+    func focus(_ stop: PlannerStop) {
+        guard contains(stop) else { return }
+        focusedStopKey = stop.key
+        focusRequest += 1
+    }
+
+    /// "Generate route" would replace stops the player chose, so it should ask first.
+    var suggestReplacesOwnStops: Bool { !stops.isEmpty && !stopsAreSuggested }
+
     /// Opens the planner. Stops chosen with "Add to route" before are kept as route constraints.
     func open(start: GeoPoint?) {
         token += 1
@@ -124,7 +148,10 @@ final class RoutePlannerModel {
         end = nil
         routeType = .roundTrip
         keepOrder = false
+        stopsAreSuggested = false
         mapMode = nil
+        focusedStopKey = nil
+        cancelReroute()
         proposal = nil
         failure = nil
         plannedRoute = nil
@@ -135,7 +162,10 @@ final class RoutePlannerModel {
         isActive = false
         status = .idle
         stops = []
+        stopsAreSuggested = false
         mapMode = nil
+        focusedStopKey = nil
+        cancelReroute()
         proposal = nil
         failure = nil
         intent = .default
@@ -191,17 +221,25 @@ final class RoutePlannerModel {
             remove(stop)
             return
         }
-        edit { stops.append(stop) }
+        edit {
+            stops.append(stop)
+            stopsAreSuggested = false
+        }
     }
 
     func remove(_ stop: PlannerStop) {
-        edit { stops.removeAll { $0.key == stop.key } }
+        rerouting {
+            stops.removeAll { $0.key == stop.key }
+            stopsAreSuggested = false
+            if focusedStopKey == stop.key { focusedStopKey = nil }
+        }
     }
 
     func move(from source: IndexSet, to destination: Int) {
-        edit {
+        rerouting {
             stops.move(fromOffsets: source, toOffset: destination)
             keepOrder = true
+            stopsAreSuggested = false
         }
     }
 
@@ -210,6 +248,11 @@ final class RoutePlannerModel {
 
     /// Connects the stops into one route; Staza's stop order is adopted unless the player set one.
     func route() async {
+        cancelReroute()
+        await performRoute()
+    }
+
+    private func performRoute() async {
         guard isIdle else { return }
         guard let start else { return fail(.missingStart) }
         guard routeType == .roundTrip || end != nil else { return fail(.missingEnd) }
@@ -227,9 +270,10 @@ final class RoutePlannerModel {
     /// the opportunity Flowlines it rides; the player can edit them.
     func suggest(in bounds: WorldBounds, catalog: (String) -> WorldCollectible?) async {
         guard isIdle else { return }
+        cancelReroute()
         guard let start else { return fail(.missingStart) }
         let request = SuggestRequest(area: PlanArea(bounds: bounds, zoom: 12), sport: sport.rawValue, start: start, intent: intent)
-        await run(.suggesting) { [self] in
+        await run(.suggesting, unroutable: .noSuggestion) { [self] in
             let result: GeneratedExploration = try await api.post("/api/explorations/generate", body: request)
             guard let suggestion = result.proposals.first else {
                 failure = .noSuggestion
@@ -241,6 +285,8 @@ final class RoutePlannerModel {
             stops = suggestion.includedTargetIds.compactMap { byId[$0] ?? catalog($0) }.map(PlannerStop.collectible)
                 + flowlineStops.map(PlannerStop.flowline)
             keepOrder = false
+            stopsAreSuggested = true
+            focusedStopKey = nil
             routeType = .roundTrip
             proposal = suggestion
         }
@@ -305,9 +351,31 @@ final class RoutePlannerModel {
         failure = nil
     }
 
+    /// An edit that keeps a calculated route current: after a short pause without further edits, the
+    /// remaining stops are routed again, so several quick moves trigger only one request.
+    private func rerouting(_ change: () -> Void) {
+        guard isIdle else { return }
+        let wasRouted = proposal != nil || reroute != nil
+        edit(change)
+        cancelReroute()
+        guard wasRouted, !stops.isEmpty else { return }
+        reroute = Task { [weak self, rerouteDelay] in
+            try? await Task.sleep(for: rerouteDelay)
+            guard let self, !Task.isCancelled else { return }
+            reroute = nil
+            await performRoute()
+        }
+    }
+
+    private func cancelReroute() {
+        reroute?.cancel()
+        reroute = nil
+    }
+
     private func fail(_ failure: Failure) { self.failure = failure }
 
-    private func run(_ running: Status, _ work: () async throws -> Void) async {
+    /// `unroutable` is the failure shown when the server finds no route (422).
+    private func run(_ running: Status, unroutable: Failure = .noRoute, _ work: () async throws -> Void) async {
         token += 1
         let current = token
         status = running
@@ -321,14 +389,14 @@ final class RoutePlannerModel {
         } catch {
             guard current == token else { return }
             status = .idle
-            failure = Self.failure(for: error)
+            failure = Self.failure(for: error, unroutable: unroutable)
             if Self.isExpired(error) { proposal = nil }
         }
     }
 
-    private static func failure(for error: Error) -> Failure {
+    private static func failure(for error: Error, unroutable: Failure) -> Failure {
         guard case APIError.server(let status, let message, _) = error else { return .server(nil) }
-        return status == 422 ? .noRoute : .server(message)
+        return status == 422 ? unroutable : .server(message)
     }
 
     private static func isExpired(_ error: Error) -> Bool {

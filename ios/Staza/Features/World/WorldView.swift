@@ -60,9 +60,10 @@ struct WorldView: View {
                     exploreOutline: model.exploreOutline,
                     questTargets: planner.isActive ? plannerTargets(planner) : model.mapQuestTargets,
                     route: planner.displayedRoute,
-                    selection: model.selection,
+                    selection: planner.isActive ? plannerSelection(planner) : model.selection,
                     onViewportChange: { model.viewportChanged($0) },
                     onExploreCircleChange: { model.exploreCircle = $0 },
+                    onVisibleAreaChange: { model.visibleArea = $0 },
                     onSelect: { kind, id in select(kind, id: id, model, planner) },
                     onMapTap: { planner.mapTapped($0) },
                     picksPoint: planner.isActive && planner.mapMode != nil,
@@ -100,6 +101,11 @@ struct WorldView: View {
                     model.endExploreSession()
                     planner.showPlannedRoute(model.preferredPlannedRoute)
                 }
+            }
+            .onChange(of: planner.focusRequest) { _, _ in
+                guard let stop = planner.focusedStop else { return }
+                withAnimation(.snappy) { sheet.revealMap() }
+                center(on: stop.points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
             }
             .onChange(of: planner.proposal?.id) { _, proposal in
                 if proposal != nil { withAnimation(.snappy) { sheet.revealMap() } }
@@ -160,10 +166,13 @@ struct WorldView: View {
     /// Centers the map on a selected Flowline or collectible once the sheet has settled at its
     /// new height, so the fit uses the final visible area above it.
     private func center(on selection: WorldSelection) {
-        let coordinates = switch selection {
-        case .flowline(let flowline): flowline.coordinates
-        case .collectible(let item): [item.coordinate]
+        switch selection {
+        case .flowline(let flowline): center(on: flowline.coordinates)
+        case .collectible(let item): center(on: [item.coordinate])
         }
+    }
+
+    private func center(on coordinates: [CLLocationCoordinate2D]) {
         centering?.cancel()
         centering = Task { @MainActor in
             try? await Task.sleep(for: Self.sheetSettleDelay(reduceMotion: reduceMotion))
@@ -242,6 +251,15 @@ struct WorldView: View {
         return QuestTargets(collectibles: collectibles, flowlines: flowlines)
     }
 
+    /// The stop tapped in the planner list gets the map's selection halo; waypoints are only centered.
+    private func plannerSelection(_ planner: RoutePlannerModel) -> WorldSelection? {
+        switch planner.focusedStop {
+        case .flowline(let flowline)?: .flowline(flowline)
+        case .collectible(let item)?: .collectible(item)
+        case .waypoint?, nil: nil
+        }
+    }
+
     private func stop(for selection: WorldSelection) -> PlannerStop {
         switch selection {
         case .collectible(let item): .collectible(item)
@@ -307,7 +325,8 @@ struct WorldView: View {
                 planner: planner,
                 userLocation: userLocation,
                 onSuggest: {
-                    guard let bounds = model.sessionBounds ?? model.bounds else { return }
+                    // The explored area, else the map the sheet does not cover.
+                    guard let bounds = model.sessionBounds ?? model.visibleArea ?? model.bounds else { return }
                     Task { await planner.suggest(in: bounds, catalog: model.collectible(id:)) }
                 },
                 onSave: {

@@ -18,6 +18,15 @@ enum StazaMapLayers {
         style.addLayer(line(id: "\(id)-line", source: source, color: accent, opacity: 0.95, width: routeWidth(1)))
     }
 
+    /// A planned, not yet ridden route: a dashed blue line on a faint casing, without glow, so
+    /// Flowlines underneath stay visible and it never reads like a ridden (gold) route.
+    static func addPlannedRoute(to style: MLNStyle, source: MLNSource, id: String, palette: MapPalette) {
+        style.addLayer(line(id: "\(id)-casing", source: source, color: palette.color(\.casing), opacity: 0.45, width: routeWidth(1.5)))
+        let dashes = line(id: "\(id)-line", source: source, color: palette.color(\.plannedRoute), opacity: 0.95, width: routeWidth(0.9))
+        dashes.lineDashPattern = NSExpression(forConstantValue: [1.4, 1.6])
+        style.addLayer(dashes)
+    }
+
     /// Muted context route: casing plus a subdued line (`stazaSubduedRouteLayers`).
     static func addSubduedRoute(to style: MLNStyle, source: MLNSource, id: String, palette: MapPalette) {
         style.addLayer(line(id: "\(id)-casing", source: source, color: palette.color(\.casing), opacity: 0.5, width: routeWidth(1.4)))

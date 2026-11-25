@@ -50,6 +50,8 @@ struct WorldMapView: UIViewRepresentable {
     let onViewportChange: (WorldBounds) -> Void
     /// The circle the next Explore covers: the largest one fitting the visible map above the sheet.
     var onExploreCircleChange: (ExploreCircle?) -> Void = { _ in }
+    /// The part of the map not covered by the sheet; `nil` when too little of it is visible.
+    var onVisibleAreaChange: (WorldBounds?) -> Void = { _ in }
     let onSelect: (WorldSelectionKind, String) -> Void
     /// A tap on the map that hit no collectible or Flowline.
     var onMapTap: (GeoPoint) -> Void = { _ in }
@@ -94,6 +96,7 @@ struct WorldMapView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onViewportChange = onViewportChange
         coordinator.onExploreCircleChange = onExploreCircleChange
+        coordinator.onVisibleAreaChange = onVisibleAreaChange
         coordinator.onSelect = onSelect
         coordinator.onMapTap = onMapTap
         coordinator.picksPoint = picksPoint
@@ -108,6 +111,7 @@ struct WorldMapView: UIViewRepresentable {
             map.setContentInset(UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0), animated: true) { [weak coordinator, weak map] in
                 guard let coordinator, let map else { return }
                 coordinator.reportExploreCircle(map)
+                coordinator.reportVisibleArea(map)
             }
         }
         if WorldTracking(map.userTrackingMode) != tracking {
@@ -121,6 +125,7 @@ struct WorldMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MLNMapViewDelegate, CLLocationManagerDelegate {
         var onViewportChange: (WorldBounds) -> Void = { _ in }
         var onExploreCircleChange: (ExploreCircle?) -> Void = { _ in }
+        var onVisibleAreaChange: (WorldBounds?) -> Void = { _ in }
         var onTrackingChange: (WorldTracking) -> Void = { _ in }
         var onLocationDenied: (Bool) -> Void = { _ in }
         var appliedInset: CGFloat = 0
@@ -209,7 +214,7 @@ struct WorldMapView: UIViewRepresentable {
 
             let routeSource = MLNShapeSource(identifier: "explore-route", shape: nil, options: nil)
             style.addSource(routeSource)
-            StazaMapLayers.addRoute(to: style, source: routeSource, id: "explore-route", accent: palette.color(\.questRoute), palette: palette)
+            StazaMapLayers.addPlannedRoute(to: style, source: routeSource, id: "explore-route", palette: palette)
             self.routeSource = routeSource
 
             // Collectibles draw above routes: fallback circles, highlight rings, then category icons.
@@ -373,6 +378,20 @@ struct WorldMapView: UIViewRepresentable {
             let bounds = map.visibleCoordinateBounds
             onViewportChange(WorldBounds(west: bounds.sw.longitude, south: bounds.sw.latitude, east: bounds.ne.longitude, north: bounds.ne.latitude))
             reportExploreCircle(map)
+            reportVisibleArea(map)
+        }
+
+        /// Minimum uncovered map height for the visible area to be worth planning in.
+        private static let minVisibleHeight: CGFloat = 120
+
+        func reportVisibleArea(_ map: MLNMapView) {
+            let height = map.bounds.height - map.contentInset.bottom
+            guard height >= Self.minVisibleHeight, map.bounds.width > 0 else { return onVisibleAreaChange(nil) }
+            let northWest = map.convert(CGPoint(x: 0, y: 0), toCoordinateFrom: map)
+            let southEast = map.convert(CGPoint(x: map.bounds.width, y: height), toCoordinateFrom: map)
+            guard CLLocationCoordinate2DIsValid(northWest), CLLocationCoordinate2DIsValid(southEast) else { return onVisibleAreaChange(nil) }
+            onVisibleAreaChange(WorldBounds(west: northWest.longitude, south: southEast.latitude,
+                                            east: southEast.longitude, north: northWest.latitude))
         }
 
         /// Space kept clear around the Explore circle: map edges, the sheet, and the locate button row.

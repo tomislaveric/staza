@@ -5,6 +5,7 @@ import { generateIntentRoute } from "./intentPlanner.js";
 import type { RouteProvider } from "./planner.js";
 import { PLANNING_LIMITS } from "./policy.js";
 import { RoutingError } from "./routingClient.js";
+import { backtrackRatio } from "./roundTrip.js";
 import { at, flowlineGeometry, pointTarget, straightLineRoute } from "./testFixtures.js";
 import type { FlowlineGeometry, QuestRouteTarget, RoutePlanningInput, RoutingRequest } from "./types.js";
 
@@ -111,6 +112,44 @@ describe("generateIntentRoute", () => {
       expect(stops.length).toBeGreaterThan(0);
       expect(router.calls.length).toBeLessThanOrEqual(PLANNING_LIMITS.maxRoutingRequests);
     }
+  });
+
+  it("rides to a distant area and back on different sides instead of out and back", async () => {
+    const routing = straightRouter();
+    const input = { ...ride("chill"), start: at(-30, 0), end: at(-30, 0) };
+    const { proposal } = await generateIntentRoute(
+      { requestId: "req", playerId: "player", scopeId: "exploration", intent: "chill", targets: [], flowlines: [], input, bounds },
+      { routing, log: () => undefined }
+    );
+    expect(backtrackRatio(proposal.geometry.coordinates)).toBeLessThan(0.1);
+    const there = proposal.waypoints![0];
+    const back = proposal.waypoints![proposal.waypoints!.length - 1];
+    expect(there.lat).toBeLessThan(bounds.minLatitude);
+    expect(back.lat).toBeLessThan(bounds.minLatitude);
+    expect(Math.sign(there.lon - input.start.lon)).toBe(-Math.sign(back.lon - input.start.lon));
+    expect(routing.calls.length).toBeLessThanOrEqual(PLANNING_LIMITS.maxRoutingRequests);
+  });
+
+  it("tries tighter area loops when every first route bends out of the area", async () => {
+    // Roads around wide loops leave the area; only loops close to the start stay inside it.
+    const reachKm = (point: { lat: number; lon: number }) => Math.max(
+      Math.abs(point.lat - at(0, 0).lat) / (at(1, 0).lat - at(0, 0).lat),
+      Math.abs(point.lon - at(0, 0).lon) / (at(0, 1).lon - at(0, 0).lon)
+    );
+    const calls: RoutingRequest[] = [];
+    const routing: RouteProvider = {
+      route: async (request) => {
+        calls.push(request);
+        const route = straightLineRoute(request);
+        if (request.waypoints.every((point) => reachKm(point) <= 2.5)) return route;
+        const outside = [at(15, 15).lon, at(15, 15).lat] as [number, number];
+        return { ...route, geometry: { ...route.geometry, coordinates: [route.geometry.coordinates[0], outside, ...route.geometry.coordinates.slice(1)] } };
+      }
+    };
+    const { proposal } = await generate("chill", { routing });
+    expect(proposal.geometry.coordinates.every(([lon, lat]) => reachKm({ lat, lon }) <= 10)).toBe(true);
+    expect(calls.length).toBeGreaterThan(1);
+    expect(calls.length).toBeLessThanOrEqual(PLANNING_LIMITS.maxRoutingRequests);
   });
 
   it("never zigzags Explore routes out to far collectibles", async () => {

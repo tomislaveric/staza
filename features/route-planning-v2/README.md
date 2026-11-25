@@ -21,11 +21,14 @@ Out:
 ## Decisions
 
 - Use guided sections in the existing scrollable sheet, not a strict one-step-at-a-time wizard or another navigation destination.
-- Order the guidance as sport → route feeling → stops → existing route-shape controls → start selection only when the start is missing.
+- Order the guidance as sport → route feeling → existing route-shape controls → stops → start selection only when the start is missing.
 - Keep all sections accessible without gating. Preserve round-trip and endpoint options.
 - In the active planner, tapping a Flowline or collectible directly toggles it as a stop. Tapping empty map adds a waypoint by default. An explicit start/end-pick action takes precedence while active.
 - When a start is already set under the existing location rules, show a compact status instead of raw coordinates and provide one compact way to change it. When missing, show the map-pick prompt as the final guided section; routing remains unavailable until selected.
 - Retain the stop list, reorder/remove controls, Suggest route, Route, Save, result/error states, and gameplay disclaimer.
+- Tapping a stop in the list highlights it on the map and centers it, as Explore does for a tapped Flowline or collectible; waypoints are centered only.
+- Removing or moving a stop recalculates an already calculated route after a short pause (about 0.8 s), so several quick moves send one request.
+- Suggest route is the primary action while there are no stops; once stops exist, Route is primary. Suggest route asks before replacing stops the player chose or edited, but not stops it suggested itself.
 - Use concise English and German copy, existing Staza tokens and components, and the existing `RouteIntentPicker`. Do not create a new design-system primitive.
 
 ## Implementation plan
@@ -37,7 +40,7 @@ Out:
 ## Acceptance criteria
 
 - The planner presents the chosen guided section order in one scrollable sheet without forced progression.
-- Sport appears first and route feeling second; stop selection has one concise instruction and no three add-mode buttons.
+- Sport appears first, route feeling second and route shape third; stop selection has one concise instruction and no three add-mode buttons.
 - Tapping Flowlines and collectibles adds/removes them directly while planning; empty map adds a waypoint unless start/end selection is explicitly active.
 - A pre-set start is summarized without a coordinate-heavy row and can still be changed. A missing start is requested after stop/route-shape setup and must be selected before routing.
 - Round-trip/endpoint selection, route generation, Suggest route, save, failure states, and planner behavior outside this sheet remain unchanged.

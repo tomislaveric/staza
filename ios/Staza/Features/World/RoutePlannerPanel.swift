@@ -32,6 +32,7 @@ struct RoutePlannerPanel: View {
     let onSuggest: () -> Void
     let onSave: () -> Void
     @Environment(\.locale) private var locale
+    @State private var confirmingSuggest = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
@@ -48,8 +49,6 @@ struct RoutePlannerPanel: View {
                 .disabled(!planner.isIdle)
                 .accessibilityIdentifier("plannerIntent")
 
-            stops
-
             VStack(alignment: .leading, spacing: StazaSpacing.xs) {
                 SectionHeader("planner.routeShape")
                 Picker("planner.routeType", selection: Binding(get: { planner.routeType }, set: { planner.setRouteType($0) })) {
@@ -62,6 +61,8 @@ struct RoutePlannerPanel: View {
                     pointRow("planner.end", point: planner.end, mode: .pickEnd)
                 }
             }
+
+            stops
 
             startSection
             result
@@ -208,20 +209,29 @@ struct RoutePlannerPanel: View {
     }
 
     private func stopRow(_ stop: PlannerStop, index: Int, dropped: Bool) -> some View {
-        HStack(spacing: StazaSpacing.sm) {
-            Text(verbatim: "\(index + 1)")
-                .font(StazaFont.caption.monospacedDigit().weight(.bold))
-                .foregroundStyle(StazaColor.onAccent)
-                .frame(width: 22, height: 22)
-                .background(dropped ? StazaColor.textSubtle : StazaColor.accent, in: Circle())
-            Image(systemName: icon(stop)).foregroundStyle(tint(stop)).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(verbatim: name(stop)).font(StazaFont.subheadline.weight(.medium)).foregroundStyle(StazaColor.textPrimary).lineLimit(1)
-                if dropped {
-                    Text("planner.stop.dropped").font(StazaFont.caption).foregroundStyle(StazaColor.danger)
+        let focused = planner.focusedStopKey == stop.key
+        return HStack(spacing: StazaSpacing.sm) {
+            Button { planner.focus(stop) } label: {
+                HStack(spacing: StazaSpacing.sm) {
+                    Text(verbatim: "\(index + 1)")
+                        .font(StazaFont.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(StazaColor.onAccent)
+                        .frame(width: 22, height: 22)
+                        .background(dropped ? StazaColor.textSubtle : StazaColor.accent, in: Circle())
+                    Image(systemName: icon(stop)).foregroundStyle(tint(stop)).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(verbatim: name(stop)).font(StazaFont.subheadline.weight(.medium)).foregroundStyle(StazaColor.textPrimary).lineLimit(1)
+                        if dropped {
+                            Text("planner.stop.dropped").font(StazaFont.caption).foregroundStyle(StazaColor.danger)
+                        }
+                    }
+                    Spacer(minLength: StazaSpacing.xs)
                 }
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: StazaSpacing.xs)
+            .buttonStyle(.plain)
+            .accessibilityHint(Text("planner.stop.showOnMap"))
+            .accessibilityAddTraits(focused ? .isSelected : [])
             iconButton("chevron.up", label: "planner.stop.up", disabled: index == 0) {
                 planner.move(from: IndexSet(integer: index), to: index - 1)
             }
@@ -229,6 +239,12 @@ struct RoutePlannerPanel: View {
                 planner.move(from: IndexSet(integer: index), to: index + 2)
             }
             iconButton("xmark.circle.fill", label: "planner.stop.remove", disabled: false) { planner.remove(stop) }
+        }
+        .padding(.horizontal, StazaSpacing.xs)
+        .background(focused ? StazaColor.surfaceRaised : .clear, in: RoundedRectangle(cornerRadius: StazaRadius.chip))
+        .overlay {
+            RoundedRectangle(cornerRadius: StazaRadius.chip)
+                .strokeBorder(focused ? StazaColor.accent : .clear, lineWidth: 1)
         }
         .disabled(!planner.isIdle)
         .accessibilityElement(children: .contain)
@@ -288,28 +304,39 @@ struct RoutePlannerPanel: View {
         }
     }
 
+    /// Without stops, "Generate route" leads; once there are stops, connecting them does.
+    private var suggestLeads: Bool { planner.stops.isEmpty && planner.proposal == nil }
+
     private var actions: some View {
         HStack(spacing: StazaSpacing.sm) {
-            Button(action: onSuggest) {
+            Button {
+                if planner.suggestReplacesOwnStops { confirmingSuggest = true } else { onSuggest() }
+            } label: {
                 if planner.status == .suggesting {
-                    SwiftUI.ProgressView().tint(StazaColor.accent)
+                    SwiftUI.ProgressView().tint(suggestLeads ? StazaColor.onAccent : StazaColor.accent)
                 } else {
                     Label("planner.suggest", systemImage: "sparkles")
                 }
             }
-            .buttonStyle(.stazaSecondary)
+            .buttonStyle(suggestLeads ? .stazaPrimaryWide : .stazaSecondary)
             .disabled(!planner.isIdle || planner.start == nil)
             .accessibilityIdentifier("plannerSuggest")
+            .confirmationDialog("planner.suggest.replace.title", isPresented: $confirmingSuggest, titleVisibility: .visible) {
+                Button("planner.suggest.replace.confirm", role: .destructive, action: onSuggest)
+                Button("action.cancel", role: .cancel) {}
+            } message: {
+                Text("planner.suggest.replace.message")
+            }
 
             if planner.proposal == nil {
                 Button { Task { await planner.route() } } label: {
                     if planner.status == .routing {
-                        SwiftUI.ProgressView().tint(StazaColor.onAccent)
+                        SwiftUI.ProgressView().tint(suggestLeads ? StazaColor.accent : StazaColor.onAccent)
                     } else {
                         Label("planner.route", systemImage: "arrow.triangle.turn.up.right.diamond")
                     }
                 }
-                .buttonStyle(.stazaPrimaryWide)
+                .buttonStyle(suggestLeads ? .stazaSecondary : .stazaPrimaryWide)
                 .disabled(!planner.isIdle || planner.start == nil || planner.stops.isEmpty)
                 .accessibilityIdentifier("plannerRoute")
             } else {

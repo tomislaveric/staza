@@ -6,6 +6,7 @@
 export const STAZA_MAP_PALETTE = {
   casing: "#0b0c0f",
   questRoute: "#e8b80a",
+  plannedRoute: "#4c8dff",
   alternateRoute: "#c9b46a",
   activityRoute: "#5ec8c2",
   activityRouteSubdued: "#4a4f59",

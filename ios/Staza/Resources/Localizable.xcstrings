@@ -2413,13 +2413,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hier konnte keine Route vorgeschlagen werden. Füge selbst Stopps hinzu."
+            "value" : "In diesem Kartenausschnitt wurde keine Route gefunden. Verschiebe die Karte oder zoome heraus."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No route could be suggested here. Add stops yourself."
+            "value" : "No route found in this map area. Move or zoom out the map and try again."
           }
         }
       }
@@ -2589,7 +2589,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Route berechnen"
+            "value" : "Berechnen"
           }
         },
         "en" : {
@@ -2840,6 +2840,22 @@
         }
       }
     },
+    "planner.stop.showOnMap" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt den Stopp auf der Karte."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows the stop on the map."
+          }
+        }
+      }
+    },
     "planner.stop.up" : {
       "localizations" : {
         "de" : {
@@ -2941,13 +2957,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Route erstellen"
+            "value" : "Vorschlagen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Generate route"
+            "value" : "Generate"
+          }
+        }
+      }
+    },
+    "planner.suggest.replace.confirm" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ersetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace"
+          }
+        }
+      }
+    },
+    "planner.suggest.replace.message" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Staza schlägt eine neue Route vor und ersetzt deine gewählten Stopps."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Staza suggests a new route and replaces the stops you chose."
+          }
+        }
+      }
+    },
+    "planner.suggest.replace.title" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Stopps ersetzen?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace your stops?"
           }
         }
       }
