@@ -57,9 +57,10 @@ struct WorldView: View {
                     collectibles: model.visibleCollectibles,
                     flowlines: model.visibleFlowlines,
                     explorationRoutes: model.explorationRoutes,
-                    exploreOutline: model.exploreOutline,
+                    exploreOutline: planner.isActive ? planningOutline(model, planner) : model.exploreOutline,
                     questTargets: planner.isActive ? plannerTargets(planner) : model.mapQuestTargets,
                     route: planner.displayedRoute,
+                    alternativeRoutes: planner.isActive ? planner.otherAlternatives.map(\.geometry.clCoordinates) : [],
                     selection: planner.isActive ? plannerSelection(planner) : model.selection,
                     onViewportChange: { model.viewportChanged($0) },
                     onExploreCircleChange: { model.exploreCircle = $0 },
@@ -77,6 +78,7 @@ struct WorldView: View {
                     palette: basemap.mapPalette
                 )
                 .ignoresSafeArea(edges: .top)
+                .overlay { if planner.isActive { planningAreaOverlay(model, planner) } }
                 .overlay(alignment: .topTrailing) { locateButton.padding(StazaSpacing.md) }
                 .accessibilityIdentifier("worldMap")
 
@@ -102,6 +104,7 @@ struct WorldView: View {
                     planner.showPlannedRoute(model.preferredPlannedRoute)
                 }
             }
+            .onChange(of: planner.generateRequest) { _, _ in generate(model, planner) }
             .onChange(of: planner.focusRequest) { _, _ in
                 guard let stop = planner.focusedStop else { return }
                 withAnimation(.snappy) { sheet.revealMap() }
@@ -237,6 +240,72 @@ struct WorldView: View {
         model.select(kind, id: id)
     }
 
+    /// Generates the planner's three routes in the explored area, else in the map the sheet does not cover.
+    private func generate(_ model: WorldModel, _ planner: RoutePlannerModel) {
+        guard let bounds = model.sessionBounds ?? model.visibleArea ?? model.bounds else { return }
+        Task { await planner.generate(in: bounds) }
+    }
+
+    /// The planning area while planning: the Explore session's outline, the area the routes were generated
+    /// for, else the visible map above the sheet (slightly inset so its dashed frame shows).
+    private func planningOutline(_ model: WorldModel, _ planner: RoutePlannerModel) -> [CLLocationCoordinate2D] {
+        if !model.exploreOutline.isEmpty { return model.exploreOutline }
+        if let area = planner.generatedArea { return Self.rectangle(area, inset: 0) }
+        guard planner.chosenIntent == nil, planner.proposal == nil, let visible = model.visibleArea else { return [] }
+        return Self.rectangle(visible, inset: 0.04)
+    }
+
+    private static func rectangle(_ bounds: WorldBounds, inset: Double) -> [CLLocationCoordinate2D] {
+        let dLat = (bounds.north - bounds.south) * inset, dLon = (bounds.east - bounds.west) * inset
+        let (west, east) = (bounds.west + dLon, bounds.east - dLon)
+        let (south, north) = (bounds.south + dLat, bounds.north - dLat)
+        return [(north, west), (north, east), (south, east), (south, west), (north, west)]
+            .map { CLLocationCoordinate2D(latitude: $0.0, longitude: $0.1) }
+    }
+
+    /// Shows which map area the routes come from: a center target and caption before generating, and
+    /// "Generate here" once the map shows clearly another area.
+    @ViewBuilder
+    private func planningAreaOverlay(_ model: WorldModel, _ planner: RoutePlannerModel) -> some View {
+        let before = planner.generatedArea == nil && planner.chosenIntent == nil && planner.proposal == nil
+            && model.exploreOutline.isEmpty
+        let moved = planner.isIdle && planner.canGenerate && model.exploreOutline.isEmpty
+            && planner.areaMoved(to: model.visibleArea)
+        ZStack(alignment: .top) {
+            if before {
+                // Full map height like the map's own frame, so the target sits in the middle of the uncovered map.
+                GeometryReader { geometry in
+                    Image(systemName: "scope")
+                        .font(.title)
+                        .foregroundStyle(StazaColor.accent)
+                        .shadow(color: .black.opacity(0.25), radius: 2)
+                        .position(x: geometry.size.width / 2, y: max(0, geometry.size.height - sheetHeight) / 2)
+                }
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+            if moved {
+                Button("planner.area.regenerate", systemImage: "arrow.clockwise") { planner.requestGeneration() }
+                    .buttonStyle(.stazaPrimaryWide)
+                    .fixedSize()
+                    .padding(.top, StazaSpacing.md)
+                    .accessibilityIdentifier("plannerRegenerate")
+            } else if before {
+                Label("planner.area.caption", systemImage: "viewfinder")
+                    .font(StazaFont.footnote.weight(.semibold))
+                    .foregroundStyle(StazaColor.textPrimary)
+                    .padding(.horizontal, StazaSpacing.sm)
+                    .padding(.vertical, StazaSpacing.xs)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.top, StazaSpacing.md)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("plannerAreaCaption")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
     /// The planner's stops, emphasised on the map like quest targets.
     private func plannerTargets(_ planner: RoutePlannerModel) -> QuestTargets {
         var collectibles: [WorldCollectible] = []
@@ -324,11 +393,6 @@ struct WorldView: View {
             RoutePlannerPanel(
                 planner: planner,
                 userLocation: userLocation,
-                onSuggest: {
-                    // The explored area, else the map the sheet does not cover.
-                    guard let bounds = model.sessionBounds ?? model.visibleArea ?? model.bounds else { return }
-                    Task { await planner.suggest(in: bounds, catalog: model.collectible(id:)) }
-                },
                 onSave: {
                     Task { if await planner.save() { container.playerDataChanged() } }
                 }

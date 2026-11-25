@@ -26,31 +26,64 @@ export const IntentPicker = (selected, attribute, { disabled = false } = {}) => 
 `;
 
 /**
- * Manual "Plan a route" state. The player edits every stop - the Explore session's Flowlines,
- * collectibles and map points - and Staza only connects them. Staza orders the stops unless the
- * player reordered them (`keepOrder`). "Generate route" replaces the stops with a generated set.
- * Saving is the only persistence step; starting the saved Exploration happens from the list.
+ * The route planner as a short wizard: pick a sport, pick a shape, and Staza generates Glide, Chill
+ * and Explore for the planning area in one request. Choosing one turns its stops into the editable
+ * stop list; every later edit reroutes. Saving is the only persistence step.
+ * - `sportChosen` / `shapeChosen`: the wizard steps the player completed; `stepsOpen` shows them again.
+ * - `alternatives`: the generated routes (each with `intent`), `chosenIntent` the one being edited.
+ * - `stopsAreSuggested`: the stops are exactly the chosen route's; own edits clear it.
  * - `adding`: "flowline" | "collectible" | "waypoint" while the map adds that kind of stop.
  * - `picking`: "start" | "end" while the map sets that endpoint.
- * - `status`: "idle" | "routing" | "suggesting" | "saving".
+ * - `status`: "idle" | "routing" | "generating" | "saving".
  * - `proposal`: the routed result for the current stops; cleared by every edit.
- * - `intent`: the feel "Generate route" aims for (Flow / Chill / Explore).
+ * - `generatedArea`: the bbox the alternatives were generated for; `areaMoved` once the map left it.
  */
-export const createPlannerState = ({ start, stops = [], intent = DEFAULT_ROUTE_INTENT } = {}) => ({
+export const createPlannerState = ({ start, stops = [], sport, routeType } = {}) => ({
   start,
-  intent,
   end: undefined,
-  routeType: "round_trip",
-  sport: "cycling",
+  routeType: routeType ?? "round_trip",
+  sport: sport ?? "cycling",
+  sportChosen: Boolean(sport),
+  shapeChosen: Boolean(routeType),
+  stepsOpen: !(sport && routeType),
   picking: start ? undefined : "start",
   stops: [...stops],
+  stopsAreSuggested: false,
   adding: undefined,
   keepOrder: false,
   status: "idle",
   proposal: undefined,
+  alternatives: [],
+  chosenIntent: undefined,
+  catalog: undefined,
+  generatedArea: undefined,
+  areaMoved: false,
+  rerouteQueued: false,
   dropped: [],
   error: undefined
 });
+
+export const stepsDone = (state) => state.sportChosen && state.shapeChosen;
+
+/** Sport, shape, start (and end for A to B) are known, so the three routes can be generated. */
+export const canGenerate = (state) => Boolean(stepsDone(state) && state.start && (state.routeType !== "point_to_point" || state.end));
+
+/** Stops are editable once a route is chosen or the player already has stops of their own. */
+export const canEditStops = (state) => Boolean(state.chosenIntent || state.proposal || state.stops.length);
+
+/** The generated routes not currently chosen. */
+export const otherAlternatives = (state) => state.chosenIntent
+  ? state.alternatives.filter((route) => route.intent !== state.chosenIntent)
+  : state.alternatives;
+
+/** Generated routes in Glide, Chill, Explore order. */
+export const orderAlternatives = (proposals = []) => {
+  const rank = (proposal) => {
+    const index = ROUTE_INTENTS.findIndex((intent) => intent.value === proposal.intent);
+    return index < 0 ? ROUTE_INTENTS.length : index;
+  };
+  return [...proposals].sort((left, right) => rank(left) - rank(right));
+};
 
 export const waypointKey = (point) => `waypoint:${point.lat.toFixed(6)},${point.lon.toFixed(6)}`;
 
@@ -141,12 +174,61 @@ export const buildPlanRequest = (state) => {
   };
 };
 
-/** "Generate route": one route for the explored area, shaped by the chosen intent. */
+const parseBbox = (bbox) => bbox.split(",").map(Number);
+
+/** The area grown (with a small margin) so it contains `point`; the server rejects an end outside the area. */
+export const areaIncluding = (area, point) => {
+  const [west, south, east, north] = parseBbox(area.bbox);
+  if (!point || (point.lon >= west && point.lon <= east && point.lat >= south && point.lat <= north)) return area;
+  const padLat = Math.max(0.01, (north - south) * 0.05);
+  const padLon = Math.max(0.015, (east - west) * 0.05);
+  const round = (value) => Number(value.toFixed(6));
+  const bounds = [
+    Math.min(west, point.lon - padLon), Math.min(south, point.lat - padLat),
+    Math.max(east, point.lon + padLon), Math.max(north, point.lat + padLat)
+  ].map(round);
+  return { ...area, bbox: bounds.join(","), center: { lat: round((bounds[1] + bounds[3]) / 2), lon: round((bounds[0] + bounds[2]) / 2) } };
+};
+
+/** Generates Glide, Chill and Explore for the planning area in one request. */
 export const buildSuggestRequest = (state, area) => {
   if (!state.start) return { error: "Choose a start on the map." };
+  const pointToPoint = state.routeType === "point_to_point";
+  if (pointToPoint && !state.end) return { error: "Choose an end point on the map." };
   return {
-    body: { area, sport: state.sport, start: state.start, routeType: "round_trip", intent: state.intent ?? DEFAULT_ROUTE_INTENT }
+    body: {
+      area: pointToPoint ? areaIncluding(area, state.end) : area,
+      sport: state.sport,
+      start: state.start,
+      routeType: state.routeType,
+      ...(pointToPoint ? { end: state.end } : {}),
+      intents: ROUTE_INTENTS.map((intent) => intent.value)
+    }
   };
+};
+
+/** A generated route's stops: its included collectibles and the unridden Flowlines it rides. */
+export const suggestedStops = (proposal, catalog = {}) => {
+  const flowlines = new Map((catalog.flowlines ?? []).filter((flowline) => !flowline.completed).map((flowline) => [flowline.id, flowline]));
+  const collectibles = new Map((catalog.collectibles ?? []).map((collectible) => [collectible.id, collectible]));
+  return [
+    ...(proposal.includedTargetIds ?? []).map((id) => collectibles.get(id)).filter(Boolean).map(collectibleStop),
+    ...[...new Set((proposal.traversedFlowlines ?? []).map((flowline) => flowline.id))]
+      .map((id) => flowlines.get(id)).filter(Boolean).map(flowlineStop)
+  ];
+};
+
+/**
+ * Whether the visible map clearly left the area the routes were generated for: its center lies
+ * outside that area, or the player zoomed out to more than twice its width. Zooming in never counts.
+ */
+export const areaMoved = (generatedBbox, bounds) => {
+  if (!generatedBbox || !bounds) return false;
+  const [west, south, east, north] = parseBbox(generatedBbox);
+  const centerLat = (bounds.south + bounds.north) / 2;
+  const centerLon = (bounds.west + bounds.east) / 2;
+  if (centerLat < south || centerLat > north || centerLon < west || centerLon > east) return true;
+  return bounds.east - bounds.west > 2 * (east - west);
 };
 
 /** Names of stops the routed proposal had to leave out. */
@@ -170,8 +252,8 @@ const formatPoint = (point) => point ? `${point.lat.toFixed(4)}, ${point.lon.toF
 
 const statusLine = (state) => {
   if (state.error) return `<p class="route-planner-error" role="alert">${escapeHtml(state.error)}</p>`;
-  if (state.status === "routing") return '<p class="route-planner-status" role="status">Connecting your stops\u2026</p>';
-  if (state.status === "suggesting") return '<p class="route-planner-status" role="status">Generating a route\u2026</p>';
+  if (state.status === "routing" || state.rerouteQueued) return '<p class="route-planner-status" role="status">Updating the route\u2026</p>';
+  if (state.status === "generating") return '<p class="route-planner-status" role="status">Generating Glide, Chill and Explore\u2026</p>';
   if (state.status === "saving") return '<p class="route-planner-status" role="status">Saving exploration\u2026</p>';
   if (state.picking === "start") return '<p class="route-planner-status" role="status">Click the map to set your start.</p>';
   if (state.picking === "end") return '<p class="route-planner-status" role="status">Click the map to set your end point.</p>';
@@ -193,62 +275,132 @@ const pointRow = (kind, label, state, idle) => `
 
 const addLabels = { flowline: "Add Flowline", collectible: "Add Collectible", waypoint: "Add waypoint" };
 
-/** The manual planner panel. Pure render. */
+const SPORT_ICONS = { cycling: "\u{1F6B2}", running: "\u{1F3C3}", hiking: "\u{1F97E}" };
+export const ROUTE_SHAPES = [
+  { value: "round_trip", label: "Roundtrip", icon: "\u27F3" },
+  { value: "point_to_point", label: "A \u2192 B", icon: "\u2192" }
+];
+
+const choiceButton = (attribute, value, icon, label, pressed, idle) => `
+  <button type="button" class="route-planner-choice" ${attribute}="${value}" aria-pressed="${pressed}"${idle ? "" : " disabled"}>
+    <span class="route-planner-choice-icon" aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span>
+  </button>`;
+
+/** Sport and shape as icon choices, or one summary row once both are chosen. */
+const wizardSteps = (state, idle) => {
+  const sport = SPORT_OPTIONS.find((option) => option.value === state.sport) ?? SPORT_OPTIONS[0];
+  const shape = ROUTE_SHAPES.find((option) => option.value === state.routeType) ?? ROUTE_SHAPES[0];
+  if (stepsDone(state) && !state.stepsOpen) {
+    return `
+      <div class="route-planner-summary">
+        <span><span aria-hidden="true">${SPORT_ICONS[sport.value]}</span> ${escapeHtml(sport.label)} \u00b7 <span aria-hidden="true">${shape.icon}</span> ${escapeHtml(shape.label)}</span>
+        <button type="button" data-planner-steps${idle ? "" : " disabled"}>Change</button>
+      </div>`;
+  }
+  return `
+    <div class="route-planner-step" role="group" aria-label="Sport">
+      <small>Sport</small>
+      <div class="route-planner-choices">
+        ${SPORT_OPTIONS.map((option) => choiceButton("data-planner-sport", option.value, SPORT_ICONS[option.value], option.label, state.sportChosen && state.sport === option.value, idle)).join("")}
+      </div>
+    </div>
+    <div class="route-planner-step" role="group" aria-label="Route shape">
+      <small>Route shape</small>
+      <div class="route-planner-choices">
+        ${ROUTE_SHAPES.map((option) => choiceButton("data-planner-shape", option.value, option.icon, option.label, state.shapeChosen && state.routeType === option.value, idle)).join("")}
+      </div>
+    </div>`;
+};
+
+const intentInfo = (intent) => ROUTE_INTENTS.find((item) => item.value === intent);
+
+const metrics = (proposal) => `
+  <p class="route-proposal-metrics">
+    <span>${escapeHtml(formatRouteDistance(proposal.distanceM))}</span>
+    <span>${escapeHtml(formatRouteDuration(proposal.durationS))}</span>
+    ${Number.isFinite(proposal.elevationGainM) ? `<span>\u2191 ${Math.round(proposal.elevationGainM)} m</span>` : ""}
+  </p>`;
+
+/** One generated route as a tappable row; `compact` once another route is chosen. */
+const alternativeRow = (proposal, idle, compact) => {
+  const info = intentInfo(proposal.intent);
+  return `
+    <li>
+      <button type="button" class="route-planner-alternative${compact ? " is-compact" : ""}" data-planner-choose="${escapeHtml(proposal.intent ?? "")}"${idle ? "" : " disabled"}>
+        <strong translate="no">${escapeHtml(info?.label ?? "Route")}</strong>
+        <span>${escapeHtml(formatRouteDistance(proposal.distanceM))} \u00b7 ${escapeHtml(formatRouteDuration(proposal.durationS))}</span>
+        ${compact ? "" : `<small>${escapeHtml(info?.description ?? "")}</small>`}
+      </button>
+    </li>`;
+};
+
+/** The chosen (or own) route: metrics and Save, shown above the stops. */
+const chosenCard = (state, dropped, idle) => {
+  const info = intentInfo(state.chosenIntent);
+  const { proposal } = state;
+  return `
+    <div class="route-planner-result" data-planner-result>
+      <p class="route-planner-chosen-title"><strong translate="no">${escapeHtml(info?.label ?? "Your route")}</strong>${state.chosenIntent && !state.stopsAreSuggested ? " <small>Edited</small>" : ""}</p>
+      ${proposal ? metrics(proposal) : ""}
+      ${proposal && dropped.length ? `<p class="route-planner-note">Couldn't route ${escapeHtml(dropped.map(stopName).join(", "))}, so ${dropped.length === 1 ? "it was" : "they were"} left out.</p>` : ""}
+      ${proposal ? `
+        <p class="route-planner-note">Saving keeps this route on your World. Start it whenever you go; progress only counts from activities after you start.</p>
+        <button type="button" class="route-planner-confirm" data-planner-save${idle && !state.rerouteQueued ? "" : " disabled"}>Save Exploration</button>` : ""}
+    </div>`;
+};
+
+const stopList = (state, dropped, idle) => state.stops.length ? `
+  <ol class="exploration-selected route-planner-stops" aria-label="Route stops" data-planner-stops>
+    ${state.stops.map((stop, index) => `
+      <li data-planner-stop="${escapeHtml(stopKey(stop))}"${dropped.includes(stop) ? ' class="is-dropped"' : ""}>
+        <span class="exploration-target-name">${stopIcon(stop)}<span data-user-content>${escapeHtml(stopName(stop))}</span></span>
+        <span class="route-planner-stop-actions">
+          <button type="button" data-planner-move="${index}:-1" aria-label="Move ${escapeHtml(stopName(stop))} up"${idle && index > 0 ? "" : " disabled"}>\u2191</button>
+          <button type="button" data-planner-move="${index}:1" aria-label="Move ${escapeHtml(stopName(stop))} down"${idle && index < state.stops.length - 1 ? "" : " disabled"}>\u2193</button>
+          <button type="button" data-planner-remove="${index}" aria-label="Remove ${escapeHtml(stopName(stop))}"${idle ? "" : " disabled"}>\u2715</button>
+        </span>
+      </li>`).join("")}
+  </ol>
+  <p class="route-planner-note">${state.keepOrder ? "Your order is kept." : "Staza orders the stops; move one to keep your own order."}</p>`
+  : '<p class="route-planner-note">Add Flowlines, collectibles or waypoints. Staza only connects what you choose.</p>';
+
+/** The wizard planner panel. Pure render. */
 export const RoutePlannerPanel = (state) => {
   const idle = state.status === "idle";
-  const { proposal } = state;
-  const dropped = droppedStops(state.stops, proposal);
+  const dropped = droppedStops(state.stops, state.proposal);
+  const chosen = Boolean(state.chosenIntent || state.proposal);
+  const others = otherAlternatives(state);
+  const ownStopsUnrouted = !state.chosenIntent && !state.proposal && state.stops.length > 0;
   return `
     <section class="world-detail exploration-panel route-planner" aria-label="Plan a route">
       <header>
         <div>
-          <p class="world-detail-meta"><small>Connect this area's opportunities</small></p>
+          <p class="world-detail-meta"><small>Sport, shape, done: Staza suggests three routes</small></p>
           <h2>Plan a route</h2>
         </div>
         <button type="button" class="world-detail-close" data-planner-close aria-label="Close route planner">\u2715</button>
       </header>
-      <div class="route-planner-toggle" role="group" aria-label="Sport">
-        ${SPORT_OPTIONS.map((option) => `<button type="button" data-planner-sport="${option.value}" aria-pressed="${state.sport === option.value}"${idle ? "" : " disabled"}>${option.label}</button>`).join("")}
-      </div>
+      ${wizardSteps(state, idle)}
       ${pointRow("start", "Start", state, idle)}
-      <div class="route-planner-toggle" role="group" aria-label="Route type">
-        <button type="button" data-planner-route-type="round_trip" aria-pressed="${state.routeType === "round_trip"}"${idle ? "" : " disabled"}>Roundtrip</button>
-        <button type="button" data-planner-route-type="point_to_point" aria-pressed="${state.routeType === "point_to_point"}"${idle ? "" : " disabled"}>End point</button>
-      </div>
       ${state.routeType === "point_to_point" ? pointRow("end", "End", state, idle) : ""}
-      ${state.stops.length ? `
-        <ol class="exploration-selected route-planner-stops" aria-label="Route stops" data-planner-stops>
-          ${state.stops.map((stop, index) => `
-            <li data-planner-stop="${escapeHtml(stopKey(stop))}"${dropped.includes(stop) ? ' class="is-dropped"' : ""}>
-              <span class="exploration-target-name">${stopIcon(stop)}<span data-user-content>${escapeHtml(stopName(stop))}</span></span>
-              <span class="route-planner-stop-actions">
-                <button type="button" data-planner-move="${index}:-1" aria-label="Move ${escapeHtml(stopName(stop))} up"${idle && index > 0 ? "" : " disabled"}>\u2191</button>
-                <button type="button" data-planner-move="${index}:1" aria-label="Move ${escapeHtml(stopName(stop))} down"${idle && index < state.stops.length - 1 ? "" : " disabled"}>\u2193</button>
-                <button type="button" data-planner-remove="${index}" aria-label="Remove ${escapeHtml(stopName(stop))}"${idle ? "" : " disabled"}>\u2715</button>
-              </span>
-            </li>`).join("")}
-        </ol>
-        <p class="route-planner-note">${state.keepOrder ? "Your order is kept." : "Staza orders the stops; move one to keep your own order."}</p>`
-        : '<p class="route-planner-note">Add Flowlines, collectibles or waypoints. Staza only connects what you choose.</p>'}
-      <div class="exploration-route-actions route-planner-add" role="group" aria-label="Add stops">
-        ${Object.entries(addLabels).map(([kind, label]) => `<button type="button" data-planner-add="${kind}" aria-pressed="${state.adding === kind}"${idle ? "" : " disabled"}>${label}</button>`).join("")}
-      </div>
-      ${IntentPicker(state.intent ?? DEFAULT_ROUTE_INTENT, "data-planner-intent", { disabled: !idle })}
+      ${!state.alternatives.length && !chosen && idle ? '<p class="route-planner-note" data-planner-area>Routes are planned for the visible map area.</p>' : ""}
+      ${state.areaMoved && idle ? '<button type="button" class="route-planner-regenerate" data-planner-regenerate>Generate here</button>' : ""}
       ${statusLine(state)}
-      <div class="route-planner-commands">
-        <button type="button" class="route-planner-submit" data-planner-route${idle && state.start && state.stops.length ? "" : " disabled"}>Route</button>
-        <button type="button" data-planner-suggest${idle && state.start ? "" : " disabled"}>Generate route</button>
-      </div>
-      ${proposal ? `
-        <div class="route-planner-result" data-planner-result>
-          <p class="route-proposal-metrics">
-            <span>${escapeHtml(formatRouteDistance(proposal.distanceM))}</span>
-            <span>${escapeHtml(formatRouteDuration(proposal.durationS))}</span>
-            ${Number.isFinite(proposal.elevationGainM) ? `<span>\u2191 ${Math.round(proposal.elevationGainM)} m</span>` : ""}
-          </p>
-          ${dropped.length ? `<p class="route-planner-note">Couldn't route ${escapeHtml(dropped.map(stopName).join(", "))}, so ${dropped.length === 1 ? "it was" : "they were"} left out.</p>` : ""}
-          <p class="route-planner-note">Saving keeps this route on your World. Start it whenever you go; progress only counts from activities after you start.</p>
-          <button type="button" class="route-planner-confirm" data-planner-save${idle ? "" : " disabled"}>Save Exploration</button>
+      ${state.error && (state.stops.length || canGenerate(state)) ? `<button type="button" data-planner-retry${idle ? "" : " disabled"}>Try again</button>` : ""}
+      ${chosen ? chosenCard(state, dropped, idle) : ""}
+      ${others.length ? `
+        ${chosen ? '<p class="route-planner-heading">Other routes</p>' : '<p class="route-planner-heading">Pick a route</p>'}
+        <ol class="route-planner-routes" aria-label="${chosen ? "Other routes" : "Routes"}">
+          ${others.map((proposal) => alternativeRow(proposal, idle, chosen)).join("")}
+        </ol>` : ""}
+      ${canEditStops(state) ? `
+        ${stopList(state, dropped, idle)}
+        <div class="exploration-route-actions route-planner-add" role="group" aria-label="Add stops">
+          ${Object.entries(addLabels).map(([kind, label]) => `<button type="button" data-planner-add="${kind}" aria-pressed="${state.adding === kind}"${idle ? "" : " disabled"}>${label}</button>`).join("")}
+        </div>` : ""}
+      ${ownStopsUnrouted && !state.error ? `
+        <div class="route-planner-commands">
+          <button type="button" class="route-planner-submit" data-planner-route${idle && state.start ? "" : " disabled"}>Route my stops</button>
         </div>` : ""}
     </section>
   `;

@@ -176,7 +176,7 @@ export class ExplorationService {
    */
   async generate(playerId: string, body: unknown, requestId: string = randomUUID()): Promise<GeneratedExploration> {
     const routing = this.requireRouting();
-    const { area, input, intent, destinationId, destinationFlowlineId } = parseGenerateRequest(body);
+    const { area, input, variants, destinationId, destinationFlowlineId } = parseGenerateRequest(body);
     if (input.routeType === "point_to_point" && !insideBounds([input.end.lon, input.end.lat], area.bounds, 0)) {
       throw new UserInputError("The destination must be inside the explored area.");
     }
@@ -215,7 +215,16 @@ export class ExplorationService {
     };
     const session = this.dependencies.sessions.create({ playerId, area, input, ...sessionData(resolved) });
 
-    const plan = async (current: typeof resolved): Promise<{ planned?: PlannedProposal[]; failure?: unknown }> => {
+    const plan = async (current: typeof resolved): Promise<{ planned?: Array<PlannedProposal & { input: typeof input }>; failure?: unknown }> => {
+      // Every intent is planned in parallel; failing intents are left out, unless all fail.
+      const results = await Promise.all(variants.map((variant) => planIntent(current, variant)));
+      const planned = results.flatMap((result) => (result.planned ? [result.planned] : []));
+      return planned.length > 0 ? { planned } : { failure: results[0].failure };
+    };
+    const planIntent = async (
+      current: typeof resolved,
+      { intent, input }: (typeof variants)[number]
+    ): Promise<{ planned?: PlannedProposal & { input: typeof input }; failure?: unknown }> => {
       try {
         const dependencies = { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) };
         const required = destination
@@ -232,7 +241,7 @@ export class ExplorationService {
           },
           dependencies
         );
-        return { planned: [generated] };
+        return { planned: { ...generated, proposal: { ...generated.proposal, intent }, input } };
       } catch (failure) {
         return { failure };
       }
@@ -257,7 +266,7 @@ export class ExplorationService {
     };
     this.dependencies.proposals.replaceForPlayer(
       playerId,
-      planned.map((entry) => this.store(session.id, entry, available, input, flowlineStops(entry.proposal)))
+      planned.map((entry) => this.store(session.id, entry, available, entry.input, flowlineStops(entry.proposal)))
     );
     return {
       explorationId: session.id,

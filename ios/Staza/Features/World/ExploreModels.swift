@@ -33,6 +33,8 @@ struct RouteProposal: Decodable, Equatable, Identifiable, Sendable {
     var stopOrder: [String]? = nil
     /// Flowlines a generated route rides; the opportunity ones become its Flowline stops.
     var traversedFlowlines: [TraversedFlowline]? = nil
+    /// The feel a generated route was made for; manual routes have none.
+    var intent: RouteIntent? = nil
 
     struct TraversedFlowline: Decodable, Equatable, Sendable {
         let id: String
@@ -85,7 +87,7 @@ struct PlanArea: Encodable, Equatable, Sendable {
 }
 
 /// The feel of a generated route. Staza never optimizes for speed.
-enum RouteIntent: String, CaseIterable, Identifiable, Encodable, Sendable {
+enum RouteIntent: String, CaseIterable, Identifiable, Codable, Sendable {
     /// Smooth Flowlines, few interruptions; places are secondary.
     case flow
     /// A relaxed, moderate mix.
@@ -114,13 +116,14 @@ enum RouteIntent: String, CaseIterable, Identifiable, Encodable, Sendable {
     }
 }
 
-/// "Generate route": one route for the intent, bounded to the explored area and its opportunities.
+/// Generates one route per intent (Glide, Chill, Explore) in one request, bounded to the planning area.
 struct SuggestRequest: Encodable, Sendable {
     let area: PlanArea
     let sport: String
     let start: GeoPoint
-    let intent: RouteIntent
-    let routeType = "round_trip"
+    let intents: [RouteIntent]
+    var routeType = "round_trip"
+    var end: GeoPoint? = nil
 }
 
 struct PlanRequest: Encodable, Sendable {

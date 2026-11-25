@@ -441,7 +441,7 @@ describe("mounted World page interactions", () => {
         if (generateError) return { ok: false, status: 422, json: async () => generateError };
         body = {
           explorationId: "exp-1",
-          proposals: [routeProposal("proposal-balanced", "balanced", ["peak-unfound"], { recommended: true })],
+          proposals: ["explore", "flow", "chill"].map((intent) => routeProposal(`proposal-${intent}`, intent, ["peak-unfound"], { intent })),
           catalog: { collectibles: [collectibles[0], collectibles[1]], flowlines: [fartleks[0]] },
           truncated: false
         };
@@ -706,15 +706,23 @@ describe("mounted World page interactions", () => {
     page.card("[data-explore-generate]");
     await vi.waitFor(() => expect(page.detail.innerHTML).toContain("data-planner-save"));
     const body = JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body);
-    expect(body).toMatchObject({ start: { lat: 50, lon: 9 }, intent: "explore", area: { bbox: "8.00000,49.00000,11.00000,52.00000" } });
-    expect(page.detail.innerHTML).toMatch(/data-planner-intent="explore" aria-pressed="true"/);
+    expect(body).toMatchObject({
+      start: { lat: 50, lon: 9 }, sport: "cycling", routeType: "round_trip", intents: ["flow", "chill", "explore"],
+      area: { bbox: "8.00000,49.00000,11.00000,52.00000" }
+    });
+    expect(page.detail.innerHTML).toContain("data-planner-steps");
+    expect(page.detail.innerHTML).not.toContain('data-planner-choose="explore"');
+    expect(page.detail.innerHTML).toContain('data-planner-choose="flow"');
+    expect(page.detail.innerHTML).toContain('data-planner-choose="chill"');
+    expect(page.detail.innerHTML.indexOf("data-planner-save")).toBeLessThan(page.detail.innerHTML.indexOf('data-planner-stop="peak-unfound"'));
+    expect(page.map.setAlternateRoutes).toHaveBeenLastCalledWith([expect.objectContaining({ intent: "flow" }), expect.objectContaining({ intent: "chill" })]);
     expect(page.detail.innerHTML).toContain('data-planner-stop="peak-unfound"');
     expect(page.detail.innerHTML).toContain('data-planner-stop="flowline:fartlek-1"');
     expect(page.fartlekIds()).toContain("fresh-1");
 
     page.bound("[data-planner-save]:click")();
     await vi.waitFor(() => expect(page.quests.innerHTML).toContain('data-quest-start="instance-1"'));
-    expect(JSON.parse(page.calls("/api/explorations/save", "POST")[0][1].body)).toEqual({ proposalId: "proposal-balanced" });
+    expect(JSON.parse(page.calls("/api/explorations/save", "POST")[0][1].body)).toEqual({ proposalId: "proposal-explore" });
     expect(page.calls("/api/quest-instances/instance-1/start")).toHaveLength(0);
     expect(page.quests.innerHTML).toContain(">Planned</small>");
     expect(page.map.setSavedRoutes).toHaveBeenLastCalledWith([expect.objectContaining({ id: "instance-1", geometry: routeGeometry })]);
@@ -762,7 +770,7 @@ describe("mounted World page interactions", () => {
       stops: [{ kind: "flowline", id: "fartlek-1" }]
     });
     expect(body.area.bbox.split(",").map(Number)).toHaveLength(4);
-    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry });
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry }, { planned: true });
     expect(page.fartlekFeature("fartlek-1").properties.questTarget).toBe(true);
     expect(page.cta.hidden).toBe(true);
     expect(page.calls("/api/explorations/generate")).toHaveLength(0);
@@ -772,7 +780,12 @@ describe("mounted World page interactions", () => {
     const page = await mount({ savedHome: { latitude: 50, longitude: 9 } });
     page.openPlanner();
     expect(page.detail.innerHTML).toContain("Plan a route");
-    expect(page.detail.innerHTML).toMatch(/data-planner-route disabled/);
+    expect(page.detail.innerHTML).not.toContain("data-planner-add");
+    page.bound("[data-planner-close]:click")();
+    page.setDataset("[data-flowline-add-route]", { flowlineAddRoute: "fartlek-1" });
+    page.callbacks.onFartlekSelect("fartlek-1");
+    page.bound("[data-flowline-add-route]:click")();
+    page.openPlanner();
     page.callbacks.onCollectibleSelect("peak-unfound");
     expect(page.detail.innerHTML).not.toContain('data-planner-stop="peak-unfound"');
 
@@ -787,14 +800,14 @@ describe("mounted World page interactions", () => {
     page.map.setMapClickHandler.mock.lastCall[0]({ lat: 50.3, lon: 9.3 });
     expect(page.detail.innerHTML).toContain('data-planner-stop="waypoint:50.300000,9.300000"');
 
-    page.setDataset("[data-planner-move]", { plannerMove: "1:-1" });
+    page.setDataset("[data-planner-move]", { plannerMove: "2:-1" });
     page.bound("[data-planner-move]:click")();
     expect(page.detail.innerHTML).toContain("Your order is kept.");
     page.bound("[data-planner-route]:click")();
     await vi.waitFor(() => expect(page.calls("/api/explorations/plan", "POST")).toHaveLength(1));
     expect(JSON.parse(page.calls("/api/explorations/plan", "POST")[0][1].body)).toMatchObject({
       keepOrder: true,
-      stops: [{ kind: "waypoint", lat: 50.3, lon: 9.3 }, { kind: "collectible", id: "peak-unfound" }]
+      stops: [{ kind: "flowline", id: "fartlek-1" }, { kind: "waypoint", lat: 50.3, lon: 9.3 }, { kind: "collectible", id: "peak-unfound" }]
     });
   });
 
@@ -804,10 +817,48 @@ describe("mounted World page interactions", () => {
     expect(page.detail.innerHTML).toContain("Click the map to set your start.");
     page.map.setPickHandler.mock.lastCall[0]({ lat: 50, lon: 9 });
     expect(page.map.setRouteEndpoints).toHaveBeenLastCalledWith({ start: { lat: 50, lon: 9 }, end: undefined });
-    page.bound("[data-planner-suggest]:click")();
-    await vi.waitFor(() => expect(page.detail.innerHTML).toContain('data-planner-stop="peak-unfound"'));
-    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body)).toMatchObject({ start: { lat: 50, lon: 9 }, routeType: "round_trip", intent: "chill" });
+    expect(page.calls("/api/explorations/generate")).toHaveLength(0);
+    page.setDataset("[data-planner-sport]", { plannerSport: "running" });
+    page.bound("[data-planner-sport]:click")();
+    expect(page.calls("/api/explorations/generate")).toHaveLength(0);
+    page.setDataset("[data-planner-shape]", { plannerShape: "round_trip" });
+    page.bound("[data-planner-shape]:click")();
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain('data-planner-choose="chill"'));
+    expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body))
+      .toMatchObject({ start: { lat: 50, lon: 9 }, sport: "running", routeType: "round_trip", intents: ["flow", "chill", "explore"] });
+    expect(page.map.setExploreFrame).toHaveBeenLastCalledWith("8.00000,49.00000,11.00000,52.00000");
+    expect(page.detail.innerHTML).not.toContain("data-planner-save");
+    expect(page.detail.innerHTML).not.toContain("data-planner-add");
+
+    page.setDataset("[data-planner-choose]", { plannerChoose: "chill" });
+    page.bound("[data-planner-choose]:click")();
     expect(page.detail.innerHTML).toContain("data-planner-save");
+    expect(page.detail.innerHTML).toContain('data-planner-stop="peak-unfound"');
+    expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry }, { planned: true });
+
+    page.callbacks.onViewportChange({ west: 20, south: 49, east: 23, north: 52 });
+    expect(page.detail.innerHTML).toContain("data-planner-regenerate");
+  });
+
+  it("reroutes a chosen route once after quick stop edits", async () => {
+    const page = await mount({ savedHome: { latitude: 50, longitude: 9 } });
+    page.explore();
+    await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("data-explore-generate"));
+    page.card("[data-explore-generate]");
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("data-planner-save"));
+    expect(page.detail.innerHTML).toContain('data-planner-stop="flowline:fartlek-1"');
+    page.setDataset("[data-planner-move]", { plannerMove: "1:-1" });
+    page.bound("[data-planner-move]:click")();
+    page.setDataset("[data-planner-move]", { plannerMove: "0:1" });
+    page.bound("[data-planner-move]:click")();
+    expect(page.detail.innerHTML).toContain("Updating the route");
+    expect(page.detail.innerHTML).not.toContain("data-planner-save");
+    await vi.waitFor(() => expect(page.calls("/api/explorations/plan", "POST")).toHaveLength(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("Edited"));
+    expect(JSON.parse(page.calls("/api/explorations/plan", "POST")[0][1].body)).toMatchObject({
+      keepOrder: true,
+      stops: [{ kind: "collectible", id: "peak-unfound" }, { kind: "flowline", id: "fartlek-1" }]
+    });
   });
 
   it("asks for a start instead of generating from the map center when none is known", async () => {
@@ -816,10 +867,8 @@ describe("mounted World page interactions", () => {
     await vi.waitFor(() => expect(page.exploreCard.innerHTML).toContain("data-explore-generate"));
     page.card("[data-explore-generate]");
     expect(page.detail.innerHTML).toContain("Click the map to set your start.");
-    expect(page.detail.innerHTML).toMatch(/data-planner-suggest disabled/);
     expect(page.calls("/api/explorations/generate")).toHaveLength(0);
     page.map.setPickHandler.mock.lastCall[0]({ lat: 50.1, lon: 9.1 });
-    page.bound("[data-planner-suggest]:click")();
     await vi.waitFor(() => expect(page.calls("/api/explorations/generate", "POST")).toHaveLength(1));
     expect(JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body)).toMatchObject({ start: { lat: 50.1, lon: 9.1 } });
   });

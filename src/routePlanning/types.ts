@@ -187,6 +187,8 @@ export interface RouteProposal {
   /** Flowlines the final geometry naturally rides; informational, never routing constraints. */
   traversedFlowlines: TraversedFlowline[];
   constraintFit: ConstraintFitFlag;
+  /** The feel a generated route was planned for (flow / chill / explore). */
+  intent?: "flow" | "chill" | "explore";
   /** Set on routes re-planned after the player edited their targets. */
   customized?: boolean;
   /** Proposal this customized route was derived from. */

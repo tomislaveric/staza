@@ -45,6 +45,8 @@ struct WorldMapView: UIViewRepresentable {
     var exploreOutline: [CLLocationCoordinate2D] = []
     let questTargets: QuestTargets
     var route: [CLLocationCoordinate2D] = []
+    /// The planner's generated routes not shown as `route`: subdued, so the chosen one stands out.
+    var alternativeRoutes: [[CLLocationCoordinate2D]] = []
     /// The tapped collectible or Flowline; it gets the selection halo.
     var selection: WorldSelection? = nil
     let onViewportChange: (WorldBounds) -> Void
@@ -106,6 +108,7 @@ struct WorldMapView: UIViewRepresentable {
         coordinator.data = (collectibles, flowlines, questTargets, selection)
         coordinator.explorationRoutes = explorationRoutes
         coordinator.exploreOutline = exploreOutline
+        coordinator.alternativeRoutes = alternativeRoutes
         if abs(coordinator.appliedInset - bottomInset) > 0.5 {
             coordinator.appliedInset = bottomInset
             map.setContentInset(UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0), animated: true) { [weak coordinator, weak map] in
@@ -141,6 +144,7 @@ struct WorldMapView: UIViewRepresentable {
         var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selection: WorldSelection?) = ([], [], .empty, nil)
         var explorationRoutes: [ExplorationRoute] = []
         var exploreOutline: [CLLocationCoordinate2D] = []
+        var alternativeRoutes: [[CLLocationCoordinate2D]] = []
 
         private let locationManager = CLLocationManager()
         private var explorationRouteSource: MLNShapeSource?
@@ -150,6 +154,7 @@ struct WorldMapView: UIViewRepresentable {
         private var questFlowlineSource: MLNShapeSource?
         private var selectedFlowlineSource: MLNShapeSource?
         private var routeSource: MLNShapeSource?
+        private var alternativeRouteSource: MLNShapeSource?
         private var route: [CLLocationCoordinate2D] = []
 
         func requestLocationAccess() {
@@ -211,6 +216,11 @@ struct WorldMapView: UIViewRepresentable {
                                                width: CollectibleMapIcons.zoomStops([9: 5, 12: 7, 15: 9, 17: 11])))
             StazaMapLayers.addFlowlines(to: style, source: selectedFlowline, id: "world-selected-flowline", palette: palette)
             selectedFlowlineSource = selectedFlowline
+
+            let alternatives = MLNShapeSource(identifier: "planner-alternatives", shape: nil, options: nil)
+            style.addSource(alternatives)
+            StazaMapLayers.addAlternativeRoutes(to: style, source: alternatives, id: "planner-alternatives", palette: palette)
+            alternativeRouteSource = alternatives
 
             let routeSource = MLNShapeSource(identifier: "explore-route", shape: nil, options: nil)
             style.addSource(routeSource)
@@ -314,6 +324,8 @@ struct WorldMapView: UIViewRepresentable {
             var outline = exploreOutline
             exploreFrameSource?.shape = outline.isEmpty ? nil : MLNPolylineFeature(coordinates: &outline, count: UInt(outline.count))
             questFlowlineSource.shape = Self.lines(data.quest.flowlines)
+            let alternatives = alternativeRoutes.filter { $0.count >= 2 }.map { MLNPolylineFeature(coordinates: $0, count: UInt($0.count)) }
+            alternativeRouteSource?.shape = alternatives.isEmpty ? nil : MLNShapeCollectionFeature(shapes: alternatives)
         }
 
         func setRoute(_ coordinates: [CLLocationCoordinate2D], on map: MLNMapView) {

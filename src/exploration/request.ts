@@ -1,6 +1,6 @@
 import { UserInputError } from "../errors.js";
 import { distanceBetween } from "../routePlanning/geo.js";
-import { intentLengthMeters, parseRouteIntent, type RouteIntent } from "../routePlanning/intent.js";
+import { intentLengthMeters, parseRouteIntent, ROUTE_INTENTS, type RouteIntent } from "../routePlanning/intent.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import { isRecord, isUuid, parseLatLon, parseProposalId, parseRoutePlanningInput } from "../routePlanning/request.js";
 import type { LatLon, RoutePlanningInput } from "../routePlanning/types.js";
@@ -30,8 +30,10 @@ export const parseArea = (value: unknown): ExplorationAreaContext => {
 export interface GenerateRequest {
   area: ExplorationAreaContext;
   input: RoutePlanningInput;
-  /** What the route should feel like; defaults to Chill. */
+  /** What the route should feel like; defaults to Chill. The first of `variants`. */
   intent: RouteIntent;
+  /** One ride per requested intent (`intents`, or the single `intent`); the length differs per intent. */
+  variants: { intent: RouteIntent; input: RoutePlanningInput }[];
   /** A collectible every route must visit ("Route to"). */
   destinationId?: string;
   /** A plannable Flowline of the area every route must ride ("Plan route via this Flowline"). */
@@ -48,8 +50,19 @@ export const areaConstraint = ({ bounds }: ExplorationAreaContext): { type: "dis
   return { type: "distance", value };
 };
 
+/** `intents` (1-3 unique intents) wins over the single `intent` older clients send. */
+const parseIntents = (body: Record<string, unknown>): RouteIntent[] => {
+  if (body.intents === undefined) return [parseRouteIntent(body.intent)];
+  if (!Array.isArray(body.intents) || body.intents.length === 0 || body.intents.length > ROUTE_INTENTS.length) {
+    throw new UserInputError("Intents must list one to three of flow, chill and explore.");
+  }
+  const intents = body.intents.map((value) => parseRouteIntent(value ?? ""));
+  if (new Set(intents).size !== intents.length) throw new UserInputError("Intents must not repeat.");
+  return intents;
+};
+
 /**
- * `{ area, start, intent?, sport?, routeType?, constraint? }`: the ride only — never targets. The
+ * `{ area, start, intent? | intents?, sport?, routeType?, constraint? }`: the ride only — never targets. The
  * area's size defines the ride, so route type defaults to a round trip and the length is derived
  * from it, capped per intent.
  */
@@ -66,12 +79,16 @@ export const parseGenerateRequest = (body: unknown): GenerateRequest => {
   if (destinationId && destinationFlowlineId) {
     throw new UserInputError("Choose either a destination or a Flowline, not both.");
   }
-  const intent = parseRouteIntent(body.intent);
-  const constraint = { type: "distance", value: intentLengthMeters(areaConstraint(area).value, intent) };
+  const intents = parseIntents(body);
+  const variants = intents.map((intent) => {
+    const constraint = { type: "distance", value: intentLengthMeters(areaConstraint(area).value, intent) };
+    return { intent, input: parseRoutePlanningInput({ routeType: "round_trip", constraint, ...body }) };
+  });
   return {
     area,
-    intent,
-    input: parseRoutePlanningInput({ routeType: "round_trip", constraint, ...body }),
+    intent: variants[0].intent,
+    variants,
+    input: variants[0].input,
     ...(destinationId ? { destinationId } : {}),
     ...(destinationFlowlineId ? { destinationFlowlineId } : {})
   };

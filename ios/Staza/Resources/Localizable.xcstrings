@@ -2312,6 +2312,38 @@
         }
       }
     },
+    "planner.area.caption" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routen in diesem Kartenausschnitt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routes in this map area"
+          }
+        }
+      }
+    },
+    "planner.area.regenerate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hier neu erzeugen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generate here"
+          }
+        }
+      }
+    },
     "planner.disclaimer" : {
       "localizations" : {
         "de" : {
@@ -2436,6 +2468,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Choose a start on the map."
+          }
+        }
+      }
+    },
+    "planner.generating" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suche drei Routen …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finding three routes…"
           }
         }
       }
@@ -2568,6 +2616,22 @@
         }
       }
     },
+    "planner.retry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut versuchen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
     "planner.roundTrip" : {
       "localizations" : {
         "de" : {
@@ -2600,6 +2664,22 @@
         }
       }
     },
+    "planner.route.own" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Route"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your route"
+          }
+        }
+      }
+    },
     "planner.routeShape" : {
       "localizations" : {
         "de" : {
@@ -2616,18 +2696,50 @@
         }
       }
     },
-    "planner.routeType" : {
+    "planner.routes" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Routentyp"
+            "value" : "Routen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Route type"
+            "value" : "Routes"
+          }
+        }
+      }
+    },
+    "planner.routes.hint" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tippe eine Route an, um ihre Stopps zu sehen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a route to see its stops."
+          }
+        }
+      }
+    },
+    "planner.routes.others" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Andere Routen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other routes"
           }
         }
       }
@@ -2792,6 +2904,22 @@
         }
       }
     },
+    "planner.steps.change" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ändern"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change"
+          }
+        }
+      }
+    },
     "planner.stop.down" : {
       "localizations" : {
         "de" : {
@@ -2941,29 +3069,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verbinde deine Entdeckungen"
+            "value" : "Sportart und Form wählen, Staza findet drei Routen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Connect what you discovered"
-          }
-        }
-      }
-    },
-    "planner.suggest" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vorschlagen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Generate"
+            "value" : "Pick a sport and shape, Staza finds three routes"
           }
         }
       }
@@ -2989,13 +3101,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Staza schlägt eine neue Route vor und ersetzt deine gewählten Stopps."
+            "value" : "Die gewählte Route ersetzt deine gewählten Stopps."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Staza suggests a new route and replaces the stops you chose."
+            "value" : "The chosen route replaces the stops you chose."
           }
         }
       }

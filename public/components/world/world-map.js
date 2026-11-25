@@ -55,6 +55,13 @@ export const endpointsToGeoJson = ({ start, end } = {}) => ({
 /** The World quest route uses the shared Staza route vocabulary at the quest accent. */
 export const routeLayers = () => stazaRouteLayers(ROUTE_SOURCE);
 
+/** Paint overrides ("layer:property") for a planned, not-yet-ridden route: blue dashes; `undefined` restores the default. */
+export const routePaint = (planned) => ({
+  "glow:line-color": planned ? STAZA_MAP_PALETTE.plannedRoute : STAZA_MAP_PALETTE.questRoute,
+  "line:line-color": planned ? STAZA_MAP_PALETTE.plannedRoute : STAZA_MAP_PALETTE.questRoute,
+  "line:line-dasharray": planned ? [1.4, 1.2] : undefined
+});
+
 const ALTERNATES_SOURCE = "staza-exploration-alternates";
 export const ALTERNATES_SOURCE_ID = ALTERNATES_SOURCE;
 
@@ -181,6 +188,7 @@ export const createWorldMap = async (container, {
   const setSavedRouteData = () => map.getSource(SAVED_ROUTES_SOURCE)?.setData(savedRoutesToGeoJson(pendingSavedRoutes));
   let panelInset = 0;
   let pickHandler;
+  let routePlanned = false;
   let clickHandler;
   let pointTooltip;
   let homeMarker;
@@ -318,10 +326,17 @@ export const createWorldMap = async (container, {
       ensureExploreFrameLayers();
       map.getSource(EXPLORE_FRAME_SOURCE).setData(exploreFrameToGeoJson(bbox));
     },
-    setRoute(route) {
+    /** The quest route; `planned` draws a not-yet-ridden planner route in blue dashes instead. */
+    setRoute(route, { planned = false } = {}) {
       if (!styleReady) return;
       ensureRouteLayers();
       map.getSource(ROUTE_SOURCE).setData(routeToGeoJson(route));
+      if (planned === routePlanned) return;
+      routePlanned = planned;
+      for (const [key, value] of Object.entries(routePaint(planned))) {
+        const [layer, property] = key.split(":");
+        map.setPaintProperty(`${ROUTE_SOURCE}-${layer}`, property, value);
+      }
     },
     /** Muted, clickable geometry of the unselected exploration proposals. */
     setAlternateRoutes(routes) {

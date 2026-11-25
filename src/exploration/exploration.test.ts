@@ -139,6 +139,18 @@ describe("exploration requests", () => {
     expect(() => parseGenerateRequest({ area: { bbox, center: area.center, zoom: 11 } })).toThrow(UserInputError);
   });
 
+  it("parses one ride per requested intent, with a length per intent", () => {
+    const base = { area: { bbox, center: area.center, zoom: 11 }, start: at(0, 0) };
+    const parsed = parseGenerateRequest({ ...base, intents: ["flow", "chill", "explore"] });
+    expect(parsed.variants.map((variant) => variant.intent)).toEqual(["flow", "chill", "explore"]);
+    const lengths = parsed.variants.map(({ input }) => (input.constraint.type === "distance" ? input.constraint.meters : 0));
+    expect(lengths[1]).toBeLessThan(lengths[2]);
+    expect(parseGenerateRequest({ ...base, intent: "explore" }).variants.map((variant) => variant.intent)).toEqual(["explore"]);
+    for (const intents of [[], ["chill", "chill"], ["fast"], "chill", ["flow", "chill", "explore", "flow"]]) {
+      expect(() => parseGenerateRequest({ ...base, intents })).toThrow(UserInputError);
+    }
+  });
+
   it("accepts a de-duplicated target list for rerouting", () => {
     const proposalId = "0b8f1c1e-3c3a-4c1e-9f5e-1c2d3e4f5a6b";
     expect(parseRerouteRequest({ proposalId, targetIds: ["a", "b", "a"] })).toEqual({ proposalId, targetIds: ["a", "b"], waypoints: [] });
@@ -212,6 +224,16 @@ describe("ExplorationService", () => {
     const catalogIds = new Set(["c-near", "c-mid", "c-east", "c-far"]);
     for (const proposal of result.proposals) expect(contents(proposal).every((id) => catalogIds.has(id))).toBe(true);
     expect(created).toHaveLength(0);
+  });
+
+  it("generates one saveable route per requested intent in one exploration", async () => {
+    const { service } = setup();
+    const result = await service.generate("p1", { ...generateBody, intents: ["flow", "chill", "explore"] });
+    expect(result.proposals.map((proposal) => proposal.intent)).toEqual(["flow", "chill", "explore"]);
+    expect(new Set(result.proposals.map((proposal) => proposal.id)).size).toBe(3);
+    for (const proposal of result.proposals) {
+      expect(await service.save("p1", { proposalId: proposal.id })).toBe(`instance-${proposal.id}`);
+    }
   });
 
   it("reports Flowlines a route rides as derived metadata, never as targets", async () => {

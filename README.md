@@ -199,6 +199,9 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   good POIs instead of packing in collectibles.
 - [Route planning v2](features/route-planning-v2/README.md) — simplify the iOS World
   planner into guided sections, direct map selection, and a compact final start step.
+- [Route planner wizard](features/route-planner-wizard/README.md) — pick sport and
+  route shape with icons, get Glide, Chill and Explore routes automatically for the
+  visible map area, and edit the chosen route's stops below its card.
 - [Route-Relevant World Query V1](features/route-relevant-world-query-v1/README.md)
   — cheaply limit the configured world to the padded geographic region around an
   activity route before existing precise collectible detection and presentation.

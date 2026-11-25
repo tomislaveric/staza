@@ -1,5 +1,9 @@
 # route-generation-v2
 
+> **Planner UI superseded by [route-planner-wizard](../route-planner-wizard/README.md):** the planner
+> now generates Glide, Chill and Explore together (`intents`) after the player picks a sport and a
+> route shape. The intent model, scoring and per-intent generator described here still apply.
+
 > Amends [explore-sessions-and-saved-explorations](../explore-sessions-and-saved-explorations/README.md)
 > and [explore-reveal-and-manual-planner](../explore-reveal-and-manual-planner/README.md):
 > Explore this area works at any zoom, and **Generate route** builds exactly one route for a

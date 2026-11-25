@@ -56,9 +56,10 @@ enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
     }
 }
 
-/// Route editor. "Generate route" proposes a route from the Explore session's opportunities; the player
-/// can then edit every stop and Staza only connects them, ordering the stops unless the player
-/// reordered them. "Save Exploration" persists the route as a planned Exploration; it never starts it.
+/// Route planner wizard: the player picks a sport and a route shape, then Staza generates Glide, Chill
+/// and Explore for the planning area in one request. Choosing one shows its stops; the player can edit
+/// them and Staza reroutes, ordering the stops unless the player reordered them. "Save Exploration"
+/// persists the route as a planned Exploration; it never starts it.
 @MainActor
 @Observable
 final class RoutePlannerModel {
@@ -81,8 +82,22 @@ final class RoutePlannerModel {
     private(set) var end: GeoPoint?
     private(set) var routeType = RouteType.roundTrip
     private(set) var sport = Sport.cycling
-    /// The feel "Generate route" aims for; never saved with the Exploration.
+    /// The feel the Explore card preselects; never saved with the Exploration.
     var intent = RouteIntent.default
+    /// Wizard steps: generation starts once both are chosen (and the end for A→B).
+    private(set) var sportChosen = false
+    private(set) var shapeChosen = false
+    /// The player reopened the collapsed steps to change a choice.
+    private(set) var stepsOpen = false
+    /// The generated routes, one per intent. They stay listed after one is chosen.
+    private(set) var alternatives: [RouteProposal] = []
+    /// The intent of the generated route the player chose; its (edited) route is `proposal`.
+    private(set) var chosenIntent: RouteIntent?
+    /// The area the alternatives were generated for.
+    private(set) var generatedArea: WorldBounds?
+    /// Bumped whenever the wizard is ready to generate; the view answers with `generate(in:catalog:)`.
+    private(set) var generateRequest = 0
+    private var catalog: ExplorationCatalog?
     private(set) var stops: [PlannerStop] = []
     /// Set once the player reorders stops; Staza then routes them as given.
     private(set) var keepOrder = false
@@ -136,8 +151,41 @@ final class RoutePlannerModel {
         focusRequest += 1
     }
 
-    /// "Generate route" would replace stops the player chose, so it should ask first.
+    /// Choosing a generated route would replace stops the player chose, so it should ask first.
     var suggestReplacesOwnStops: Bool { !stops.isEmpty && !stopsAreSuggested }
+
+    /// Sport and shape are chosen.
+    var stepsDone: Bool { sportChosen && shapeChosen }
+
+    /// The step pickers show until both are chosen or while reopened; else a summary row replaces them.
+    var showsSteps: Bool { !stepsDone || stepsOpen }
+
+    /// Everything generation needs is known.
+    var canGenerate: Bool {
+        isActive && stepsDone && start != nil && (routeType == .roundTrip || end != nil)
+    }
+
+    /// Map taps edit stops only once a route is chosen (or the player builds one from own stops).
+    var canEditStops: Bool { chosenIntent != nil || proposal != nil || !stops.isEmpty }
+
+    /// The generated routes not chosen, shown collapsed under the chosen one.
+    var otherAlternatives: [RouteProposal] {
+        guard let chosenIntent else { return alternatives }
+        return alternatives.filter { $0.intent != chosenIntent }
+    }
+
+    /// Whether the map now shows clearly another area than the routes were generated for: its center
+    /// left that area or it shows more than twice its width. Zooming in (e.g. to a chosen route) is no
+    /// new area.
+    func areaMoved(to visible: WorldBounds?) -> Bool {
+        guard let generatedArea, let visible else { return false }
+        let center = (lat: (visible.south + visible.north) / 2, lon: (visible.west + visible.east) / 2)
+        let outside = center.lat < generatedArea.south || center.lat > generatedArea.north
+            || center.lon < generatedArea.west || center.lon > generatedArea.east
+        let width = { (b: WorldBounds) in max(b.east - b.west, 1e-9) }
+        let ratio = width(visible) / width(generatedArea)
+        return outside || ratio > 2
+    }
 
     /// Opens the planner. Stops chosen with "Add to route" before are kept as route constraints.
     func open(start: GeoPoint?) {
@@ -155,6 +203,10 @@ final class RoutePlannerModel {
         proposal = nil
         failure = nil
         plannedRoute = nil
+        sportChosen = false
+        shapeChosen = false
+        stepsOpen = false
+        clearAlternatives()
     }
 
     func close() {
@@ -169,16 +221,84 @@ final class RoutePlannerModel {
         proposal = nil
         failure = nil
         intent = .default
+        sportChosen = false
+        shapeChosen = false
+        stepsOpen = false
+        clearAlternatives()
     }
 
-    func setSport(_ sport: Sport) { edit { self.sport = sport } }
+    /// Wizard step 1. Changing the sport regenerates the routes.
+    func chooseSport(_ sport: Sport) {
+        guard isIdle else { return }
+        let changed = !sportChosen || sport != self.sport
+        self.sport = sport
+        sportChosen = true
+        if shapeChosen { stepsOpen = false }
+        if changed { restartGeneration() }
+    }
 
-    func setRouteType(_ type: RouteType) {
-        edit {
-            routeType = type
-            mapMode = type == .pointToPoint && end == nil ? .pickEnd : nil
+    /// Wizard step 2. A→B first asks for the end on the map; generation waits for it.
+    func chooseShape(_ type: RouteType) {
+        guard isIdle else { return }
+        let changed = !shapeChosen || type != routeType
+        routeType = type
+        shapeChosen = true
+        stepsOpen = false
+        mapMode = type == .pointToPoint && end == nil ? .pickEnd : nil
+        if changed { restartGeneration() }
+    }
+
+    /// Reopens the wizard steps so the player can change sport or shape.
+    func reopenSteps() {
+        guard isIdle else { return }
+        stepsOpen = true
+        mapMode = nil
+    }
+
+    /// Regenerates for a new area, e.g. after the player moved the map.
+    func requestGeneration() {
+        guard canGenerate, isIdle else { return }
+        generateRequest += 1
+    }
+
+    /// Picks a generated route: its collectibles and the opportunity Flowlines it rides become the stops.
+    func choose(_ suggestion: RouteProposal) {
+        guard isIdle else { return }
+        cancelReroute()
+        let byId = Dictionary((catalog?.collectibles ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let ridden = Set((suggestion.traversedFlowlines ?? []).map(\.id))
+        let flowlineStops = (catalog?.flowlines ?? []).filter { !$0.completed && ridden.contains($0.id) }
+        stops = suggestion.includedTargetIds.compactMap { byId[$0] }.map(PlannerStop.collectible)
+            + flowlineStops.map(PlannerStop.flowline)
+        keepOrder = false
+        stopsAreSuggested = true
+        focusedStopKey = nil
+        failure = nil
+        chosenIntent = suggestion.intent
+        proposal = suggestion
+    }
+
+    /// Drops the generated routes; suggested stops go with them, the player's own stops stay.
+    private func clearAlternatives() {
+        alternatives = []
+        chosenIntent = nil
+        generatedArea = nil
+        catalog = nil
+        if stopsAreSuggested {
+            stops = []
+            stopsAreSuggested = false
+            focusedStopKey = nil
         }
     }
+
+    private func restartGeneration() {
+        cancelReroute()
+        clearAlternatives()
+        proposal = nil
+        failure = nil
+        requestGeneration()
+    }
+
 
     /// Toggles what the next map tap does.
     func toggleMapMode(_ mode: MapMode) {
@@ -188,9 +308,25 @@ final class RoutePlannerModel {
     }
 
     func setStart(_ point: GeoPoint) {
-        edit {
-            start = point
-            if mapMode == .pickStart { mapMode = nil }
+        guard isIdle else { return }
+        start = point
+        if mapMode == .pickStart { mapMode = nil }
+        endpointChanged()
+    }
+
+    private func setEnd(_ point: GeoPoint) {
+        guard isIdle else { return }
+        end = point
+        mapMode = nil
+        endpointChanged()
+    }
+
+    /// A new start or end reroutes a chosen or own route; otherwise the routes are generated again.
+    private func endpointChanged() {
+        if chosenIntent != nil || (proposal != nil && !stopsAreSuggested) {
+            rerouting {}
+        } else {
+            restartGeneration()
         }
     }
 
@@ -200,8 +336,10 @@ final class RoutePlannerModel {
         guard isActive, isIdle else { return false }
         switch mapMode {
         case .pickStart: setStart(point)
-        case .pickEnd: edit { end = point; mapMode = nil }
-        case nil: toggle(.waypoint(point))
+        case .pickEnd: setEnd(point)
+        case nil:
+            guard canEditStops else { return false }
+            toggle(.waypoint(point))
         }
         return true
     }
@@ -209,7 +347,7 @@ final class RoutePlannerModel {
     /// A Flowline or collectible tap adds/removes a stop unless the player is picking an endpoint.
     @discardableResult
     func mapSelected(_ stop: PlannerStop) -> Bool {
-        guard isActive, isIdle, mapMode == nil else { return false }
+        guard isActive, isIdle, mapMode == nil, canEditStops else { return false }
         toggle(stop)
         return true
     }
@@ -221,7 +359,7 @@ final class RoutePlannerModel {
             remove(stop)
             return
         }
-        edit {
+        rerouting {
             stops.append(stop)
             stopsAreSuggested = false
         }
@@ -266,30 +404,37 @@ final class RoutePlannerModel {
         }
     }
 
-    /// "Generate route": proposes a route in the explored area. Its stops are the included collectibles and
-    /// the opportunity Flowlines it rides; the player can edit them.
-    func suggest(in bounds: WorldBounds, catalog: (String) -> WorldCollectible?) async {
+    /// Generates Glide, Chill and Explore for the planning area in one request. The routes are listed;
+    /// none is chosen yet, so the player's stops stay untouched.
+    func generate(in bounds: WorldBounds) async {
         guard isIdle else { return }
         cancelReroute()
         guard let start else { return fail(.missingStart) }
-        let request = SuggestRequest(area: PlanArea(bounds: bounds, zoom: 12), sport: sport.rawValue, start: start, intent: intent)
+        let end = routeType == .pointToPoint ? self.end : nil
+        if routeType == .pointToPoint, end == nil { return fail(.missingEnd) }
+        let area = end.map { Self.including($0, in: bounds) } ?? bounds
+        let request = SuggestRequest(area: PlanArea(bounds: area, zoom: 12), sport: sport.rawValue, start: start,
+                                     intents: RouteIntent.allCases, routeType: routeType.rawValue, end: end)
+        clearAlternatives()
+        proposal = nil
         await run(.suggesting, unroutable: .noSuggestion) { [self] in
             let result: GeneratedExploration = try await api.post("/api/explorations/generate", body: request)
-            guard let suggestion = result.proposals.first else {
+            guard !result.proposals.isEmpty else {
                 failure = .noSuggestion
                 return
             }
-            let byId = Dictionary(result.catalog.collectibles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            let ridden = Set((suggestion.traversedFlowlines ?? []).map(\.id))
-            let flowlineStops = (result.catalog.flowlines ?? []).filter { !$0.completed && ridden.contains($0.id) }
-            stops = suggestion.includedTargetIds.compactMap { byId[$0] ?? catalog($0) }.map(PlannerStop.collectible)
-                + flowlineStops.map(PlannerStop.flowline)
-            keepOrder = false
-            stopsAreSuggested = true
-            focusedStopKey = nil
-            routeType = .roundTrip
-            proposal = suggestion
+            catalog = result.catalog
+            generatedArea = area
+            alternatives = RouteIntent.allCases.compactMap { intent in result.proposals.first { $0.intent == intent } }
+            if alternatives.isEmpty { alternatives = result.proposals }
         }
+    }
+
+    /// The bounds grown to contain the point with a small margin; the server needs an A→B end inside.
+    static func including(_ point: GeoPoint, in bounds: WorldBounds) -> WorldBounds {
+        let pad = 0.01
+        return WorldBounds(west: min(bounds.west, point.lon - pad), south: min(bounds.south, point.lat - pad),
+                           east: max(bounds.east, point.lon + pad), north: max(bounds.north, point.lat + pad))
     }
 
     /// "Save Exploration": persists the routed plan as a planned QuestInstance with its PlannedRoute and
@@ -355,7 +500,7 @@ final class RoutePlannerModel {
     /// remaining stops are routed again, so several quick moves trigger only one request.
     private func rerouting(_ change: () -> Void) {
         guard isIdle else { return }
-        let wasRouted = proposal != nil || reroute != nil
+        let wasRouted = proposal != nil || reroute != nil || chosenIntent != nil
         edit(change)
         cancelReroute()
         guard wasRouted, !stops.isEmpty else { return }

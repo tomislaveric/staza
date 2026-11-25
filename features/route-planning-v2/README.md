@@ -1,5 +1,9 @@
 # route-planning-v2
 
+> **Planner flow superseded by [route-planner-wizard](../route-planner-wizard/README.md):** Suggest route
+> and Route are replaced by the sport/shape wizard with three automatically generated routes and
+> automatic rerouting after stop edits.
+
 ## Goal
 
 Simplify the iOS World route-planner sheet shown in the approved screenshot. Replace its dense stack of controls and long instructions with a guided, compact flow that makes map-based stop selection clear and asks for a start only when one is not already available.
