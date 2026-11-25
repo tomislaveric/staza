@@ -53,6 +53,8 @@ struct WorldMapView: UIViewRepresentable {
     let onSelect: (WorldSelectionKind, String) -> Void
     /// A tap on the map that hit no collectible or Flowline.
     var onMapTap: (GeoPoint) -> Void = { _ in }
+    /// When set, every tap reports its coordinate through `onMapTap`, even over a collectible or Flowline.
+    var picksPoint = false
     var onUserLocation: (GeoPoint?) -> Void = { _ in }
     @Binding var tracking: WorldTracking
     /// Height covered by the bottom sheet; the map keeps its focus above it.
@@ -94,6 +96,7 @@ struct WorldMapView: UIViewRepresentable {
         coordinator.onExploreCircleChange = onExploreCircleChange
         coordinator.onSelect = onSelect
         coordinator.onMapTap = onMapTap
+        coordinator.picksPoint = picksPoint
         coordinator.onUserLocation = onUserLocation
         coordinator.onTrackingChange = { tracking = $0 }
         coordinator.onLocationDenied = onLocationDenied
@@ -128,6 +131,7 @@ struct WorldMapView: UIViewRepresentable {
         private var focusRequest = 0
         var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
         var onMapTap: (GeoPoint) -> Void = { _ in }
+        var picksPoint = false
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
         var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selection: WorldSelection?) = ([], [], .empty, nil)
         var explorationRoutes: [ExplorationRoute] = []
@@ -273,7 +277,7 @@ struct WorldMapView: UIViewRepresentable {
                 (.collectible, [Self.iconLayer, Self.circleLayer]),
                 (.flowline, ["world-selected-flowline-line", "world-quest-flowlines-line", "world-flowlines-line"])
             ]
-            for (kind, layers) in groups {
+            for (kind, layers) in groups where !picksPoint {
                 let hit = map.visibleFeatures(in: hitArea, styleLayerIdentifiers: layers)
                     .compactMap { $0.attribute(forKey: "id") as? String }.first
                 if let hit {

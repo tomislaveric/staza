@@ -65,6 +65,7 @@ struct WorldView: View {
                     onExploreCircleChange: { model.exploreCircle = $0 },
                     onSelect: { kind, id in select(kind, id: id, model, planner) },
                     onMapTap: { planner.mapTapped($0) },
+                    picksPoint: planner.isActive && planner.mapMode != nil,
                     onUserLocation: { userLocation = $0 },
                     tracking: $tracking,
                     bottomInset: sheetHeight,
@@ -213,16 +214,18 @@ struct WorldView: View {
         planner.open(start: start)
     }
 
-    /// While the planner adds Flowlines or collectibles, map taps add them as stops; otherwise they open details.
+    /// Planner map taps add stops directly unless the player is explicitly picking an endpoint.
     private func select(_ kind: WorldSelectionKind, id: String, _ model: WorldModel, _ planner: RoutePlannerModel) {
-        switch (kind, planner.isActive ? planner.mapMode : nil) {
-        case (.flowline, .addFlowline?):
-            if let flowline = model.flowline(id: id) { planner.toggle(.flowline(flowline)) }
-        case (.collectible, .addCollectible?):
-            if let item = model.collectible(id: id) { planner.toggle(.collectible(item)) }
-        default:
-            model.select(kind, id: id)
+        if planner.isActive {
+            switch kind {
+            case .flowline:
+                if let flowline = model.flowline(id: id) { planner.mapSelected(.flowline(flowline)) }
+            case .collectible:
+                if let item = model.collectible(id: id) { planner.mapSelected(.collectible(item)) }
+            }
+            return
         }
+        model.select(kind, id: id)
     }
 
     /// The planner's stops, emphasised on the map like quest targets.

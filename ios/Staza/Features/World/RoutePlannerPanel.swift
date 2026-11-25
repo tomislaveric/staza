@@ -35,41 +35,35 @@ struct RoutePlannerPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
-            Picker("planner.sport", selection: Binding(get: { planner.sport }, set: { planner.setSport($0) })) {
-                ForEach(RoutePlannerModel.Sport.allCases) { Text(sportLabel($0)).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .disabled(!planner.isIdle)
-
-            pointRow("planner.start", point: planner.start, mode: .pickStart) {
-                if let userLocation {
-                    Button { planner.setStart(userLocation) } label: { Image(systemName: "location.fill") }
-                        .buttonStyle(.stazaSecondary)
-                        .accessibilityLabel(Text("planner.locate"))
+            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
+                SectionHeader("planner.sport")
+                Picker("planner.sport", selection: Binding(get: { planner.sport }, set: { planner.setSport($0) })) {
+                    ForEach(RoutePlannerModel.Sport.allCases) { Text(sportLabel($0)).tag($0) }
                 }
+                .pickerStyle(.segmented)
+                .disabled(!planner.isIdle)
             }
-            Picker("planner.routeType", selection: Binding(get: { planner.routeType }, set: { planner.setRouteType($0) })) {
-                Text("planner.roundTrip").tag(RoutePlannerModel.RouteType.roundTrip)
-                Text("planner.oneWay").tag(RoutePlannerModel.RouteType.pointToPoint)
-            }
-            .pickerStyle(.segmented)
-            .disabled(!planner.isIdle)
-            if planner.routeType == .pointToPoint {
-                pointRow("planner.end", point: planner.end, mode: .pickEnd) { EmptyView() }
-            }
-
-            HStack(spacing: StazaSpacing.sm) {
-                addButton("planner.add.flowline", mode: .addFlowline, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                addButton("planner.add.collectible", mode: .addCollectible, systemImage: "mappin")
-                addButton("planner.add.waypoint", mode: .addWaypoint, systemImage: "mappin.and.ellipse")
-            }
-            if let hint { Label(hint, systemImage: "hand.tap").font(StazaFont.footnote).foregroundStyle(StazaColor.accent) }
 
             RouteIntentPicker(intent: Binding(get: { planner.intent }, set: { planner.intent = $0 }))
                 .disabled(!planner.isIdle)
                 .accessibilityIdentifier("plannerIntent")
 
             stops
+
+            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
+                SectionHeader("planner.routeShape")
+                Picker("planner.routeType", selection: Binding(get: { planner.routeType }, set: { planner.setRouteType($0) })) {
+                    Text("planner.roundTrip").tag(RoutePlannerModel.RouteType.roundTrip)
+                    Text("planner.oneWay").tag(RoutePlannerModel.RouteType.pointToPoint)
+                }
+                .pickerStyle(.segmented)
+                .disabled(!planner.isIdle)
+                if planner.routeType == .pointToPoint {
+                    pointRow("planner.end", point: planner.end, mode: .pickEnd)
+                }
+            }
+
+            startSection
             result
             if let failure = planner.failure {
                 Label { message(failure) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
@@ -88,7 +82,7 @@ struct RoutePlannerPanel: View {
 
     // MARK: Points
 
-    private func pointRow<Extra: View>(_ title: LocalizedStringKey, point: GeoPoint?, mode: RoutePlannerModel.MapMode, @ViewBuilder extra: () -> Extra) -> some View {
+    private func pointRow(_ title: LocalizedStringKey, point: GeoPoint?, mode: RoutePlannerModel.MapMode) -> some View {
         let picking = planner.mapMode == mode
         return HStack(spacing: StazaSpacing.sm) {
             VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
@@ -100,41 +94,87 @@ struct RoutePlannerPanel: View {
                 }
             }
             Spacer(minLength: StazaSpacing.sm)
-            Button(picking ? "planner.tapMap" : "planner.selectOnMap") { planner.toggleMapMode(mode) }
-                .buttonStyle(.stazaSecondary)
-                .accessibilityAddTraits(picking ? .isSelected : [])
-            extra()
-        }
-        .disabled(!planner.isIdle)
-    }
-
-    private func addButton(_ title: LocalizedStringKey, mode: RoutePlannerModel.MapMode, systemImage: String) -> some View {
-        let active = planner.mapMode == mode
-        return Button { planner.toggleMapMode(mode) } label: {
-            VStack(spacing: StazaSpacing.xxs) {
-                Image(systemName: systemImage)
-                Text(title).font(StazaFont.caption.weight(.semibold)).multilineTextAlignment(.center).lineLimit(2)
+            if picking {
+                Label("planner.hint.end", systemImage: "hand.tap")
+                    .font(StazaFont.footnote)
+                    .foregroundStyle(StazaColor.accent)
+            } else {
+                Button("planner.selectOnMap") { planner.toggleMapMode(mode) }
+                    .buttonStyle(.stazaSecondary)
+                    .disabled(!planner.isIdle)
             }
-            .foregroundStyle(active ? StazaColor.onAccent : StazaColor.textPrimary)
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .background(active ? StazaColor.accent : StazaColor.surfaceRaised.opacity(0.85), in: RoundedRectangle(cornerRadius: StazaRadius.chip, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: StazaRadius.chip, style: .continuous).strokeBorder(active ? StazaColor.accent : StazaColor.border, lineWidth: 1))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .disabled(!planner.isIdle)
-        .accessibilityAddTraits(active ? .isSelected : [])
     }
 
-    private var hint: LocalizedStringKey? {
-        switch planner.mapMode {
-        case .pickStart: "planner.hint.start"
-        case .pickEnd: "planner.hint.end"
-        case .addFlowline: "planner.hint.flowline"
-        case .addCollectible: "planner.hint.collectible"
-        case .addWaypoint: "planner.hint.waypoint"
-        case nil: nil
+    private var startSection: some View {
+        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            SectionHeader("planner.start")
+            if planner.start != nil {
+                HStack(spacing: StazaSpacing.sm) {
+                    Label("planner.start.set", systemImage: "location.fill")
+                        .font(StazaFont.subheadline)
+                        .foregroundStyle(StazaColor.textPrimary)
+                    Spacer(minLength: StazaSpacing.sm)
+                    Menu {
+                        Button("planner.selectOnMap", systemImage: "map") {
+                            planner.toggleMapMode(.pickStart)
+                        }
+                        if let userLocation {
+                            Button("planner.locate", systemImage: "location.fill") {
+                                planner.setStart(userLocation)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .foregroundStyle(StazaColor.textPrimary)
+                            .frame(minWidth: 36, minHeight: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!planner.isIdle)
+                    .accessibilityLabel(Text("planner.start.change"))
+                }
+            } else {
+                HStack(spacing: StazaSpacing.sm) {
+                    VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                        if planner.mapMode == .pickStart {
+                            Label("planner.hint.start", systemImage: "hand.tap")
+                                .font(StazaFont.footnote)
+                                .foregroundStyle(StazaColor.accent)
+                        } else {
+                            Text("planner.start.prompt")
+                                .font(StazaFont.footnote)
+                                .foregroundStyle(StazaColor.textMuted)
+                        }
+                    }
+                    Spacer(minLength: StazaSpacing.xs)
+                    if planner.mapMode != .pickStart {
+                        Button("planner.selectOnMap", systemImage: "map") {
+                            planner.toggleMapMode(.pickStart)
+                        }
+                        .buttonStyle(.stazaSecondary)
+                        .disabled(!planner.isIdle)
+                    }
+                    if let userLocation {
+                        Button { planner.setStart(userLocation) } label: {
+                            Image(systemName: "location.fill")
+                                .frame(minWidth: 36, minHeight: 36)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!planner.isIdle)
+                        .accessibilityLabel(Text("planner.locate"))
+                    }
+                }
+            }
+            if planner.mapMode == .pickStart, planner.start != nil {
+                Label("planner.hint.start", systemImage: "hand.tap")
+                    .font(StazaFont.footnote)
+                    .foregroundStyle(StazaColor.accent)
+            }
         }
+        .accessibilityIdentifier("plannerStart")
     }
 
     // MARK: Stops
@@ -143,6 +183,9 @@ struct RoutePlannerPanel: View {
     private var stops: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.sm) {
             SectionHeader("planner.stops")
+            Text("planner.stops.mapHint")
+                .font(StazaFont.footnote)
+                .foregroundStyle(StazaColor.textMuted)
             if planner.stops.isEmpty {
                 Text("planner.stops.empty").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
             } else {
@@ -255,7 +298,7 @@ struct RoutePlannerPanel: View {
                 }
             }
             .buttonStyle(.stazaSecondary)
-            .disabled(!planner.isIdle)
+            .disabled(!planner.isIdle || planner.start == nil)
             .accessibilityIdentifier("plannerSuggest")
 
             if planner.proposal == nil {
@@ -267,7 +310,7 @@ struct RoutePlannerPanel: View {
                     }
                 }
                 .buttonStyle(.stazaPrimaryWide)
-                .disabled(!planner.isIdle || planner.stops.isEmpty)
+                .disabled(!planner.isIdle || planner.start == nil || planner.stops.isEmpty)
                 .accessibilityIdentifier("plannerRoute")
             } else {
                 Button(action: onSave) {

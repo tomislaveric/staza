@@ -68,8 +68,8 @@ final class RoutePlannerModel {
         case cycling, running, hiking
         var id: String { rawValue }
     }
-    /// What the next map tap does.
-    enum MapMode: Equatable { case pickStart, pickEnd, addFlowline, addCollectible, addWaypoint }
+    /// What the next empty-map tap does. With no active pick, it adds a waypoint.
+    enum MapMode: Equatable { case pickStart, pickEnd }
     enum Failure: Equatable {
         case missingStart, missingEnd, noStops, noRoute, noSuggestion
         case server(String?)
@@ -124,7 +124,7 @@ final class RoutePlannerModel {
         end = nil
         routeType = .roundTrip
         keepOrder = false
-        mapMode = start == nil ? .pickStart : nil
+        mapMode = nil
         proposal = nil
         failure = nil
         plannedRoute = nil
@@ -164,16 +164,23 @@ final class RoutePlannerModel {
         }
     }
 
-    /// A map tap on empty ground: sets a pending endpoint or adds a waypoint. Returns whether it was used.
+    /// A map tap on empty ground: sets an explicitly picked endpoint or adds a waypoint.
     @discardableResult
     func mapTapped(_ point: GeoPoint) -> Bool {
         guard isActive, isIdle else { return false }
         switch mapMode {
         case .pickStart: setStart(point)
         case .pickEnd: edit { end = point; mapMode = nil }
-        case .addWaypoint: toggle(.waypoint(point))
-        default: return false
+        case nil: toggle(.waypoint(point))
         }
+        return true
+    }
+
+    /// A Flowline or collectible tap adds/removes a stop unless the player is picking an endpoint.
+    @discardableResult
+    func mapSelected(_ stop: PlannerStop) -> Bool {
+        guard isActive, isIdle, mapMode == nil else { return false }
+        toggle(stop)
         return true
     }
 

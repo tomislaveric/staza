@@ -176,7 +176,11 @@ enclosing `bbox` for older servers. The explored circle is outlined and framed d
 **iOS** (`ExploreRevealViews.swift`, `ExploreModels.swift`, `RoutePlannerModel.swift`,
 `WorldMapView.swift`, `WorldModel.swift`, `Localizable.xcstrings`): the same behaviour, mirrored.
 `RouteIntent` names are not localized; `ExploreAction`/`exploreAllowed` are removed and the
-explored `area` is decoded (optional for older servers).
+explored `area` is decoded (optional for older servers). The World route planner presents sport,
+route feeling, stops, route shape and then a missing-start prompt in one scrollable sheet. Flowline
+and collectible map taps toggle stops directly; empty-map taps add waypoints unless start or end
+selection is active; while picking a start or end, any map tap sets that point. A valid existing start is shown as a compact status, and a missing start is
+picked only after the player asks for it.
 
 ## Implementation plan
 
@@ -209,9 +213,11 @@ explored `area` is decoded (optional for older servers).
   secondary.
 - Chill produces a shorter, simpler route with few or no POIs.
 - The start comes from the last Locate me position inside the explored area. Without one, the
-  player must tap the map before Generate is enabled.
+  player must select a start on the map before Generate is enabled; iOS asks for it in the final
+  planner section.
 - The editor (add or remove Flowlines and Collectibles, start, end point or round trip,
-  waypoints, reorder, reroute, Save Exploration) works unchanged on the generated route.
+  waypoints, reorder, reroute, Save Exploration) works unchanged on the generated route. On iOS,
+  map taps toggle Flowline/collectible stops directly and add waypoints on empty map by default.
 - No UI text uses speed wording for the intents.
 
 ## Constraints

@@ -30,7 +30,6 @@ final class RoutePlannerModelTests: XCTestCase {
         planner.open(start: GeoPoint(lat: 48, lon: 11))
         XCTAssertEqual(planner.stops.map(\.key), ["flowline:f1"], "stops added before opening are kept")
         planner.toggle(.collectible(collectible("a")))
-        planner.toggleMapMode(.addWaypoint)
         XCTAssertTrue(planner.mapTapped(GeoPoint(lat: 48.1, lon: 11.3)))
 
         await planner.route()
@@ -56,9 +55,10 @@ final class RoutePlannerModelTests: XCTestCase {
         let transport = StubTransport([])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
         planner.open(start: nil)
-        XCTAssertEqual(planner.mapMode, .pickStart)
+        XCTAssertNil(planner.mapMode, "start selection is deferred until requested")
         await planner.route()
         XCTAssertEqual(planner.failure, .missingStart)
+        planner.toggleMapMode(.pickStart)
         planner.mapTapped(GeoPoint(lat: 48, lon: 11))
         XCTAssertEqual(planner.start, GeoPoint(lat: 48, lon: 11))
         await planner.route()
@@ -70,6 +70,58 @@ final class RoutePlannerModelTests: XCTestCase {
         await planner.route()
         XCTAssertEqual(planner.failure, .missingEnd)
         XCTAssertTrue(transport.requests.isEmpty)
+    }
+
+    func testEmptyMapAddsWaypointUnlessEndpointPickIsActive() {
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([])))
+        let start = GeoPoint(lat: 48, lon: 11)
+        let waypoint = GeoPoint(lat: 48.1, lon: 11.1)
+        let end = GeoPoint(lat: 48.2, lon: 11.2)
+        planner.open(start: start)
+
+        XCTAssertTrue(planner.mapTapped(waypoint))
+        XCTAssertEqual(planner.stops.map(\.key), [PlannerStop.waypointKey(waypoint)])
+        planner.setRouteType(.pointToPoint)
+        XCTAssertEqual(planner.mapMode, .pickEnd)
+        XCTAssertTrue(planner.mapTapped(end))
+        XCTAssertEqual(planner.end, end)
+        XCTAssertEqual(planner.stops.map(\.key), [PlannerStop.waypointKey(waypoint)])
+        XCTAssertNil(planner.mapMode)
+    }
+
+    func testMapFeatureTapsToggleStopsOnlyWhenNotPickingAnEndpoint() {
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([])))
+        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        let stop = PlannerStop.flowline(flowline("f1"))
+        let target = PlannerStop.collectible(collectible("c1"))
+
+        XCTAssertTrue(planner.mapSelected(stop))
+        XCTAssertTrue(planner.contains(stop))
+        XCTAssertTrue(planner.mapSelected(stop))
+        XCTAssertFalse(planner.contains(stop))
+        XCTAssertTrue(planner.mapSelected(target))
+        XCTAssertTrue(planner.contains(target))
+
+        planner.setRouteType(.pointToPoint)
+        XCTAssertFalse(planner.mapSelected(stop))
+        planner.toggleMapMode(.pickStart)
+        XCTAssertFalse(planner.mapSelected(target))
+        XCTAssertTrue(planner.contains(target))
+    }
+
+    func testMissingStartDoesNotInterceptWaypointTapAndCanBePickedExplicitly() {
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([])))
+        planner.open(start: nil)
+        let waypoint = GeoPoint(lat: 48.1, lon: 11.1)
+        let start = GeoPoint(lat: 48.2, lon: 11.2)
+
+        XCTAssertTrue(planner.mapTapped(waypoint))
+        XCTAssertNil(planner.start)
+        XCTAssertEqual(planner.stops.map(\.key), [PlannerStop.waypointKey(waypoint)])
+        planner.toggleMapMode(.pickStart)
+        XCTAssertTrue(planner.mapTapped(start))
+        XCTAssertEqual(planner.start, start)
+        XCTAssertEqual(planner.stops.map(\.key), [PlannerStop.waypointKey(waypoint)])
     }
 
     func testGenerateReplacesStopsWithTheRouteCollectiblesAndRiddenOpportunities() async throws {

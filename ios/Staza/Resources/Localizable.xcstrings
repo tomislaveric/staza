@@ -2312,54 +2312,6 @@
         }
       }
     },
-    "planner.add.collectible" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sammelobjekt hinzufügen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add Collectible"
-          }
-        }
-      }
-    },
-    "planner.add.flowline" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flowline hinzufügen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add Flowline"
-          }
-        }
-      }
-    },
-    "planner.add.waypoint" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wegpunkt hinzufügen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add waypoint"
-          }
-        }
-      }
-    },
     "planner.disclaimer" : {
       "localizations" : {
         "de" : {
@@ -2488,22 +2440,6 @@
         }
       }
     },
-    "planner.hint.collectible" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wähle ein Sammelobjekt auf der Karte."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select a collectible on the map."
-          }
-        }
-      }
-    },
     "planner.hint.end" : {
       "localizations" : {
         "de" : {
@@ -2520,22 +2456,6 @@
         }
       }
     },
-    "planner.hint.flowline" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wähle eine entdeckte Flowline auf der Karte."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select a revealed Flowline on the map."
-          }
-        }
-      }
-    },
     "planner.hint.start" : {
       "localizations" : {
         "de" : {
@@ -2548,22 +2468,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tap the map to set your start."
-          }
-        }
-      }
-    },
-    "planner.hint.waypoint" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tippe auf die Karte, um einen Wegpunkt hinzuzufügen."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tap the map to add a waypoint."
           }
         }
       }
@@ -2696,6 +2600,22 @@
         }
       }
     },
+    "planner.routeShape" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routenform"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route shape"
+          }
+        }
+      }
+    },
     "planner.routeType" : {
       "localizations" : {
         "de" : {
@@ -2824,6 +2744,54 @@
         }
       }
     },
+    "planner.start.change" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start ändern"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change start"
+          }
+        }
+      }
+    },
+    "planner.start.prompt" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle einen Start auf der Karte."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a start on the map."
+          }
+        }
+      }
+    },
+    "planner.start.set" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start festgelegt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start set"
+          }
+        }
+      }
+    },
     "planner.stop.down" : {
       "localizations" : {
         "de" : {
@@ -2925,13 +2893,29 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Füge entdeckte Flowlines, Sammelobjekte oder Wegpunkte hinzu. Staza verbindet nur, was du auswählst."
+            "value" : "Noch keine Stopps."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Add revealed Flowlines, collectibles or waypoints. Staza only connects what you choose."
+            "value" : "No stops yet."
+          }
+        }
+      }
+    },
+    "planner.stops.mapHint" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tippe Flowlines oder Sammelobjekte an, auf freie Karte für einen Wegpunkt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap Flowlines or collectibles, or empty map for a waypoint."
           }
         }
       }
@@ -2969,6 +2953,7 @@
       }
     },
     "planner.tapMap" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -5278,22 +5263,6 @@
         }
       }
     },
-    "world.explore.clamped" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erkundet wurde der markierte Bereich in der Kartenmitte."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Explored the framed area in the map center."
-          }
-        }
-      }
-    },
     "world.explore.breakdown.plain %lld" : {
       "localizations" : {
         "de" : {
@@ -5330,6 +5299,22 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "world.explore.clamped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkundet wurde der markierte Bereich in der Kartenmitte."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Explored the framed area in the map center."
           }
         }
       }
