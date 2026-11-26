@@ -166,19 +166,19 @@ final class RoutePlannerModelTests: XCTestCase {
 
     private let aim = GeoPoint(lat: 48.25, lon: 11.25)
 
-    /// A generate response with one route; it rides f1 and f2 and includes b and a.
+    /// A generate response with one baseline route and f1 as an optional enhancement.
     private func generated() -> String {
         let line = #""geometry":{"type":"LineString","coordinates":[[11.1,48.1],[11.2,48.2]]}"#
         let flowlines = #"[{"id":"f1","name":"Open",\#(line),"completed":false},{"id":"f2","name":"Done",\#(line),"completed":true},{"id":"f3","name":"Skipped",\#(line),"completed":false}]"#
         let catalog = #"{"collectibles":[{"id":"a","name":"A","latitude":48,"longitude":11,"found":false},{"id":"b","name":"B","latitude":48,"longitude":11,"found":false}],"flowlines":\#(flowlines)}"#
-        let ridden = #","traversedFlowlines":[{"id":"f1","name":"Open"},{"id":"f2","name":"Done"}]"#
-        return #"{"explorationId":"e1","proposals":[\#(proposal("pc", targets: ["b", "a"], extra: ridden))],"catalog":\#(catalog)}"#
+        let option = #"{"flowline":{"id":"f1","name":"Open",\#(line),"completed":false},"rationale":"A flow ride close to your route."}"#
+        return #"{"explorationId":"e1","proposals":[\#(proposal("pc", targets: ["b"]))],"catalog":\#(catalog),"flowlineEnhancements":[\#(option)]}"#
     }
 
     func testWizardGeneratesOneRouteWithEditableStops() async throws {
         let transport = StubTransport([.init(status: 200, body: generated())])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.open(start: GeoPoint(lat: 48, lon: 11), destination: aim, destinationId: "b")
         XCTAssertTrue(planner.showsSteps)
         planner.chooseSport(.running)
         XCTAssertEqual(planner.generateRequest, 0, "the shape is still missing")
@@ -197,10 +197,11 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertEqual((body["target"] as? [String: Double])?["lat"], 48.25)
         XCTAssertTrue(planner.generated)
         XCTAssertEqual(planner.proposal?.id, "pc", "the one route is shown right away")
-        XCTAssertEqual(planner.stops.map(\.key), ["b", "a", "flowline:f1"], "its collectibles and ridden opportunities")
+        XCTAssertEqual(planner.stops.map(\.key), ["b"], "only the selected destination becomes a baseline stop")
         XCTAssertTrue(planner.canEditStops)
         XCTAssertFalse(planner.suggestReplacesOwnStops, "regenerating untouched stops needs no confirmation")
         planner.remove(planner.stops[0])
+        planner.toggle(.collectible(collectible("a")))
         XCTAssertTrue(planner.suggestReplacesOwnStops, "an edited route is the player's own")
 
         planner.reopenSteps()
@@ -211,10 +212,33 @@ final class RoutePlannerModelTests: XCTestCase {
         planner.reopenSteps()
         planner.chooseSport(.hiking)
         XCTAssertEqual(planner.generateRequest, 1, "a new sport reroutes edited stops instead of replacing them")
-        XCTAssertEqual(planner.stops.map(\.key), ["a", "flowline:f1"], "the player's edited stops stay")
+        XCTAssertEqual(planner.stops.map(\.key), ["a"], "the player's edited stops stay")
 
         planner.close()
         XCTAssertFalse(planner.sportChosen, "the wizard starts over next time")
+    }
+
+    func testOptionalFlowlineEnhancementReroutesBaselineAndShowsActualDeltas() async throws {
+        let enhanced = proposal("p2", extra: #","flowlineIds":["f1"]"#)
+        let metrics = #"{"distanceDeltaM":1200,"durationDeltaS":300,"elevationGainDeltaM":80}"#
+        let transport = StubTransport([
+            .init(status: 200, body: generated()),
+            .init(status: 200, body: #"{"proposal":\#(enhanced),"metrics":\#(metrics),"flowlineIds":["f1"]}"#)
+        ])
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
+        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.chooseSport(.cycling)
+        planner.chooseShape(.roundTrip)
+        await planner.generate(toward: aim)
+        await planner.setFlowlineEnhancement("f1", enabled: true)
+
+        XCTAssertEqual(planner.proposal?.id, "p2")
+        XCTAssertEqual(planner.selectedEnhancementIds, ["f1"])
+        XCTAssertEqual(planner.enhancementMetrics?.distanceDeltaM, 1200)
+        XCTAssertEqual(transport.requests.last?.url?.path, "/api/explorations/e1/enhance")
+        let body = try json(transport.requests.last)
+        XCTAssertEqual(body["proposalId"] as? String, "pc", "every combination is compared with the baseline")
+        XCTAssertEqual(body["flowlineIds"] as? [String], ["f1"])
     }
 
     func testAddingAStopToTheGeneratedRouteReroutes() async throws {

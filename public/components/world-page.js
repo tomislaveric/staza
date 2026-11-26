@@ -154,14 +154,13 @@ export const WorldStats = (truncated) => truncated
   : "";
 
 /**
- * Primary Explore CTA plus a small "Plan route" entry; hidden Flowlines are never drawn.
+ * The sole route-planning entry point is Explore; hidden Flowlines are never drawn.
  * The CTA stays disabled until the map is ready (`ready: false`) or while exploring.
  */
-export const WorldExploreControls = ({ busy = false, ready = true, stopCount = 0 } = {}) => {
+export const WorldExploreControls = ({ busy = false, ready = true } = {}) => {
   const cta = exploreCta();
   return `
     <button class="world-explore" type="button" data-world-explore="${cta.action}"${busy || !ready ? " disabled" : ""}>${escapeHtml(cta.label)}</button>
-    <button class="world-plan-route" type="button" data-world-plan>${stopCount ? `Plan route \u00b7 ${stopCount}` : "Plan route"}</button>
   `;
 };
 
@@ -391,9 +390,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   const renderControls = () => {
     if (aimHost) aimHost.hidden = !(planner && showsAim(planner));
     ctaHost.hidden = Boolean(planner);
-    ctaHost.innerHTML = WorldExploreControls({ busy: explore?.phase === "exploring", stopCount: draftStops.length });
+    ctaHost.innerHTML = WorldExploreControls({ busy: explore?.phase === "exploring" });
     ctaHost.querySelector("[data-world-explore]")?.addEventListener("click", () => void exploreArea());
-    ctaHost.querySelector("[data-world-plan]")?.addEventListener("click", () => openPlanner());
     exploreCardHost.hidden = !explore || Boolean(planner);
     exploreCardHost.innerHTML = explore && !planner ? ExploreResultCard(explore) : "";
     const on = (selector, handler) => exploreCardHost.querySelectorAll(selector).forEach((button) => button.addEventListener("click", handler));
@@ -462,7 +460,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         worldMap.fitTo(geometryPoints(fartlek.geometry));
       }));
       detailHost.querySelector("[data-discoveries-generate]")?.addEventListener("click", () => void generateRoute());
-      detailHost.querySelector("[data-discoveries-plan]")?.addEventListener("click", () => openPlanner());
       bindRouteButtons();
       return;
     }
@@ -778,15 +775,21 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   function planToCollectible(id) {
     const collectible = collectibleById(id);
     if (!collectible) return;
-    const stop = collectibleStop(collectible);
-    if (!currentStops().some((item) => item.kind === "collectible" && item.id === id)) {
-      draftStops = toggleStop(currentStops(), stop);
-    }
-    openPlanner();
+    void startRouteToCollectible(collectible);
+  }
+
+  async function startRouteToCollectible(collectible) {
+    if (!session) await exploreArea();
+    if (!session || planner) return;
+    openPlanner({
+      start: generateStart(),
+      destination: { lat: collectible.latitude, lon: collectible.longitude },
+      destinationId: collectible.id
+    });
   }
 
   /** Opens the manual planner; earlier "Add to route" picks become its first stops. */
-  function openPlanner({ start, sport, routeType } = {}) {
+  function openPlanner({ start, sport, routeType, destination, destinationId } = {}) {
     if (!worldMap || planner) return;
     exploreToken += 1;
     explore = undefined;
@@ -798,7 +801,9 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       start: start ?? (homePosition ? { lat: homePosition.latitude, lon: homePosition.longitude } : undefined),
       stops: draftStops,
       sport,
-      routeType
+      routeType,
+      destination,
+      destinationId
     });
     setStatus(undefined);
     renderSidePanels();
@@ -835,11 +840,10 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   function generateRoute() {
     if (!session || planner) return;
     draftStops = [];
-    openPlanner({ start: generateStart(), sport: "cycling", routeType: "round_trip" });
+    openPlanner({ start: generateStart() });
     if (!planner) return;
     if (!planner.start) Object.assign(planner, { picking: "start" });
     renderAll();
-    if (planner.start) void generatePlannerRoute();
   }
 
   function pickPlannerPoint(point) {
@@ -891,6 +895,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     Object.assign(planner, {
       stops,
       proposal: undefined,
+      selectedEnhancementIds: [],
+      enhancementMetrics: undefined,
       stopsAreSuggested: false,
       error,
       ...(keepOrder === undefined ? {} : { keepOrder })
@@ -971,7 +977,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   /** Generates one route towards the aim (the map center); its stops become the editable list. */
   async function generatePlannerRoute() {
     if (!planner || planner.status !== "idle") return;
-    const { body, error } = buildSuggestRequest(planner, worldMap.getView().center);
+    const { body, error } = buildSuggestRequest(planner, planner.destination ?? worldMap.getView().center);
     if (error) {
       planner.error = error;
       renderDetail();
@@ -982,7 +988,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     if (planner.stopsAreSuggested) planner.stops = [];
     Object.assign(planner, {
       status: "generating", adding: undefined, picking: undefined, error: undefined, generated: false,
-      proposal: undefined, stopsAreSuggested: false, rerouteQueued: false
+      proposal: undefined, baselineProposal: undefined, explorationId: undefined, flowlineEnhancements: [],
+      selectedEnhancementIds: [], enhancementMetrics: undefined, stopsAreSuggested: false, rerouteQueued: false
     });
     if (planner.routeType === "point_to_point" && !planner.end) planner.end = body.target;
     renderAll();
@@ -995,6 +1002,9 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         status: "idle",
         generated: true,
         proposal: route,
+        baselineProposal: route,
+        explorationId: result.explorationId,
+        flowlineEnhancements: result.flowlineEnhancements ?? [],
         catalog: result.catalog,
         stops: suggestedStops(route, result.catalog),
         stopsAreSuggested: true,
@@ -1004,6 +1014,32 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     } catch (generateError) {
       if (token !== plannerToken || !planner) return;
       Object.assign(planner, { status: "idle", error: explorationErrorMessage(generateError) });
+    }
+    renderAll();
+  }
+
+  async function toggleFlowlineEnhancement(id, checked) {
+    if (!planner || planner.status !== "idle" || !planner.baselineProposal || !planner.explorationId) return;
+    const selectedEnhancementIds = checked
+      ? [...new Set([...planner.selectedEnhancementIds, id])]
+      : planner.selectedEnhancementIds.filter((item) => item !== id);
+    const token = ++plannerToken;
+    Object.assign(planner, { status: "routing", error: undefined, selectedEnhancementIds });
+    renderAll();
+    try {
+      const result = await jsonRequest("POST", `/api/explorations/${encodeURIComponent(planner.explorationId)}/enhance`, {
+        proposalId: planner.baselineProposal.id,
+        flowlineIds: selectedEnhancementIds
+      });
+      if (token !== plannerToken || !planner) return;
+      Object.assign(planner, {
+        status: "idle",
+        proposal: result.proposal,
+        enhancementMetrics: result.metrics
+      });
+    } catch (error) {
+      if (token !== plannerToken || !planner) return;
+      Object.assign(planner, { status: "idle", selectedEnhancementIds: planner.selectedEnhancementIds.filter((item) => item !== id), error: explorationErrorMessage(error) });
     }
     renderAll();
   }
@@ -1106,6 +1142,9 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     });
     on("[data-planner-route]", () => void routePlanner());
     on("[data-planner-save]", () => void savePlan());
+    detailHost.querySelectorAll("[data-planner-enhancement]").forEach((input) => {
+      input.addEventListener("change", () => void toggleFlowlineEnhancement(input.dataset.plannerEnhancement, input.checked));
+    });
   }
 
   /** "Start Exploration": separate from saving; activities count from now on. */

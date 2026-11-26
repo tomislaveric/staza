@@ -2651,16 +2651,64 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vorgeschlagene Route"
+            "value" : "Basisroute"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Suggested route"
+            "value" : "Baseline route"
           }
         }
       }
+    },
+    "planner.flowlines.delta" : {
+     "localizations" : {
+       "de" : {
+         "stringUnit" : {
+           "state" : "translated",
+           "value" : "Im Vergleich zur Basisroute"
+         }
+       },
+       "en" : {
+         "stringUnit" : {
+           "state" : "translated",
+           "value" : "Compared with baseline"
+         }
+       }
+     }
+    },
+    "planner.flowlines.note" : {
+     "localizations" : {
+       "de" : {
+         "stringUnit" : {
+           "state" : "translated",
+           "value" : "Die Basisroute funktioniert ohne diese Flowlines. Füge eine oder mehrere hinzu."
+         }
+       },
+       "en" : {
+         "stringUnit" : {
+           "state" : "translated",
+           "value" : "Your baseline route works without these. Add one or combine several."
+         }
+       }
+     }
+    },
+    "planner.flowlines.title" : {
+     "localizations" : {
+       "de" : {
+         "stringUnit" : {
+           "state" : "translated",
+           "value" : "Optionale Flowlines"
+         }
+       },
+       "en" : {
+         "stringUnit" : {
+           "state" : "translated",
+           "value" : "Optional Flowlines"
+         }
+       }
+     }
     },
     "planner.route.own" : {
       "localizations" : {
@@ -5369,6 +5417,22 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "world.explore.generateRoute" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route für dieses Ziel planen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan a route to this destination"
           }
         }
       }

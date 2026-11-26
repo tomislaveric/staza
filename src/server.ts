@@ -39,7 +39,7 @@ import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
 import { flowlinePolicyForBounds } from "./flowlinePolicy.js";
-import { parseBoundsParameter } from "./worldQuery.js";
+import { parseBoundsParameter, type GeoBounds } from "./worldQuery.js";
 import { StravaConnectionRepository, type StravaReturnLocale } from "./persistence/stravaConnectionRepository.js";
 import { StravaClient } from "./strava/client.js";
 import { StravaError } from "./strava/errors.js";
@@ -1070,9 +1070,8 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
       skipCollectibles
         ? undefined
         : areaBounds
-          // World shows the experienced world only: collected collectibles. Explore shows the rest.
-          ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit, { onlyIds: discoveredSourceIds })
-          : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit, { onlyIds: discoveredSourceIds }),
+          ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit)
+          : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
       // Only ridden Flowlines are on the map by default; opportunities come from Explore.
       // WORLD_SHOW_ALL_FLOWLINES (testing) shows every Flowline route planning may use.
       config.worldShowAllFlowlines
@@ -1140,19 +1139,30 @@ app.get("/api/quest-instances", requirePlayer, async (request: UploadRequest, re
   }
 });
 
+const loadExplorationCollectibles = async (playerId: string, bounds: GeoBounds) => {
+  const [viewport, discoveredSourceIds] = await Promise.all([
+    collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
+    activityRepository.listDiscoveredCollectibleSourceIds(playerId)
+  ]);
+  return {
+    collectibles: createWorldSnapshot(viewport.collectibles, discoveredSourceIds).collectibles,
+    truncated: viewport.truncated
+  };
+};
+const loadExplorationFlowlines = async (playerId: string, bounds: GeoBounds) => {
+  const candidates = await fartlekRepository.listWithinBounds(bounds);
+  return plannableFlowlinesForPlayer(playerId, candidates);
+};
+
 const explorationService = new ExplorationService({
+  loadCollectibles: loadExplorationCollectibles,
+  loadFlowlines: loadExplorationFlowlines,
   loadArea: async (playerId, bounds) => {
-    const [viewport, flowlineCandidates, discoveredSourceIds] = await Promise.all([
-      collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      fartlekRepository.listWithinBounds(bounds),
-      activityRepository.listDiscoveredCollectibleSourceIds(playerId)
+    const [collectibles, flowlines] = await Promise.all([
+      loadExplorationCollectibles(playerId, bounds),
+      loadExplorationFlowlines(playerId, bounds)
     ]);
-    const flowlines = await plannableFlowlinesForPlayer(playerId, flowlineCandidates);
-    return {
-      collectibles: createWorldSnapshot(viewport.collectibles, discoveredSourceIds).collectibles,
-      flowlines,
-      truncated: viewport.truncated
-    };
+    return { ...collectibles, flowlines: flowlines };
   },
   ...(config.routingServiceUrl
     ? { routing: new RoutingClient({ baseUrl: config.routingServiceUrl, timeoutMs: config.routingServiceTimeoutMs }) }
@@ -1213,6 +1223,14 @@ app.post("/api/world/explore", requirePlayer, requireCsrf, routeEditLimiter, asy
 app.post("/api/explorations/generate", requirePlayer, requireCsrf, routePlanningLimiter, async (request: UploadRequest, response, next) => {
   try {
     response.json(await explorationService.generate(request.user!.playerId, request.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/explorations/:explorationId/enhance", requirePlayer, requireCsrf, routeEditLimiter, async (request: UploadRequest, response, next) => {
+  try {
+    response.json(await explorationService.enhance(request.user!.playerId, request.params.explorationId, request.body));
   } catch (error) {
     next(error);
   }

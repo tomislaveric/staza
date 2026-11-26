@@ -218,11 +218,38 @@ struct WorldView: View {
     }
 
     private func openPlanner(_ model: WorldModel, _ planner: RoutePlannerModel, start: GeoPoint?) {
+        openPlanner(model, planner, start: start, destination: nil, destinationId: nil)
+    }
+
+    private func openPlanner(
+        _ model: WorldModel,
+        _ planner: RoutePlannerModel,
+        start: GeoPoint?,
+        destination: GeoPoint?,
+        destinationId: String? = nil
+    ) {
         model.dismissExplore()
         model.selection = nil
         model.clearHighlight()
         framed = []
-        planner.open(start: start)
+        planner.open(start: start, destination: destination, destinationId: destinationId)
+    }
+
+    private func planToCollectible(_ item: WorldCollectible, _ model: WorldModel, _ planner: RoutePlannerModel) {
+        Task {
+            if !model.hasExploreSession { await model.exploreArea(reduceMotion: reduceMotion) }
+            guard model.hasExploreSession else { return }
+            let start = model.sessionBounds.map { bounds in userLocation.flatMap { bounds.contains($0) ? $0 : nil } } ?? userLocation
+            openPlanner(model, planner, start: start,
+                        destination: GeoPoint(lat: item.latitude, lon: item.longitude), destinationId: item.id)
+        }
+    }
+
+    private func planFromExplore(_ model: WorldModel, _ planner: RoutePlannerModel) {
+        guard model.hasExploreSession else { return }
+        let target = (model.visibleArea ?? model.sessionBounds ?? model.bounds)?.center
+        let start = model.sessionBounds.map { bounds in userLocation.flatMap { bounds.contains($0) ? $0 : nil } } ?? userLocation
+        openPlanner(model, planner, start: start, destination: target)
     }
 
     /// Planner map taps add stops directly unless the player is explicitly picking an endpoint.
@@ -313,17 +340,10 @@ struct WorldView: View {
     private func sheetHeader(_ model: WorldModel, _ planner: RoutePlannerModel) -> some View {
         switch sheet.mode {
         case .browse:
-            WorldBrowseHeader(
-                model: model,
-                routeStops: planner.stops.count,
-                onExplore: { explore(model) },
-                onPlanRoute: { openPlanner(model, planner) }
-            )
+            WorldBrowseHeader(model: model, onExplore: { explore(model) })
         case .discoveries:
             DiscoveriesHeader(
-                routeStops: planner.stops.count,
                 isExploring: model.isExploring,
-                onPlanRoute: { openPlanner(model, planner) },
                 onExplore: { explore(model) }
             )
         case .planner:
@@ -353,6 +373,7 @@ struct WorldView: View {
                     // Re-selecting the current item does not change the selection; center on it anyway.
                     center(on: selection)
                 },
+                onGenerateRoute: { planFromExplore(model, planner) },
                 onZoomOut: { zoomOut(model) },
                 onEnd: {
                     framed = []
@@ -370,12 +391,27 @@ struct WorldView: View {
             )
         case .detail(let selection):
             let stop = stop(for: selection)
+            let onRoute = routeAction(for: selection, stop: stop, model: model, planner: planner)
             WorldDetailBody(
                 selection: selection,
                 isQuestTarget: model.isQuestTarget(selection),
                 inRoute: planner.contains(stop),
-                onToggleRoute: { planner.toggle(stop) }
+                onToggleRoute: onRoute
             )
+        }
+    }
+
+    private func routeAction(
+        for selection: WorldSelection,
+        stop: PlannerStop,
+        model: WorldModel,
+        planner: RoutePlannerModel
+    ) -> (() -> Void)? {
+        switch selection {
+        case .collectible(let item):
+            return planner.isActive ? { planner.toggle(stop) } : { planToCollectible(item, model, planner) }
+        case .flowline:
+            return planner.isActive ? { planner.toggle(stop) } : nil
         }
     }
 

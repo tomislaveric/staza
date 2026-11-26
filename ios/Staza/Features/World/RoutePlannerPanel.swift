@@ -43,6 +43,7 @@ struct RoutePlannerPanel: View {
 
             if planner.status == .suggesting { generating }
             chosen
+            if showsFlowlineEnhancements { enhancements }
             if showsStops { stops }
             if let failure = planner.failure { failureRow(failure) }
 
@@ -57,6 +58,9 @@ struct RoutePlannerPanel: View {
 
     /// Stops show once there is a route to edit or the player brought own stops.
     private var showsStops: Bool { planner.generated || planner.proposal != nil || !planner.stops.isEmpty }
+    private var showsFlowlineEnhancements: Bool {
+        planner.generated && planner.stopsAreSuggested && planner.sport == .cycling && !planner.flowlineEnhancements.isEmpty
+    }
 
     // MARK: Steps
 
@@ -159,6 +163,18 @@ struct RoutePlannerPanel: View {
                             .foregroundStyle(StazaColor.textPrimary)
                         MetricLine(items: metrics(proposal))
                     }
+                    if let delta = planner.enhancementMetrics, !planner.selectedEnhancementIds.isEmpty {
+                        Text("planner.flowlines.delta")
+                            .font(StazaFont.caption)
+                            .foregroundStyle(StazaColor.textMuted)
+                        MetricLine(items: [
+                            signed(delta.distanceDeltaM, StazaFormat.distance(meters: abs(delta.distanceDeltaM), locale: locale)),
+                            signed(delta.durationDeltaS, ActivityStyle.duration(seconds: abs(delta.durationDeltaS), locale: locale))
+                        ] + (delta.elevationGainDeltaM.map { [signedElevation($0)] } ?? []))
+                    }
+                    if planner.sport == .cycling, !planner.flowlineEnhancements.isEmpty {
+                        enhancements
+                    }
                     Button(action: onSave) {
                         if planner.status == .saving {
                             SwiftUI.ProgressView().tint(StazaColor.onAccent)
@@ -173,6 +189,52 @@ struct RoutePlannerPanel: View {
             }
             .accessibilityIdentifier("plannerResult")
         }
+    }
+
+    private var enhancements: some View {
+        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            SectionHeader("planner.flowlines.title")
+            Text("planner.flowlines.note")
+                .font(StazaFont.footnote)
+                .foregroundStyle(StazaColor.textMuted)
+            ForEach(planner.flowlineEnhancements) { option in
+                let selected = planner.selectedEnhancementIds.contains(option.id)
+                Button {
+                    Task { await planner.setFlowlineEnhancement(option.id, enabled: !selected) }
+                } label: {
+                    HStack(alignment: .top, spacing: StazaSpacing.sm) {
+                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(selected ? StazaColor.accent : StazaColor.textSubtle)
+                        VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                            Text(verbatim: option.flowline.name)
+                                .font(StazaFont.subheadline.weight(.semibold))
+                                .foregroundStyle(StazaColor.textPrimary)
+                            Text(verbatim: option.rationale)
+                                .font(StazaFont.footnote)
+                                .foregroundStyle(StazaColor.textMuted)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(StazaSpacing.sm)
+                    .background(StazaColor.surfaceRaised, in: RoundedRectangle(cornerRadius: StazaRadius.chip))
+                }
+                .buttonStyle(.plain)
+                .disabled(!planner.isIdle)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityIdentifier("plannerEnhancement-\(option.id)")
+            }
+        }
+        .accessibilityIdentifier("plannerEnhancements")
+    }
+
+    private func signed(_ value: Double, _ formatted: String) -> String {
+        "\(value >= 0 ? "+" : "−")\(formatted)"
+    }
+
+    private func signedElevation(_ value: Double) -> String {
+        let formatted = "\(Int(abs(value).rounded())) m"
+        return "↑ \(signed(value, formatted))"
     }
 
     private func failureRow(_ failure: RoutePlannerModel.Failure) -> some View {

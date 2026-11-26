@@ -19,6 +19,7 @@ describe("route planner stops", () => {
     expect(orderStops([flowline, peak, point], ["waypoint:47.100000,9.050000", "flowline:f1"])).toEqual([point, flowline, peak]);
     expect(moveStop([flowline, peak], 1, -1)).toEqual([peak, flowline]);
     expect(moveStop([flowline, peak], 0, -1)).toEqual([flowline, peak]);
+    expect(moveStop([flowline], 1, -1)).toEqual([flowline]);
   });
 });
 
@@ -79,13 +80,15 @@ describe("planner wizard", () => {
     expect(buildSuggestRequest({ ...state, routeType: "point_to_point" }, aim).body)
       .toMatchObject({ routeType: "point_to_point", target: aim });
     expect(buildSuggestRequest(createPlannerState(), aim).error).toBe("Choose a start on the map.");
+    expect(buildSuggestRequest(createPlannerState({ start, destination: aim, destinationId: "poi-1" }), aim).body)
+      .toMatchObject({ target: aim, destinationId: "poi-1" });
   });
 
   it("shows the generated route's card above its editable stops", () => {
     const state = createPlannerState({ start, sport: "cycling", routeType: "round_trip" });
     expect(RoutePlannerPanel(state)).not.toContain("data-planner-save");
     const generated = RoutePlannerPanel({ ...state, generated: true, proposal: route(), stops: [peak], stopsAreSuggested: true });
-    expect(generated).toContain("Suggested route");
+    expect(generated).toContain("Baseline route");
     expect(generated).not.toContain("Edited");
     expect(generated.indexOf("data-planner-save")).toBeLessThan(generated.indexOf('data-planner-stop="peak-1"'));
     expect(generated).toContain("data-planner-add");
@@ -98,7 +101,25 @@ describe("planner wizard", () => {
       flowlines: [{ id: "f1", name: "Rheintal", geometry: { coordinates: [[9, 47]] } }, { id: "done", completed: true }]
     };
     const stops = suggestedStops(route({ includedTargetIds: ["peak-1"], traversedFlowlines: [{ id: "f1" }, { id: "f1" }, { id: "done" }] }), catalog);
-    expect(stops.map((stop) => stop.id)).toEqual(["peak-1", "f1"]);
+    expect(stops.map((stop) => stop.id)).toEqual(["peak-1"]);
+  });
+
+  it("shows optional Flowlines and actual cumulative deltas separately from baseline stops", () => {
+    const state = {
+      ...createPlannerState({ start, sport: "cycling", routeType: "round_trip" }),
+      generated: true,
+      stopsAreSuggested: true,
+      proposal: route(),
+      baselineProposal: route(),
+      flowlineEnhancements: [{ flowline: { id: "f1", name: "Rheintal" }, rationale: "A scenic stretch near your route." }],
+      selectedEnhancementIds: ["f1"],
+      enhancementMetrics: { distanceDeltaM: 1200, durationDeltaS: 300, elevationGainDeltaM: 80 }
+    };
+    const html = RoutePlannerPanel(state);
+    expect(html).toContain("Optional Flowlines");
+    expect(html).toContain("A scenic stretch near your route.");
+    expect(html).toContain('data-planner-enhancement="f1"');
+    expect(html).toContain("Compared with baseline: +1.2 km · +5m · ↑ +80 m");
   });
 
   it("shows the aim until a route exists, for A to B routes only without a picked end", () => {

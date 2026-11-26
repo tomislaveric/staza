@@ -49,6 +49,25 @@ struct GeneratedExploration: Decodable, Equatable, Sendable {
     let explorationId: String
     let proposals: [RouteProposal]
     let catalog: ExplorationCatalog
+    var flowlineEnhancements: [FlowlineEnhancementOption]? = nil
+}
+
+struct FlowlineEnhancementOption: Decodable, Equatable, Sendable, Identifiable {
+    let flowline: WorldFlowline
+    let rationale: String
+    var id: String { flowline.id }
+}
+
+struct FlowlineEnhancementMetrics: Decodable, Equatable, Sendable {
+    let distanceDeltaM: Double
+    let durationDeltaS: Double
+    var elevationGainDeltaM: Double?
+}
+
+struct FlowlineEnhancementResponse: Decodable, Sendable {
+    let proposal: RouteProposal
+    let metrics: FlowlineEnhancementMetrics
+    let flowlineIds: [String]
 }
 
 /// `POST /api/explorations/plan`: the one route connecting the player's stops.
@@ -89,7 +108,13 @@ struct SuggestRequest: Encodable, Sendable {
     let target: GeoPoint
     let sport: String
     let start: GeoPoint
+    var destinationId: String? = nil
     var routeType = "round_trip"
+}
+
+struct FlowlineEnhancementRequest: Encodable, Sendable {
+    let proposalId: String
+    let flowlineIds: [String]
 }
 
 struct PlanRequest: Encodable, Sendable {

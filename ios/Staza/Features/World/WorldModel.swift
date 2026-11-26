@@ -7,7 +7,7 @@ import Observation
 final class WorldModel {
     private(set) var basemap: Basemap?
     private(set) var basemapFailed = false
-    /// The player's collected collectibles plus the open Explore session's uncollected ones.
+    /// Curated collectibles in the viewport plus uncollected Explore-session opportunities.
     private(set) var collectibles: [WorldCollectible] = []
     /// Completed Flowlines in the viewport plus the open Explore session's opportunities.
     private(set) var flowlines: [WorldFlowline] = []
@@ -38,8 +38,8 @@ final class WorldModel {
     private(set) var bounds: WorldBounds?
     /// The last loaded viewport; Explore explores it, clamped by the server to a maximum frame.
     private var areaBounds: WorldBounds?
-    /// The persistent world of the viewport: collected collectibles and completed Flowlines.
-    private var collectedCollectibles: [WorldCollectible] = []
+    /// Curated POIs in the viewport and completed Flowlines.
+    private var viewportCollectibles: [WorldCollectible] = []
     private var completedFlowlines: [WorldFlowline] = []
     private(set) var instances: [QuestInstance] = []
     private(set) var capabilities = WorldCapabilities.empty
@@ -114,7 +114,7 @@ final class WorldModel {
             let viewport: WorldViewport = try await api.get("/api/world", query: [URLQueryItem(name: "bbox", value: bounds.queryValue)])
             // A newer viewport request started meanwhile; its response wins.
             guard generation == viewportGeneration else { return }
-            collectedCollectibles = viewport.collectibles ?? []
+            viewportCollectibles = viewport.collectibles ?? []
             completedFlowlines = viewport.fartleks ?? []
             explorationRoutes = viewport.explorationRoutes ?? []
             mergeWorld()
@@ -195,8 +195,8 @@ final class WorldModel {
     private func mergeWorld() {
         let completed = Set(completedFlowlines.map(\.id))
         flowlines = completedFlowlines + sessionFlowlines.filter { !completed.contains($0.id) }
-        let collected = Set(collectedCollectibles.map(\.id))
-        collectibles = collectedCollectibles + sessionCollectibles.filter { !collected.contains($0.id) }
+        let visible = Set(viewportCollectibles.map(\.id))
+        collectibles = viewportCollectibles + sessionCollectibles.filter { !visible.contains($0.id) }
     }
 
     private static func message(_ error: Error) -> String? {

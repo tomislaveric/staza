@@ -1,5 +1,11 @@
 # hidden-flowline-discovery
 
+> **Amended by [world-destination-route-enhancements](../world-destination-route-enhancements/README.md):**
+> Flowlines are not required to plan or progress. A baseline is generated before nearby cycling
+> Flowlines are offered as optional enhancements, and selecting one does not create a
+> `flowline_rule` objective. Existing authored and legacy Flowline quests and activity completion
+> remain unchanged.
+
 > **Amended by
 > [explore-sessions-and-saved-explorations](../explore-sessions-and-saved-explorations/README.md).**
 > Explore writes nothing. Existing `explore` reveals were deleted and only `ride` reveals

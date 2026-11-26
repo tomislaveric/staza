@@ -6,6 +6,7 @@ import { PlanningError, rerouteTargets, waypointTarget, type PlannedProposal, ty
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import type { ProposalStore } from "../routePlanning/proposalStore.js";
 import { routeTargetIds } from "../routePlanning/proposals.js";
+import { distanceBetween } from "../routePlanning/geo.js";
 import { insideBounds } from "../routePlanning/validation.js";
 import { assertNearTargets, parseProposalId } from "../routePlanning/request.js";
 import { constraintActual, constraintRequested } from "../routePlanning/scoring.js";
@@ -15,7 +16,7 @@ import { PLANNER_VERSION, type QuestRouteTarget, type RoutePlanningInput, type R
 import type { GeoBounds } from "../worldQuery.js";
 import { planManualRoute, startToNearestStopM, type ManualStop } from "../routePlanning/manual.js";
 import { describeExploration, explorationObjectives, flowlineObjective, withObjectiveIds } from "./objectives.js";
-import { parseExplorationId, parseGenerateRequest, parsePlanRequest, parseRerouteRequest } from "./request.js";
+import { parseExplorationId, parseFlowlineEnhancementRequest, parseGenerateRequest, parsePlanRequest, parseRerouteRequest } from "./request.js";
 import type { ExplorationSessionStore } from "./sessionStore.js";
 
 /** Exploration persisted when the player saves a route; its id is the saved proposal id (idempotency key). */
@@ -33,6 +34,9 @@ export interface ExplorationDependencies {
    * completed ones). Planning is stateless: it never depends on, or writes, reveal state.
    */
   loadArea(playerId: string, bounds: GeoBounds): Promise<{ collectibles: WorldCollectible[]; flowlines: WorldFartlek[]; truncated: boolean }>;
+  /** Separate baseline inputs so automatic generation need not fetch Flowlines first. */
+  loadCollectibles?(playerId: string, bounds: GeoBounds): Promise<{ collectibles: WorldCollectible[]; truncated: boolean }>;
+  loadFlowlines?(playerId: string, bounds: GeoBounds): Promise<WorldFartlek[]>;
   /** Undefined when no routing service is configured. */
   routing?: RouteProvider;
   sessions: ExplorationSessionStore;
@@ -118,6 +122,8 @@ export interface GeneratedExploration {
   proposals: PublicRouteProposal[];
   /** Eligible destinations (collectibles) and the area's plannable Flowlines: rendered for the selected route and while adding destinations. */
   catalog: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[] };
+  /** Small set of nearby optional cycling enhancements, separate from the baseline route. */
+  flowlineEnhancements: { flowline: WorldFartlek; rationale: string }[];
   truncated: boolean;
   warnings: ExplorationWarning[];
 }
@@ -198,7 +204,21 @@ export class ExplorationService {
       throw new UserInputError("The destination must be inside the explored area.");
     }
     const inArea = ({ latitude, longitude }: { latitude: number; longitude: number }) => insideBounds([longitude, latitude], area.bounds, 0);
-    const world = areaWorld(await this.dependencies.loadArea(playerId, area.bounds), inArea);
+    let loadedArea: Awaited<ReturnType<ExplorationDependencies["loadArea"]>> | undefined;
+    const loadArea = async () => loadedArea ??= await this.dependencies.loadArea(playerId, area.bounds);
+    const collectibleArea = this.dependencies.loadCollectibles
+      ? await this.dependencies.loadCollectibles(playerId, area.bounds)
+      : await loadArea();
+    const initialFlowlines = destinationFlowlineId
+      ? this.dependencies.loadFlowlines
+        ? await this.dependencies.loadFlowlines(playerId, area.bounds)
+        : (await loadArea()).flowlines
+      : [];
+    const world = areaWorld({
+      collectibles: collectibleArea.collectibles,
+      flowlines: initialFlowlines,
+      truncated: collectibleArea.truncated
+    }, inArea);
     const requiredFlowline = destinationFlowlineId
       ? buildFlowlineGeometries(world.flowlines).find((flowline) => flowline.id === destinationFlowlineId)
       : undefined;
@@ -230,7 +250,12 @@ export class ExplorationService {
         truncated: current.truncated || world.truncated
       };
     };
-    const session = this.dependencies.sessions.create({ playerId, area, input, ...sessionData(resolved) });
+    const destinationPoint = destination?.coordinate ?? aim ?? (input.routeType === "point_to_point" ? input.end : undefined);
+    const session = this.dependencies.sessions.create({
+      playerId, area, input, ...(destinationPoint ? { destination: destinationPoint } : {}),
+      ...(destination ? { destinationId: destination.id } : {}),
+      flowlineEnhancementIds: [], ...sessionData(resolved)
+    });
 
     const plan = async (current: typeof resolved): Promise<{ planned?: Array<PlannedProposal & { input: typeof input }>; failure?: unknown }> => {
       try {
@@ -243,7 +268,8 @@ export class ExplorationService {
           : undefined;
         const generated = await generateRoute(
           {
-            requestId, playerId, scopeId: session.id, targets: current.targets, flowlines: current.flowlineGeometries, input, bounds: area.bounds,
+            requestId, playerId, scopeId: session.id, targets: destination ? [destination] : [],
+            flowlines: requiredFlowline ? current.flowlineGeometries : [], input, bounds: area.bounds,
             ...(aim ? { aim } : {}),
             ...(required ? { required } : {}),
             ...(requiredFlowline ? { requiredFlowline } : {})
@@ -263,26 +289,111 @@ export class ExplorationService {
     const warnings: ExplorationWarning[] = planned.every((entry) => entry.proposal.constraintFit === "short")
       ? [insufficientAreaWarning(input, planned.map((entry) => entry.proposal))]
       : [];
-    // A generated route's stops are its collectibles and the opportunity Flowlines it rides.
-    const opportunities = new Set(session.flowlines.filter((flowline) => !flowline.completed).map((flowline) => flowline.id));
-    const flowlineStops = (proposal: RouteProposal) => {
-      const stops = new Map<string, { id: string; name: string }>();
-      if (requiredFlowline) stops.set(requiredFlowline.id, { id: requiredFlowline.id, name: requiredFlowline.name });
-      for (const flowline of proposal.traversedFlowlines) {
-        if (opportunities.has(flowline.id) && !stops.has(flowline.id)) stops.set(flowline.id, { id: flowline.id, name: flowline.name });
-      }
-      return [...stops.values()];
-    };
+    const route = planned[0].proposal;
+    const candidateFlowlines = destinationFlowlineId
+      ? initialFlowlines
+      : input.sport === "cycling"
+        ? this.dependencies.loadFlowlines
+          ? await this.dependencies.loadFlowlines(playerId, area.bounds)
+          : (await loadArea()).flowlines
+        : [];
+    if (!this.dependencies.sessions.get(playerId, session.id)) throw new ExplorationError("exploration_expired");
+    session.flowlines = candidateFlowlines;
+    session.flowlineGeometries = buildFlowlineGeometries(candidateFlowlines);
+    const candidates = input.sport === "cycling" && !requiredFlowline
+      ? session.flowlines.filter((flowline) => !flowline.completed && flowline.status === "published"
+        && flowline.geometry.coordinates.length >= 2).map((flowline) => {
+          const routePoints = route.geometry.coordinates.map(([lon, lat]) => ({ lat, lon }));
+          const distanceM = Math.min(...flowline.geometry.coordinates.flatMap(([lon, lat]) =>
+            routePoints.map((point) => distanceBetween(point, { lat, lon }))));
+          return { flowline, distanceM };
+        }).filter(({ distanceM }) => distanceM <= 2_500)
+        .sort((a, b) => a.distanceM - b.distanceM || a.flowline.id.localeCompare(b.flowline.id))
+        .slice(0, 3)
+      : [];
+    session.flowlineEnhancementIds = candidates.map(({ flowline }) => flowline.id);
+    const flowlineEnhancements = candidates.map(({ flowline, distanceM }) => ({
+      flowline,
+      rationale: distanceM <= 750
+        ? flowline.character?.primary
+          ? `A ${flowline.character.primary} ride close to your route.`
+          : "A nearby Flowline adds a distinct stretch to your ride."
+        : flowline.character?.primary
+          ? `A ${flowline.character.primary} detour that stays close to your route.`
+          : "A nearby detour for a more varied ride."
+    }));
     this.dependencies.proposals.replaceForPlayer(
       playerId,
-      planned.map((entry) => this.store(session.id, entry, available, entry.input, flowlineStops(entry.proposal)))
+      planned.map((entry) => this.store(session.id, entry, available, entry.input,
+        requiredFlowline ? [{ id: requiredFlowline.id, name: requiredFlowline.name }] : []))
     );
     return {
       explorationId: session.id,
       proposals: planned.map((entry) => toPublic(entry.proposal)),
       catalog: { collectibles: session.collectibles, flowlines: session.flowlines },
+      flowlineEnhancements,
       truncated: session.truncated,
       warnings
+    };
+  }
+
+  /** Routes selected optional Flowlines through the saved baseline destination, without objectives. */
+  async enhance(playerId: string, explorationIdValue: unknown, body: unknown, requestId: string = randomUUID()) {
+    const routing = this.requireRouting();
+    const explorationId = parseExplorationId(explorationIdValue);
+    const { proposalId, flowlineIds } = parseFlowlineEnhancementRequest(body);
+    const session = this.dependencies.sessions.get(playerId, explorationId);
+    if (!session) throw new ExplorationError("exploration_expired");
+    const base = this.dependencies.proposals.get(playerId, proposalId);
+    if (!base || base.explorationId !== session.id) throw new ExplorationError("proposal_expired");
+    if (flowlineIds.some((id) => !(session.flowlineEnhancementIds ?? []).includes(id))) {
+      throw new UserInputError("Only Flowlines offered for this route can be added.");
+    }
+    if (flowlineIds.length === 0) {
+      return {
+        proposal: toPublic(base.proposal),
+        metrics: { distanceDeltaM: 0, durationDeltaS: 0 },
+        flowlineIds: []
+      };
+    }
+    const byId = new Map(session.flowlineGeometries.map((flowline) => [flowline.id, flowline]));
+    const selected = flowlineIds.map((id) => byId.get(id)).filter((flowline): flowline is NonNullable<typeof flowline> => Boolean(flowline));
+    const destination = session.destinationId
+      ? session.availableTargets.find((target) => target.id === session.destinationId)
+      : session.destination ? waypointTarget(session.destination) : undefined;
+    const destinationObjectives = destination && !destination.routeOnly ? explorationObjectives([destination]) : [];
+    const destinationStop = destination
+      ? withObjectiveIds([destination], destinationObjectives)[0]
+      : undefined;
+    const stops: ManualStop[] = [
+      ...(destinationStop ? [{ kind: "target" as const, target: destinationStop }] : []),
+      ...selected.map((flowline) => ({ kind: "flowline" as const, flowline }))
+    ];
+    if (stops.length === 0) throw new UserInputError("A route enhancement needs a destination or Flowline.");
+    let planned: PlannedProposal & { stopOrder: string[] };
+    try {
+      planned = await planManualRoute({
+        requestId, playerId, scopeId: session.id, stops, keepOrder: false,
+        objectives: destinationObjectives, flowlines: selected, input: session.input, bounds: session.area.bounds
+      }, { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) });
+    } catch (error) {
+      throw planningFailure(error);
+    }
+    const available = new Map(session.availableTargets.map((target) => [target.id, target]));
+    const proposal = { ...planned.proposal, basedOn: base.proposal.id };
+    this.dependencies.proposals.addForPlayer(playerId, this.store(
+      session.id, { proposal, stops: planned.stops }, available, session.input
+    ));
+    return {
+      proposal: toPublic(proposal),
+      metrics: {
+        distanceDeltaM: proposal.distanceM - base.proposal.distanceM,
+        durationDeltaS: proposal.durationS - base.proposal.durationS,
+        ...(proposal.elevationGainM !== undefined && base.proposal.elevationGainM !== undefined
+          ? { elevationGainDeltaM: proposal.elevationGainM - base.proposal.elevationGainM }
+          : {})
+      },
+      flowlineIds: proposal.flowlineIds ?? []
     };
   }
 

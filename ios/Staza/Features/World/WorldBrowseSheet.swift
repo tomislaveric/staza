@@ -1,11 +1,9 @@
 import SwiftUI
 
-/// Sheet header while browsing: Explore and Plan route; no counts that change with every pan.
+/// Sheet header while browsing: Explore is the route-planning entry point.
 struct WorldBrowseHeader: View {
     let model: WorldModel
-    let routeStops: Int
     let onExplore: () -> Void
-    let onPlanRoute: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: StazaSpacing.sm) {
@@ -18,7 +16,6 @@ struct WorldBrowseHeader: View {
             }
             Spacer(minLength: StazaSpacing.xs)
             ExploreButton(isExploring: model.isExploring, onExplore: onExplore)
-            PlanRouteButton(routeStops: routeStops, onPlanRoute: onPlanRoute)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, StazaSpacing.md)

@@ -1,5 +1,11 @@
 # route-planner-wizard
 
+> **Amended by [world-destination-route-enhancements](../world-destination-route-enhancements/README.md):**
+> generation now routes a destination-focused baseline without Flowline geometry or automatic
+> POI stops. Curated POIs may be selected as destinations; other POIs remain accidental
+> discoveries. Nearby cycling Flowlines are offered only after the baseline and are optional
+> enhancements with actual route deltas. Running and hiking also use Flowline-free baselines.
+
 ## Goal
 
 Planning a route should take two taps. The player taps a sport and a route shape. Staza then

@@ -79,6 +79,8 @@ final class RoutePlannerModel {
     private(set) var status = Status.idle
     private(set) var start: GeoPoint?
     private(set) var end: GeoPoint?
+    private(set) var destination: GeoPoint?
+    private(set) var destinationId: String?
     private(set) var routeType = RouteType.roundTrip
     private(set) var sport = Sport.cycling
     /// Wizard steps: generation starts once both are chosen.
@@ -103,6 +105,11 @@ final class RoutePlannerModel {
     private(set) var focusRequest = 0
     /// The route for the current stops; every edit clears it.
     private(set) var proposal: RouteProposal?
+    private(set) var baselineProposal: RouteProposal?
+    private(set) var explorationId: String?
+    private(set) var flowlineEnhancements: [FlowlineEnhancementOption] = []
+    private(set) var selectedEnhancementIds: Set<String> = []
+    private(set) var enhancementMetrics: FlowlineEnhancementMetrics?
     private(set) var failure: Failure?
     private(set) var plannedRoute: PlannedRoute?
 
@@ -160,12 +167,14 @@ final class RoutePlannerModel {
     var canEditStops: Bool { generated || proposal != nil || !stops.isEmpty }
 
     /// Opens the planner. Stops chosen with "Add to route" before are kept as route constraints.
-    func open(start: GeoPoint?) {
+    func open(start: GeoPoint?, destination: GeoPoint? = nil, destinationId: String? = nil) {
         token += 1
         isActive = true
         status = .idle
         self.start = start
         end = nil
+        self.destination = destination
+        self.destinationId = destinationId
         routeType = .roundTrip
         keepOrder = false
         stopsAreSuggested = false
@@ -173,6 +182,11 @@ final class RoutePlannerModel {
         focusedStopKey = nil
         cancelReroute()
         proposal = nil
+        baselineProposal = nil
+        explorationId = nil
+        flowlineEnhancements = []
+        selectedEnhancementIds = []
+        enhancementMetrics = nil
         failure = nil
         plannedRoute = nil
         sportChosen = false
@@ -191,6 +205,11 @@ final class RoutePlannerModel {
         focusedStopKey = nil
         cancelReroute()
         proposal = nil
+        baselineProposal = nil
+        explorationId = nil
+        flowlineEnhancements = []
+        selectedEnhancementIds = []
+        enhancementMetrics = nil
         failure = nil
         sportChosen = false
         shapeChosen = false
@@ -233,13 +252,13 @@ final class RoutePlannerModel {
         generateRequest += 1
     }
 
-    /// Adopts the generated route: its collectibles and the opportunity Flowlines it rides become the stops.
+    /// Only the explicitly selected curated destination becomes a baseline stop.
     private func adopt(_ suggestion: RouteProposal) {
         let byId = Dictionary((catalog?.collectibles ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let ridden = Set((suggestion.traversedFlowlines ?? []).map(\.id))
-        let flowlineStops = (catalog?.flowlines ?? []).filter { !$0.completed && ridden.contains($0.id) }
-        stops = suggestion.includedTargetIds.compactMap { byId[$0] }.map(PlannerStop.collectible)
-            + flowlineStops.map(PlannerStop.flowline)
+        stops = suggestion.includedTargetIds
+            .filter { $0 == destinationId }
+            .compactMap { byId[$0] }
+            .map(PlannerStop.collectible)
         keepOrder = false
         stopsAreSuggested = true
         focusedStopKey = nil
@@ -252,6 +271,11 @@ final class RoutePlannerModel {
     private func clearGenerated() {
         generated = false
         catalog = nil
+        baselineProposal = nil
+        explorationId = nil
+        flowlineEnhancements = []
+        selectedEnhancementIds = []
+        enhancementMetrics = nil
         if stopsAreSuggested {
             stops = []
             stopsAreSuggested = false
@@ -291,6 +315,8 @@ final class RoutePlannerModel {
     private func setEnd(_ point: GeoPoint) {
         guard isIdle else { return }
         end = point
+        destination = nil
+        destinationId = nil
         mapMode = nil
         endpointChanged()
     }
@@ -379,14 +405,14 @@ final class RoutePlannerModel {
     }
 
     /// Generates one route towards the aimed target: round trips ride there and back, A→B routes end at
-    /// the picked end, else at the aim. Its collectibles and Flowlines become the editable stops.
+    /// the picked end, else at the aim. Only a selected curated destination becomes a baseline stop.
     func generate(toward aim: GeoPoint) async {
         guard isIdle else { return }
         cancelReroute()
         guard let start else { return fail(.missingStart) }
         if routeType == .pointToPoint, end == nil { end = aim }
-        let target = routeType == .pointToPoint ? end ?? aim : aim
-        let request = SuggestRequest(target: target, sport: sport.rawValue, start: start,
+        let target = destination ?? (routeType == .pointToPoint ? end ?? aim : aim)
+        let request = SuggestRequest(target: target, sport: sport.rawValue, start: start, destinationId: destinationId,
                                      routeType: routeType.rawValue)
         clearGenerated()
         proposal = nil
@@ -397,8 +423,29 @@ final class RoutePlannerModel {
                 return
             }
             catalog = result.catalog
+            explorationId = result.explorationId
+            flowlineEnhancements = result.flowlineEnhancements ?? []
+            baselineProposal = result.proposals[0]
             adopt(result.proposals[0])
         }
+    }
+
+    /// Applies or removes optional cycling Flowlines while retaining the generated baseline for comparison.
+    func setFlowlineEnhancement(_ id: String, enabled: Bool) async {
+        guard isIdle, generated, stopsAreSuggested, let explorationId, let baselineProposal,
+              flowlineEnhancements.contains(where: { $0.id == id }) else { return }
+        let previous = selectedEnhancementIds
+        if enabled { selectedEnhancementIds.insert(id) } else { selectedEnhancementIds.remove(id) }
+        let selected = selectedEnhancementIds.sorted()
+        await run(.routing) { [self] in
+            let result: FlowlineEnhancementResponse = try await api.post(
+                "/api/explorations/\(explorationId)/enhance",
+                body: FlowlineEnhancementRequest(proposalId: baselineProposal.id, flowlineIds: selected)
+            )
+            proposal = result.proposal
+            enhancementMetrics = selected.isEmpty ? nil : result.metrics
+        }
+        if failure != nil { selectedEnhancementIds = previous }
     }
 
     /// "Save Exploration": persists the routed plan as a planned QuestInstance with its PlannedRoute and
@@ -458,6 +505,8 @@ final class RoutePlannerModel {
         change()
         proposal = nil
         failure = nil
+        selectedEnhancementIds = []
+        enhancementMetrics = nil
     }
 
     /// An edit that keeps a calculated route current: after a short pause without further edits, the

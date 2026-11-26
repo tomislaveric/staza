@@ -19,6 +19,11 @@ export interface ExplorationSession {
   playerId: string;
   area: ExplorationAreaContext;
   input: RoutePlanningInput;
+  /** The selected map target, retained as a route constraint for optional enhancements. */
+  destination?: LatLon;
+  destinationId?: string;
+  /** Nearby optional Flowlines offered with the baseline proposal. */
+  flowlineEnhancementIds?: string[];
   /** Eligible destinations; Flowlines are never targets. */
   availableTargets: QuestRouteTarget[];
   /** World objects behind the available targets, returned to the client for rendering. */

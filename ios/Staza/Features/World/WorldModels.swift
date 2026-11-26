@@ -45,7 +45,7 @@ struct ExplorationRoute: Decodable, Equatable, Identifiable, Sendable {
 }
 
 struct WorldViewport: Decodable, Equatable, Sendable {
-    /// Only the player's collected collectibles.
+    /// Curated collectibles in the viewport, whether found or not.
     let collectibles: [WorldCollectible]?
     /// Only the player's completed Flowlines.
     let fartleks: [WorldFlowline]?

@@ -234,14 +234,11 @@ struct ExploreFindings: View {
 /// The Explore session's toolbar: route planning with its stop count, the title, and "explore again"
 /// for wherever the map has been moved to. Routes are generated from route planning.
 struct DiscoveriesHeader: View {
-    let routeStops: Int
     let isExploring: Bool
-    let onPlanRoute: () -> Void
     let onExplore: () -> Void
 
     var body: some View {
         HStack(spacing: StazaSpacing.sm) {
-            PlanRouteButton(routeStops: routeStops, iconOnly: true, onPlanRoute: onPlanRoute)
             Text("world.discoveries.title")
                 .font(StazaFont.title3)
                 .foregroundStyle(StazaColor.textPrimary)
@@ -261,6 +258,7 @@ struct DiscoveriesContent: View {
     let model: WorldModel
     let planner: RoutePlannerModel
     let onViewOnMap: (WorldSelection) -> Void
+    let onGenerateRoute: () -> Void
     var onZoomOut: () -> Void = {}
     /// Ends the Explore session; until then the sheet stays in route generation.
     var onEnd: () -> Void = {}
@@ -275,6 +273,11 @@ struct DiscoveriesContent: View {
                     onZoomOut: onZoomOut,
                     clamped: model.exploreClamped
                 )
+                Button(action: onGenerateRoute) {
+                    Label("world.explore.generateRoute", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                }
+                .buttonStyle(.stazaPrimaryWide)
+                .accessibilityIdentifier("exploreGenerateRoute")
             }
 
             let items = DiscoveryItem.list(flowlines: model.sessionFlowlines, collectibles: model.sessionCollectibles, filters: filters)

@@ -1,5 +1,11 @@
 # route-generation-v2
 
+> **Amended by [world-destination-route-enhancements](../world-destination-route-enhancements/README.md):**
+> the single generated route is now a destination-focused baseline and is independent of
+> Flowline geometry and Flowline-based scoring for every supported sport. Nearby cycling
+> Flowlines are returned separately after baseline routing and may be selected for actual
+> rerouting; unselected POIs are not added as route stops.
+
 > **Superseded in part by [route-planner-wizard](../route-planner-wizard/README.md):** intents
 > (Glide, Chill, Explore) were removed. The generator now builds exactly one route with one fixed
 > policy (`GENERATION_POLICY` in `src/routePlanning/generationPolicy.ts`, generator in

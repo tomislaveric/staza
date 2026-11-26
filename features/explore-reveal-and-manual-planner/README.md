@@ -1,5 +1,11 @@
 # explore-reveal-and-manual-planner
 
+> **Amended by [world-destination-route-enhancements](../world-destination-route-enhancements/README.md):**
+> Explore now leads directly to destination and sport selection, then a Flowline-free baseline.
+> It does not preload Flowline stops or automatically include POIs. Nearby cycling Flowlines may
+> be selected after baseline generation as optional route enhancements; they do not create
+> progression objectives. Curated POIs are visible and selectable in the default World map.
+
 > **Amended by [route-generation-v2](../route-generation-v2/README.md).** Explore is always
 > available: a viewport wider than 50 km or taller than 100 km is clamped to a centered frame
 > instead of being rejected, so "Zoom in to explore" is gone. Generate route

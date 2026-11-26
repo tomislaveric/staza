@@ -1,5 +1,11 @@
 # explore-sessions-and-saved-explorations
 
+> **Amended by [world-destination-route-enhancements](../world-destination-route-enhancements/README.md):**
+> curated POIs are visible in the default World viewport, and Explore is the only route-planning
+> entry point. Generate first returns a destination-focused baseline without Flowlines or
+> unselected POI stops; nearby cycling Flowlines can then be added as optional enhancements.
+> Saving and starting remain separate, and optional Flowlines create no progression objectives.
+
 > **Amended by [route-generation-v2](../route-generation-v2/README.md).** Generate route builds
 > one route instead of picking the
 > recommended one of several proposals. It needs a start: the last located position inside the

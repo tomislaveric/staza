@@ -14,9 +14,11 @@ import { formatRouteDistance, formatRouteDuration, SPORT_OPTIONS } from "./route
  * - `status`: "idle" | "routing" | "generating" | "saving".
  * - `proposal`: the routed result for the current stops; cleared by every edit.
  */
-export const createPlannerState = ({ start, stops = [], sport, routeType } = {}) => ({
+export const createPlannerState = ({ start, stops = [], sport, routeType, destination, destinationId } = {}) => ({
   start,
   end: undefined,
+  destination,
+  destinationId,
   routeType: routeType ?? "round_trip",
   sport: sport ?? "cycling",
   sportChosen: Boolean(sport),
@@ -31,6 +33,11 @@ export const createPlannerState = ({ start, stops = [], sport, routeType } = {})
   proposal: undefined,
   generated: false,
   catalog: undefined,
+  explorationId: undefined,
+  baselineProposal: undefined,
+  flowlineEnhancements: [],
+  selectedEnhancementIds: [],
+  enhancementMetrics: undefined,
   rerouteQueued: false,
   dropped: [],
   error: undefined
@@ -75,7 +82,7 @@ export const toggleStop = (stops, stop) =>
 
 export const moveStop = (stops, index, offset) => {
   const target = index + offset;
-  if (index < 0 || target < 0 || target >= stops.length) return stops;
+  if (index < 0 || index >= stops.length || target < 0 || target >= stops.length) return stops;
   const next = [...stops];
   [next[index], next[target]] = [next[target], next[index]];
   return next;
@@ -141,25 +148,22 @@ export const buildPlanRequest = (state) => {
 export const buildSuggestRequest = (state, aim) => {
   if (!state.start) return { error: "Choose a start on the map." };
   const pointToPoint = state.routeType === "point_to_point";
+  const target = state.destination ?? (pointToPoint ? state.end ?? aim : aim);
   return {
     body: {
-      target: pointToPoint ? state.end ?? aim : aim,
+      target,
       sport: state.sport,
       start: state.start,
-      routeType: state.routeType
+      routeType: state.routeType,
+      ...(state.destinationId ? { destinationId: state.destinationId } : {})
     }
   };
 };
 
 /** A generated route's stops: its included collectibles and the unridden Flowlines it rides. */
 export const suggestedStops = (proposal, catalog = {}) => {
-  const flowlines = new Map((catalog.flowlines ?? []).filter((flowline) => !flowline.completed).map((flowline) => [flowline.id, flowline]));
   const collectibles = new Map((catalog.collectibles ?? []).map((collectible) => [collectible.id, collectible]));
-  return [
-    ...(proposal.includedTargetIds ?? []).map((id) => collectibles.get(id)).filter(Boolean).map(collectibleStop),
-    ...[...new Set((proposal.traversedFlowlines ?? []).map((flowline) => flowline.id))]
-      .map((id) => flowlines.get(id)).filter(Boolean).map(flowlineStop)
-  ];
+  return (proposal.includedTargetIds ?? []).map((id) => collectibles.get(id)).filter(Boolean).map(collectibleStop);
 };
 
 /** The crosshair marks the target until a route exists: a round trip's turning point or an A to B route's end. */
@@ -257,16 +261,31 @@ const metrics = (proposal) => `
 /** The generated (or own) route: metrics and Save, shown above the stops. */
 const routeCard = (state, dropped, idle) => {
   const { proposal } = state;
+  const delta = state.enhancementMetrics;
+  const signed = (value, formatter) => `${value > 0 ? "+" : ""}${formatter(value)}`;
   return `
     <div class="route-planner-result" data-planner-result>
-      <p class="route-planner-chosen-title"><strong>${state.generated ? "Suggested route" : "Your route"}</strong>${state.generated && !state.stopsAreSuggested ? " <small>Edited</small>" : ""}</p>
+      <p class="route-planner-chosen-title"><strong>${state.generated ? "Baseline route" : "Your route"}</strong>${state.generated && !state.stopsAreSuggested ? " <small>Edited</small>" : ""}</p>
       ${proposal ? metrics(proposal) : ""}
+      ${delta && state.selectedEnhancementIds.length ? `<p class="route-planner-note" data-enhancement-delta>Compared with baseline: ${escapeHtml(signed(delta.distanceDeltaM, formatRouteDistance))} \u00b7 ${escapeHtml(signed(delta.durationDeltaS, formatRouteDuration))}${Number.isFinite(delta.elevationGainDeltaM) ? ` \u00b7 \u2191 ${delta.elevationGainDeltaM > 0 ? "+" : ""}${Math.round(delta.elevationGainDeltaM)} m` : ""}</p>` : ""}
       ${proposal && dropped.length ? `<p class="route-planner-note">Couldn't route ${escapeHtml(dropped.map(stopName).join(", "))}, so ${dropped.length === 1 ? "it was" : "they were"} left out.</p>` : ""}
       ${proposal ? `
         <p class="route-planner-note">Saving keeps this route on your World. Start it whenever you go; progress only counts from activities after you start.</p>
         <button type="button" class="route-planner-confirm" data-planner-save${idle && !state.rerouteQueued ? "" : " disabled"}>Save Exploration</button>` : ""}
     </div>`;
 };
+
+const flowlineEnhancements = (state, idle) => state.generated && state.flowlineEnhancements.length ? `
+  <section class="route-planner-enhancements" aria-label="Optional Flowline enhancements">
+    <h3>Optional Flowlines</h3>
+    <p class="route-planner-note">Your baseline route works without these. Add one or combine several.</p>
+    ${state.flowlineEnhancements.map(({ flowline, rationale }) => `
+      <label class="route-planner-enhancement">
+        <input type="checkbox" data-planner-enhancement="${escapeHtml(flowline.id)}"
+          ${state.selectedEnhancementIds.includes(flowline.id) ? "checked" : ""}${idle ? "" : " disabled"}>
+        <span><strong>${escapeHtml(flowline.name)}</strong><small>${escapeHtml(rationale)}</small></span>
+      </label>`).join("")}
+  </section>` : "";
 
 const stopList = (state, dropped, idle) => state.stops.length ? `
   <ol class="exploration-selected route-planner-stops" aria-label="Route stops" data-planner-stops>
@@ -305,6 +324,7 @@ export const RoutePlannerPanel = (state) => {
       ${statusLine(state)}
       ${state.error && (state.stops.length || canGenerate(state)) ? `<button type="button" data-planner-retry${idle ? "" : " disabled"}>Try again</button>` : ""}
       ${routed ? routeCard(state, dropped, idle) : ""}
+      ${flowlineEnhancements(state, idle)}
       ${canEditStops(state) ? `
         ${stopList(state, dropped, idle)}
         <div class="exploration-route-actions route-planner-add" role="group" aria-label="Add stops">

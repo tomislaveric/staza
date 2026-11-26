@@ -186,7 +186,6 @@ export const DiscoveriesPanel = ({ flowlines, collectibles, sort = "flow", origi
       </ol>` : '<p class="route-planner-note">No Flowline opportunities here. Explore another area to find some.</p>'}
       <div class="world-explore-card-actions">
         <button type="button" class="is-primary" data-discoveries-generate>Generate route</button>
-        <button type="button" data-discoveries-plan>Plan a route</button>
       </div>
     </section>
   `;

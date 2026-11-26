@@ -111,7 +111,7 @@ export const parseGenerateRequest = (body: unknown): GenerateRequest => {
     throw new UserInputError("The target is too far from the start.");
   }
   const area = target && start ? targetArea(start, target) : parseArea(body.area);
-  const aim = target && start && distanceBetween(start, target) >= NEAR_TARGET_M ? target : undefined;
+  const aim = target && start ? target : undefined;
   const { destinationId, destinationFlowlineId } = body;
   if (destinationId !== undefined && (typeof destinationId !== "string" || destinationId.trim() === "")) {
     throw new UserInputError("The destination must be a collectible id.");
@@ -136,6 +136,23 @@ export const parseGenerateRequest = (body: unknown): GenerateRequest => {
     ...(destinationId ? { destinationId } : {}),
     ...(destinationFlowlineId ? { destinationFlowlineId } : {})
   };
+};
+
+export interface FlowlineEnhancementRequest {
+  proposalId: string;
+  flowlineIds: string[];
+}
+
+/** `{ proposalId, flowlineIds }`: the selected optional Flowline set, including an empty reset. */
+export const parseFlowlineEnhancementRequest = (body: unknown): FlowlineEnhancementRequest => {
+  if (!isRecord(body)) throw new UserInputError("A route enhancement request is required.");
+  const proposalId = parseProposalId(body);
+  if (!Array.isArray(body.flowlineIds) || body.flowlineIds.some((id) => typeof id !== "string" || id.trim() === "")) {
+    throw new UserInputError("Flowline enhancements must be a list of ids.");
+  }
+  const flowlineIds = [...new Set(body.flowlineIds as string[])];
+  if (flowlineIds.length > 3) throw new UserInputError("Choose up to three Flowline enhancements.");
+  return { proposalId, flowlineIds };
 };
 
 export const parseExplorationId = (value: unknown): string => {

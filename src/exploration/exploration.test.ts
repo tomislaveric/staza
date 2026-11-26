@@ -141,7 +141,7 @@ describe("exploration requests", () => {
     const inside = (point: { lat: number; lon: number }, bounds: { minLatitude: number; maxLatitude: number; minLongitude: number; maxLongitude: number }) =>
       point.lat > bounds.minLatitude && point.lat < bounds.maxLatitude && point.lon > bounds.minLongitude && point.lon < bounds.maxLongitude;
     const near = parseGenerateRequest({ target: at(1, 0), start: at(0, 0) });
-    expect(near.aim).toBeUndefined();
+    expect(near.aim).toEqual(at(1, 0));
     expect(near.area.bounds.minLatitude).toBeCloseTo(at(-2, 0).lat, 3);
     const far = parseGenerateRequest({ target: at(20, 0), start: at(0, 0) });
     expect(far.aim).toEqual(at(20, 0));
@@ -183,15 +183,32 @@ describe("ExplorationService", () => {
   } = {}) => {
     const created: Array<{ playerId: string; exploration: NewExploration; route: NewPlannedRoute }> = [];
     const routeCalls: unknown[] = [];
-    const routing = options.routing === null
+    const loadEvents: string[] = [];
+    const routing: RouteProvider | undefined = options.routing === null
       ? undefined
-      : options.routing ?? { route: async (request) => { routeCalls.push(request); return straightLineRoute(request); } };
+      : {
+        route: async (request, routeOptions) => {
+          loadEvents.push("route");
+          routeCalls.push(request);
+          return options.routing
+            ? options.routing.route(request, routeOptions)
+            : straightLineRoute(request);
+        }
+      };
     const service = new ExplorationService({
       loadArea: async () => ({
         collectibles: options.collectibles ?? worldCollectibles,
         flowlines: options.flowlines ?? (options.collectibles ? [] : worldFlowlines),
         truncated: false
       }),
+      loadCollectibles: async () => ({
+        collectibles: options.collectibles ?? worldCollectibles,
+        truncated: false
+      }),
+      loadFlowlines: async () => {
+        loadEvents.push("flowlines");
+        return options.flowlines ?? (options.collectibles ? [] : worldFlowlines);
+      },
       ...(routing ? { routing } : {}),
       sessions: new ExplorationSessionStore(),
       proposals: new ProposalStore(),
@@ -205,7 +222,7 @@ describe("ExplorationService", () => {
       },
       log: () => undefined
     });
-    return { service, created, routeCalls };
+    return { service, created, routeCalls, loadEvents };
   };
   const generateBody = {
     area: { bbox, center: area.center, zoom: 11 },
@@ -216,8 +233,8 @@ describe("ExplorationService", () => {
   const contents = (proposal: { includedTargetIds: string[]; nearbyTargetIds: string[] }) =>
     [...proposal.includedTargetIds, ...proposal.nearbyTargetIds];
 
-  it("generates exactly one route from the ride alone, with the area catalog and no persistence", async () => {
-    const { service, created } = setup();
+  it("generates a Flowline-free, destination-only baseline and returns enhancements separately", async () => {
+    const { service, created, loadEvents } = setup();
     const result = await service.generate("p1", generateBody);
     expect(result.proposals).toHaveLength(1);
     expect(result.proposals[0].recommended).toBe(true);
@@ -226,9 +243,21 @@ describe("ExplorationService", () => {
     expect(result.catalog.collectibles.map((item) => item.id)).toEqual(["c-near", "c-mid", "c-east", "c-far"]);
     expect(result.catalog.flowlines.map((item) => item.id)).toEqual(["f-near", "f-west", "f-east"]);
     expect(result).not.toHaveProperty("limits");
-    const catalogIds = new Set(["c-near", "c-mid", "c-east", "c-far"]);
-    for (const proposal of result.proposals) expect(contents(proposal).every((id) => catalogIds.has(id))).toBe(true);
+    for (const proposal of result.proposals) {
+      expect(contents(proposal)).toEqual([]);
+      expect(proposal.traversedFlowlines).toEqual([]);
+    }
+    expect(result.flowlineEnhancements.length).toBeLessThanOrEqual(3);
     expect(created).toHaveLength(0);
+    expect(loadEvents.indexOf("flowlines")).toBeGreaterThan(loadEvents.lastIndexOf("route"));
+  });
+
+  it("does not fetch Flowlines for a non-cycling baseline", async () => {
+    const { service, loadEvents } = setup();
+    const result = await service.generate("p1", { ...generateBody, sport: "running" });
+    expect(result.flowlineEnhancements).toEqual([]);
+    expect(result.catalog.flowlines).toEqual([]);
+    expect(loadEvents).not.toContain("flowlines");
   });
 
   it("generates exactly one saveable route and ignores legacy intents", async () => {
@@ -250,15 +279,14 @@ describe("ExplorationService", () => {
     }
   });
 
-  it("reports Flowlines a route rides as derived metadata, never as targets", async () => {
-    const { service, routeCalls } = setup();
-    const { proposals: [proposal] } = await service.generate("p1", generateBody);
-    const ridden = proposal.traversedFlowlines.map((flowline) => flowline.id);
-    expect(ridden.length).toBeGreaterThan(0);
-    expect(ridden.every((id) => ["f-near", "f-west", "f-east"].includes(id))).toBe(true);
-    expect(contents(proposal).some((id) => id.startsWith("f-"))).toBe(false);
-    expect(proposal.targetSummary).not.toHaveProperty("flowlines");
-    expect(JSON.stringify(routeCalls)).toContain('"through"');
+  it("does not use Flowline geometry or scoring to build the baseline", async () => {
+    const first = setup();
+    const second = setup({ flowlines: [flowline("extra", [-2, 0], [2, 0], { flowScore: 100 })] });
+    const { proposals: [proposal] } = await first.service.generate("p1", generateBody);
+    const { proposals: [other] } = await second.service.generate("p1", generateBody);
+    expect(proposal.traversedFlowlines).toEqual([]);
+    expect(proposal.geometry).toEqual(other.geometry);
+    expect(proposal.distanceM).toEqual(other.distanceM);
   });
 
   it("routes an area without collectibles as route-only loops that save without objectives", async () => {
@@ -318,16 +346,32 @@ describe("ExplorationService", () => {
       );
     });
 
-    it("saves the opportunity Flowlines a generated route rides as stops, never completed ones", async () => {
+    it("keeps optional Flowlines out of baseline progression objectives", async () => {
       const completedWest = plannable.map((item) => (item.id === "f-west" ? { ...item, completed: true, completionCount: 1 } : item));
       const { service, created } = setup({ flowlines: completedWest });
       const result = await service.generate("p1", generateBody);
-      const proposal = result.proposals.find((entry) => entry.traversedFlowlines.length > 0) ?? result.proposals[0];
+      const proposal = result.proposals[0];
       await service.save("p1", { proposalId: proposal.id });
       const saved = created[0].exploration.objectives
         .filter((objective) => objective.type === "flowline_rule")
         .map((objective) => objective.targets[0].id);
-      expect(saved.sort()).toEqual(proposal.traversedFlowlines.map((item) => item.id).filter((id) => id !== "f-west").sort());
+      expect(saved).toEqual([]);
+    });
+
+    it("reroutes selected Flowlines as optional enhancements and saves no Flowline objectives", async () => {
+      const { service, created } = setup({ flowlines: [flowline("f-near", [0.2, 0.1], [1, 0.2])] });
+      const { explorationId, proposals, flowlineEnhancements } = await service.generate("p1", {
+        ...generateBody, target: at(1, 0)
+      });
+      expect(flowlineEnhancements.map(({ flowline: item }) => item.id)).toContain("f-near");
+      const result = await service.enhance("p1", explorationId, {
+        proposalId: proposals[0].id, flowlineIds: ["f-near"]
+      });
+      expect(result.flowlineIds).toContain("f-near");
+      expect(result.metrics).toHaveProperty("distanceDeltaM");
+      expect(result.metrics).toHaveProperty("durationDeltaS");
+      await service.save("p1", { proposalId: result.proposal.id });
+      expect(created[0].exploration.objectives.some((objective) => objective.type === "flowline_rule")).toBe(false);
     });
 
     it("rejects Flowlines the area does not offer and combined destinations", async () => {

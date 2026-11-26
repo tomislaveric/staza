@@ -241,6 +241,11 @@
 .route-planner-stops li.is-dropped { opacity: .55; }
 .route-planner-stop-actions button { min-width: 32px; padding: 0 6px; }
 .route-planner-result { border-top: 1px solid var(--border-faint); display: grid; gap: 8px; padding-top: 10px; }
+.route-planner-enhancements { display: grid; gap: 8px; }
+.route-planner-enhancements h3 { font-size: 13px; margin: 0; }
+.route-planner-enhancement { align-items: flex-start; background: var(--surface-raised); border: 1px solid var(--border-faint); border-radius: 10px; display: flex; gap: 8px; padding: 10px; }
+.route-planner-enhancement span { display: grid; gap: 3px; }
+.route-planner-enhancement small { color: var(--text-muted); }
 .route-planner-waypoint { color: var(--text-muted); font-family: var(--font-mono); }
 
 /* Planner wizard: sport and shape as icon choices, then three generated routes. */
