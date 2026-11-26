@@ -53,14 +53,15 @@ describe("scoring", () => {
 });
 
 describe("routing plan", () => {
-  it("maps routing location indexes to destinations and uses via for every stop", () => {
+  it("maps routing location indexes to destinations, stops at targets and passes helper points", () => {
     const first = pointTarget("p", "o", 1, 1);
     const second = pointTarget("q", "o", 2, 2);
-    const plan = buildRoutingPlan(at(0, 0), at(0, 0), [{ target: first }, { target: second }]);
-    expect(plan.request.waypoints).toHaveLength(2);
-    expect(plan.request.waypoints.every((waypoint) => waypoint.type === "via")).toBe(true);
+    const helper = { ...pointTarget("h", "o", 3, 3), routeOnly: true };
+    const plan = buildRoutingPlan(at(0, 0), at(0, 0), [{ target: first }, { target: helper }, { target: second }]);
+    expect(plan.request.waypoints.map((waypoint) => waypoint.type)).toEqual(["via", "through", "via"]);
+    expect(plan.request.options).toEqual({ avoidFerries: true });
     expect(plan.waypointTargetIds.get(1)).toBe("p");
-    expect(plan.waypointTargetIds.get(2)).toBe("q");
+    expect(plan.waypointTargetIds.get(3)).toBe("q");
     expect(JSON.stringify(plan.request)).not.toContain("\"p\"");
   });
 });

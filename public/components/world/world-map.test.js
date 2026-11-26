@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  ALTERNATES_SOURCE_ID,
   ROUTE_SOURCE_ID,
   SAVED_ROUTES_SOURCE_ID,
-  alternateRouteLayers,
-  alternateRoutesToGeoJson,
   createHomeMarkerElement,
   exploreFrameToGeoJson,
   homeScaleZoom,
@@ -45,26 +42,6 @@ describe("quest route layers", () => {
 describe("routeToGeoJson", () => {
   it("never fabricates geometry for quests without a route", () => {
     expect(routeToGeoJson(undefined).geometry).toEqual({ type: "LineString", coordinates: [] });
-  });
-});
-
-describe("alternate exploration routes", () => {
-  it("draws unselected proposals muted, without the quest accent glow", () => {
-    const layers = alternateRouteLayers();
-    expect(layers.every((layer) => layer.source === ALTERNATES_SOURCE_ID)).toBe(true);
-    expect(layers.some((layer) => layer.id.endsWith("-glow"))).toBe(false);
-    const line = layers.find((layer) => layer.id.endsWith("-line"));
-    expect(line.paint["line-color"]).not.toBe("#e8b80a");
-    expect(line.paint["line-opacity"]).toBeLessThan(0.95);
-  });
-
-  it("tags each route with its proposal id and skips empty geometry", () => {
-    const geometry = { type: "LineString", coordinates: [[9, 50], [9.1, 50.1]] };
-    expect(alternateRoutesToGeoJson([{ id: "a", geometry }, { id: "b" }])).toEqual({
-      type: "FeatureCollection",
-      features: [{ type: "Feature", properties: { proposalId: "a" }, geometry }]
-    });
-    expect(alternateRoutesToGeoJson().features).toEqual([]);
   });
 });
 

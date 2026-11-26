@@ -18,6 +18,20 @@ export const bearing = (from: LatLon, to: LatLon): number => {
   return angle < 0 ? angle + 2 * Math.PI : angle;
 };
 
+/** Angle in degrees (0..90) between two undirected axes, given as bearings in radians. */
+export const axisAngleDegrees = (a: number, b: number): number => {
+  const diff = (((a - b) % Math.PI) + Math.PI) % Math.PI;
+  return Math.min(diff, Math.PI - diff) / RADIANS;
+};
+
+/** End-to-end bearing of a line and how straight it is (end-to-end distance / length, 0..1). */
+export const lineAxis = (coordinates: LonLat[]): { bearing: number; straightness: number } => {
+  const first = toLatLon(coordinates[0]);
+  const last = toLatLon(coordinates[coordinates.length - 1]);
+  const length = lineLengthMeters(coordinates);
+  return { bearing: bearing(first, last), straightness: length > 0 ? distanceBetween(first, last) / length : 0 };
+};
+
 /** Equirectangular projection around an origin; accurate enough at ride scale. */
 export class LocalProjection {
   private readonly cosLat: number;

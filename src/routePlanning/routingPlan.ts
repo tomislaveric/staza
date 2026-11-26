@@ -5,16 +5,19 @@ export const stopPosition = (stop: CandidateStop): LatLon => stop.target.coordin
 const roundCoordinate = (value: number): number => Math.round(value * 1e6) / 1e6;
 
 /**
- * Translates an ordered candidate into a neutral routing request: every destination becomes a
- * `via` stop. The returned map correlates routing location indexes (0 = start) with Staza target
- * ids so snapping failures can be attributed.
+ * Translates an ordered candidate into a neutral routing request. Collectibles become `via`
+ * stops; route-only points (loop anchors, Flowline ride points, map points) become `through`
+ * points, which shape the path without a U-turn, so the router never rides into a side road and
+ * back just to touch them. `stopAtHelpers` routes them as `via` too, for when passing them is
+ * impossible without leaving the area. The returned map correlates routing location indexes (0 = start) with
+ * Staza target ids so snapping failures can be attributed.
  */
-export const buildRoutingPlan = (start: LatLon, end: LatLon, stops: CandidateStop[], profile: RoutingProfile = "bicycle"): RoutingPlan => {
+export const buildRoutingPlan = (start: LatLon, end: LatLon, stops: CandidateStop[], profile: RoutingProfile = "bicycle", { stopAtHelpers = false }: { stopAtHelpers?: boolean } = {}): RoutingPlan => {
   const waypoints: RoutingWaypoint[] = [];
   const waypointTargetIds = new Map<number, string>();
   for (const stop of stops) {
     const point = stopPosition(stop);
-    waypoints.push({ type: "via", lat: roundCoordinate(point.lat), lon: roundCoordinate(point.lon) });
+    waypoints.push({ type: stop.target.routeOnly && !stopAtHelpers ? "through" : "via", lat: roundCoordinate(point.lat), lon: roundCoordinate(point.lon) });
     waypointTargetIds.set(waypoints.length, stop.target.id);
   }
   return {
@@ -22,7 +25,8 @@ export const buildRoutingPlan = (start: LatLon, end: LatLon, stops: CandidateSto
       profile,
       start: { lat: roundCoordinate(start.lat), lon: roundCoordinate(start.lon) },
       end: { lat: roundCoordinate(end.lat), lon: roundCoordinate(end.lon) },
-      waypoints
+      waypoints,
+      options: { avoidFerries: true }
     },
     waypointTargetIds
   };

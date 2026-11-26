@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { UserInputError } from "../errors.js";
-import { DEFAULT_ROUTE_INTENT, flowlineFit, intentLengthMeters, parseRouteIntent, poiValue, sharpTurns, type RouteIntent } from "./intent.js";
-import { generateIntentRoute } from "./intentPlanner.js";
+import { flowlineFit, GENERATION_POLICY, generationLengthMeters, lateralJogs, poiValue, sharpTurns } from "./generationPolicy.js";
+import { generateRoute } from "./routeGenerator.js";
 import type { RouteProvider } from "./planner.js";
 import { PLANNING_LIMITS } from "./policy.js";
 import { RoutingError } from "./routingClient.js";
-import { backtrackRatio } from "./roundTrip.js";
+import { backtrackRatio, routeKnots } from "./roundTrip.js";
 import { at, flowlineGeometry, pointTarget, straightLineRoute } from "./testFixtures.js";
 import type { FlowlineGeometry, QuestRouteTarget, RoutePlanningInput, RoutingRequest } from "./types.js";
 
@@ -14,12 +13,12 @@ const ne = at(10, 10);
 const bounds = { minLatitude: sw.lat, maxLatitude: ne.lat, minLongitude: sw.lon, maxLongitude: ne.lon };
 const AREA_METERS = 56_000;
 
-const ride = (intent: RouteIntent, sport: RoutePlanningInput["sport"] = "cycling"): RoutePlanningInput => ({
+const ride = (sport: RoutePlanningInput["sport"] = "cycling"): RoutePlanningInput => ({
   start: at(0, 0),
   end: at(0, 0),
   routeType: "round_trip",
   sport,
-  constraint: { type: "distance", meters: intentLengthMeters(AREA_METERS, intent) }
+  constraint: { type: "distance", meters: generationLengthMeters(AREA_METERS) }
 });
 
 const straightRouter = (): RouteProvider & { calls: RoutingRequest[] } => {
@@ -28,15 +27,14 @@ const straightRouter = (): RouteProvider & { calls: RoutingRequest[] } => {
 };
 
 const generate = (
-  intent: RouteIntent,
   { targets = [], flowlines = [], routing = straightRouter(), sport }: {
     targets?: QuestRouteTarget[];
     flowlines?: FlowlineGeometry[];
     routing?: RouteProvider;
     sport?: RoutePlanningInput["sport"];
   } = {}
-) => generateIntentRoute(
-  { requestId: "req", playerId: "player", scopeId: "exploration", intent, targets, flowlines, input: ride(intent, sport), bounds },
+) => generateRoute(
+  { requestId: "req", playerId: "player", scopeId: "exploration", targets, flowlines, input: ride(sport), bounds },
   { routing, log: () => undefined }
 );
 
@@ -64,19 +62,11 @@ const besideStart = [
 const categories = (ids: string[], targets: QuestRouteTarget[]) =>
   ids.map((id) => targets.find((target) => target.id === id)?.category);
 
-describe("route intents", () => {
-  it("defaults to Chill and rejects unknown intents", () => {
-    expect(parseRouteIntent(undefined)).toBe(DEFAULT_ROUTE_INTENT);
-    expect(DEFAULT_ROUTE_INTENT).toBe("chill");
-    expect(parseRouteIntent("explore")).toBe("explore");
-    expect(() => parseRouteIntent("fast")).toThrow(UserInputError);
-  });
-
-  it("caps the area-derived length per intent, Chill shortest", () => {
-    expect(intentLengthMeters(AREA_METERS, "chill")).toBeLessThan(intentLengthMeters(AREA_METERS, "flow"));
-    expect(intentLengthMeters(AREA_METERS, "explore")).toBe(AREA_METERS);
-    expect(intentLengthMeters(300_000, "chill")).toBe(50_000);
-    expect(intentLengthMeters(300_000, "flow")).toBe(120_000);
+describe("generation policy", () => {
+  it("scales and caps the area-derived length", () => {
+    expect(generationLengthMeters(AREA_METERS)).toBeLessThan(AREA_METERS);
+    expect(generationLengthMeters(300_000)).toBe(GENERATION_POLICY.maxLengthMeters);
+    expect(generationLengthMeters(0)).toBe(PLANNING_LIMITS.minDistanceMeters);
   });
 
   it("values variety over more of the same category", () => {
@@ -86,11 +76,10 @@ describe("route intents", () => {
     expect(poiValue([castle1, { ...castle2, alreadyAchieved: true }])).toBeLessThan(poiValue([castle1, castle2]));
   });
 
-  it("ranks Flowlines by the intent's ride style", () => {
-    const explorative = scored("explorative", [0, 0], [1, 0], { flow: 30, endurance: 40, explore: 95, roadQuality: 60 });
-    expect(flowlineFit(highFlow, "flow")).toBeGreaterThan(flowlineFit(explorative, "flow"));
-    expect(flowlineFit(explorative, "explore")).toBeGreaterThan(flowlineFit(highFlow, "explore"));
-    expect(flowlineFit({ ...highFlow, completed: true }, "flow")).toBeLessThan(flowlineFit(highFlow, "flow"));
+  it("ranks good Flowlines above poor and completed ones", () => {
+    const poor = scored("poor", [0, 0], [1, 0], { flow: 20, endurance: 30, explore: 30, roadQuality: 30 });
+    expect(flowlineFit(highFlow)).toBeGreaterThan(flowlineFit(poor));
+    expect(flowlineFit({ ...highFlow, completed: true })).toBeLessThan(flowlineFit(highFlow));
   });
 
   it("counts sharp turns, not gentle bends", () => {
@@ -101,24 +90,29 @@ describe("route intents", () => {
     expect(sharpTurns(route([[0, 0], [0, 2], [2, 2], [2, 0]]).geometry.coordinates)).toBe(2);
     expect(sharpTurns(line([[0, 0], [0, 1]]))).toBe(0);
   });
+
+  it("counts short sideways hops as jogs, not bends or single corners", () => {
+    const line = (points: Array<[number, number]>) => points.map(([n, e]) => [at(n, e).lon, at(n, e).lat] as [number, number]);
+    expect(lateralJogs(line([[0, 0], [0, 1], [0.025, 1], [0.025, 2]]))).toBe(1);
+    expect(lateralJogs(line([[0, 0], [0, 2], [0.2, 4]]))).toBe(0);
+    expect(lateralJogs(line([[0, 0], [0, 1], [1, 1]]))).toBe(0);
+  });
 });
 
-describe("generateIntentRoute", () => {
+describe("generateRoute", () => {
   it("returns exactly one recommended route within the routing budget", async () => {
-    for (const intent of ["flow", "chill", "explore"] as const) {
-      const router = straightRouter();
-      const { proposal, stops } = await generate(intent, { targets: besideStart, flowlines: [highFlow], routing: router });
-      expect(proposal.recommended).toBe(true);
-      expect(stops.length).toBeGreaterThan(0);
-      expect(router.calls.length).toBeLessThanOrEqual(PLANNING_LIMITS.maxRoutingRequests);
-    }
+    const router = straightRouter();
+    const { proposal, stops } = await generate({ targets: besideStart, flowlines: [highFlow], routing: router });
+    expect(proposal.recommended).toBe(true);
+    expect(stops.length).toBeGreaterThan(0);
+    expect(router.calls.length).toBeLessThanOrEqual(PLANNING_LIMITS.maxRoutingRequests);
   });
 
   it("rides to a distant area and back on different sides instead of out and back", async () => {
     const routing = straightRouter();
-    const input = { ...ride("chill"), start: at(-30, 0), end: at(-30, 0) };
-    const { proposal } = await generateIntentRoute(
-      { requestId: "req", playerId: "player", scopeId: "exploration", intent: "chill", targets: [], flowlines: [], input, bounds },
+    const input = { ...ride(), start: at(-30, 0), end: at(-30, 0) };
+    const { proposal } = await generateRoute(
+      { requestId: "req", playerId: "player", scopeId: "exploration", targets: [], flowlines: [], input, bounds },
       { routing, log: () => undefined }
     );
     expect(backtrackRatio(proposal.geometry.coordinates)).toBeLessThan(0.1);
@@ -146,44 +140,79 @@ describe("generateIntentRoute", () => {
         return { ...route, geometry: { ...route.geometry, coordinates: [route.geometry.coordinates[0], outside, ...route.geometry.coordinates.slice(1)] } };
       }
     };
-    const { proposal } = await generate("chill", { routing });
+    const { proposal } = await generate({ routing });
     expect(proposal.geometry.coordinates.every(([lon, lat]) => reachKm({ lat, lon }) <= 10)).toBe(true);
     expect(calls.length).toBeGreaterThan(1);
     expect(calls.length).toBeLessThanOrEqual(PLANNING_LIMITS.maxRoutingRequests);
   });
 
-  it("never zigzags Explore routes out to far collectibles", async () => {
-    const { proposal } = await generate("explore", { targets: cornerCastles });
+  it("stops at helper points when passing them always leaves the area", async () => {
+    const calls: RoutingRequest[] = [];
+    const routing: RouteProvider = {
+      route: async (request) => {
+        calls.push(request);
+        const route = straightLineRoute(request);
+        if (request.waypoints.every((point) => point.type === "via")) return route;
+        const outside = [at(15, 15).lon, at(15, 15).lat] as [number, number];
+        return { ...route, geometry: { ...route.geometry, coordinates: [route.geometry.coordinates[0], outside, ...route.geometry.coordinates.slice(1)] } };
+      }
+    };
+    const { proposal } = await generate({ routing });
+    expect(proposal.geometry.coordinates.length).toBeGreaterThan(0);
+    expect(calls.some((request) => request.waypoints.some((point) => point.type === "through"))).toBe(true);
+    expect(calls.length).toBeLessThanOrEqual(PLANNING_LIMITS.maxRoutingRequests);
+  });
+
+  it("drops the helper point that ties a knot into the route", async () => {
+    // Roads around helpers far east of the start force a small loop that crosses itself.
+    const kmNorth = at(1, 0).lat - at(0, 0).lat;
+    const kmEast = at(0, 1).lon - at(0, 0).lon;
+    const knotted = (point: { lat: number; lon: number }) => point.lon > at(0, 0).lon + 3 * kmEast;
+    const routing: RouteProvider = {
+      route: async (request) => {
+        const route = straightLineRoute(request);
+        const knot = request.waypoints.find((point) => point.type === "through" && knotted(point));
+        if (!knot) return route;
+        const offset = (n: number, e: number) => [knot.lon + e * kmEast, knot.lat + n * kmNorth] as [number, number];
+        const coordinates = [request.start, ...request.waypoints.slice(0, request.waypoints.indexOf(knot))]
+          .map((point) => [point.lon, point.lat] as [number, number]);
+        const rest = [...request.waypoints.slice(request.waypoints.indexOf(knot) + 1), request.end]
+          .map((point) => [point.lon, point.lat] as [number, number]);
+        const loop = [offset(0, 0), offset(0.3, 0.15), offset(0.3, -0.15), offset(-0.2, 0.15), offset(0, 0)];
+        const geometry = straightLineRoute({ ...request, waypoints: [] }).geometry;
+        return { ...route, geometry: { ...geometry, coordinates: [...coordinates, ...loop, ...rest] } };
+      }
+    };
+    const { proposal } = await generate({ routing });
+    expect(routeKnots(proposal.geometry.coordinates)).toHaveLength(0);
+    expect(proposal.geometry.coordinates.length).toBeGreaterThan(2);
+  });
+
+  it("never zigzags out to far collectibles", async () => {
+    const { proposal } = await generate({ targets: cornerCastles });
     expect(proposal.includedTargetIds).toEqual([]);
     expect(proposal.nearbyTargetIds).toEqual([]);
   });
 
-  it("gives Explore a few varied collectibles instead of every castle", async () => {
-    const { proposal } = await generate("explore", { targets: [...besideStart, ...cornerCastles] });
-    const kinds = categories([...proposal.includedTargetIds, ...proposal.nearbyTargetIds], besideStart);
-    expect(new Set(kinds).size).toBeGreaterThanOrEqual(2);
-    expect(kinds.filter((kind) => kind === "castle").length).toBeLessThanOrEqual(2);
+  it("adds a few varied collectibles instead of every castle", async () => {
+    const { proposal } = await generate({ targets: [...besideStart, ...cornerCastles] });
+    const kinds = categories(proposal.includedTargetIds, besideStart);
+    expect(proposal.includedTargetIds.length).toBeLessThanOrEqual(GENERATION_POLICY.pois.max);
+    expect(kinds.filter((kind) => kind === "castle").length).toBeLessThanOrEqual(1);
     expect(proposal.includedTargetIds.some((id) => id.startsWith("castle-n") || id.startsWith("castle-s"))).toBe(false);
   });
 
-  it("builds Flow routes on the best-fitting Flowline with at most one planned collectible", async () => {
+  it("builds on the best-fitting Flowline with few planned collectibles", async () => {
     const lowFlow = scored("low-flow", [-2, -3], [-7, -3], { flow: 20, endurance: 30, explore: 30, roadQuality: 30 });
-    const { proposal, stops } = await generate("flow", { targets: besideStart, flowlines: [highFlow, lowFlow] });
+    const { proposal, stops } = await generate({ targets: besideStart, flowlines: [highFlow, lowFlow] });
     expect(proposal.traversedFlowlines.map((flowline) => flowline.id)).toContain("high-flow");
     expect(proposal.traversedFlowlines.map((flowline) => flowline.id)).not.toContain("low-flow");
-    expect(stops.filter((stop) => !stop.targetId.startsWith("waypoint:")).length).toBeLessThanOrEqual(1);
-  });
-
-  it("keeps Chill shorter with fewer planned collectibles than Explore", async () => {
-    const chill = await generate("chill", { targets: besideStart, flowlines: [highFlow] });
-    const explore = await generate("explore", { targets: besideStart, flowlines: [highFlow] });
-    const planned = (entry: typeof chill) => entry.stops.filter((stop) => !stop.targetId.startsWith("waypoint:")).length;
-    expect(chill.proposal.distanceM).toBeLessThan(explore.proposal.distanceM);
-    expect(planned(chill)).toBeLessThanOrEqual(planned(explore));
+    expect(stops.filter((stop) => stop.targetId.startsWith("castle") || stop.targetId === "peak" || stop.targetId === "viewpoint").length)
+      .toBeLessThanOrEqual(GENERATION_POLICY.pois.max);
   });
 
   it("never follows Flowlines for running", async () => {
-    const { proposal } = await generate("flow", { flowlines: [highFlow], sport: "running" });
+    const { proposal } = await generate({ flowlines: [highFlow], sport: "running" });
     expect(proposal.traversedFlowlines).toEqual([]);
   });
 
@@ -197,18 +226,18 @@ describe("generateIntentRoute", () => {
         return straightLineRoute(request);
       }
     };
-    const { proposal } = await generate("explore", { targets: besideStart, routing });
+    const { proposal } = await generate({ targets: besideStart, routing });
     expect(proposal.includedTargetIds).not.toContain("peak");
   });
 
   it("reports routing outages with a stable code", async () => {
     const down: RouteProvider = { route: async () => { throw new RoutingError("unavailable", "down"); } };
-    await expect(generate("chill", { targets: besideStart, routing: down })).rejects.toMatchObject({ code: "routing_unavailable" });
+    await expect(generate({ targets: besideStart, routing: down })).rejects.toMatchObject({ code: "routing_unavailable" });
   });
 
   it("is deterministic for identical inputs", async () => {
     const strip = async () => {
-      const { proposal: { id: _id, ...rest }, stops } = await generate("explore", { targets: besideStart, flowlines: [highFlow] });
+      const { proposal: { id: _id, ...rest }, stops } = await generate({ targets: besideStart, flowlines: [highFlow] });
       return { rest, stops };
     };
     expect(await strip()).toEqual(await strip());

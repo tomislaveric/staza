@@ -15,6 +15,7 @@ struct WorldView: View {
     /// Coordinates the map frames on request, e.g. a Flowline shown from the discoveries.
     @State private var framed: [CLLocationCoordinate2D] = []
     @State private var focusRequest = 0
+    @State private var confirmRegenerate = false
     @State private var centering: Task<Void, Never>?
     /// Share of the visible map a focus fit may fill; a selected item gets room around it.
     @State private var focusFill: CGFloat = 1
@@ -57,10 +58,9 @@ struct WorldView: View {
                     collectibles: model.visibleCollectibles,
                     flowlines: model.visibleFlowlines,
                     explorationRoutes: model.explorationRoutes,
-                    exploreOutline: planner.isActive ? planningOutline(model, planner) : model.exploreOutline,
+                    exploreOutline: model.exploreOutline,
                     questTargets: planner.isActive ? plannerTargets(planner) : model.mapQuestTargets,
                     route: planner.displayedRoute,
-                    alternativeRoutes: planner.isActive ? planner.otherAlternatives.map(\.geometry.clCoordinates) : [],
                     selection: planner.isActive ? plannerSelection(planner) : model.selection,
                     onViewportChange: { model.viewportChanged($0) },
                     onExploreCircleChange: { model.exploreCircle = $0 },
@@ -105,6 +105,12 @@ struct WorldView: View {
                 }
             }
             .onChange(of: planner.generateRequest) { _, _ in generate(model, planner) }
+            .confirmationDialog("planner.suggest.replace.title", isPresented: $confirmRegenerate, titleVisibility: .visible) {
+                Button("planner.suggest.replace.confirm", role: .destructive) { planner.requestGeneration() }
+                Button("action.cancel", role: .cancel) {}
+            } message: {
+                Text("planner.suggest.replace.message")
+            }
             .onChange(of: planner.focusRequest) { _, _ in
                 guard let stop = planner.focusedStop else { return }
                 withAnimation(.snappy) { sheet.revealMap() }
@@ -240,39 +246,21 @@ struct WorldView: View {
         model.select(kind, id: id)
     }
 
-    /// Generates the planner's three routes in the explored area, else in the map the sheet does not cover.
+    /// Generates the planner's route towards the aim: the center of the map the sheet does not cover.
     private func generate(_ model: WorldModel, _ planner: RoutePlannerModel) {
-        guard let bounds = model.sessionBounds ?? model.visibleArea ?? model.bounds else { return }
-        Task { await planner.generate(in: bounds) }
+        guard let aim = (model.visibleArea ?? model.sessionBounds ?? model.bounds)?.center else { return }
+        Task { await planner.generate(toward: aim) }
     }
 
-    /// The planning area while planning: the Explore session's outline, the area the routes were generated
-    /// for, else the visible map above the sheet (slightly inset so its dashed frame shows).
-    private func planningOutline(_ model: WorldModel, _ planner: RoutePlannerModel) -> [CLLocationCoordinate2D] {
-        if !model.exploreOutline.isEmpty { return model.exploreOutline }
-        if let area = planner.generatedArea { return Self.rectangle(area, inset: 0) }
-        guard planner.chosenIntent == nil, planner.proposal == nil, let visible = model.visibleArea else { return [] }
-        return Self.rectangle(visible, inset: 0.04)
-    }
-
-    private static func rectangle(_ bounds: WorldBounds, inset: Double) -> [CLLocationCoordinate2D] {
-        let dLat = (bounds.north - bounds.south) * inset, dLon = (bounds.east - bounds.west) * inset
-        let (west, east) = (bounds.west + dLon, bounds.east - dLon)
-        let (south, north) = (bounds.south + dLat, bounds.north - dLat)
-        return [(north, west), (north, east), (south, east), (south, west), (north, west)]
-            .map { CLLocationCoordinate2D(latitude: $0.0, longitude: $0.1) }
-    }
-
-    /// Shows which map area the routes come from: a center target and caption before generating, and
-    /// "Generate here" once the map shows clearly another area.
+    /// The aim icon marks the target in the middle of the uncovered map before generating and while the map
+    /// aims elsewhere ("Generate here"). An A→B route aims at its picked end instead.
     @ViewBuilder
     private func planningAreaOverlay(_ model: WorldModel, _ planner: RoutePlannerModel) -> some View {
-        let before = planner.generatedArea == nil && planner.chosenIntent == nil && planner.proposal == nil
-            && model.exploreOutline.isEmpty
-        let moved = planner.isIdle && planner.canGenerate && model.exploreOutline.isEmpty
-            && planner.areaMoved(to: model.visibleArea)
+        let aims = planner.routeType == .roundTrip
+        let before = aims && planner.generatedTarget == nil && !planner.generated && planner.proposal == nil
+        let moved = aims && planner.isIdle && planner.canGenerate && planner.targetMoved(to: model.visibleArea)
         ZStack(alignment: .top) {
-            if before {
+            if before || moved {
                 // Full map height like the map's own frame, so the target sits in the middle of the uncovered map.
                 GeometryReader { geometry in
                     Image(systemName: "scope")
@@ -286,13 +274,15 @@ struct WorldView: View {
                 .accessibilityHidden(true)
             }
             if moved {
-                Button("planner.area.regenerate", systemImage: "arrow.clockwise") { planner.requestGeneration() }
+                Button("planner.area.regenerate", systemImage: "arrow.clockwise") {
+                    if planner.suggestReplacesOwnStops { confirmRegenerate = true } else { planner.requestGeneration() }
+                }
                     .buttonStyle(.stazaPrimaryWide)
                     .fixedSize()
                     .padding(.top, StazaSpacing.md)
                     .accessibilityIdentifier("plannerRegenerate")
             } else if before {
-                Label("planner.area.caption", systemImage: "viewfinder")
+                Label("planner.area.caption", systemImage: "scope")
                     .font(StazaFont.footnote.weight(.semibold))
                     .foregroundStyle(StazaColor.textPrimary)
                     .padding(.horizontal, StazaSpacing.sm)

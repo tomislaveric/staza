@@ -2,8 +2,8 @@
 
 > **Amended by [route-generation-v2](../route-generation-v2/README.md).** Explore is always
 > available: a viewport wider than 50 km or taller than 100 km is clamped to a centered frame
-> instead of being rejected, so "Zoom in to explore" is gone. Generate route takes an intent
-> (Flow / Chill / Explore) and returns exactly one route.
+> instead of being rejected, so "Zoom in to explore" is gone. Generate route
+> and returns exactly one route.
 >
 > **Amended by
 > [explore-sessions-and-saved-explorations](../explore-sessions-and-saved-explorations/README.md).**

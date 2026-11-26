@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { NewPlannedRoute, QuestObjective, WorldCollectible, WorldFartlek } from "../domain.js";
 import { UserInputError } from "../errors.js";
-import { generateIntentRoute } from "../routePlanning/intentPlanner.js";
+import { generateRoute } from "../routePlanning/routeGenerator.js";
 import { PlanningError, rerouteTargets, waypointTarget, type PlannedProposal, type RouteProvider } from "../routePlanning/planner.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import type { ProposalStore } from "../routePlanning/proposalStore.js";
@@ -11,7 +11,7 @@ import { assertNearTargets, parseProposalId } from "../routePlanning/request.js"
 import { constraintActual, constraintRequested } from "../routePlanning/scoring.js";
 import { profileForSport } from "../routePlanning/sport.js";
 import { buildExplorationTargets, buildFlowlineGeometries, MAX_AVAILABLE_TARGETS } from "../routePlanning/targets.js";
-import { PLANNER_VERSION, type QuestRouteTarget, type RoutePlanningInput, type RouteProposal } from "../routePlanning/types.js";
+import { PLANNER_VERSION, type QuestRouteTarget, type RoutePlanningInput, type RouteProposal, type RoutingResult } from "../routePlanning/types.js";
 import type { GeoBounds } from "../worldQuery.js";
 import { planManualRoute, startToNearestStopM, type ManualStop } from "../routePlanning/manual.js";
 import { describeExploration, explorationObjectives, flowlineObjective, withObjectiveIds } from "./objectives.js";
@@ -139,6 +139,22 @@ const planningFailure = (error: unknown): unknown => error instanceof PlanningEr
   ? new ExplorationError(error.code === "routing_unavailable" ? "planning_unavailable" : error.code)
   : error;
 
+/** Shares identical routing requests (and their failures) within one generation. */
+const sharedRoutes = (routing: RouteProvider): RouteProvider => {
+  const results = new Map<string, Promise<RoutingResult>>();
+  return {
+    route: (request, options) => {
+      const key = JSON.stringify(request);
+      let result = results.get(key);
+      if (!result) {
+        result = routing.route(request, options);
+        results.set(key, result);
+      }
+      return result;
+    }
+  };
+};
+
 /**
  * Route-first "Explore this Area": the player describes the ride, the planner chooses target
  * combinations and returns a few route proposals, the player may customize one route's targets,
@@ -171,12 +187,13 @@ export class ExplorationService {
   }
 
   /**
-   * Freezes the area, resolves its eligible targets and generates ONE route for the player's intent
-   * (Flow, Chill or Explore). The response keeps a one-entry `proposals` list for older clients.
+   * Freezes the area, resolves its eligible targets and generates ONE route. The response keeps a
+   * one-entry `proposals` list.
    */
   async generate(playerId: string, body: unknown, requestId: string = randomUUID()): Promise<GeneratedExploration> {
-    const routing = this.requireRouting();
-    const { area, input, variants, destinationId, destinationFlowlineId } = parseGenerateRequest(body);
+    // Skeleton variants often repeat a route; each distinct request goes to the router once.
+    const routing = sharedRoutes(this.requireRouting());
+    const { area, aim, input, destinationId, destinationFlowlineId } = parseGenerateRequest(body);
     if (input.routeType === "point_to_point" && !insideBounds([input.end.lon, input.end.lat], area.bounds, 0)) {
       throw new UserInputError("The destination must be inside the explored area.");
     }
@@ -216,15 +233,6 @@ export class ExplorationService {
     const session = this.dependencies.sessions.create({ playerId, area, input, ...sessionData(resolved) });
 
     const plan = async (current: typeof resolved): Promise<{ planned?: Array<PlannedProposal & { input: typeof input }>; failure?: unknown }> => {
-      // Every intent is planned in parallel; failing intents are left out, unless all fail.
-      const results = await Promise.all(variants.map((variant) => planIntent(current, variant)));
-      const planned = results.flatMap((result) => (result.planned ? [result.planned] : []));
-      return planned.length > 0 ? { planned } : { failure: results[0].failure };
-    };
-    const planIntent = async (
-      current: typeof resolved,
-      { intent, input }: (typeof variants)[number]
-    ): Promise<{ planned?: PlannedProposal & { input: typeof input }; failure?: unknown }> => {
       try {
         const dependencies = { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) };
         const required = destination
@@ -233,15 +241,16 @@ export class ExplorationService {
             return { target: withObjectiveIds([destination], objectives)[0], objectives };
           })()
           : undefined;
-        const generated = await generateIntentRoute(
+        const generated = await generateRoute(
           {
-            requestId, playerId, scopeId: session.id, intent, targets: current.targets, flowlines: current.flowlineGeometries, input, bounds: area.bounds,
+            requestId, playerId, scopeId: session.id, targets: current.targets, flowlines: current.flowlineGeometries, input, bounds: area.bounds,
+            ...(aim ? { aim } : {}),
             ...(required ? { required } : {}),
             ...(requiredFlowline ? { requiredFlowline } : {})
           },
           dependencies
         );
-        return { planned: { ...generated, proposal: { ...generated.proposal, intent }, input } };
+        return { planned: [{ ...generated, input }] };
       } catch (failure) {
         return { failure };
       }

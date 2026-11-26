@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 /**
- * Explore (wide viewport, clamped frame) → intent → generate one route → edit → save → start with stubbed World data, so the flow does not depend on the
+ * Explore (wide viewport, clamped frame) → generate one route → edit → save → start with stubbed World data, so the flow does not depend on the
  * test player's history. The real page, map and client logic run unchanged.
  */
 const line = (lon: number) => ({ type: "LineString", coordinates: [[lon, 47.5], [lon + 0.02, 47.51]] });
@@ -91,22 +91,18 @@ test.describe("explore this area", () => {
     await expect(card.locator(".world-explore-breakdown")).toContainText("1 collectible");
     await expect(card.locator("[data-explore-clamped]")).toBeVisible();
 
-    await expect(card.locator('[data-explore-intent="chill"]')).toHaveAttribute("aria-pressed", "true");
-    await card.locator('[data-explore-intent="flow"]').click();
-    await expect(card.locator('[data-explore-intent="flow"]')).toHaveAttribute("aria-pressed", "true");
-
     await card.locator("[data-explore-generate]").click();
     await expect(page.locator('[data-planner-stop="c-castle"]')).toBeVisible();
     await expect(page.locator('[data-planner-stop="flowline:f-rhine"]')).toBeVisible();
     expect(calls.generate).toHaveLength(1);
-    expect(calls.generate[0]).toMatchObject({ intent: "flow", start: { lat: 47.5, lon: 8.5 }, area: { bbox: "8.300000,47.300000,8.700000,47.700000" } });
+    expect(calls.generate[0]).toMatchObject({ start: { lat: 47.5, lon: 8.5 }, routeType: "round_trip" });
+    expect(calls.generate[0]).not.toHaveProperty("intents");
 
-    // The generated route is directly editable: drop the castle and reroute.
+    // The generated route is directly editable: dropping the castle reroutes after a short pause.
     await page.getByRole("button", { name: "Remove Hill Castle" }).click();
     await expect(page.locator('[data-planner-stop="c-castle"]')).toHaveCount(0);
-    await page.locator("[data-planner-route]").click();
-    await expect(page.locator("[data-planner-result]")).toBeVisible();
-    expect(calls.plan).toHaveLength(1);
+    await expect.poll(() => calls.plan.length).toBe(1);
+    await expect(page.locator("[data-planner-save]")).toBeEnabled();
 
     await page.locator("[data-planner-save]").click();
     const quests = page.getByRole("region", { name: "Your explorations" });

@@ -3,40 +3,17 @@ import { CollectibleSwatch } from "./collectible-swatch.js";
 import { formatRouteDistance, formatRouteDuration, SPORT_OPTIONS } from "./route-format.js";
 
 /**
- * What a generated route should feel like. Never named after speed: Staza does not optimize pace.
- * The names stay Glide / Chill / Explore (Glide, so it never clashes with the Flow score) in every language. Chill is the default; the choice is
- * not saved with the Exploration.
- */
-export const ROUTE_INTENTS = [
-  { value: "flow", label: "Glide", description: "Smooth Flowlines, few interruptions." },
-  { value: "chill", label: "Chill", description: "A relaxed, moderate mix." },
-  { value: "explore", label: "Explore", description: "A few good places, small detours." }
-];
-export const DEFAULT_ROUTE_INTENT = "chill";
-
-/** The intent picker shared by the Explore card and the planner; `attribute` names the click target. */
-export const IntentPicker = (selected, attribute, { disabled = false } = {}) => `
-  <div class="route-intent-picker" role="group" aria-label="Route feel">
-    ${ROUTE_INTENTS.map((intent) => `
-      <button type="button" ${attribute}="${intent.value}" aria-pressed="${selected === intent.value}"${disabled ? " disabled" : ""}>
-        <strong translate="no">${escapeHtml(intent.label)}</strong>
-        <small>${escapeHtml(intent.description)}</small>
-      </button>`).join("")}
-  </div>
-`;
-
-/**
- * The route planner as a short wizard: pick a sport, pick a shape, and Staza generates Glide, Chill
- * and Explore for the planning area in one request. Choosing one turns its stops into the editable
- * stop list; every later edit reroutes. Saving is the only persistence step.
+ * The route planner as a short wizard: pick a sport, pick a shape, and Staza generates one route
+ * towards the aimed target (the map center). Its stops become the editable stop list; every later
+ * edit reroutes. Saving is the only persistence step.
  * - `sportChosen` / `shapeChosen`: the wizard steps the player completed; `stepsOpen` shows them again.
- * - `alternatives`: the generated routes (each with `intent`), `chosenIntent` the one being edited.
- * - `stopsAreSuggested`: the stops are exactly the chosen route's; own edits clear it.
+ * - `generated`: Staza generated the current route (possibly edited since).
+ * - `stopsAreSuggested`: the stops are exactly the generated route's; own edits clear it.
  * - `adding`: "flowline" | "collectible" | "waypoint" while the map adds that kind of stop.
  * - `picking`: "start" | "end" while the map sets that endpoint.
  * - `status`: "idle" | "routing" | "generating" | "saving".
  * - `proposal`: the routed result for the current stops; cleared by every edit.
- * - `generatedArea`: the bbox the alternatives were generated for; `areaMoved` once the map left it.
+ * - `generatedTarget`: the target the route was generated for; `targetMoved` once the map aims elsewhere.
  */
 export const createPlannerState = ({ start, stops = [], sport, routeType } = {}) => ({
   start,
@@ -53,11 +30,10 @@ export const createPlannerState = ({ start, stops = [], sport, routeType } = {})
   keepOrder: false,
   status: "idle",
   proposal: undefined,
-  alternatives: [],
-  chosenIntent: undefined,
+  generated: false,
   catalog: undefined,
-  generatedArea: undefined,
-  areaMoved: false,
+  generatedTarget: undefined,
+  targetMoved: false,
   rerouteQueued: false,
   dropped: [],
   error: undefined
@@ -65,25 +41,11 @@ export const createPlannerState = ({ start, stops = [], sport, routeType } = {})
 
 export const stepsDone = (state) => state.sportChosen && state.shapeChosen;
 
-/** Sport, shape, start (and end for A to B) are known, so the three routes can be generated. */
+/** Sport, shape, start (and end for A to B) are known, so a route can be generated. */
 export const canGenerate = (state) => Boolean(stepsDone(state) && state.start && (state.routeType !== "point_to_point" || state.end));
 
-/** Stops are editable once a route is chosen or the player already has stops of their own. */
-export const canEditStops = (state) => Boolean(state.chosenIntent || state.proposal || state.stops.length);
-
-/** The generated routes not currently chosen. */
-export const otherAlternatives = (state) => state.chosenIntent
-  ? state.alternatives.filter((route) => route.intent !== state.chosenIntent)
-  : state.alternatives;
-
-/** Generated routes in Glide, Chill, Explore order. */
-export const orderAlternatives = (proposals = []) => {
-  const rank = (proposal) => {
-    const index = ROUTE_INTENTS.findIndex((intent) => intent.value === proposal.intent);
-    return index < 0 ? ROUTE_INTENTS.length : index;
-  };
-  return [...proposals].sort((left, right) => rank(left) - rank(right));
-};
+/** Stops are editable once a route exists or the player already has stops of their own. */
+export const canEditStops = (state) => Boolean(state.generated || state.proposal || state.stops.length);
 
 export const waypointKey = (point) => `waypoint:${point.lat.toFixed(6)},${point.lon.toFixed(6)}`;
 
@@ -174,35 +136,20 @@ export const buildPlanRequest = (state) => {
   };
 };
 
-const parseBbox = (bbox) => bbox.split(",").map(Number);
-
-/** The area grown (with a small margin) so it contains `point`; the server rejects an end outside the area. */
-export const areaIncluding = (area, point) => {
-  const [west, south, east, north] = parseBbox(area.bbox);
-  if (!point || (point.lon >= west && point.lon <= east && point.lat >= south && point.lat <= north)) return area;
-  const padLat = Math.max(0.01, (north - south) * 0.05);
-  const padLon = Math.max(0.015, (east - west) * 0.05);
-  const round = (value) => Number(value.toFixed(6));
-  const bounds = [
-    Math.min(west, point.lon - padLon), Math.min(south, point.lat - padLat),
-    Math.max(east, point.lon + padLon), Math.max(north, point.lat + padLat)
-  ].map(round);
-  return { ...area, bbox: bounds.join(","), center: { lat: round((bounds[1] + bounds[3]) / 2), lon: round((bounds[0] + bounds[2]) / 2) } };
-};
-
-/** Generates Glide, Chill and Explore for the planning area in one request. */
-export const buildSuggestRequest = (state, area) => {
+/**
+ * Generates one route towards the aimed target: a round trip rides
+ * to `aim` and back, an A to B route ends at the picked end.
+ */
+export const buildSuggestRequest = (state, aim) => {
   if (!state.start) return { error: "Choose a start on the map." };
   const pointToPoint = state.routeType === "point_to_point";
   if (pointToPoint && !state.end) return { error: "Choose an end point on the map." };
   return {
     body: {
-      area: pointToPoint ? areaIncluding(area, state.end) : area,
+      target: pointToPoint ? state.end : aim,
       sport: state.sport,
       start: state.start,
-      routeType: state.routeType,
-      ...(pointToPoint ? { end: state.end } : {}),
-      intents: ROUTE_INTENTS.map((intent) => intent.value)
+      routeType: state.routeType
     }
   };
 };
@@ -218,18 +165,27 @@ export const suggestedStops = (proposal, catalog = {}) => {
   ];
 };
 
-/**
- * Whether the visible map clearly left the area the routes were generated for: its center lies
- * outside that area, or the player zoomed out to more than twice its width. Zooming in never counts.
- */
-export const areaMoved = (generatedBbox, bounds) => {
-  if (!generatedBbox || !bounds) return false;
-  const [west, south, east, north] = parseBbox(generatedBbox);
-  const centerLat = (bounds.south + bounds.north) / 2;
-  const centerLon = (bounds.west + bounds.east) / 2;
-  if (centerLat < south || centerLat > north || centerLon < west || centerLon > east) return true;
-  return bounds.east - bounds.west > 2 * (east - west);
+/** How close generated routes come to the aimed target; a map center within it aims at the same target. */
+export const AIM_RADIUS_M = 1000;
+
+const metersBetween = (a, b) => {
+  const radians = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * radians;
+  const dLon = (b.lon - a.lon) * radians;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * radians) * Math.cos(b.lat * radians) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
 };
+
+/** Whether the map center (the aim) is now clearly away from the target the routes were generated for. */
+export const targetMoved = (generatedTarget, bounds) => {
+  if (!generatedTarget || !bounds) return false;
+  const center = { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 };
+  return metersBetween(center, generatedTarget) > AIM_RADIUS_M;
+};
+
+/** Round trips aim at the map center before generating and once the map aims elsewhere. */
+export const showsAim = (state) => state.routeType === "round_trip"
+  && ((!state.generated && !state.proposal) || state.targetMoved);
 
 /** Names of stops the routed proposal had to leave out. */
 export const droppedStops = (stops, proposal) => {
@@ -253,7 +209,7 @@ const formatPoint = (point) => point ? `${point.lat.toFixed(4)}, ${point.lon.toF
 const statusLine = (state) => {
   if (state.error) return `<p class="route-planner-error" role="alert">${escapeHtml(state.error)}</p>`;
   if (state.status === "routing" || state.rerouteQueued) return '<p class="route-planner-status" role="status">Updating the route\u2026</p>';
-  if (state.status === "generating") return '<p class="route-planner-status" role="status">Generating Glide, Chill and Explore\u2026</p>';
+  if (state.status === "generating") return '<p class="route-planner-status" role="status">Finding a route\u2026</p>';
   if (state.status === "saving") return '<p class="route-planner-status" role="status">Saving exploration\u2026</p>';
   if (state.picking === "start") return '<p class="route-planner-status" role="status">Click the map to set your start.</p>';
   if (state.picking === "end") return '<p class="route-planner-status" role="status">Click the map to set your end point.</p>';
@@ -312,8 +268,6 @@ const wizardSteps = (state, idle) => {
     </div>`;
 };
 
-const intentInfo = (intent) => ROUTE_INTENTS.find((item) => item.value === intent);
-
 const metrics = (proposal) => `
   <p class="route-proposal-metrics">
     <span>${escapeHtml(formatRouteDistance(proposal.distanceM))}</span>
@@ -321,26 +275,12 @@ const metrics = (proposal) => `
     ${Number.isFinite(proposal.elevationGainM) ? `<span>\u2191 ${Math.round(proposal.elevationGainM)} m</span>` : ""}
   </p>`;
 
-/** One generated route as a tappable row; `compact` once another route is chosen. */
-const alternativeRow = (proposal, idle, compact) => {
-  const info = intentInfo(proposal.intent);
-  return `
-    <li>
-      <button type="button" class="route-planner-alternative${compact ? " is-compact" : ""}" data-planner-choose="${escapeHtml(proposal.intent ?? "")}"${idle ? "" : " disabled"}>
-        <strong translate="no">${escapeHtml(info?.label ?? "Route")}</strong>
-        <span>${escapeHtml(formatRouteDistance(proposal.distanceM))} \u00b7 ${escapeHtml(formatRouteDuration(proposal.durationS))}</span>
-        ${compact ? "" : `<small>${escapeHtml(info?.description ?? "")}</small>`}
-      </button>
-    </li>`;
-};
-
-/** The chosen (or own) route: metrics and Save, shown above the stops. */
-const chosenCard = (state, dropped, idle) => {
-  const info = intentInfo(state.chosenIntent);
+/** The generated (or own) route: metrics and Save, shown above the stops. */
+const routeCard = (state, dropped, idle) => {
   const { proposal } = state;
   return `
     <div class="route-planner-result" data-planner-result>
-      <p class="route-planner-chosen-title"><strong translate="no">${escapeHtml(info?.label ?? "Your route")}</strong>${state.chosenIntent && !state.stopsAreSuggested ? " <small>Edited</small>" : ""}</p>
+      <p class="route-planner-chosen-title"><strong>${state.generated ? "Suggested route" : "Your route"}</strong>${state.generated && !state.stopsAreSuggested ? " <small>Edited</small>" : ""}</p>
       ${proposal ? metrics(proposal) : ""}
       ${proposal && dropped.length ? `<p class="route-planner-note">Couldn't route ${escapeHtml(dropped.map(stopName).join(", "))}, so ${dropped.length === 1 ? "it was" : "they were"} left out.</p>` : ""}
       ${proposal ? `
@@ -368,14 +308,13 @@ const stopList = (state, dropped, idle) => state.stops.length ? `
 export const RoutePlannerPanel = (state) => {
   const idle = state.status === "idle";
   const dropped = droppedStops(state.stops, state.proposal);
-  const chosen = Boolean(state.chosenIntent || state.proposal);
-  const others = otherAlternatives(state);
-  const ownStopsUnrouted = !state.chosenIntent && !state.proposal && state.stops.length > 0;
+  const routed = Boolean(state.generated || state.proposal);
+  const ownStopsUnrouted = !routed && state.stops.length > 0;
   return `
     <section class="world-detail exploration-panel route-planner" aria-label="Plan a route">
       <header>
         <div>
-          <p class="world-detail-meta"><small>Sport, shape, done: Staza suggests three routes</small></p>
+          <p class="world-detail-meta"><small>Sport, shape, done: Staza suggests a route</small></p>
           <h2>Plan a route</h2>
         </div>
         <button type="button" class="world-detail-close" data-planner-close aria-label="Close route planner">\u2715</button>
@@ -383,16 +322,11 @@ export const RoutePlannerPanel = (state) => {
       ${wizardSteps(state, idle)}
       ${pointRow("start", "Start", state, idle)}
       ${state.routeType === "point_to_point" ? pointRow("end", "End", state, idle) : ""}
-      ${!state.alternatives.length && !chosen && idle ? '<p class="route-planner-note" data-planner-area>Routes are planned for the visible map area.</p>' : ""}
-      ${state.areaMoved && idle ? '<button type="button" class="route-planner-regenerate" data-planner-regenerate>Generate here</button>' : ""}
+      ${state.routeType === "round_trip" && !routed && idle ? '<p class="route-planner-note" data-planner-area>Routes ride to the crosshair in the map center and back.</p>' : ""}
+      ${state.targetMoved && idle ? '<button type="button" class="route-planner-regenerate" data-planner-regenerate>Generate here</button>' : ""}
       ${statusLine(state)}
       ${state.error && (state.stops.length || canGenerate(state)) ? `<button type="button" data-planner-retry${idle ? "" : " disabled"}>Try again</button>` : ""}
-      ${chosen ? chosenCard(state, dropped, idle) : ""}
-      ${others.length ? `
-        ${chosen ? '<p class="route-planner-heading">Other routes</p>' : '<p class="route-planner-heading">Pick a route</p>'}
-        <ol class="route-planner-routes" aria-label="${chosen ? "Other routes" : "Routes"}">
-          ${others.map((proposal) => alternativeRow(proposal, idle, chosen)).join("")}
-        </ol>` : ""}
+      ${routed ? routeCard(state, dropped, idle) : ""}
       ${canEditStops(state) ? `
         ${stopList(state, dropped, idle)}
         <div class="exploration-route-actions route-planner-add" role="group" aria-label="Add stops">

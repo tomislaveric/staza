@@ -163,20 +163,18 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertEqual(planner.stops.map(\.key), ["a", PlannerStop.waypointKey(waypoint)])
     }
 
-    private let area = WorldBounds(west: 11, south: 48, east: 11.5, north: 48.5)
+    private let aim = GeoPoint(lat: 48.25, lon: 11.25)
 
-    /// A generate response with one route per intent; Chill rides f1 and includes b and a.
+    /// A generate response with one route; it rides f1 and f2 and includes b and a.
     private func generated() -> String {
         let line = #""geometry":{"type":"LineString","coordinates":[[11.1,48.1],[11.2,48.2]]}"#
         let flowlines = #"[{"id":"f1","name":"Open",\#(line),"completed":false},{"id":"f2","name":"Done",\#(line),"completed":true},{"id":"f3","name":"Skipped",\#(line),"completed":false}]"#
         let catalog = #"{"collectibles":[{"id":"a","name":"A","latitude":48,"longitude":11,"found":false},{"id":"b","name":"B","latitude":48,"longitude":11,"found":false}],"flowlines":\#(flowlines)}"#
-        let chill = #","intent":"chill","traversedFlowlines":[{"id":"f1","name":"Open"},{"id":"f2","name":"Done"}]"#
-        let proposals = [proposal("pe", extra: #","intent":"explore""#), proposal("pf", extra: #","intent":"flow""#),
-                         proposal("pc", targets: ["b", "a"], extra: chill)]
-        return #"{"explorationId":"e1","proposals":[\#(proposals.joined(separator: ","))],"catalog":\#(catalog)}"#
+        let ridden = #","traversedFlowlines":[{"id":"f1","name":"Open"},{"id":"f2","name":"Done"}]"#
+        return #"{"explorationId":"e1","proposals":[\#(proposal("pc", targets: ["b", "a"], extra: ridden))],"catalog":\#(catalog)}"#
     }
 
-    func testWizardGeneratesThreeRoutesAndChoosingOneShowsItsStops() async throws {
+    func testWizardGeneratesOneRouteWithEditableStops() async throws {
         let transport = StubTransport([.init(status: 200, body: generated())])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
@@ -187,28 +185,21 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertEqual(planner.generateRequest, 1, "sport and shape start generation")
         XCTAssertFalse(planner.showsSteps, "done steps collapse into the summary")
 
-        await planner.generate(in: area)
+        await planner.generate(toward: aim)
         let body = try json(transport.requests.first)
         XCTAssertEqual(transport.requests.first?.url?.path, "/api/explorations/generate")
-        XCTAssertEqual(body["intents"] as? [String], ["flow", "chill", "explore"])
+        XCTAssertNil(body["intents"])
         XCTAssertEqual(body["sport"] as? String, "running")
         XCTAssertEqual(body["routeType"] as? String, "round_trip")
         XCTAssertNil(body["end"])
-        XCTAssertEqual(planner.alternatives.map(\.intent), [.flow, .chill, .explore], "listed Glide, Chill, Explore")
-        XCTAssertNil(planner.chosenIntent)
-        XCTAssertNil(planner.proposal)
-        XCTAssertTrue(planner.stops.isEmpty, "nothing is chosen yet")
-        XCTAssertEqual(planner.generatedArea, area)
-
-        planner.choose(try XCTUnwrap(planner.alternatives.first { $0.intent == .chill }))
-        XCTAssertEqual(planner.chosenIntent, .chill)
-        XCTAssertEqual(planner.proposal?.id, "pc")
+        XCTAssertNil(body["area"], "routes aim at a target instead of a map area")
+        XCTAssertEqual((body["target"] as? [String: Double])?["lat"], 48.25)
+        XCTAssertTrue(planner.generated)
+        XCTAssertEqual(planner.proposal?.id, "pc", "the one route is shown right away")
         XCTAssertEqual(planner.stops.map(\.key), ["b", "a", "flowline:f1"], "its collectibles and ridden opportunities")
-        XCTAssertEqual(planner.otherAlternatives.map(\.intent), [.flow, .explore])
-        XCTAssertFalse(planner.suggestReplacesOwnStops, "switching away from untouched stops needs no confirmation")
-        planner.choose(try XCTUnwrap(planner.alternatives.first { $0.intent == .flow }))
-        XCTAssertEqual(planner.stops.map(\.key), [])
-        planner.choose(try XCTUnwrap(planner.alternatives.first { $0.intent == .chill }))
+        XCTAssertEqual(planner.generatedTarget, aim)
+        XCTAssertTrue(planner.canEditStops)
+        XCTAssertFalse(planner.suggestReplacesOwnStops, "regenerating untouched stops needs no confirmation")
         planner.remove(planner.stops[0])
         XCTAssertTrue(planner.suggestReplacesOwnStops, "an edited route is the player's own")
 
@@ -219,32 +210,29 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertFalse(planner.showsSteps)
         planner.reopenSteps()
         planner.chooseSport(.hiking)
-        XCTAssertEqual(planner.generateRequest, 2, "a new sport regenerates")
-        XCTAssertTrue(planner.alternatives.isEmpty)
-        XCTAssertNil(planner.chosenIntent)
+        XCTAssertEqual(planner.generateRequest, 1, "a new sport reroutes edited stops instead of replacing them")
         XCTAssertEqual(planner.stops.map(\.key), ["a", "flowline:f1"], "the player's edited stops stay")
 
         planner.close()
         XCTAssertFalse(planner.sportChosen, "the wizard starts over next time")
     }
 
-    func testAddingAStopToTheChosenRouteReroutes() async throws {
+    func testAddingAStopToTheGeneratedRouteReroutes() async throws {
         let transport = StubTransport([
             .init(status: 200, body: generated()),
             .init(status: 200, body: #"{"explorationId":"e2","proposal":\#(proposal("p2"))}"#)
         ])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport), rerouteDelay: .milliseconds(50))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
-        XCTAssertFalse(planner.mapSelected(.flowline(flowline("f9"))), "no editing before a route is chosen")
+        XCTAssertFalse(planner.mapSelected(.flowline(flowline("f9"))), "no editing before a route exists")
         planner.chooseSport(.cycling)
         planner.chooseShape(.roundTrip)
-        await planner.generate(in: area)
-        planner.choose(try XCTUnwrap(planner.alternatives.first { $0.intent == .chill }))
+        await planner.generate(toward: aim)
         XCTAssertTrue(planner.mapSelected(.flowline(flowline("f9"))))
         for _ in 0..<40 where planner.proposal?.id != "p2" { try await Task.sleep(for: .milliseconds(25)) }
         XCTAssertEqual(planner.proposal?.id, "p2")
         XCTAssertEqual(transport.requests.last?.url?.path, "/api/explorations/plan")
-        XCTAssertEqual(planner.chosenIntent, .chill, "the edited route stays the chosen one")
+        XCTAssertTrue(planner.generated, "the edited route stays the generated one")
     }
 
     func testPointToPointWaitsForTheEndAndSendsIt() async throws {
@@ -258,26 +246,24 @@ final class RoutePlannerModelTests: XCTestCase {
         let end = GeoPoint(lat: 48.7, lon: 11.2)
         XCTAssertTrue(planner.mapTapped(end))
         XCTAssertEqual(planner.generateRequest, 1)
-        await planner.generate(in: area)
+        await planner.generate(toward: aim)
         let body = try json(transport.requests.first)
         XCTAssertEqual(body["routeType"] as? String, "point_to_point")
-        XCTAssertEqual((body["end"] as? [String: Double])?["lat"], 48.7)
-        let bbox = try XCTUnwrap((body["area"] as? [String: Any])?["bbox"] as? String)
-        let north = try XCTUnwrap(Double(bbox.split(separator: ",")[3]))
-        XCTAssertGreaterThan(north, 48.7, "the area grows to contain the end")
+        XCTAssertEqual((body["target"] as? [String: Double])?["lat"], 48.7, "an A→B route aims at its end")
     }
 
-    func testAreaMovedOnlyForAnotherArea() async {
+    func testTargetMovedOnlyWhenTheMapAimsElsewhere() async {
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([.init(status: 200, body: generated())])))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
-        XCTAssertFalse(planner.areaMoved(to: area), "nothing generated yet")
+        let area = WorldBounds(west: 11, south: 48, east: 11.5, north: 48.5)
+        XCTAssertFalse(planner.targetMoved(to: area), "nothing generated yet")
         planner.chooseSport(.cycling)
         planner.chooseShape(.roundTrip)
-        await planner.generate(in: area)
-        XCTAssertFalse(planner.areaMoved(to: area))
-        XCTAssertFalse(planner.areaMoved(to: WorldBounds(west: 11.2, south: 48.2, east: 11.3, north: 48.3)), "zoomed in")
-        XCTAssertTrue(planner.areaMoved(to: WorldBounds(west: 11.6, south: 48, east: 12.1, north: 48.5)), "panned away")
-        XCTAssertTrue(planner.areaMoved(to: WorldBounds(west: 10.5, south: 47.5, east: 12, north: 49)), "zoomed out")
+        await planner.generate(toward: aim)
+        XCTAssertFalse(planner.targetMoved(to: area))
+        XCTAssertFalse(planner.targetMoved(to: WorldBounds(west: 11.2, south: 48.2, east: 11.3, north: 48.3)), "zoomed in")
+        XCTAssertFalse(planner.targetMoved(to: WorldBounds(west: 11.005, south: 48.005, east: 11.505, north: 48.505)), "within the aim radius")
+        XCTAssertTrue(planner.targetMoved(to: WorldBounds(west: 11.6, south: 48, east: 12.1, north: 48.5)), "panned away")
     }
 
     func testSaveStoresAPlannedExplorationAndClosesPlanner() async throws {
@@ -319,9 +305,10 @@ final class RoutePlannerModelTests: XCTestCase {
     func testUnprocessableSuggestionReportsNoSuggestionInsteadOfUnconnectedStops() async {
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([.init(status: 422, body: #"{"error":"x"}"#)])))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
-        await planner.generate(in: area)
+        await planner.generate(toward: aim)
         XCTAssertEqual(planner.failure, .noSuggestion)
-        XCTAssertTrue(planner.alternatives.isEmpty)
+        XCTAssertFalse(planner.generated)
+        XCTAssertNil(planner.proposal)
     }
 
     func testUnprocessableRouteReportsNoRoute() async {

@@ -25,14 +25,13 @@ struct RoutePlannerHeader: View {
     }
 }
 
-/// The route planner wizard: sport, route shape, then three generated routes. The chosen route's card
-/// sits above its stops; the other routes stay as slim rows to switch to.
+/// The route planner wizard: sport, route shape, then one generated route. Its card sits above its stops,
+/// which the player can edit.
 struct RoutePlannerPanel: View {
     let planner: RoutePlannerModel
     let userLocation: GeoPoint?
     let onSave: () -> Void
     @Environment(\.locale) private var locale
-    @State private var pendingChoice: RouteProposal?
 
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
@@ -45,7 +44,6 @@ struct RoutePlannerPanel: View {
             if planner.status == .suggesting { generating }
             chosen
             if showsStops { stops }
-            alternatives
             if let failure = planner.failure { failureRow(failure) }
 
             if planner.start != nil, planner.mapMode != .pickStart, planner.stepsDone { startSection }
@@ -55,18 +53,10 @@ struct RoutePlannerPanel: View {
         .padding(.bottom, StazaSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("routePlanner")
-        .confirmationDialog("planner.suggest.replace.title", isPresented: Binding(
-            get: { pendingChoice != nil }, set: { if !$0 { pendingChoice = nil } }
-        ), titleVisibility: .visible, presenting: pendingChoice) { proposal in
-            Button("planner.suggest.replace.confirm", role: .destructive) { planner.choose(proposal) }
-            Button("action.cancel", role: .cancel) {}
-        } message: { _ in
-            Text("planner.suggest.replace.message")
-        }
     }
 
     /// Stops show once there is a route to edit or the player brought own stops.
-    private var showsStops: Bool { planner.chosenIntent != nil || planner.proposal != nil || !planner.stops.isEmpty }
+    private var showsStops: Bool { planner.generated || planner.proposal != nil || !planner.stops.isEmpty }
 
     // MARK: Steps
 
@@ -151,18 +141,15 @@ struct RoutePlannerPanel: View {
         .accessibilityIdentifier("plannerGenerating")
     }
 
-    /// The chosen (or own) route: name, feel, metrics and Save, above its stops.
+    /// The generated (or own) route: metrics and Save, above its stops.
     @ViewBuilder
     private var chosen: some View {
-        if planner.chosenIntent != nil || planner.proposal != nil {
+        if planner.generated || planner.proposal != nil {
             StazaCard(tint: StazaColor.accent) {
                 VStack(alignment: .leading, spacing: StazaSpacing.sm) {
                     HStack(alignment: .firstTextBaseline) {
-                        if let intent = planner.chosenIntent {
-                            Text(verbatim: intent.name).font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                        } else {
-                            Text("planner.route.own").font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
-                        }
+                        Text(planner.generated ? "planner.route.generated" : "planner.route.own")
+                            .font(StazaFont.headline).foregroundStyle(StazaColor.textPrimary)
                         Spacer(minLength: StazaSpacing.xs)
                         if planner.status == .routing { SwiftUI.ProgressView() }
                     }
@@ -171,9 +158,6 @@ struct RoutePlannerPanel: View {
                             .font(StazaFont.metricLarge)
                             .foregroundStyle(StazaColor.textPrimary)
                         MetricLine(items: metrics(proposal))
-                    }
-                    if let intent = planner.chosenIntent {
-                        Text(intent.summary).font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
                     }
                     Button(action: onSave) {
                         if planner.status == .saving {
@@ -189,61 +173,6 @@ struct RoutePlannerPanel: View {
             }
             .accessibilityIdentifier("plannerResult")
         }
-    }
-
-    /// Before a choice: the three routes as rows. After: the others, collapsed under the stops.
-    @ViewBuilder
-    private var alternatives: some View {
-        let others = planner.otherAlternatives
-        if !others.isEmpty {
-            VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-                if planner.chosenIntent == nil {
-                    SectionHeader("planner.routes")
-                    Text("planner.routes.hint").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
-                } else {
-                    SectionHeader("planner.routes.others")
-                }
-                ForEach(others) { proposal in
-                    alternativeRow(proposal, compact: planner.chosenIntent != nil)
-                }
-            }
-            .disabled(!planner.isIdle)
-            .accessibilityIdentifier("plannerAlternatives")
-        }
-    }
-
-    private func alternativeRow(_ proposal: RouteProposal, compact: Bool) -> some View {
-        Button {
-            if planner.suggestReplacesOwnStops { pendingChoice = proposal } else { planner.choose(proposal) }
-        } label: {
-            HStack(alignment: compact ? .center : .top, spacing: StazaSpacing.sm) {
-                Image(systemName: intentIcon(proposal.intent))
-                    .foregroundStyle(StazaColor.accent)
-                    .frame(width: 24)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
-                    HStack(spacing: StazaSpacing.sm) {
-                        Text(verbatim: proposal.intent?.name ?? proposal.label)
-                            .font(StazaFont.subheadline.weight(.semibold))
-                            .foregroundStyle(StazaColor.textPrimary)
-                        Spacer(minLength: StazaSpacing.xs)
-                        Text(verbatim: ([StazaFormat.distance(meters: proposal.distanceM, locale: locale)] + metrics(proposal).prefix(1)).joined(separator: " · "))
-                            .font(StazaFont.footnote.monospacedDigit())
-                            .foregroundStyle(StazaColor.textMuted)
-                    }
-                    if !compact, let intent = proposal.intent {
-                        Text(intent.summary).font(StazaFont.caption).foregroundStyle(StazaColor.textMuted).lineLimit(2)
-                    }
-                }
-                Image(systemName: "chevron.right").font(StazaFont.caption).foregroundStyle(StazaColor.textSubtle)
-            }
-            .padding(.horizontal, StazaSpacing.sm)
-            .padding(.vertical, compact ? StazaSpacing.xs : StazaSpacing.sm)
-            .background(StazaColor.surfaceRaised, in: RoundedRectangle(cornerRadius: StazaRadius.chip))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("plannerAlternative-\(proposal.intent?.rawValue ?? proposal.id)")
     }
 
     private func failureRow(_ failure: RoutePlannerModel.Failure) -> some View {
@@ -263,11 +192,11 @@ struct RoutePlannerPanel: View {
         .accessibilityIdentifier("plannerError")
     }
 
-    private var routesStops: Bool { planner.chosenIntent != nil || !planner.stops.isEmpty }
+    private var routesStops: Bool { planner.generated || !planner.stops.isEmpty }
 
     private var canRetry: Bool { routesStops ? !planner.stops.isEmpty && planner.start != nil : planner.canGenerate }
 
-    /// Routes a chosen or own route again, else generates the three routes again.
+    /// Routes a generated or own route again, else generates the route again.
     private func retry() {
         if routesStops { Task { await planner.route() } } else { planner.requestGeneration() }
     }
@@ -385,7 +314,7 @@ struct RoutePlannerPanel: View {
                 ForEach(Array(planner.stops.enumerated()), id: \.element.key) { index, stop in
                     stopRow(stop, index: index, dropped: dropped.contains(stop.key))
                 }
-                if planner.proposal == nil, planner.chosenIntent == nil, planner.failure == nil {
+                if planner.proposal == nil, !planner.generated, planner.failure == nil {
                     Button { Task { await planner.route() } } label: {
                         if planner.status == .routing {
                             SwiftUI.ProgressView().tint(StazaColor.onAccent)
@@ -515,15 +444,6 @@ struct RoutePlannerPanel: View {
 
     private func shapeIcon(_ type: RoutePlannerModel.RouteType) -> String {
         type == .roundTrip ? "arrow.triangle.2.circlepath" : "arrow.right"
-    }
-
-    private func intentIcon(_ intent: RouteIntent?) -> String {
-        switch intent {
-        case .flow: "wind"
-        case .chill: "leaf"
-        case .explore: "binoculars"
-        case nil: "point.topleft.down.to.point.bottomright.curvepath"
-        }
     }
 
     private func sportLabel(_ sport: RoutePlannerModel.Sport) -> LocalizedStringKey {

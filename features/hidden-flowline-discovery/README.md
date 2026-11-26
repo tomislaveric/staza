@@ -138,6 +138,8 @@ ascending.
 - `GET /api/world`: `fartleks` contains only revealed Flowlines, still thinned by the
   existing viewport policy. A new field, `hiddenFlowlineCount`, counts the unrevealed
   published Flowlines in the viewport.
+  For testing, `WORLD_SHOW_ALL_FLOWLINES=true` returns every plannable Flowline in the
+  viewport instead (default off; on in the DEV compose).
 - `POST /api/explorations/generate`:
   - Reveals the top N first, then plans with only revealed Flowlines.
   - The response adds `revealedFlowlineIds`, the Flowlines newly revealed by this call.

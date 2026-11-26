@@ -13,18 +13,16 @@ import { FartlekDetail } from "./world/fartlek-detail.js";
 import { DiscoveriesPanel, exploreCta, ExploreResultCard, revealSequence } from "./world/explore-reveal.js";
 import { flowlineCharacter } from "./world/flowline-character.js";
 import {
+  showsAim,
+  targetMoved,
   buildPlanRequest,
-  areaMoved,
   buildSuggestRequest,
   canGenerate,
   collectibleStop,
   createPlannerState,
-  DEFAULT_ROUTE_INTENT,
   flowlineStop,
   moveStop,
-  orderAlternatives,
   orderStops,
-  otherAlternatives,
   RoutePlannerPanel,
   suggestedStops,
   toggleStop,
@@ -180,6 +178,7 @@ export const WorldPage = ({ selectedFilters, lockedFilters = [] }) => `
     <div class="world-map-shell">
       <div class="world-map-frame">
         <div class="world-map staza-map" data-world-map></div>
+        <span class="world-map-aim" data-world-aim aria-hidden="true" hidden></span>
         <ul class="world-collectible-list" aria-label="Collectibles on the map" data-world-collectible-list></ul>
         <a class="world-osm-attribution" href="https://www.openstreetmap.org/copyright"
           target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
@@ -319,6 +318,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   const detailHost = mountPoint.querySelector("[data-world-detail]");
   const collectibleListHost = mountPoint.querySelector("[data-world-collectible-list]");
   const ctaHost = mountPoint.querySelector("[data-world-explore-cta]");
+  const aimHost = mountPoint.querySelector("[data-world-aim]");
   const exploreCardHost = mountPoint.querySelector("[data-world-explore-card]");
   mountPoint.querySelectorAll("[data-world-filter-unlock]").forEach((button) => {
     button.addEventListener("click", () => onNavigate?.(button.dataset.worldFilterUnlock));
@@ -390,6 +390,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   };
 
   const renderControls = () => {
+    if (aimHost) aimHost.hidden = !(planner && showsAim(planner));
     ctaHost.hidden = Boolean(planner);
     ctaHost.innerHTML = WorldExploreControls({ busy: explore?.phase === "exploring", stopCount: draftStops.length });
     ctaHost.querySelector("[data-world-explore]")?.addEventListener("click", () => void exploreArea());
@@ -403,11 +404,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       closeExploreCard();
       worldMap.flyTo(view.center.lon, view.center.lat, Math.max(0, view.zoom - 2));
     });
-    exploreCardHost.querySelectorAll("[data-explore-intent]").forEach((button) => button.addEventListener("click", () => {
-      if (explore?.phase !== "result") return;
-      explore.intent = button.dataset.exploreIntent;
-      renderControls();
-    }));
     on("[data-explore-generate]", () => void generateRoute());
     on("[data-explore-discoveries]", () => openDiscoveries());
   };
@@ -640,7 +636,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     if (!worldMap) return;
     worldMap.setPickHandler(planner?.picking ? pickPlannerPoint : undefined);
     worldMap.setMapClickHandler(planner?.adding === "waypoint" && planner.status === "idle" ? addPlannerWaypoint : undefined);
-    worldMap.setAlternateRoutes(planner ? otherAlternatives(planner) : []);
     if (planner) {
       worldMap.setRouteEndpoints({
         start: planner.start,
@@ -730,7 +725,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     try {
       const result = await jsonRequest("POST", "/api/world/explore", { bbox: viewBbox });
       if (token !== exploreToken) return;
-      explore = { phase: "result", result, intent: DEFAULT_ROUTE_INTENT };
+      explore = { phase: "result", result };
       // Wide viewports explore a centered max-size frame; the session (and Generate) use that frame.
       const bbox = result.area?.bbox ?? viewBbox;
       const center = result.area?.center ?? view.center;
@@ -834,20 +829,18 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
   };
 
   /**
-   * "Generate route" on the Explore card: opens the wizard with a cycling roundtrip already chosen,
-   * generates the three routes for the session and opens the card's feel. Without a start inside
+   * "Generate route" on the Explore card: opens the wizard with a cycling roundtrip already chosen
+   * and generates the route for the session. Without a start inside
    * the explored area the planner first asks for one and generates once it is set.
    */
   function generateRoute() {
     if (!session || planner) return;
-    const intent = explore?.intent ?? DEFAULT_ROUTE_INTENT;
     draftStops = [];
     openPlanner({ start: generateStart(), sport: "cycling", routeType: "round_trip" });
     if (!planner) return;
-    planner.autoChoose = intent;
     if (!planner.start) Object.assign(planner, { picking: "start" });
     renderAll();
-    if (planner.start) void generateRoutes();
+    if (planner.start) void generatePlannerRoute();
   }
 
   function pickPlannerPoint(point) {
@@ -859,9 +852,9 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     endpointChanged();
   }
 
-  /** A new start or end reroutes a chosen route; before that it (re)generates the three routes. */
+  /** A new start or end reroutes an existing route; before that it (re)generates the route. */
   function endpointChanged() {
-    if (planner.chosenIntent || planner.proposal) {
+    if (planner.generated || planner.proposal) {
       planner.proposal = undefined;
       if (planner.stops.length && !planner.picking) scheduleReroute(0);
       renderAll();
@@ -870,22 +863,32 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     restartGeneration();
   }
 
-  /** Drops the generated routes (and stops that were only their suggestion) and generates again when possible. */
+  /**
+   * Drops the generated route (and stops that were only its suggestion) and generates again when possible.
+   * The player's own stops are never replaced: they are routed again instead.
+   */
   function restartGeneration() {
+    if (planner.stops.length && !planner.stopsAreSuggested) {
+      const wasRouted = Boolean(planner.generated || planner.proposal);
+      planner.proposal = undefined;
+      if (wasRouted && !planner.picking) scheduleReroute(0);
+      renderAll();
+      return;
+    }
     plannerToken += 1;
     clearTimeout(rerouteTimer);
     if (planner.stopsAreSuggested) planner.stops = [];
     Object.assign(planner, {
-      status: "idle", alternatives: [], chosenIntent: undefined, proposal: undefined, catalog: undefined,
-      generatedArea: undefined, areaMoved: false, rerouteQueued: false, stopsAreSuggested: false, error: undefined
+      status: "idle", generated: false, proposal: undefined, catalog: undefined,
+      generatedTarget: undefined, targetMoved: false, rerouteQueued: false, stopsAreSuggested: false, error: undefined
     });
     renderAll();
-    if (canGenerate(planner) && !planner.picking) void generateRoutes();
+    if (canGenerate(planner) && !planner.picking) void generatePlannerRoute();
   }
 
   /** Every stop edit after a route exists reroutes after a short delay; earlier edits only change the list. */
   function editPlannerStops(stops, { keepOrder, error } = {}) {
-    const wasRouted = Boolean(planner.chosenIntent || planner.proposal);
+    const wasRouted = Boolean(planner.generated || planner.proposal);
     Object.assign(planner, {
       stops,
       proposal: undefined,
@@ -957,8 +960,8 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         proposal: result.proposal,
         stops: planner.keepOrder ? planner.stops : orderStops(planner.stops, result.proposal.stopOrder)
       });
-      // A chosen route stays in view while it is edited; a first own route is framed.
-      if (!planner.chosenIntent) worldMap.fitTo(geometryPoints(result.proposal.geometry));
+      // A generated route stays in view while it is edited; a first own route is framed.
+      if (!planner.generated) worldMap.fitTo(geometryPoints(result.proposal.geometry));
     } catch (routeError) {
       if (token !== plannerToken || !planner) return;
       Object.assign(planner, { status: "idle", error: explorationErrorMessage(routeError) });
@@ -966,17 +969,10 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderAll();
   }
 
-  /** The planning area: the explored session, else the visible map. `current` always uses the visible map. */
-  const planningArea = ({ current = false } = {}) => {
-    const view = (!current && session?.view) || worldMap.getView();
-    const bbox = (!current && session?.bbox) || boundsToParameter(worldMap.getBounds());
-    return { bbox, center: view.center, zoom: view.zoom };
-  };
-
-  /** Generates Glide, Chill and Explore for the planning area in one request. */
-  async function generateRoutes({ current = false } = {}) {
+  /** Generates one route towards the aim (the map center); its stops become the editable list. */
+  async function generatePlannerRoute() {
     if (!planner || planner.status !== "idle") return;
-    const { body, error } = buildSuggestRequest(planner, planningArea({ current }));
+    const { body, error } = buildSuggestRequest(planner, worldMap.getView().center);
     if (error) {
       planner.error = error;
       renderDetail();
@@ -986,24 +982,26 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     clearTimeout(rerouteTimer);
     if (planner.stopsAreSuggested) planner.stops = [];
     Object.assign(planner, {
-      status: "generating", adding: undefined, picking: undefined, error: undefined, alternatives: [], chosenIntent: undefined,
-      proposal: undefined, stopsAreSuggested: false, rerouteQueued: false, areaMoved: false
+      status: "generating", adding: undefined, picking: undefined, error: undefined, generated: false,
+      proposal: undefined, stopsAreSuggested: false, rerouteQueued: false, targetMoved: false
     });
     renderAll();
     try {
       const result = await jsonRequest("POST", "/api/explorations/generate", body);
       if (token !== plannerToken || !planner) return;
-      const alternatives = orderAlternatives(result.proposals);
-      if (!alternatives.length) throw new Error("No route could be generated here. Move the map or add stops yourself.");
-      Object.assign(planner, { status: "idle", alternatives, catalog: result.catalog, generatedArea: body.area.bbox });
-      worldMap.setExploreFrame?.(body.area.bbox);
-      const autoChoose = planner.autoChoose;
-      planner.autoChoose = undefined;
-      if (autoChoose && alternatives.some((route) => route.intent === autoChoose)) {
-        chooseRoute(autoChoose);
-        return;
-      }
-      worldMap.fitTo(alternatives.flatMap((route) => geometryPoints(route.geometry)));
+      const [route] = result.proposals ?? [];
+      if (!route) throw new Error("No route could be generated here. Move the map or add stops yourself.");
+      Object.assign(planner, {
+        status: "idle",
+        generated: true,
+        proposal: route,
+        catalog: result.catalog,
+        generatedTarget: body.target,
+        stops: suggestedStops(route, result.catalog),
+        stopsAreSuggested: true,
+        keepOrder: false
+      });
+      worldMap.fitTo(geometryPoints(route.geometry));
     } catch (generateError) {
       if (token !== plannerToken || !planner) return;
       Object.assign(planner, { status: "idle", error: explorationErrorMessage(generateError) });
@@ -1011,36 +1009,12 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     renderAll();
   }
 
-  /** Opens one generated route: its stops become the editable list; own stops are only replaced after confirming. */
-  function chooseRoute(intent) {
-    if (!planner || planner.status !== "idle") return;
-    const route = planner.alternatives.find((item) => item.intent === intent);
-    if (!route || (planner.chosenIntent === intent && planner.proposal === route)) return;
-    if (planner.stops.length && !planner.stopsAreSuggested && !globalThis.confirm(
-      "Use this route's stops? Your own stops will be replaced."
-    )) return;
-    plannerToken += 1;
-    clearTimeout(rerouteTimer);
-    Object.assign(planner, {
-      chosenIntent: intent,
-      proposal: route,
-      stops: suggestedStops(route, planner.catalog),
-      stopsAreSuggested: true,
-      keepOrder: false,
-      adding: undefined,
-      rerouteQueued: false,
-      error: undefined
-    });
-    worldMap.fitTo(geometryPoints(route.geometry));
-    renderAll();
-  }
-
   /** Map moves after generation offer "Generate here" instead of regenerating on every pan. */
   function plannerViewportChanged(bounds) {
-    if (!planner?.generatedArea) return;
-    const moved = areaMoved(planner.generatedArea, bounds);
-    if (moved === planner.areaMoved) return;
-    planner.areaMoved = moved;
+    if (!planner?.generatedTarget) return;
+    const moved = targetMoved(planner.generatedTarget, bounds);
+    if (moved === planner.targetMoved) return;
+    planner.targetMoved = moved;
     renderDetail();
   }
 
@@ -1116,13 +1090,17 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     on("[data-planner-steps]", () => edit(() => {
       planner.stepsOpen = true;
     }));
-    on("[data-planner-choose]", (button) => chooseRoute(button.dataset.plannerChoose));
-    on("[data-planner-regenerate]", () => void generateRoutes({ current: true }));
+    on("[data-planner-regenerate]", () => {
+      if (planner.stops.length && !planner.stopsAreSuggested && !globalThis.confirm(
+        "Generate a new route here? Your own stops will be replaced."
+      )) return;
+      void generatePlannerRoute();
+    });
     on("[data-planner-retry]", () => {
       if (planner.status !== "idle") return;
       planner.error = undefined;
       if (planner.stops.length) void routePlanner();
-      else void generateRoutes();
+      else void generatePlannerRoute();
     });
     on("[data-planner-pick]", (button) => edit(() => {
       planner.adding = undefined;
@@ -1271,10 +1249,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       onViewportChange: (bounds) => {
         plannerViewportChanged(bounds);
         scheduleViewportLoad(bounds);
-      },
-      onAlternateRouteSelect: (proposalId) => {
-        const route = planner?.alternatives.find((item) => item.id === proposalId);
-        if (route) chooseRoute(route.intent);
       },
       onCollectibleSelect: (id) => selectCollectible(id),
       onFartlekSelect: (id) => selectFartlek(id)

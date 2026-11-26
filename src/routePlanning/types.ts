@@ -47,7 +47,7 @@ export interface QuestRouteTarget {
   routeOnly?: boolean;
 }
 
-/** A Flowline's geometry: finds the Flowlines a route rides and lets generation rank Flowlines by intent. */
+/** A Flowline's geometry: finds the Flowlines a route rides and lets generation rank Flowlines. */
 export interface FlowlineGeometry {
   id: string;
   name: string;
@@ -93,6 +93,8 @@ export interface RoutingRequest {
   start: LatLon;
   end: LatLon;
   waypoints: RoutingWaypoint[];
+  /** Routing preferences, not guarantees. Bicycle access rules (no motorways, no bicycle=no) always apply. */
+  options?: { avoidFerries?: boolean };
 }
 
 export interface RoutingResult {
@@ -187,8 +189,6 @@ export interface RouteProposal {
   /** Flowlines the final geometry naturally rides; informational, never routing constraints. */
   traversedFlowlines: TraversedFlowline[];
   constraintFit: ConstraintFitFlag;
-  /** The feel a generated route was planned for (flow / chill / explore). */
-  intent?: "flow" | "chill" | "explore";
   /** Set on routes re-planned after the player edited their targets. */
   customized?: boolean;
   /** Proposal this customized route was derived from. */

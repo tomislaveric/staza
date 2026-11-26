@@ -27,6 +27,7 @@ services:
       STRAVA_TOKEN_ENCRYPTION_KEY: ${STRAVA_TOKEN_ENCRYPTION_KEY:-}
       STRAVA_RECENT_ACTIVITY_LIMIT: ${STRAVA_RECENT_ACTIVITY_LIMIT:-3}
       ROUTING_SERVICE_URL: ${ROUTING_SERVICE_URL:-http://routing-api:3000}
+      WORLD_SHOW_ALL_FLOWLINES: ${WORLD_SHOW_ALL_FLOWLINES:-true}
     volumes:
       - app-data:/data
       - /opt/staza/data:/import-source:ro

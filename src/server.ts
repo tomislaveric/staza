@@ -1038,6 +1038,20 @@ const worldFartleksForPlayer = async (playerId: string, fartleks: Fartlek[]): Pr
   return fartleks.map((fartlek) => toWorldFartlek(fartlek, stats.get(fartlek.id)));
 };
 
+/** Flowlines a route may use: the area's Flowline opportunities and the player's completed Flowlines. */
+const plannableFlowlinesForPlayer = async (playerId: string, fartleks: Fartlek[]): Promise<WorldFartlek[]> =>
+  (await worldFartleksForPlayer(playerId, fartleks)).filter((flowline, index) => {
+    const source = fartleks[index]!;
+    return isPlannableFlowline({
+      id: source.id,
+      ...(source.flowScore === undefined ? {} : { flowScore: source.flowScore }),
+      ...(source.enduranceScore === undefined ? {} : { enduranceScore: source.enduranceScore }),
+      ...(source.exploreScore === undefined ? {} : { exploreScore: source.exploreScore }),
+      ...(source.roadQualityScore === undefined ? {} : { roadQualityScore: source.roadQualityScore }),
+      ...(source.dataConfidence === undefined ? {} : { dataConfidence: source.dataConfidence })
+    }, flowline.completed);
+  });
+
 app.get("/api/world", requirePlayer, async (request: UploadRequest, response, next) => {
   try {
     const playerId = request.user!.playerId;
@@ -1060,10 +1074,15 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
           ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit, { onlyIds: discoveredSourceIds })
           : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit, { onlyIds: discoveredSourceIds }),
       // Only ridden Flowlines are on the map by default; opportunities come from Explore.
-      flowlineRevealRepository.listCompletedWithinBoundsLimited(playerId, bounds, flowlinePolicy)
+      // WORLD_SHOW_ALL_FLOWLINES (testing) shows every Flowline route planning may use.
+      config.worldShowAllFlowlines
+        ? fartlekRepository.listWithinBoundsLimited(bounds, flowlinePolicy)
+        : flowlineRevealRepository.listCompletedWithinBoundsLimited(playerId, bounds, flowlinePolicy)
     ]);
     const explorationRoutes = await questInstanceRepository.listRoutesWithinBounds(playerId, bounds);
-    const fartleks = await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
+    const fartleks = config.worldShowAllFlowlines
+      ? await plannableFlowlinesForPlayer(playerId, fartlekResult.fartleks)
+      : await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
     const world = viewport ? createWorldSnapshot(viewport.collectibles, discoveredSourceIds) : undefined;
     response.json({
       ...(world ? { collectibles: world.collectibles } : {}),
@@ -1128,18 +1147,7 @@ const explorationService = new ExplorationService({
       fartlekRepository.listWithinBounds(bounds),
       activityRepository.listDiscoveredCollectibleSourceIds(playerId)
     ]);
-    // Routes may use the area's Flowline opportunities and the player's completed Flowlines.
-    const flowlines = (await worldFartleksForPlayer(playerId, flowlineCandidates)).filter((flowline, index) => {
-      const source = flowlineCandidates[index]!;
-      return isPlannableFlowline({
-        id: source.id,
-        ...(source.flowScore === undefined ? {} : { flowScore: source.flowScore }),
-        ...(source.enduranceScore === undefined ? {} : { enduranceScore: source.enduranceScore }),
-        ...(source.exploreScore === undefined ? {} : { exploreScore: source.exploreScore }),
-        ...(source.roadQualityScore === undefined ? {} : { roadQualityScore: source.roadQualityScore }),
-        ...(source.dataConfidence === undefined ? {} : { dataConfidence: source.dataConfidence })
-      }, flowline.completed);
-    });
+    const flowlines = await plannableFlowlinesForPlayer(playerId, flowlineCandidates);
     return {
       collectibles: createWorldSnapshot(viewport.collectibles, discoveredSourceIds).collectibles,
       flowlines,

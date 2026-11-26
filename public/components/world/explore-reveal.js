@@ -1,7 +1,6 @@
 import { escapeHtml } from "../collected-list.js";
 import { collectibleCategory } from "./collectible-features.js";
 import { formatDistance } from "./fartlek-detail.js";
-import { DEFAULT_ROUTE_INTENT, IntentPicker } from "./route-planner.js";
 import { characterScore, flowlineCharacter } from "./flowline-character.js";
 export { characterScore, flowlineCharacter } from "./flowline-character.js";
 
@@ -32,8 +31,7 @@ const closeButton = '<button type="button" class="world-detail-close" data-explo
 
 /**
  * The card shown after Explore. `state.phase` is "exploring" while the request runs; otherwise
- * `state.result` is the server's explore response. Choosing a feel (`state.intent`, Chill by
- * default) and generating one route is the primary next step.
+ * `state.result` is the server's explore response. Generating a route is the primary next step.
  */
 export const ExploreResultCard = (state) => {
   if (state.phase === "exploring") {
@@ -83,7 +81,6 @@ export const ExploreResultCard = (state) => {
     </ul>
     ${result.area?.clamped ? '<p class="route-planner-note" data-explore-clamped>Explored the framed area in the map center.</p>' : ""}
     <p class="route-planner-note">Shown for this session only. Save an Exploration to keep a route.</p>
-    ${IntentPicker(state.intent ?? DEFAULT_ROUTE_INTENT, "data-explore-intent")}
     <div class="world-explore-card-actions">
       <button type="button" class="is-primary" data-explore-generate>Generate route</button>
       <button type="button" data-explore-discoveries>View opportunities</button>

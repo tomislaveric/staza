@@ -2,7 +2,7 @@
 
 > **Generator replaced by [route-generation-v2](../route-generation-v2/README.md).** The
 > `balanced` / `peak_focus` / `discovery` strategies and multi-proposal output described here
-> are removed. Generation is one intent-weighted route (Flow / Chill / Explore) that never
+> are removed. Generation is one route that never
 > trades route quality for collectibles.
 >
 > **Superseded in part by

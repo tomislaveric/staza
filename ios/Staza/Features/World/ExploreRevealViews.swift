@@ -93,22 +93,6 @@ struct ExploreButton: View {
     }
 }
 
-/// Glide / Chill / Explore for "Generate route"; the names stay the same in every language.
-struct RouteIntentPicker: View {
-    @Binding var intent: RouteIntent
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: StazaSpacing.xs) {
-            OverlineText("route.intent.title")
-            Picker("route.intent.title", selection: $intent) {
-                ForEach(RouteIntent.allCases) { Text(verbatim: $0.name).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            Text(intent.summary).font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
-        }
-    }
-}
-
 /// "Plan" button that opens route planning; a badge counts the stops picked so far.
 struct PlanRouteButton: View {
     let routeStops: Int
@@ -143,11 +127,10 @@ struct PlanRouteButton: View {
 
 // MARK: - Result banner
 
-/// The top of the Explore sheet: errors or "nothing new", the clamp note and the route feel.
+/// The top of the Explore sheet: errors or "nothing new", and the clamp note.
 struct ExploreResultBanner: View {
     let state: ExploreState
     let onZoomOut: () -> Void
-    var intent: Binding<RouteIntent> = .constant(.default)
     var clamped = false
 
     var body: some View {
@@ -189,7 +172,6 @@ struct ExploreResultBanner: View {
                 .foregroundStyle(StazaColor.textMuted)
                 .accessibilityIdentifier("exploreClamped")
         }
-        RouteIntentPicker(intent: intent).accessibilityIdentifier("exploreIntent")
     }
 
     private func header(_ title: Text, systemImage: String, tint: Color) -> some View {
@@ -291,7 +273,6 @@ struct DiscoveriesContent: View {
                 ExploreResultBanner(
                     state: state,
                     onZoomOut: onZoomOut,
-                    intent: Binding(get: { planner.intent }, set: { planner.intent = $0 }),
                     clamped: model.exploreClamped
                 )
             }

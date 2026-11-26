@@ -1,9 +1,7 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "" : {
-
-    },
+    "" : {},
     "action.addActivity" : {
       "localizations" : {
         "de" : {
@@ -2317,13 +2315,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Routen in diesem Kartenausschnitt"
+            "value" : "Ziel: Fadenkreuz"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Routes in this map area"
+            "value" : "Target: crosshair"
           }
         }
       }
@@ -2477,13 +2475,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Suche drei Routen …"
+            "value" : "Suche eine Route …"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Finding three routes…"
+            "value" : "Finding a route…"
           }
         }
       }
@@ -2664,6 +2662,22 @@
         }
       }
     },
+    "planner.route.generated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorgeschlagene Route"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggested route"
+          }
+        }
+      }
+    },
     "planner.route.own" : {
       "localizations" : {
         "de" : {
@@ -2692,54 +2706,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Route shape"
-          }
-        }
-      }
-    },
-    "planner.routes" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Routen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Routes"
-          }
-        }
-      }
-    },
-    "planner.routes.hint" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tippe eine Route an, um ihre Stopps zu sehen."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tap a route to see its stops."
-          }
-        }
-      }
-    },
-    "planner.routes.others" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Andere Routen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Other routes"
           }
         }
       }
@@ -3069,13 +3035,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sportart und Form wählen, Staza findet drei Routen"
+            "value" : "Sportart und Form wählen, Staza findet eine Route"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pick a sport and shape, Staza finds three routes"
+            "value" : "Pick a sport and shape, Staza finds a route"
           }
         }
       }
@@ -3101,13 +3067,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die gewählte Route ersetzt deine gewählten Stopps."
+            "value" : "Die neue Route ersetzt deine gewählten Stopps."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The chosen route replaces the stops you chose."
+            "value" : "The new route replaces the stops you chose."
           }
         }
       }
@@ -4362,70 +4328,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New Flowline discovered"
-          }
-        }
-      }
-    },
-    "route.intent.chill.description" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entspannter, moderater Mix."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A relaxed, moderate mix."
-          }
-        }
-      }
-    },
-    "route.intent.explore.description" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenige gute Orte, kleine Umwege."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A few good places, small detours."
-          }
-        }
-      }
-    },
-    "route.intent.flow.description" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flüssige Flowlines, wenige Unterbrechungen."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Smooth Flowlines, few interruptions."
-          }
-        }
-      }
-    },
-    "route.intent.title" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Routengefühl"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Route feel"
           }
         }
       }

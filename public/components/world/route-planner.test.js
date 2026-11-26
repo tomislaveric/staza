@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  areaMoved, buildPlanRequest, buildSuggestRequest, canGenerate, collectibleStop, createPlannerState, flowlineStop, moveStop,
-  orderAlternatives, orderStops, planArea, RoutePlannerPanel, ROUTE_INTENTS, suggestedStops, toggleStop, waypointStop
+  buildPlanRequest, buildSuggestRequest, canGenerate, collectibleStop, createPlannerState, flowlineStop, moveStop,
+  orderStops, planArea, RoutePlannerPanel, suggestedStops, showsAim, targetMoved, toggleStop, waypointStop
 } from "./route-planner.js";
 
 const flowline = flowlineStop({ id: "f1", name: "Rheintal", geometry: { coordinates: [[9, 47], [9.1, 47.2]] } });
@@ -50,17 +50,10 @@ describe("buildPlanRequest", () => {
   });
 });
 
-describe("route intents", () => {
-  it("offers Glide, Chill and Explore, never speed wording", () => {
-    expect(ROUTE_INTENTS.map((intent) => intent.label)).toEqual(["Glide", "Chill", "Explore"]);
-    expect(JSON.stringify(ROUTE_INTENTS)).not.toMatch(/fast|speed|quick/i);
-  });
-});
-
 describe("planner wizard", () => {
   const start = { lat: 47, lon: 9 };
-  const area = { bbox: "9,47,9.2,47.2", center: { lat: 47.1, lon: 9.1 }, zoom: 11 };
-  const route = (intent, extra = {}) => ({ id: `p-${intent}`, intent, distanceM: 12000, durationS: 2400, geometry: { coordinates: [] }, ...extra });
+  const aim = { lat: 47.1, lon: 9.1 };
+  const route = (extra = {}) => ({ id: "p1", distanceM: 12000, durationS: 2400, geometry: { coordinates: [] }, ...extra });
 
   it("asks for sport and shape first, then generates once a start is known", () => {
     const state = createPlannerState({ start });
@@ -69,7 +62,6 @@ describe("planner wizard", () => {
     expect(html).toContain('data-planner-sport="cycling" aria-pressed="false"');
     expect(html).toContain('data-planner-shape="round_trip"');
     expect(html).not.toContain("data-planner-add");
-    expect(html).not.toContain("data-planner-intent");
     const ready = { ...state, sportChosen: true, shapeChosen: true, stepsOpen: false };
     expect(canGenerate(ready)).toBe(true);
     expect(canGenerate({ ...ready, routeType: "point_to_point" })).toBe(false);
@@ -77,33 +69,25 @@ describe("planner wizard", () => {
     expect(RoutePlannerPanel(ready)).not.toContain("data-planner-sport");
   });
 
-  it("requests all three feels in one call and grows the area to contain an A to B end", () => {
+  it("requests one route towards the aim, or the end of an A to B route", () => {
     const state = createPlannerState({ start, sport: "running", routeType: "round_trip" });
-    expect(buildSuggestRequest(state, area).body)
-      .toEqual({ area, sport: "running", start, routeType: "round_trip", intents: ["flow", "chill", "explore"] });
+    expect(buildSuggestRequest(state, aim).body)
+      .toEqual({ target: aim, sport: "running", start, routeType: "round_trip" });
     const end = { lat: 47.5, lon: 9.1 };
-    const { body } = buildSuggestRequest({ ...state, routeType: "point_to_point", end }, area);
-    expect(body).toMatchObject({ routeType: "point_to_point", end });
-    const [, south, , north] = body.area.bbox.split(",").map(Number);
-    expect(south).toBe(47);
-    expect(north).toBeGreaterThan(47.5);
-    expect(buildSuggestRequest(createPlannerState(), area).error).toBe("Choose a start on the map.");
+    expect(buildSuggestRequest({ ...state, routeType: "point_to_point", end }, aim).body)
+      .toMatchObject({ routeType: "point_to_point", target: end });
+    expect(buildSuggestRequest(createPlannerState(), aim).error).toBe("Choose a start on the map.");
   });
 
-  it("lists the routes, then shows the chosen card above its stops and the others collapsed", () => {
-    const alternatives = orderAlternatives([route("explore"), route("flow"), route("chill")]);
-    expect(alternatives.map((item) => item.intent)).toEqual(["flow", "chill", "explore"]);
-    const state = { ...createPlannerState({ start, sport: "cycling", routeType: "round_trip" }), alternatives };
-    const listed = RoutePlannerPanel(state);
-    expect(listed.match(/data-planner-choose=/g)).toHaveLength(3);
-    expect(listed).not.toContain("data-planner-save");
-
-    const chosen = RoutePlannerPanel({ ...state, chosenIntent: "chill", proposal: alternatives[1], stops: [peak], stopsAreSuggested: true });
-    expect(chosen.match(/data-planner-choose=/g)).toHaveLength(2);
-    expect(chosen).not.toContain('data-planner-choose="chill"');
-    expect(chosen).toContain("Other routes");
-    expect(chosen.indexOf("data-planner-save")).toBeLessThan(chosen.indexOf('data-planner-stop="peak-1"'));
-    expect(chosen).toContain("data-planner-add");
+  it("shows the generated route's card above its editable stops", () => {
+    const state = createPlannerState({ start, sport: "cycling", routeType: "round_trip" });
+    expect(RoutePlannerPanel(state)).not.toContain("data-planner-save");
+    const generated = RoutePlannerPanel({ ...state, generated: true, proposal: route(), stops: [peak], stopsAreSuggested: true });
+    expect(generated).toContain("Suggested route");
+    expect(generated).not.toContain("Edited");
+    expect(generated.indexOf("data-planner-save")).toBeLessThan(generated.indexOf('data-planner-stop="peak-1"'));
+    expect(generated).toContain("data-planner-add");
+    expect(RoutePlannerPanel({ ...state, generated: true, stops: [peak] })).toContain("Edited");
   });
 
   it("turns a route's collectibles and unridden Flowlines into stops", () => {
@@ -111,14 +95,24 @@ describe("planner wizard", () => {
       collectibles: [{ id: "peak-1", name: "Peak", type: "peak", latitude: 47.5, longitude: 9.5 }],
       flowlines: [{ id: "f1", name: "Rheintal", geometry: { coordinates: [[9, 47]] } }, { id: "done", completed: true }]
     };
-    const stops = suggestedStops(route("chill", { includedTargetIds: ["peak-1"], traversedFlowlines: [{ id: "f1" }, { id: "f1" }, { id: "done" }] }), catalog);
+    const stops = suggestedStops(route({ includedTargetIds: ["peak-1"], traversedFlowlines: [{ id: "f1" }, { id: "f1" }, { id: "done" }] }), catalog);
     expect(stops.map((stop) => stop.id)).toEqual(["peak-1", "f1"]);
   });
 
-  it("flags a clearly moved map but not zooming in", () => {
-    const bbox = "9,47,10,48";
-    expect(areaMoved(bbox, { west: 9.2, south: 47.2, east: 9.8, north: 47.8 })).toBe(false);
-    expect(areaMoved(bbox, { west: 10.2, south: 47, east: 11.2, north: 48 })).toBe(true);
-    expect(areaMoved(bbox, { west: 8, south: 46.5, east: 11, north: 48.5 })).toBe(true);
+  it("flags a map aiming more than the aim radius away, but not zooming", () => {
+    const target = { lat: 47.5, lon: 9.5 };
+    expect(targetMoved(target, { west: 9.2, south: 47.2, east: 9.8, north: 47.8 })).toBe(false);
+    expect(targetMoved(target, { west: 8, south: 46, east: 11, north: 49 })).toBe(false);
+    expect(targetMoved(target, { west: 9.205, south: 47.205, east: 9.805, north: 47.805 })).toBe(false);
+    expect(targetMoved(target, { west: 9.3, south: 47.2, east: 9.9, north: 47.8 })).toBe(true);
+  });
+
+  it("shows the aim for round trips until routes exist and again once the map aims elsewhere", () => {
+    const state = createPlannerState({ start, sport: "cycling", routeType: "round_trip" });
+    expect(showsAim(state)).toBe(true);
+    expect(showsAim({ ...state, routeType: "point_to_point" })).toBe(false);
+    const generated = { ...state, generated: true, proposal: route() };
+    expect(showsAim(generated)).toBe(false);
+    expect(showsAim({ ...generated, targetMoved: true })).toBe(true);
   });
 });

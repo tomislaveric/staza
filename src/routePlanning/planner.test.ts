@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { areaAnchors, customizedStops, flowlineRidePoints, rerouteTargets, type RouteProvider } from "./planner.js";
 import { constraintFitFlag, proposalHint } from "./proposals.js";
-import { backtrackRatio, detourLengthM } from "./roundTrip.js";
+import { backtrackRatio, detourLengthM, routeKnots } from "./roundTrip.js";
 import { RoutingError } from "./routingClient.js";
 import { at, flowlineGeometry, objectivesFor, pointTarget, straightLineRoute } from "./testFixtures.js";
 import type { QuestRouteTarget, RoutePlanningInput, RoutingRequest, ScoredRoute } from "./types.js";
@@ -135,6 +135,28 @@ describe("areaAnchors", () => {
   });
 });
 
+describe("areaAnchors Flowline direction", () => {
+  const sw = at(-10, -10);
+  const ne = at(10, 10);
+  const bounds = { minLatitude: sw.lat, maxLatitude: ne.lat, minLongitude: sw.lon, maxLongitude: ne.lon };
+  const input = { ...roundTrip(30), start: at(0, 5), sport: "cycling" as const };
+  const loop = { stops: 1, reach: 0.55 };
+
+  it("rides a Flowline along the loop end to end in travel direction", () => {
+    const along = flowlineGeometry("along", [1, 5.5], [-1, 5.5]);
+    const anchors = areaAnchors(input, bounds, [along], loop);
+    expect(anchors).toHaveLength(3);
+    expect(anchors[0].lat).toBeLessThan(anchors[2].lat);
+  });
+
+  it("ignores a Flowline that crosses the loop direction", () => {
+    const crossing = flowlineGeometry("crossing", [0, 4.5], [0, 6.5]);
+    const anchors = areaAnchors(input, bounds, [crossing], loop);
+    expect(anchors).toHaveLength(1);
+    expect(crossing.coordinates.some(([lon, lat]) => lon === anchors[0].lon && lat === anchors[0].lat)).toBe(false);
+  });
+});
+
 describe("flowlineRidePoints", () => {
   it("rides a Flowline from the end nearer the start through its middle to the far end", () => {
     const flowline = flowlineGeometry("f", [5, 0], [1, 0]);
@@ -163,5 +185,17 @@ describe("detourLengthM", () => {
   it("flags short local spurs but not a clean loop", () => {
     expect(detourLengthM(line([[0, 0], [0, 2], [0.8, 2], [0, 2], [0, 4], [4, 4], [4, 0], [0, 0]]))).toBeGreaterThan(150);
     expect(detourLengthM(line([[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]]))).toBe(0);
+  });
+});
+
+describe("routeKnots", () => {
+  const line = (points: Array<[number, number]>) => points.map(([n, e]) => [at(n, e).lon, at(n, e).lat] as [number, number]);
+
+  it("flags a small self-crossing loop but not bends, roundabouts or the tour's own shape", () => {
+    // Rides east, loops 400 m north and crosses its own path before continuing.
+    expect(routeKnots(line([[0, 0], [0, 2], [0.4, 2], [0.4, 1.8], [-0.2, 1.8], [-0.2, 4]]))).toHaveLength(1);
+    expect(routeKnots(line([[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]]))).toHaveLength(0);
+    expect(routeKnots(line([[0, 0], [0, 2], [0.03, 2], [0.03, 1.97], [-0.01, 1.97], [-0.01, 4]]))).toHaveLength(0);
+    expect(routeKnots(line([[0, 0], [0, 4], [3, 4], [3, 2], [-1, 2], [-1, 0]]))).toHaveLength(0);
   });
 });

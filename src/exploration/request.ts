@@ -1,10 +1,11 @@
 import { UserInputError } from "../errors.js";
 import { distanceBetween } from "../routePlanning/geo.js";
-import { intentLengthMeters, parseRouteIntent, ROUTE_INTENTS, type RouteIntent } from "../routePlanning/intent.js";
+import { generationLengthMeters } from "../routePlanning/generationPolicy.js";
+import { AIM_RADIUS_M } from "../routePlanning/routeGenerator.js";
 import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import { isRecord, isUuid, parseLatLon, parseProposalId, parseRoutePlanningInput } from "../routePlanning/request.js";
 import type { LatLon, RoutePlanningInput } from "../routePlanning/types.js";
-import { parseBoundsParameter } from "../worldQuery.js";
+import { parseBoundsParameter, type GeoBounds } from "../worldQuery.js";
 import type { ExplorationAreaContext } from "./types.js";
 
 /** Frozen areas larger than this (in degrees per side) are rejected; zoom in to explore. */
@@ -27,13 +28,59 @@ export const parseArea = (value: unknown): ExplorationAreaContext => {
   return { bounds, center, zoom };
 };
 
+/** A target closer to the start than this is a loop around here, not a ride there. */
+export const NEAR_TARGET_M = 2_000;
+/** Half-size of the area a loop around a near target is planned in. */
+const NEAR_LOOP_RADIUS_M = 3_000;
+/** Farthest aimed target: the corridor there and back stays a reasonable area to load. */
+export const MAX_TARGET_DISTANCE_M = 80_000;
+/** Corridor margin around start and target, as a share of their distance (side points ride at 0.3). */
+const CORRIDOR_MARGIN = 0.45;
+/** The way there and back rides beside the direct line: this much longer per direction. */
+const TARGET_WAY_FACTOR = 1.17;
+
+const squareAround = (center: LatLon, radiusM: number): GeoBounds => {
+  const dLat = radiusM / 111_320;
+  const dLon = dLat / (Math.cos((center.lat * Math.PI) / 180) || 1);
+  return { minLatitude: center.lat - dLat, maxLatitude: center.lat + dLat, minLongitude: center.lon - dLon, maxLongitude: center.lon + dLon };
+};
+
+/**
+ * Where an aimed route is planned: around a near target, or the corridor between start and a far
+ * target (with room for the way there and back on different sides and the circle around the target).
+ */
+export const targetArea = (start: LatLon, target: LatLon): ExplorationAreaContext => {
+  const distanceM = distanceBetween(start, target);
+  if (distanceM < NEAR_TARGET_M) return { bounds: squareAround(target, NEAR_LOOP_RADIUS_M), center: target, zoom: 13 };
+  const margin = Math.max(AIM_RADIUS_M, distanceM * CORRIDOR_MARGIN);
+  const [a, b] = [squareAround(start, margin), squareAround(target, margin)];
+  return {
+    bounds: {
+      minLatitude: Math.min(a.minLatitude, b.minLatitude),
+      maxLatitude: Math.max(a.maxLatitude, b.maxLatitude),
+      minLongitude: Math.min(a.minLongitude, b.minLongitude),
+      maxLongitude: Math.max(a.maxLongitude, b.maxLongitude)
+    },
+    center: target,
+    zoom: 12
+  };
+};
+
+/**
+ * Ride length towards a far target: the way there (and back on another side for round trips)
+ * plus a share of a small loop's length as room for Flowlines and collectibles.
+ */
+export const targetLengthMeters = (start: LatLon, target: LatLon, routeType: RoutePlanningInput["routeType"]): number => {
+  const room = generationLengthMeters(areaConstraint({ bounds: squareAround(target, AIM_RADIUS_M), center: target, zoom: 14 }).value);
+  const way = distanceBetween(start, target) * TARGET_WAY_FACTOR * (routeType === "round_trip" ? 2 : 1);
+  return Math.round(Math.min(PLANNING_LIMITS.maxDistanceMeters, Math.max(PLANNING_LIMITS.minDistanceMeters, way + room)));
+};
+
 export interface GenerateRequest {
   area: ExplorationAreaContext;
+  /** A far aimed target the route must reach; `area` is then the corridor to it. */
+  aim?: LatLon;
   input: RoutePlanningInput;
-  /** What the route should feel like; defaults to Chill. The first of `variants`. */
-  intent: RouteIntent;
-  /** One ride per requested intent (`intents`, or the single `intent`); the length differs per intent. */
-  variants: { intent: RouteIntent; input: RoutePlanningInput }[];
   /** A collectible every route must visit ("Route to"). */
   destinationId?: string;
   /** A plannable Flowline of the area every route must ride ("Plan route via this Flowline"). */
@@ -50,25 +97,21 @@ export const areaConstraint = ({ bounds }: ExplorationAreaContext): { type: "dis
   return { type: "distance", value };
 };
 
-/** `intents` (1-3 unique intents) wins over the single `intent` older clients send. */
-const parseIntents = (body: Record<string, unknown>): RouteIntent[] => {
-  if (body.intents === undefined) return [parseRouteIntent(body.intent)];
-  if (!Array.isArray(body.intents) || body.intents.length === 0 || body.intents.length > ROUTE_INTENTS.length) {
-    throw new UserInputError("Intents must list one to three of flow, chill and explore.");
-  }
-  const intents = body.intents.map((value) => parseRouteIntent(value ?? ""));
-  if (new Set(intents).size !== intents.length) throw new UserInputError("Intents must not repeat.");
-  return intents;
-};
-
 /**
- * `{ area, start, intent? | intents?, sport?, routeType?, constraint? }`: the ride only — never targets. The
- * area's size defines the ride, so route type defaults to a round trip and the length is derived
- * from it, capped per intent.
+ * `{ target | area, start, sport?, routeType?, end? }`: the ride only — never targets. With an
+ * aimed `target` the route rides there (an A→B route ends there) and the length follows from the
+ * way there; otherwise the area's size defines the ride. Older clients' `intent`/`intents` are
+ * ignored: generation always plans one route.
  */
 export const parseGenerateRequest = (body: unknown): GenerateRequest => {
   if (!isRecord(body)) throw new UserInputError("An exploration request is required.");
-  const area = parseArea(body.area);
+  const target = body.target === undefined ? undefined : parseLatLon(body.target, "Target");
+  const start = target ? parseLatLon(body.start, "Start") : undefined;
+  if (target && start && distanceBetween(start, target) > MAX_TARGET_DISTANCE_M) {
+    throw new UserInputError("The target is too far from the start.");
+  }
+  const area = target && start ? targetArea(start, target) : parseArea(body.area);
+  const aim = target && start && distanceBetween(start, target) >= NEAR_TARGET_M ? target : undefined;
   const { destinationId, destinationFlowlineId } = body;
   if (destinationId !== undefined && (typeof destinationId !== "string" || destinationId.trim() === "")) {
     throw new UserInputError("The destination must be a collectible id.");
@@ -79,16 +122,17 @@ export const parseGenerateRequest = (body: unknown): GenerateRequest => {
   if (destinationId && destinationFlowlineId) {
     throw new UserInputError("Choose either a destination or a Flowline, not both.");
   }
-  const intents = parseIntents(body);
-  const variants = intents.map((intent) => {
-    const constraint = { type: "distance", value: intentLengthMeters(areaConstraint(area).value, intent) };
-    return { intent, input: parseRoutePlanningInput({ routeType: "round_trip", constraint, ...body }) };
-  });
+  // An A→B route ends at its target.
+  const ride = { routeType: "round_trip", ...body, ...(target && body.routeType === "point_to_point" ? { end: target } : {}) };
+  const value = aim && start
+    ? targetLengthMeters(start, aim, ride.routeType === "point_to_point" ? "point_to_point" : "round_trip")
+    : generationLengthMeters(areaConstraint(area).value);
+  const constraint = { type: "distance", value };
+  const input = parseRoutePlanningInput(target ? { ...ride, constraint } : { constraint, ...ride });
   return {
     area,
-    intent: variants[0].intent,
-    variants,
-    input: variants[0].input,
+    ...(aim ? { aim } : {}),
+    input,
     ...(destinationId ? { destinationId } : {}),
     ...(destinationFlowlineId ? { destinationFlowlineId } : {})
   };

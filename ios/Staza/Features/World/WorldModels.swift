@@ -100,6 +100,8 @@ struct WorldBounds: Equatable, Sendable {
             .map { String(format: "%.5f", $0) }.joined(separator: ",")
     }
 
+    var center: GeoPoint { GeoPoint(lat: (south + north) / 2, lon: (west + east) / 2) }
+
     func contains(_ point: GeoPoint) -> Bool {
         let inLatitude = point.lat >= south && point.lat <= north
         let inLongitude = west <= east ? point.lon >= west && point.lon <= east : point.lon >= west || point.lon <= east

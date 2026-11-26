@@ -11,7 +11,7 @@ import {
   setFartlekData
 } from "../shared/map/staza-fartlek-layers.js";
 import { createStazaMap, DEFAULT_CENTER, DEFAULT_ZOOM } from "../shared/map/staza-map.js";
-import { stazaRouteLayers, stazaSubduedRouteLayers } from "../shared/map/staza-route-layers.js";
+import { stazaRouteLayers } from "../shared/map/staza-route-layers.js";
 import { boundsToParameter, pointsToBounds, readBounds, routeToGeoJson } from "../shared/map/staza-map-utils.js";
 import { STAZA_MAP_PALETTE } from "../shared/map/staza-map-palette.js";
 
@@ -60,20 +60,6 @@ export const routePaint = (planned) => ({
   "glow:line-color": planned ? STAZA_MAP_PALETTE.plannedRoute : STAZA_MAP_PALETTE.questRoute,
   "line:line-color": planned ? STAZA_MAP_PALETTE.plannedRoute : STAZA_MAP_PALETTE.questRoute,
   "line:line-dasharray": planned ? [1.4, 1.2] : undefined
-});
-
-const ALTERNATES_SOURCE = "staza-exploration-alternates";
-export const ALTERNATES_SOURCE_ID = ALTERNATES_SOURCE;
-
-/** Unselected exploration route proposals: muted context under the selected route. */
-export const alternateRouteLayers = () => stazaSubduedRouteLayers(ALTERNATES_SOURCE, { color: STAZA_MAP_PALETTE.alternateRoute, opacity: 0.55 });
-
-/** One LineString feature per unselected proposal, tagged with its proposal id for selection. */
-export const alternateRoutesToGeoJson = (routes = []) => ({
-  type: "FeatureCollection",
-  features: routes
-    .filter((route) => route?.geometry?.coordinates?.length)
-    .map((route) => ({ type: "Feature", properties: { proposalId: route.id }, geometry: route.geometry }))
 });
 
 const SAVED_ROUTES_SOURCE = "staza-saved-explorations";
@@ -175,7 +161,7 @@ const documentRefOf = (container) => container.ownerDocument ?? document;
  * shared Staza map foundation; Staza gameplay rules stay in the World page.
  */
 export const createWorldMap = async (container, {
-  styleUrl, attribution, homePosition, onViewportChange, onCollectibleSelect, onCollectibleHover, onFartlekSelect, onAlternateRouteSelect
+  styleUrl, attribution, homePosition, onViewportChange, onCollectibleSelect, onCollectibleHover, onFartlekSelect
 }) => {
   const staza = await createStazaMap(container, { styleUrl, attribution, ...worldMapInitialView(homePosition) });
   const { map } = staza;
@@ -210,11 +196,6 @@ export const createWorldMap = async (container, {
     map.addSource(EXPLORE_FRAME_SOURCE, { type: "geojson", data: exploreFrameToGeoJson(pendingExploreFrame) });
     for (const layer of exploreFrameLayers()) map.addLayer(layer);
   };
-  const ensureAlternateLayers = () => {
-    if (map.getSource(ALTERNATES_SOURCE)) return;
-    map.addSource(ALTERNATES_SOURCE, { type: "geojson", data: alternateRoutesToGeoJson() });
-    for (const layer of alternateRouteLayers()) map.addLayer(layer);
-  };
   const ensureRouteLayers = () => {
     if (map.getSource(ROUTE_SOURCE)) return;
     map.addSource(ROUTE_SOURCE, { type: "geojson", data: routeToGeoJson() });
@@ -235,7 +216,6 @@ export const createWorldMap = async (container, {
   ensureSavedRouteLayers();
   setSavedRouteData();
   ensureExploreFrameLayers();
-  ensureAlternateLayers();
   ensureRouteLayers();
   ensureEndpointLayers();
   // Fartlek segment layers draw above routes/activity layers but under point collectibles.
@@ -264,25 +244,7 @@ export const createWorldMap = async (container, {
   if (onFartlekSelect) bindFartlekInteractions(map, { onSelect: onFartlekSelect });
 
   map.on("moveend", () => onViewportChange(readBounds(map)));
-  let alternateClicked = false;
-  if (onAlternateRouteSelect) {
-    // Both muted layers are clickable so the thin line is easy to hit through its casing.
-    for (const { id } of alternateRouteLayers()) {
-      map.on("click", id, (event) => {
-        const proposalId = event.features?.[0]?.properties?.proposalId;
-        if (!proposalId || pickHandler) return;
-        alternateClicked = true;
-        onAlternateRouteSelect(proposalId);
-      });
-      map.on("mouseenter", id, () => { if (!pickHandler) map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", id, () => { if (!pickHandler) map.getCanvas().style.cursor = ""; });
-    }
-  }
   map.on("click", (event) => {
-    if (alternateClicked) {
-      alternateClicked = false;
-      return;
-    }
     const point = { lat: event.lngLat.lat, lon: event.lngLat.lng };
     if (pickHandler) pickHandler(point);
     else clickHandler?.(point);
@@ -337,12 +299,6 @@ export const createWorldMap = async (container, {
         const [layer, property] = key.split(":");
         map.setPaintProperty(`${ROUTE_SOURCE}-${layer}`, property, value);
       }
-    },
-    /** Muted, clickable geometry of the unselected exploration proposals. */
-    setAlternateRoutes(routes) {
-      if (!styleReady) return;
-      ensureAlternateLayers();
-      map.getSource(ALTERNATES_SOURCE).setData(alternateRoutesToGeoJson(routes));
     },
     setRouteEndpoints(endpoints) {
       if (!styleReady) return;

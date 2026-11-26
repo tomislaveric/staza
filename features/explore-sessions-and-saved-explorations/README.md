@@ -1,7 +1,7 @@
 # explore-sessions-and-saved-explorations
 
 > **Amended by [route-generation-v2](../route-generation-v2/README.md).** Generate route builds
-> one route for the chosen intent (Flow / Chill / Explore, default Chill) instead of picking the
+> one route instead of picking the
 > recommended one of several proposals. It needs a start: the last located position inside the
 > explored area, otherwise the player taps one on the map.
 >

@@ -22,7 +22,7 @@ import type {
 } from "./types.js";
 import { staysWithinBounds, validateRoute } from "./validation.js";
 import { insideBounds } from "./validation.js";
-import { distanceBetween } from "./geo.js";
+import { axisAngleDegrees, bearing, distanceBetween, lineAxis } from "./geo.js";
 import type { GeoBounds } from "../worldQuery.js";
 
 export type PlanningErrorCode = "no_reachable_targets" | "no_route" | "routing_unavailable";
@@ -57,6 +57,8 @@ export interface QueuedCandidate {
   /** Objectives the candidate was built for; scores its progress and rebuilds retries. */
   objectives: QuestObjective[];
   strategy?: string;
+  /** Routes helper points as stops (`via`, U-turns allowed); a last resort when passing them leaves the area. */
+  stopAtHelpers?: boolean;
 }
 
 interface RoutingRun {
@@ -152,7 +154,7 @@ export const routeCandidates = async (
       const entry = next();
       if (!entry) return;
       routingRequests += 1;
-      const plan = buildRoutingPlan(input.start, input.end, entry.candidate.stops, profileForSport(input.sport));
+      const plan = buildRoutingPlan(input.start, input.end, entry.candidate.stops, profileForSport(input.sport), { stopAtHelpers: entry.stopAtHelpers });
       try {
         const result = await routing.route(plan.request, { requestId: `${requestId}-${routingRequests}`, signal: deadline });
         evaluate(entry, input.routeType === "round_trip" ? closeRoundTrip(result, input.start) : result);
@@ -288,36 +290,71 @@ export const MAX_AREA_DETOUR_M = 150;
 
 /** Share of the area diagonal within which a cycling Flowline point replaces a loop point. */
 const FLOWLINE_SNAP_RATIO = 0.25;
+/**
+ * A Flowline is only used along the route's own direction: its end-to-end axis may differ from
+ * the local route direction by at most this many degrees. Crossing Flowlines are ignored, so the
+ * route never turns off to ride a few hundred metres across its way and back.
+ */
+export const MAX_FLOWLINE_ANGLE_DEGREES = 35;
+/** Flowlines that curl more than this (end-to-end distance / length) have no usable direction. */
+export const MIN_FLOWLINE_STRAIGHTNESS = 0.5;
 
-/** Moves a point onto a nearby Flowline for cycling; running and hiking never follow Flowlines. */
+/** True when a Flowline runs along `heading` (radians, either direction). */
+export const flowlineAlongHeading = (flowline: FlowlineGeometry, heading: number): boolean => {
+  const axis = lineAxis(flowline.coordinates);
+  return axis.straightness >= MIN_FLOWLINE_STRAIGHTNESS && axisAngleDegrees(axis.bearing, heading) <= MAX_FLOWLINE_ANGLE_DEGREES;
+};
+
+/**
+ * Points along a Flowline in travel direction (`heading`): both ends and the middle vertex.
+ */
+const rideAlong = (flowline: FlowlineGeometry, heading: number): LatLon[] => {
+  const points = flowline.coordinates.map(([lon, lat]) => ({ lat, lon }));
+  const ends = [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]];
+  const forward = Math.cos(bearing(ends[0], ends[2]) - heading) >= 0;
+  const ordered = forward ? ends : [...ends].reverse();
+  return ordered.filter((point, index) => ordered.findIndex((other) => waypointId(other) === waypointId(point)) === index);
+};
+
+/**
+ * Bends a loop point to a nearby Flowline for cycling; running and hiking never follow Flowlines.
+ * Only Flowlines that run along the route's direction there (`heading`) are used, and such a
+ * Flowline is ridden end to end in that direction instead of being touched at one vertex.
+ * Crossing Flowlines are ignored.
+ */
 const flowlineSnapper = (input: RoutePlanningInput, bounds: GeoBounds, flowlines: FlowlineGeometry[]) => {
   const snapM = FLOWLINE_SNAP_RATIO * distanceBetween(
     { lat: bounds.minLatitude, lon: bounds.minLongitude },
     { lat: bounds.maxLatitude, lon: bounds.maxLongitude }
   );
-  const points = input.sport === undefined || input.sport === "cycling"
-    ? flowlines.flatMap((flowline) => flowline.coordinates)
-      .filter(([lon, lat]) => insideBounds([lon, lat], bounds, 0))
-      .map(([lon, lat]) => ({ lat, lon }))
+  const usable = input.sport === undefined || input.sport === "cycling"
+    ? flowlines.filter((flowline) => flowline.coordinates.every((point) => insideBounds(point, bounds, 0)))
     : [];
-  return (point: LatLon): LatLon => {
-    let best = point;
+  const points = usable.flatMap((flowline) => flowline.coordinates.map(([lon, lat]) => ({ point: { lat, lon }, flowline })));
+  return (point: LatLon, heading: number): LatLon[] => {
+    let best: FlowlineGeometry | undefined;
     let nearest = snapM;
+    const aligned = new Map<string, boolean>();
     for (const candidate of points) {
-      const gap = distanceBetween(point, candidate);
-      if (gap < nearest) {
-        nearest = gap;
-        best = candidate;
+      const gap = distanceBetween(point, candidate.point);
+      if (gap >= nearest) continue;
+      let along = aligned.get(candidate.flowline.id);
+      if (along === undefined) {
+        along = flowlineAlongHeading(candidate.flowline, heading);
+        aligned.set(candidate.flowline.id, along);
       }
+      if (!along) continue;
+      nearest = gap;
+      best = candidate.flowline;
     }
-    return best;
+    return best ? rideAlong(best, heading) : [point];
   };
 };
 
 /**
  * Anchor points of a loop through the area, starting on the side nearest the start. Cycling
- * routes bend each point to a nearby Flowline so they follow existing Flowlines; running and
- * hiking never do.
+ * routes ride a nearby Flowline that runs along the loop there instead of a loop point, so they
+ * follow existing Flowlines; running and hiking never do.
  */
 export const areaAnchors = (
   input: RoutePlanningInput,
@@ -330,14 +367,16 @@ export const areaAnchors = (
   const halfLon = (bounds.maxLongitude - bounds.minLongitude) / 2;
   const first = Math.atan2((input.start.lat - center.lat) / (halfLat || 1), (input.start.lon - center.lon) / (halfLon || 1));
   const snap = flowlineSnapper(input, bounds, flowlines);
+  const onLoop = (angle: number): LatLon => ({
+    lat: center.lat + Math.sin(angle) * halfLat * loop.reach,
+    lon: center.lon + Math.cos(angle) * halfLon * loop.reach
+  });
   const anchors = new Map<string, LatLon>();
   for (let index = 0; index < loop.stops; index += 1) {
     const angle = first + (2 * Math.PI * index) / loop.stops;
-    const point = snap({
-      lat: center.lat + Math.sin(angle) * halfLat * loop.reach,
-      lon: center.lon + Math.cos(angle) * halfLon * loop.reach
-    });
-    anchors.set(waypointId(point), point);
+    for (const point of snap(onLoop(angle), bearing(onLoop(angle - 0.05), onLoop(angle + 0.05)))) {
+      if (!anchors.has(waypointId(point))) anchors.set(waypointId(point), point);
+    }
   }
   return [...anchors.values()];
 };
@@ -353,7 +392,9 @@ export const destinationStops = (
   bounds: GeoBounds,
   flowlines: FlowlineGeometry[],
   destination: QuestRouteTarget,
-  sides: readonly number[]
+  sides: readonly number[],
+  /** Ride there on the positive side and back on the negative one. */
+  mirrored = false
 ): CandidateStop[] => {
   const { start } = input;
   const target = destination.coordinate;
@@ -367,16 +408,16 @@ export const destinationStops = (
     lat: Math.min(bounds.maxLatitude, Math.max(bounds.minLatitude, point.lat)),
     lon: Math.min(bounds.maxLongitude, Math.max(bounds.minLongitude, point.lon))
   });
-  const side = (offset: number): LatLon => {
+  const side = (heading: number) => (offset: number): LatLon[] => {
     const metersToDeg = (spanM * Math.abs(offset)) / 111_320;
     const sign = Math.sign(offset);
     return snap(clamp({
       lat: (start.lat + target.lat) / 2 + (dx / span) * sign * metersToDeg,
       lon: (start.lon + target.lon) / 2 - ((dy / span) * sign * metersToDeg) / (scale || 1)
-    }));
+    }), heading);
   };
-  const outbound = sides.filter((offset) => offset < 0).map(side);
-  const inbound = sides.filter((offset) => offset > 0).map(side);
+  const outbound = sides.filter((offset) => (mirrored ? offset > 0 : offset < 0)).flatMap(side(bearing(start, target)));
+  const inbound = sides.filter((offset) => (mirrored ? offset < 0 : offset > 0)).flatMap(side(bearing(target, start)));
   return [...outbound.map((point) => waypointTarget(point)), destination, ...inbound.map((point) => waypointTarget(point))]
     .map((stop) => ({ target: stop }));
 };

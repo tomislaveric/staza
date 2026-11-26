@@ -74,3 +74,45 @@ export const detourLengthM = (coordinates: [number, number][]): number => {
   }
   return detoured * BACKTRACK_SPACING_M;
 };
+
+const KNOT_SPACING_M = 25;
+/** Loops up to this length are knots; longer self-crossings are the route's own shape (figure eights). */
+const MAX_KNOT_M = 3_000;
+/** Shorter loops are roundabouts or junction geometry. */
+const MIN_KNOT_M = 200;
+
+const crosses = (a: [number, number], b: [number, number], c: [number, number], d: [number, number]): boolean => {
+  const side = (p: [number, number], q: [number, number], r: [number, number]) =>
+    (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const d1 = side(c, d, a);
+  const d2 = side(c, d, b);
+  const d3 = side(a, b, c);
+  const d4 = side(a, b, d);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+};
+
+/**
+ * Small loops the route rides around before going on: it crosses its own path again within a few
+ * kilometres, typically to touch a point from the "right" direction or to ride a short Flowline
+ * and come back. Returns each knot's samples, so callers can find what caused it.
+ */
+export const routeKnots = (coordinates: [number, number][]): [number, number][][] => {
+  const samples = sampleAlong(coordinates, KNOT_SPACING_M);
+  const minGap = Math.ceil(MIN_KNOT_M / KNOT_SPACING_M);
+  const maxGap = Math.floor(MAX_KNOT_M / KNOT_SPACING_M);
+  const knots: [number, number][][] = [];
+  let index = 0;
+  while (index < samples.length - 1) {
+    let found = -1;
+    for (let later = index + minGap; later < Math.min(samples.length - 1, index + maxGap); later += 1) {
+      if (crosses(samples[index], samples[index + 1], samples[later], samples[later + 1])) found = later;
+    }
+    if (found < 0) {
+      index += 1;
+      continue;
+    }
+    knots.push(samples.slice(index, found + 2));
+    index = found + 1;
+  }
+  return knots;
+};

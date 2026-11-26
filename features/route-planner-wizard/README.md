@@ -3,89 +3,71 @@
 ## Goal
 
 Planning a route should take two taps. The player taps a sport and a route shape. Staza then
-generates Glide, Chill and Explore routes for the map area the player is looking at. Tapping one
-of them shows its card above its stops; the other two stay available as collapsed rows.
+generates **one** route towards the aimed target: the crosshair in the middle of the map the player
+is looking at. The route's card sits above its stops, which the player can edit. (KISS: the earlier
+Glide / Chill / Explore alternatives were removed.)
 
 ## Scope
 
 - iOS World route planner sheet and map.
 - Web World route planner side panel and map.
-- Server: `POST /api/explorations/generate` returns all intents in one request.
-- Out of scope: Android, regenerating automatically on every map pan, and deduplicating
-  identical alternatives.
+- Server: `POST /api/explorations/generate` returns exactly one proposal.
+- Out of scope: Android and regenerating automatically on every map pan.
 
 ## Decisions
 
 - **Wizard steps**:
   - Sport uses icon buttons (bicycle, running, hiking).
   - Route shape uses icon buttons (Round trip, A→B); A→B then asks for the end point on the map.
-  - Completed steps collapse into one summary row (for example "🚲 Cycling · ⟳ Round trip"). Its **Change** action reopens the steps, and changing a choice regenerates the routes.
-- **Automatic generation**: once sport, shape, start (and the end for A→B) are known, one request generates all three intents. There is no Generate button.
-- **Area indication**: the player must see which area is used.
-  - iOS: while no routes are generated, show a dashed frame around the visible map area above the sheet, a center target marker and the caption "Routes in this map area".
-  - If the map is later moved clearly away from the used area, show a "Generate here" chip. "Clearly" means the visible center lies outside the used area, or the visible width is more than twice the used width; zooming in never counts. Pans never regenerate automatically.
-  - During an Explore session the session's explored area is used; "Generate here" (web) uses the current viewport.
-  - Web: the panel is beside the map, so the whole viewport is used. Show the same caption and the "Generate here" action.
-- **Results**:
-  - Three compact rows (name, distance, duration, one-line feel). All three are drawn on the map, subdued and dashed.
-  - Tapping a route makes it the expanded card (metrics and Save) **above the stops**. The other two become slim rows under the card ("Other routes") and can be tapped to switch.
-  - Switching after the player edited the stops asks for confirmation (the existing replace dialog).
+  - Completed steps collapse into one summary row (for example "🚲 Cycling · ⟳ Round trip"). Its **Change** action reopens the steps, and changing a choice generates again.
+- **Automatic generation**: once sport, shape, start (and the end for A→B) are known, one request generates the route. There is no Generate button.
+- **One route, no intents**: there is no route feel (Glide / Chill / Explore) any more, neither in the planner nor on the Explore card. The server uses one fixed generation policy and ignores `intent`/`intents` sent by older clients.
+- **Aimed target** (replaces the earlier planning-area frame): the player must see where the route goes.
+  - Round trips ride from the start to the aimed target and back. The target does not need to be exact; the route passes within 1 km of it.
+  - iOS: the aim (crosshair) sits in the middle of the map above the sheet, with the caption "Target: crosshair". Web: the crosshair sits in the middle of the map viewport, and the panel says that routes ride to it and back.
+  - No frame is drawn around a planning area. An Explore session keeps its own outline.
+  - The crosshair shows before generating and again when the map center is more than 1 km away from the generated target. In that case a "Generate here" action also appears. Pans never regenerate automatically.
+  - A→B routes aim at the picked end, so they show no crosshair.
+- **Result**: the generated route is shown right away as the card (title "Suggested route", metrics and Save) **above its stops**. Its collectibles and ridden opportunity Flowlines become the stops.
 - **Editing**:
-  - Stops can be edited once a route is chosen, or when the player already has own stops ("Add to route" picks): map taps add or remove stops, and the list allows reordering and removing.
-  - Once a route exists, every edit reroutes automatically after a short debounce (about 0.8 s on web), so several quick moves route once. A new start or end reroutes a chosen route and regenerates the routes otherwise.
-  - The separate Calculate button is removed. Own stops without a route keep one "Route my stops" action; a retry action appears only after a failure.
-- **Explore card**: its "Generate route" opens the planner with cycling and Round trip already chosen, generates the three routes for the explored area and opens the feel chosen on the card.
-- **Route styling**: the chosen route uses the `plannedRoute` palette color (blue, dashed). The alternatives are subdued.
-- **Generation**: one server call with `intents`. Every alternative belongs to the same exploration session, so each one can be saved.
+  - Stops can be edited once a route exists, or when the player already has own stops ("Add to route" picks): map taps add or remove stops, and the list allows reordering and removing.
+  - Once a route exists, every edit reroutes automatically after a short debounce (about 0.8 s on web), so several quick moves route once. A new start or end reroutes an existing route and generates otherwise.
+  - The player's own (or edited) stops are never replaced silently: a new sport, shape or endpoint reroutes them instead, and "Generate here" asks for confirmation first.
+  - Own stops without a route keep one "Route my stops" action; a retry action appears only after a failure.
+- **Explore card**: its "Generate route" opens the planner with cycling and Round trip already chosen and generates the route towards the map center.
+- **Route styling**: the route uses the `plannedRoute` palette color (blue, dashed).
 
 ## Implementation plan
 
-1. **Server** (`src/exploration/request.ts`, `service.ts`, route types):
-   - Accept `intents: ("flow"|"chill"|"explore")[]`, 1–3 unique values. The legacy `intent` field is treated as `[intent]`; anything invalid returns 400.
-   - Run `generateIntentRoute` once per intent within one session; each proposal carries its `intent`.
-   - Store all proposals together so each stays saveable. Intents that fail are omitted; return 422 only if all fail.
-   - One request counts once against the route-planning rate limiter.
+1. **Server** (`src/exploration/request.ts`, `service.ts`, `src/routePlanning/generationPolicy.ts`, `routeGenerator.ts`):
+   - One `GENERATION_POLICY` (balanced Flowlines, at most 2 Flowlines and 2 POIs, length factor 0.6 of the area, capped at 50 km) and `generateRoute` without intents.
+   - `parseGenerateRequest` returns one ride input and ignores `intent`/`intents`.
+   - `ExplorationService.generate` plans one route and returns a one-entry `proposals` list; one request counts once against the route-planning rate limiter.
 2. **iOS model** (`RoutePlannerModel.swift`):
-   - Step state (sport chosen, shape chosen) and `alternatives` with their intent.
-   - The chosen intent and the generated area; automatic generation when the steps are complete.
-   - `choose(_:)` sets the stops from the chosen proposal; switching uses the replace confirmation.
-   - Reroute after adding stops as well as after removing or moving them.
-3. **iOS sheet** (`RoutePlannerPanel.swift`, `Localizable.xcstrings`):
-   - Icon steps and the summary row.
-   - Results list, the chosen card above the stops, and the collapsed alternatives.
-   - Remove the Generate and Calculate buttons. The planner stops using `RouteIntentPicker`; the Explore card keeps it.
-4. **iOS map** (`WorldView.swift`, `WorldMapView.swift`, `StazaMapLayers.swift`):
-   - Planning-area frame, center marker, caption and the "Generate here" chip.
-   - Subdued alternative routes and the chosen route in planned-route blue.
-5. **Web** (`route-planner.js`, `world-page.js`, `world-map.js`, `world.css`; planner strings stay inline in English like the rest of the planner):
-   - The same steps, summary row and automatic generation with `intents`.
-   - Results list, the chosen card above the stops, the alternatives and "Generate here".
-   - The chosen route in planned-route blue, dashed.
-6. **Docs**: keep `route-planning-v2` and `route-generation-v2` consistent with this feature.
+   - Step state (sport chosen, shape chosen), `generated` and the generated target; automatic generation when the steps are complete.
+   - `generate(toward:)` adopts the single proposal and sets its stops.
+   - Reroute after adding, removing or moving stops.
+3. **iOS sheet and map** (`RoutePlannerPanel.swift`, `WorldView.swift`, `WorldMapView.swift`, `ExploreRevealViews.swift`, `Localizable.xcstrings`):
+   - Icon steps, summary row, route card above the stops.
+   - The aim crosshair, its caption and the "Generate here" chip (with confirmation over own stops).
+   - No intent picker and no alternative routes layer.
+4. **Web** (`route-planner.js`, `world-page.js`, `world-map.js`, `explore-reveal.js`, `world.css`; planner strings stay inline in English like the rest of the planner):
+   - The same steps, summary row, automatic generation, route card above the stops and "Generate here".
+   - No intent picker and no alternative routes layer.
+5. **Docs**: keep `route-planning-v2` and `route-generation-v2` consistent with this feature.
 
 ## Acceptance criteria
 
-- Tapping a sport and Round trip produces Glide, Chill and Explore routes without any further tap, for the map area visible above the sheet (iOS) or the viewport (web).
-- Before generation, the map clearly shows which area will be used.
+- Tapping a sport and Round trip produces one route without any further tap, towards the center of the map visible above the sheet (iOS) or of the viewport (web).
+- Before generation, the map shows the crosshair the route will ride to.
 - Completed steps collapse into one summary row, and the steps can be reopened from it.
-- Tapping a route shows its card above its stops; the other routes are collapsed rows that switch on tap.
-- Every alternative can be saved.
-- Editing the stops of the chosen route reroutes automatically.
-- Older clients sending `intent` still receive one proposal.
+- The route's card sits above its editable stops, and the route can be saved.
+- Editing the stops reroutes automatically.
+- No UI shows Glide, Chill or Explore; older clients sending `intent`/`intents` still receive one proposal.
 
 ## Validation
 
-- Server vitest:
-  - Parsing of `intents` and the legacy `intent`, including invalid input.
-  - One proposal per intent in a single session.
-  - A failing intent is omitted; if all fail, the request returns 422.
-  - Every returned proposal can be saved.
-- iOS `RoutePlannerModelTests`:
-  - Automatic generation after the steps.
-  - Choosing and switching routes, including the confirmation.
-  - Rerouting after adding a stop.
-  - Detecting that the map moved away from the generated area.
-- Web `route-planner.test.js` and `world-page.test.js`:
-  - The steps and the request body of the automatic generation.
-  - Choosing and switching routes.
-- Full iOS test suite and the affected vitest suites.
+- Server vitest: request parsing ignores legacy intents; generation returns exactly one saveable proposal; aimed routes pass the target.
+- iOS `RoutePlannerModelTests`: automatic generation after the steps, the adopted route and its stops, rerouting after edits, own stops kept on a sport change, and the 1 km target check.
+- Web `route-planner.test.js` and `world-page.test.js`: the steps, the request body without intents, the route card above the stops, and "Generate here".
+- Full iOS planner tests and the affected vitest suites.

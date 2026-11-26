@@ -1,8 +1,10 @@
 # route-generation-v2
 
-> **Planner UI superseded by [route-planner-wizard](../route-planner-wizard/README.md):** the planner
-> now generates Glide, Chill and Explore together (`intents`) after the player picks a sport and a
-> route shape. The intent model, scoring and per-intent generator described here still apply.
+> **Superseded in part by [route-planner-wizard](../route-planner-wizard/README.md):** intents
+> (Glide, Chill, Explore) were removed. The generator now builds exactly one route with one fixed
+> policy (`GENERATION_POLICY` in `src/routePlanning/generationPolicy.ts`, generator in
+> `routeGenerator.ts`), and `intent`/`intents` in requests are ignored. The scoring components and
+> the generation algorithm below still apply; the per-intent table describes the former design.
 
 > Amends [explore-sessions-and-saved-explorations](../explore-sessions-and-saved-explorations/README.md)
 > and [explore-reveal-and-manual-planner](../explore-reveal-and-manual-planner/README.md):
@@ -140,6 +142,35 @@ planning deadline.
    A round trip from a start more than 2 km outside the area adds one route-only point beside the
    way there and one on the other side of the way back, so it rides a loop instead of the same
    road out and back. The plain connector stays as a fallback variant.
+   **Smooth riding:** collectibles are routed as `via` stops, while route-only helper points
+   (area anchors, Flowline ride points, side points) are routed as `through` points, so the router
+   never turns around just to touch them. Ferries are avoided. Only if every candidate then
+   leaves the area (coasts, rivers) are the same candidates retried with helpers as `via` stops.
+   Flowlines are only used along the route's direction there: a Flowline is chained into the
+   skeleton or used instead of an area-loop anchor only when its axis is within 35° of the leg
+   and it is reasonably straight (straightness ≥ 0.5); such a Flowline is ridden end to end in
+   travel direction. Crossing Flowlines are ignored. Route quality is penalized for short
+   sideways jogs (two opposite turns ≥ 45° within 80 m with a net heading change < 30°, e.g. a
+   hop onto a cycle path and back). Forbidden roads (motorways, `bicycle=no`) are excluded by
+   the router's bicycle access rules.
+   **No knots:** a knot is a 200 m–3 km stretch where the routed line crosses itself (sampled
+   every 25 m); longer crossings are the tour's own shape, shorter ones roundabouts. Each Flowline
+   ride block of the chained skeleton is flipped when that shortens the estimated tour, so a
+   Flowline is entered from the end facing the route. Route quality loses 0.35 per knot. If the
+   best route still has a knot, up to two repair rounds drop the stops within 400 m of it (with
+   the whole Flowline ride they belong to; never a pinned goal) and reroute, as long as the
+   estimated tour keeps at least 60% of the ride length.
+   **Aimed target:** the wizard sends a `target` instead of an area.
+   - A target under 2 km from the start: an area loop within a 6 km square around it.
+   - A farther target (at most 80 km): the area is the corridor box around start and target, with
+     a margin of `max(1 km, 0.45 × distance)`. A round trip rides start → side point → target →
+     side point on the other side → start, chaining in Flowlines aligned with those legs. If
+     needed, it falls back to mirrored sides, narrower sides (±0.15), and then the target alone.
+     A→B ends at the target.
+   - The length is the start–target distance × 1.17 (× 2 for a round trip) plus the intent's loop
+     share around the target.
+   - Every chosen route passes within 1 km of the target.
+   - The intents of one request share identical routing requests.
 4. **Pick** the best route by intent score above the quality floor. Return one proposal. Its stops
    are its collectibles plus the opportunity Flowlines it rides in full (as today).
 5. "Route to" (`destinationId`) and "via this Flowline" (`destinationFlowlineId`) become pinned
@@ -154,6 +185,8 @@ removed (`strategies.ts` is deleted). `PLANNER_VERSION` is bumped to 5.
   - Accepts `intent?: "flow" | "chill" | "explore"`. The default is `chill`; any other value
     returns 400.
   - The constraint is `areaConstraint(area)`, capped by the intent.
+  - Instead of `area`, accepts `target: { lat, lon }` (requires `start`). The server derives the
+    area and length from it; an A→B route ends at the target.
   - The response shape is unchanged. `proposals` has exactly one entry, with `recommended: true`.
 - `POST /api/world/explore` clamps instead of rejecting a large area and returns the explored
   `area`. `exploreAllowed` stays in the `/api/world` viewport response for older clients. The
