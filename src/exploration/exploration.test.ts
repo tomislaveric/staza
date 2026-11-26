@@ -252,6 +252,18 @@ describe("ExplorationService", () => {
     expect(loadEvents.indexOf("flowlines")).toBeGreaterThan(loadEvents.lastIndexOf("route"));
   });
 
+  it("finds enhancements near long routes and dense Flowlines without overflowing the stack", async () => {
+    const dense = flowline("f-dense", [0.2, 0.1], [1, 0.2]);
+    const [[fromLon, fromLat], [toLon, toLat]] = [dense.geometry.coordinates[0]!, dense.geometry.coordinates.at(-1)!];
+    dense.geometry.coordinates = Array.from({ length: 50_000 }, (_, index) => {
+      const share = index / 49_999;
+      return [fromLon! + (toLon! - fromLon!) * share, fromLat! + (toLat! - fromLat!) * share];
+    });
+    const { service } = setup({ flowlines: [dense] });
+    const result = await service.generate("p1", generateBody);
+    expect(result.flowlineEnhancements.map(({ flowline: item }) => item.id)).toEqual(["f-dense"]);
+  });
+
   it("does not fetch Flowlines for a non-cycling baseline", async () => {
     const { service, loadEvents } = setup();
     const result = await service.generate("p1", { ...generateBody, sport: "running" });

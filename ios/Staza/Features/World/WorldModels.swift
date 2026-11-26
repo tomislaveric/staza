@@ -16,6 +16,7 @@ extension WorldCollectible {
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 }
 
+/// A Flowline offered as an optional enhancement of a generated cycling route.
 struct WorldFlowline: Decodable, Equatable, Identifiable, Sendable {
     struct Geometry: Decodable, Equatable, Sendable {
         let coordinates: [[Double]]
@@ -23,13 +24,7 @@ struct WorldFlowline: Decodable, Equatable, Identifiable, Sendable {
     let id: String
     let name: String
     let geometry: Geometry
-    let completed: Bool
     var lengthMeters: Double? = nil
-    var flowScore: Double? = nil
-    var enduranceScore: Double? = nil
-    var exploreScore: Double? = nil
-    var roadQualityScore: Double? = nil
-    var character: FlowlineCharacter? = nil
 
     var coordinates: [CLLocationCoordinate2D] {
         geometry.coordinates.compactMap { $0.count >= 2 ? CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) : nil }
@@ -44,47 +39,11 @@ struct ExplorationRoute: Decodable, Equatable, Identifiable, Sendable {
     let geometry: LineGeometry
 }
 
+/// `GET /api/world`: curated POIs and saved Exploration routes in the viewport. Flowlines are ignored;
+/// Explore only offers them after a route is generated.
 struct WorldViewport: Decodable, Equatable, Sendable {
-    /// Curated collectibles in the viewport, whether found or not.
     let collectibles: [WorldCollectible]?
-    /// Only the player's completed Flowlines.
-    let fartleks: [WorldFlowline]?
-    /// Saved Exploration routes intersecting the viewport; absent on older servers.
     var explorationRoutes: [ExplorationRoute]? = nil
-    let truncated: Bool?
-}
-
-/// The World-relevant part of `GET /api/player/capabilities`.
-struct WorldCapabilities: Decodable, Equatable, Sendable {
-    struct LockedFilter: Decodable, Equatable, Sendable {
-        let id: String
-        let nodeId: String
-        let nodeName: String
-    }
-    var worldFilters: [String] = []
-    var lockedWorldFilters: [LockedFilter] = []
-
-    static let empty = WorldCapabilities()
-
-    init(worldFilters: [String] = [], lockedWorldFilters: [LockedFilter] = []) {
-        self.worldFilters = worldFilters
-        self.lockedWorldFilters = lockedWorldFilters
-    }
-
-    private enum CodingKeys: String, CodingKey { case worldFilters, lockedWorldFilters }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        worldFilters = try container.decodeIfPresent([String].self, forKey: .worldFilters) ?? []
-        lockedWorldFilters = try container.decodeIfPresent([LockedFilter].self, forKey: .lockedWorldFilters) ?? []
-    }
-}
-
-struct QuestTargets: Decodable, Equatable, Sendable {
-    let collectibles: [WorldCollectible]
-    let flowlines: [WorldFlowline]
-
-    static let empty = QuestTargets(collectibles: [], flowlines: [])
 }
 
 struct WorldBounds: Equatable, Sendable {
@@ -101,30 +60,33 @@ struct WorldBounds: Equatable, Sendable {
     }
 
     var center: GeoPoint { GeoPoint(lat: (south + north) / 2, lon: (west + east) / 2) }
-
-    func contains(_ point: GeoPoint) -> Bool {
-        let inLatitude = point.lat >= south && point.lat <= north
-        let inLongitude = west <= east ? point.lon >= west && point.lon <= east : point.lon >= west || point.lon <= east
-        return inLatitude && inLongitude
-    }
-
-    /// The outline, closed, as map coordinates.
-    var ring: [CLLocationCoordinate2D] {
-        [(south, west), (south, east), (north, east), (north, west), (south, west)]
-            .map { CLLocationCoordinate2D(latitude: $0.0, longitude: $0.1) }
-    }
 }
 
-enum WorldSelectionKind: Sendable { case collectible, flowline }
+enum WorldCategory {
+    static func of(_ collectible: WorldCollectible) -> String { collectible.primaryCategory ?? "coin" }
 
-enum WorldSelection: Equatable, Identifiable, Sendable {
-    case collectible(WorldCollectible)
-    case flowline(WorldFlowline)
+    /// Localization key of the category's name.
+    static func labelKey(_ category: String?) -> String {
+        switch category {
+        case "viewpoint": "world.category.viewpoint"
+        case "peak", "mountain": "world.category.peak"
+        case "castle": "world.category.castle"
+        case "waterfall": "world.category.waterfall"
+        case "place": "world.category.place"
+        case "mountain_pass": "world.category.mountainPass"
+        default: "world.detail.collectible"
+        }
+    }
 
-    var id: String {
-        switch self {
-        case .collectible(let item): "collectible:\(item.id)"
-        case .flowline(let item): "flowline:\(item.id)"
+    static func systemImage(_ category: String?) -> String {
+        switch category {
+        case "viewpoint": "binoculars.fill"
+        case "peak", "mountain": "mountain.2.fill"
+        case "castle": "building.columns.fill"
+        case "waterfall": "drop.fill"
+        case "mountain_pass": "road.lanes"
+        case "place": "mappin.and.ellipse"
+        default: "mappin"
         }
     }
 }

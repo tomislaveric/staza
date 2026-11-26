@@ -257,7 +257,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   canonical event relationships and shared replay/HUD presentation metadata.
 - [World destination route enhancements](features/world-destination-route-enhancements/README.md)
   — make World destination-first with a Flowline-free baseline route, optional
-  cycling Flowline enhancements, and visible selectable POIs.
+  cycling Flowline enhancements, and visible selectable POIs; the iOS World tab is
+  simplified to the Explore route planner.
 - [World Filter](features/world-filter/README.md)
   — combine multi-select, marker-keyed World map filters and remove the
   redundant map-overlay legend.

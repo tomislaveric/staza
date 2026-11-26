@@ -145,6 +145,45 @@ const planningFailure = (error: unknown): unknown => error instanceof PlanningEr
   ? new ExplorationError(error.code === "routing_unavailable" ? "planning_unavailable" : error.code)
   : error;
 
+const ENHANCEMENT_MAX_DISTANCE_M = 2_500;
+const ENHANCEMENT_SAMPLES = 400;
+
+type LonLat = readonly [number, number] | number[];
+
+/** At most `limit` evenly spaced points of a line (plus its last point), as lat/lon. */
+const sampledPoints = (coordinates: LonLat[], limit: number): { lat: number; lon: number }[] => {
+  const step = Math.max(1, Math.ceil(coordinates.length / limit));
+  const sampled = coordinates.filter((_, index) => index % step === 0 || index === coordinates.length - 1);
+  return sampled.map(([lon, lat]) => ({ lat: lat!, lon: lon! }));
+};
+
+/**
+ * Closest distance between two sampled lines' points. Loops instead of spreading into
+ * `Math.min`, which overflows the call stack for long routes and Flowlines. Lines whose bounding box is
+ * farther than `maxM` from every route point are skipped cheaply.
+ */
+const minimumDistanceM = (route: { lat: number; lon: number }[], line: { lat: number; lon: number }[], maxM: number): number => {
+  let south = Infinity, north = -Infinity, west = Infinity, east = -Infinity;
+  for (const { lat, lon } of line) {
+    south = Math.min(south, lat); north = Math.max(north, lat);
+    west = Math.min(west, lon); east = Math.max(east, lon);
+  }
+  const padLat = maxM / 111_000;
+  const nearBox = route.some(({ lat, lon }) => {
+    const padLon = padLat / Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+    return lat >= south - padLat && lat <= north + padLat && lon >= west - padLon && lon <= east + padLon;
+  });
+  if (!nearBox) return Infinity;
+  let closest = Infinity;
+  for (const vertex of line) {
+    for (const point of route) {
+      const distance = distanceBetween(point, vertex);
+      if (distance < closest) closest = distance;
+    }
+  }
+  return closest;
+};
+
 /** Shares identical routing requests (and their failures) within one generation. */
 const sharedRoutes = (routing: RouteProvider): RouteProvider => {
   const results = new Map<string, Promise<RoutingResult>>();
@@ -300,14 +339,13 @@ export class ExplorationService {
     if (!this.dependencies.sessions.get(playerId, session.id)) throw new ExplorationError("exploration_expired");
     session.flowlines = candidateFlowlines;
     session.flowlineGeometries = buildFlowlineGeometries(candidateFlowlines);
+    const routePoints = sampledPoints(route.geometry.coordinates, ENHANCEMENT_SAMPLES);
     const candidates = input.sport === "cycling" && !requiredFlowline
       ? session.flowlines.filter((flowline) => !flowline.completed && flowline.status === "published"
-        && flowline.geometry.coordinates.length >= 2).map((flowline) => {
-          const routePoints = route.geometry.coordinates.map(([lon, lat]) => ({ lat, lon }));
-          const distanceM = Math.min(...flowline.geometry.coordinates.flatMap(([lon, lat]) =>
-            routePoints.map((point) => distanceBetween(point, { lat, lon }))));
-          return { flowline, distanceM };
-        }).filter(({ distanceM }) => distanceM <= 2_500)
+        && flowline.geometry.coordinates.length >= 2).map((flowline) => ({
+          flowline,
+          distanceM: minimumDistanceM(routePoints, sampledPoints(flowline.geometry.coordinates, ENHANCEMENT_SAMPLES), ENHANCEMENT_MAX_DISTANCE_M)
+        })).filter(({ distanceM }) => distanceM <= ENHANCEMENT_MAX_DISTANCE_M)
         .sort((a, b) => a.distanceM - b.distanceM || a.flowline.id.localeCompare(b.flowline.id))
         .slice(0, 3)
       : [];

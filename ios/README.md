@@ -9,7 +9,7 @@ Native SwiftUI app shell. Open `Staza.xcodeproj` in Xcode 16+.
 ## Layout
 
 - `Staza/App` – entry point and composition root (`AppContainer`)
-- `Staza/Features` – feature screens: `Shell` (`TabView`), `Auth`, `Home`, `World` (map, Explore), `Quests`,
+- `Staza/Features` – feature screens: `Shell` (`TabView`), `Auth`, `Home`, `World` (Explore route planner), `Quests`,
   `SkillAtlas`, `Progress`, `Activities` (detail, replay), `AddActivity` (`.fit` import), `StravaImport`,
   `Profile`, and `More`
 - `Staza/Features/SkillAtlas` – the atlas is drawn as portrait branch lanes per sport.

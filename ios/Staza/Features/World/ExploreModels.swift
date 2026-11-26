@@ -25,24 +25,14 @@ struct RouteProposal: Decodable, Equatable, Identifiable, Sendable {
     let start: GeoPoint
     let includedTargetIds: [String]
     let constraintFit: String?
-    var flowlineIds: [String]? = nil
-    var droppedFlowlineIds: [String]? = nil
     var droppedTargetIds: [String]? = nil
     var droppedWaypoints: [GeoPoint]? = nil
-    /// Manual route stop order: collectible ids, `waypoint:<lat>,<lon>` and `flowline:<id>`.
+    /// Manual route stop order: collectible ids and `waypoint:<lat>,<lon>`.
     var stopOrder: [String]? = nil
-    /// Flowlines a generated route rides; the opportunity ones become its Flowline stops.
-    var traversedFlowlines: [TraversedFlowline]? = nil
-
-    struct TraversedFlowline: Decodable, Equatable, Sendable {
-        let id: String
-    }
 }
 
 struct ExplorationCatalog: Decodable, Equatable, Sendable {
     let collectibles: [WorldCollectible]
-    /// Plannable Flowlines of the area: its opportunities and the player's completed ones.
-    var flowlines: [WorldFlowline]? = nil
 }
 
 struct GeneratedExploration: Decodable, Equatable, Sendable {

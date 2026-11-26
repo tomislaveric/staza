@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Sheet header while planning: title and a close button that discards the plan.
+/// Explore sheet header: title and, once a plan is underway, a button that starts over.
 struct RoutePlannerHeader: View {
     let planner: RoutePlannerModel
+    let onReset: () -> Void
 
     var body: some View {
         HStack(spacing: StazaSpacing.md) {
@@ -17,16 +18,29 @@ struct RoutePlannerHeader: View {
                     .foregroundStyle(StazaColor.textMuted)
             }
             Spacer(minLength: StazaSpacing.sm)
-            SheetCloseButton { planner.close() }
-                .disabled(planner.status == .saving)
+            if planner.sportChosen || planner.proposal != nil || planner.destinationId != nil {
+                Button(action: onReset) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(StazaColor.textMuted)
+                        .frame(width: 30, height: 30)
+                        .background(StazaColor.surfaceRaised, in: Circle())
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!planner.isIdle)
+                .accessibilityLabel(Text("planner.reset"))
+                .accessibilityIdentifier("plannerReset")
+            }
         }
         .padding(.horizontal, StazaSpacing.md)
         .padding(.bottom, StazaSpacing.md)
     }
 }
 
-/// The route planner wizard: sport, route shape, then one generated route. Its card sits above its stops,
-/// which the player can edit.
+/// Explore: sport, route shape, then one generated route. Its card sits above its stops, which the
+/// player can edit.
 struct RoutePlannerPanel: View {
     let planner: RoutePlannerModel
     let userLocation: GeoPoint?
@@ -36,6 +50,7 @@ struct RoutePlannerPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
             if planner.showsSteps { steps } else { summary }
+            if let name = planner.destinationName { destinationRow(name) }
             if planner.shapeChosen, planner.routeType == .pointToPoint, planner.end != nil {
                 pointRow("planner.end", point: planner.end, mode: .pickEnd)
             }
@@ -43,7 +58,6 @@ struct RoutePlannerPanel: View {
 
             if planner.status == .suggesting { generating }
             chosen
-            if showsFlowlineEnhancements { enhancements }
             if showsStops { stops }
             if let failure = planner.failure { failureRow(failure) }
 
@@ -60,6 +74,29 @@ struct RoutePlannerPanel: View {
     private var showsStops: Bool { planner.generated || planner.proposal != nil || !planner.stops.isEmpty }
     private var showsFlowlineEnhancements: Bool {
         planner.generated && planner.stopsAreSuggested && planner.sport == .cycling && !planner.flowlineEnhancements.isEmpty
+    }
+
+    /// The POI the route leads to, chosen with "Route here".
+    private func destinationRow(_ name: String) -> some View {
+        HStack(spacing: StazaSpacing.sm) {
+            Image(systemName: "mappin.circle.fill").foregroundStyle(StazaColor.accent).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                OverlineText("planner.destination")
+                Text(verbatim: name).font(StazaFont.subheadline.weight(.medium)).foregroundStyle(StazaColor.textPrimary).lineLimit(1)
+            }
+            Spacer(minLength: StazaSpacing.sm)
+            Button { planner.clearDestination() } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(StazaColor.textMuted)
+                    .frame(minWidth: 36, minHeight: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("planner.destination.clear"))
+        }
+        .disabled(!planner.isIdle)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("plannerDestination")
     }
 
     // MARK: Steps
@@ -172,9 +209,7 @@ struct RoutePlannerPanel: View {
                             signed(delta.durationDeltaS, ActivityStyle.duration(seconds: abs(delta.durationDeltaS), locale: locale))
                         ] + (delta.elevationGainDeltaM.map { [signedElevation($0)] } ?? []))
                     }
-                    if planner.sport == .cycling, !planner.flowlineEnhancements.isEmpty {
-                        enhancements
-                    }
+                    if showsFlowlineEnhancements { enhancements }
                     Button(action: onSave) {
                         if planner.status == .saving {
                             SwiftUI.ProgressView().tint(StazaColor.onAccent)
@@ -459,7 +494,6 @@ struct RoutePlannerPanel: View {
 
     private func name(_ stop: PlannerStop) -> String {
         switch stop {
-        case .flowline(let flowline): flowline.name
         case .collectible(let item): item.name
         case .waypoint(let point): String(localized: "planner.stop.waypoint \(format(point))", locale: locale)
         }
@@ -467,7 +501,6 @@ struct RoutePlannerPanel: View {
 
     private func icon(_ stop: PlannerStop) -> String {
         switch stop {
-        case .flowline: "point.topleft.down.to.point.bottomright.curvepath"
         case .collectible(let item): WorldCategory.systemImage(item.primaryCategory)
         case .waypoint: "mappin.and.ellipse"
         }
@@ -475,7 +508,6 @@ struct RoutePlannerPanel: View {
 
     private func tint(_ stop: PlannerStop) -> Color {
         switch stop {
-        case .flowline(let flowline): flowline.resolvedCharacter.primary?.tint ?? StazaColor.textMuted
         case .collectible(let item): item.found ? StazaColor.success : StazaColor.textMuted
         case .waypoint: StazaColor.accent
         }

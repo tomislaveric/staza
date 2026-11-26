@@ -2,17 +2,15 @@ import CoreLocation
 import Foundation
 import Observation
 
-/// A stop of a manual route: an opportunity or completed Flowline, a collectible or a map point.
+/// A stop of a manual route: a curated POI or a map point.
 enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
-    case flowline(WorldFlowline)
     case collectible(WorldCollectible)
     case waypoint(GeoPoint)
 
-    enum Kind: String, Sendable { case flowline, collectible, waypoint }
+    enum Kind: String, Sendable { case collectible, waypoint }
 
     var kind: Kind {
         switch self {
-        case .flowline: .flowline
         case .collectible: .collectible
         case .waypoint: .waypoint
         }
@@ -21,7 +19,6 @@ enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
     /// The id the server uses for this stop in `stopOrder` and the dropped lists.
     var key: String {
         switch self {
-        case .flowline(let flowline): "flowline:\(flowline.id)"
         case .collectible(let collectible): collectible.id
         case .waypoint(let point): Self.waypointKey(point)
         }
@@ -31,7 +28,6 @@ enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
 
     var points: [GeoPoint] {
         switch self {
-        case .flowline(let flowline): flowline.coordinates.map { GeoPoint(lat: $0.latitude, lon: $0.longitude) }
         case .collectible(let item): [GeoPoint(lat: item.latitude, lon: item.longitude)]
         case .waypoint(let point): [point]
         }
@@ -47,7 +43,6 @@ enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(kind.rawValue, forKey: .kind)
         switch self {
-        case .flowline(let flowline): try container.encode(flowline.id, forKey: .id)
         case .collectible(let item): try container.encode(item.id, forKey: .id)
         case .waypoint(let point):
             try container.encode(point.lat, forKey: .lat)
@@ -56,9 +51,10 @@ enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
     }
 }
 
-/// Route planner wizard: the player picks a sport and a route shape, then Staza generates one route
-/// towards the aimed target and shows its stops; the player can edit them and Staza reroutes, ordering the stops unless the player reordered them. "Save Exploration"
-/// persists the route as a planned Exploration; it never starts it.
+/// Explore: the player picks a sport and a route shape, then Staza generates one Flowline-free route
+/// towards the aim or a chosen POI. The player can edit its stops and Staza reroutes, ordering them
+/// unless the player reordered them. Cycling routes then offer a few nearby Flowlines as optional
+/// enhancements. "Save Exploration" persists the route as a planned Exploration; it never starts it.
 @MainActor
 @Observable
 final class RoutePlannerModel {
@@ -75,12 +71,12 @@ final class RoutePlannerModel {
         case server(String?)
     }
 
-    private(set) var isActive = false
     private(set) var status = Status.idle
     private(set) var start: GeoPoint?
     private(set) var end: GeoPoint?
     private(set) var destination: GeoPoint?
     private(set) var destinationId: String?
+    private(set) var destinationName: String?
     private(set) var routeType = RouteType.roundTrip
     private(set) var sport = Sport.cycling
     /// Wizard steps: generation starts once both are chosen.
@@ -134,8 +130,7 @@ final class RoutePlannerModel {
     /// Stops the routed proposal had to leave out.
     var droppedStops: [PlannerStop] {
         guard let proposal else { return [] }
-        let dropped = Set((proposal.droppedFlowlineIds ?? []).map { "flowline:\($0)" }
-            + (proposal.droppedTargetIds ?? [])
+        let dropped = Set((proposal.droppedTargetIds ?? [])
             + (proposal.droppedWaypoints ?? []).map(PlannerStop.waypointKey))
         return stops.filter { dropped.contains($0.key) }
     }
@@ -161,60 +156,64 @@ final class RoutePlannerModel {
     var showsSteps: Bool { !stepsDone || stepsOpen }
 
     /// Everything generation needs is known; an A→B route without a picked end ends at the aim.
-    var canGenerate: Bool { isActive && stepsDone && start != nil }
+    var canGenerate: Bool { stepsDone && start != nil }
 
     /// Map taps edit stops only once a route is chosen (or the player builds one from own stops).
     var canEditStops: Bool { generated || proposal != nil || !stops.isEmpty }
 
-    /// Opens the planner. Stops chosen with "Add to route" before are kept as route constraints.
-    func open(start: GeoPoint?, destination: GeoPoint? = nil, destinationId: String? = nil) {
+    /// Starts a fresh plan from `start`, discarding the current one.
+    func reset(start: GeoPoint?) {
         token += 1
-        isActive = true
         status = .idle
         self.start = start
         end = nil
-        self.destination = destination
-        self.destinationId = destinationId
+        destination = nil
+        destinationId = nil
+        destinationName = nil
         routeType = .roundTrip
+        stops = []
         keepOrder = false
         stopsAreSuggested = false
         mapMode = nil
         focusedStopKey = nil
         cancelReroute()
         proposal = nil
-        baselineProposal = nil
-        explorationId = nil
-        flowlineEnhancements = []
-        selectedEnhancementIds = []
-        enhancementMetrics = nil
         failure = nil
-        plannedRoute = nil
         sportChosen = false
         shapeChosen = false
         stepsOpen = false
         clearGenerated()
     }
 
-    func close() {
-        token += 1
-        isActive = false
-        status = .idle
+    /// The player's position became known: it starts the route unless a start was picked already.
+    func locate(_ point: GeoPoint) {
+        guard start == nil, isIdle, mapMode != .pickStart else { return }
+        setStart(point)
+    }
+
+    /// "Route here": generates towards a curated POI; only it becomes a baseline stop.
+    func setDestination(_ item: WorldCollectible) {
+        guard isIdle else { return }
+        destination = GeoPoint(lat: item.latitude, lon: item.longitude)
+        destinationId = item.id
+        destinationName = item.name
+        end = nil
+        mapMode = nil
         stops = []
         stopsAreSuggested = false
-        mapMode = nil
-        focusedStopKey = nil
-        cancelReroute()
-        proposal = nil
-        baselineProposal = nil
-        explorationId = nil
-        flowlineEnhancements = []
-        selectedEnhancementIds = []
-        enhancementMetrics = nil
-        failure = nil
-        sportChosen = false
-        shapeChosen = false
-        stepsOpen = false
-        clearGenerated()
+        restartGeneration()
+    }
+
+    /// Drops the chosen POI; the route aims at the map again.
+    func clearDestination() {
+        guard isIdle, destinationId != nil else { return }
+        destination = nil
+        destinationId = nil
+        destinationName = nil
+        end = nil
+        stops = []
+        stopsAreSuggested = false
+        restartGeneration()
     }
 
     /// Wizard step 1. Changing the sport regenerates the routes.
@@ -317,13 +316,14 @@ final class RoutePlannerModel {
         end = point
         destination = nil
         destinationId = nil
+        destinationName = nil
         mapMode = nil
         endpointChanged()
     }
 
-    /// A new start or end reroutes a chosen or own route; otherwise the routes are generated again.
+    /// A new start or end reroutes a route's stops; a route without stops is generated again.
     private func endpointChanged() {
-        if generated || (proposal != nil && !stopsAreSuggested) {
+        if !stops.isEmpty, generated || proposal != nil {
             rerouting {}
         } else {
             restartGeneration()
@@ -333,7 +333,7 @@ final class RoutePlannerModel {
     /// A map tap on empty ground: sets an explicitly picked endpoint or adds a waypoint.
     @discardableResult
     func mapTapped(_ point: GeoPoint) -> Bool {
-        guard isActive, isIdle else { return false }
+        guard isIdle else { return false }
         switch mapMode {
         case .pickStart: setStart(point)
         case .pickEnd: setEnd(point)
@@ -341,14 +341,6 @@ final class RoutePlannerModel {
             guard canEditStops else { return false }
             toggle(.waypoint(point))
         }
-        return true
-    }
-
-    /// A Flowline or collectible tap adds/removes a stop unless the player is picking an endpoint.
-    @discardableResult
-    func mapSelected(_ stop: PlannerStop) -> Bool {
-        guard isActive, isIdle, mapMode == nil, canEditStops else { return false }
-        toggle(stop)
         return true
     }
 
@@ -410,12 +402,13 @@ final class RoutePlannerModel {
         guard isIdle else { return }
         cancelReroute()
         guard let start else { return fail(.missingStart) }
-        if routeType == .pointToPoint, end == nil { end = aim }
         let target = destination ?? (routeType == .pointToPoint ? end ?? aim : aim)
+        if routeType == .pointToPoint { end = target }
         let request = SuggestRequest(target: target, sport: sport.rawValue, start: start, destinationId: destinationId,
                                      routeType: routeType.rawValue)
         clearGenerated()
         proposal = nil
+        plannedRoute = nil
         await run(.suggesting, unroutable: .noSuggestion) { [self] in
             let result: GeneratedExploration = try await api.post("/api/explorations/generate", body: request)
             guard !result.proposals.isEmpty else {
@@ -449,35 +442,21 @@ final class RoutePlannerModel {
     }
 
     /// "Save Exploration": persists the routed plan as a planned QuestInstance with its PlannedRoute and
-    /// closes the planner. Starting it is a separate action in the Explorations list.
+    /// starts a fresh plan. Starting the ride is a separate action in the saved routes list.
     @discardableResult
     func save() async -> Bool {
         guard isIdle, let proposal else { return false }
         var saved = false
         await run(.saving) { [self] in
             let _: SavedExploration = try await api.post("/api/explorations/save", body: SaveRequest(proposalId: proposal.id))
-            close()
+            reset(start: start)
             saved = true
         }
         return saved
     }
 
-    /// Shows the planned route of the first exploration that has one.
-    func loadPlannedRoute(instanceIds: [String]) async {
-        guard !isActive else { return }
-        for id in instanceIds {
-            if let route: PlannedRoute = try? await api.get("/api/quest-instances/\(id)/planned-route") {
-                if !isActive { plannedRoute = route }
-                return
-            }
-        }
-    }
-
-    func clearPlannedRoute() { plannedRoute = nil }
-
-    /// Shows an already loaded planned route unless a route is being planned.
+    /// Shows a saved route while nothing is being planned.
     func showPlannedRoute(_ route: PlannedRoute?) {
-        guard !isActive else { return }
         plannedRoute = route
     }
 
@@ -541,7 +520,7 @@ final class RoutePlannerModel {
         mapMode = nil
         do {
             try await work()
-            if current == token || !isActive { status = .idle }
+            if current == token { status = .idle }
         } catch is CancellationError {
             if current == token { status = .idle }
         } catch {

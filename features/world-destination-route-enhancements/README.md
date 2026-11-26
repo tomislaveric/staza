@@ -49,6 +49,19 @@ Out:
 - **Discovery:** nearby Flowlines surfaced after generation are temporary session opportunities.
   Do not introduce persistent reveal state.
 
+### iOS simplification (follow-up decision)
+
+- The iOS World tab is the route planner, titled **Explore**. The former browse sheet (filters, the
+  area-Explore button, discoveries and Flowline reveals) and its Explore-area sessions are removed.
+- iOS loads no viewport Flowlines. Flowlines appear only as optional enhancements of a generated
+  cycling route, or after the ride in the activity replay.
+- Tapping a POI opens its detail with **Route here** (it becomes the named destination and, for A→B,
+  the end) or, once a route exists, add/remove as a stop. A reset button starts the plan over.
+- Saved Explorations stay listed below a fresh plan so they can be shown, started or deleted.
+- The web client keeps its current World UI; `/api/world` still returns Flowlines for it.
+- Enhancement candidate search samples route and Flowline vertices and avoids spreading large
+  arrays into `Math.min`, which overflowed the call stack on long routes with dense Flowlines.
+
 ## Implementation plan
 
 1. **Destination-first baseline routing**

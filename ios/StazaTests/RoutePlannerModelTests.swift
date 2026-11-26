@@ -3,10 +3,6 @@ import XCTest
 
 @MainActor
 final class RoutePlannerModelTests: XCTestCase {
-    private func flowline(_ id: String) -> WorldFlowline {
-        WorldFlowline(id: id, name: "Flow \(id)", geometry: .init(coordinates: [[11.1, 48.1], [11.2, 48.2]]), completed: false)
-    }
-
     private func collectible(_ id: String) -> WorldCollectible {
         WorldCollectible(id: id, name: id.uppercased(), latitude: 48.05, longitude: 11.05, found: false, primaryCategory: "peak")
     }
@@ -20,26 +16,25 @@ final class RoutePlannerModelTests: XCTestCase {
     }
 
     func testRouteSendsMixedStopsAndAdoptsStazaOrderUnlessReordered() async throws {
-        let order = #","stopOrder":["waypoint:48.100000,11.300000","a","flowline:f1"]"#
+        let order = #","stopOrder":["waypoint:48.100000,11.300000","a","f1"]"#
         let transport = StubTransport([
             .init(status: 200, body: #"{"explorationId":"e1","proposal":\#(proposal("p1", extra: order))}"#),
             .init(status: 200, body: #"{"explorationId":"e2","proposal":\#(proposal("p2", extra: order))}"#)
         ])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
-        planner.toggle(.flowline(flowline("f1")))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
-        XCTAssertEqual(planner.stops.map(\.key), ["flowline:f1"], "stops added before opening are kept")
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
+        planner.toggle(.collectible(collectible("f1")))
         planner.toggle(.collectible(collectible("a")))
         XCTAssertTrue(planner.mapTapped(GeoPoint(lat: 48.1, lon: 11.3)))
 
         await planner.route()
         XCTAssertEqual(planner.proposal?.id, "p1")
-        XCTAssertEqual(planner.stops.map(\.key), ["waypoint:48.100000,11.300000", "a", "flowline:f1"])
+        XCTAssertEqual(planner.stops.map(\.key), ["waypoint:48.100000,11.300000", "a", "f1"])
         let body = try json(transport.requests.first)
         XCTAssertEqual(transport.requests.first?.url?.path, "/api/explorations/plan")
         XCTAssertEqual(body["keepOrder"] as? Bool, false)
         let stops = try XCTUnwrap(body["stops"] as? [[String: Any]])
-        XCTAssertEqual(stops.first?["kind"] as? String, "flowline")
+        XCTAssertEqual(stops.first?["kind"] as? String, "collectible")
         XCTAssertEqual(stops.first?["id"] as? String, "f1")
         XCTAssertEqual(stops.last?["lat"] as? Double, 48.1)
 
@@ -47,7 +42,7 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertNil(planner.proposal, "every edit clears the routed result")
         XCTAssertTrue(planner.keepOrder)
         await planner.route()
-        XCTAssertEqual(planner.stops.map(\.key), ["flowline:f1", "waypoint:48.100000,11.300000", "a"], "the player's order is kept")
+        XCTAssertEqual(planner.stops.map(\.key), ["f1", "waypoint:48.100000,11.300000", "a"], "the player's order is kept")
         XCTAssertEqual(try json(transport.requests.last)["keepOrder"] as? Bool, true)
     }
 
@@ -57,9 +52,9 @@ final class RoutePlannerModelTests: XCTestCase {
             .init(status: 200, body: #"{"explorationId":"e2","proposal":\#(proposal("p2"))}"#)
         ])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport), rerouteDelay: .milliseconds(100))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
         let a = PlannerStop.collectible(collectible("a")), b = PlannerStop.collectible(collectible("b"))
-        let c = PlannerStop.flowline(flowline("c"))
+        let c = PlannerStop.collectible(collectible("c"))
         [a, b, c].forEach(planner.toggle)
         planner.remove(c)
         try await Task.sleep(for: .milliseconds(250))
@@ -84,7 +79,7 @@ final class RoutePlannerModelTests: XCTestCase {
     func testValidationAndLimits() async {
         let transport = StubTransport([])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
-        planner.open(start: nil)
+        planner.reset(start: nil)
         XCTAssertNil(planner.mapMode, "start selection is deferred until requested")
         await planner.route()
         XCTAssertEqual(planner.failure, .missingStart)
@@ -93,7 +88,7 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertEqual(planner.start, GeoPoint(lat: 48, lon: 11))
         await planner.route()
         XCTAssertEqual(planner.failure, .noStops)
-        for id in ["1", "2", "3", "4", "5"] { planner.toggle(.flowline(flowline(id))) }
+        for id in ["1", "2", "3", "4", "5"] { planner.toggle(.collectible(collectible(id))) }
         XCTAssertEqual(planner.stops.count, 5)
         XCTAssertNil(planner.failure)
         planner.chooseShape(.pointToPoint)
@@ -107,7 +102,7 @@ final class RoutePlannerModelTests: XCTestCase {
         let start = GeoPoint(lat: 48, lon: 11)
         let waypoint = GeoPoint(lat: 48.1, lon: 11.1)
         let end = GeoPoint(lat: 48.2, lon: 11.2)
-        planner.open(start: start)
+        planner.reset(start: start)
 
         XCTAssertFalse(planner.mapTapped(waypoint), "stops are edited once there is a route to edit")
         XCTAssertTrue(planner.stops.isEmpty)
@@ -126,31 +121,18 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertNil(planner.mapMode)
     }
 
-    func testMapFeatureTapsToggleStopsOnlyWhenNotPickingAnEndpoint() {
+    func testLocatingSetsTheStartOnlyUntilOneIsPicked() {
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([])))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
-        let stop = PlannerStop.flowline(flowline("f1"))
-        let target = PlannerStop.collectible(collectible("c1"))
-
-        XCTAssertFalse(planner.mapSelected(stop), "no route to edit yet")
-        planner.toggle(.waypoint(GeoPoint(lat: 48.3, lon: 11.3)))
-        XCTAssertTrue(planner.mapSelected(stop))
-        XCTAssertTrue(planner.contains(stop))
-        XCTAssertTrue(planner.mapSelected(stop))
-        XCTAssertFalse(planner.contains(stop))
-        XCTAssertTrue(planner.mapSelected(target))
-        XCTAssertTrue(planner.contains(target))
-
-        planner.toggleMapMode(.pickEnd)
-        XCTAssertFalse(planner.mapSelected(stop))
-        planner.toggleMapMode(.pickStart)
-        XCTAssertFalse(planner.mapSelected(target))
-        XCTAssertTrue(planner.contains(target))
+        planner.reset(start: nil)
+        planner.locate(GeoPoint(lat: 48, lon: 11))
+        XCTAssertEqual(planner.start, GeoPoint(lat: 48, lon: 11))
+        planner.locate(GeoPoint(lat: 49, lon: 12))
+        XCTAssertEqual(planner.start, GeoPoint(lat: 48, lon: 11), "a known start is kept")
     }
 
     func testMissingStartDoesNotInterceptWaypointTapAndCanBePickedExplicitly() {
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([])))
-        planner.open(start: nil)
+        planner.reset(start: nil)
         let waypoint = GeoPoint(lat: 48.1, lon: 11.1)
         let start = GeoPoint(lat: 48.2, lon: 11.2)
 
@@ -178,7 +160,9 @@ final class RoutePlannerModelTests: XCTestCase {
     func testWizardGeneratesOneRouteWithEditableStops() async throws {
         let transport = StubTransport([.init(status: 200, body: generated())])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
-        planner.open(start: GeoPoint(lat: 48, lon: 11), destination: aim, destinationId: "b")
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
+        planner.setDestination(collectible("b"))
+        XCTAssertEqual(planner.destinationName, "B")
         XCTAssertTrue(planner.showsSteps)
         planner.chooseSport(.running)
         XCTAssertEqual(planner.generateRequest, 0, "the shape is still missing")
@@ -194,7 +178,8 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertEqual(body["routeType"] as? String, "round_trip")
         XCTAssertNil(body["end"])
         XCTAssertNil(body["area"], "routes aim at a target instead of a map area")
-        XCTAssertEqual((body["target"] as? [String: Double])?["lat"], 48.25)
+        XCTAssertEqual((body["target"] as? [String: Double])?["lat"], 48.05, "a chosen POI is the target instead of the aim")
+        XCTAssertEqual(body["destinationId"] as? String, "b")
         XCTAssertTrue(planner.generated)
         XCTAssertEqual(planner.proposal?.id, "pc", "the one route is shown right away")
         XCTAssertEqual(planner.stops.map(\.key), ["b"], "only the selected destination becomes a baseline stop")
@@ -214,8 +199,10 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertEqual(planner.generateRequest, 1, "a new sport reroutes edited stops instead of replacing them")
         XCTAssertEqual(planner.stops.map(\.key), ["a"], "the player's edited stops stay")
 
-        planner.close()
-        XCTAssertFalse(planner.sportChosen, "the wizard starts over next time")
+        planner.reset(start: planner.start)
+        XCTAssertFalse(planner.sportChosen, "a reset starts the wizard over")
+        XCTAssertNil(planner.destinationId)
+        XCTAssertTrue(planner.stops.isEmpty)
     }
 
     func testOptionalFlowlineEnhancementReroutesBaselineAndShowsActualDeltas() async throws {
@@ -226,7 +213,7 @@ final class RoutePlannerModelTests: XCTestCase {
             .init(status: 200, body: #"{"proposal":\#(enhanced),"metrics":\#(metrics),"flowlineIds":["f1"]}"#)
         ])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
         planner.chooseSport(.cycling)
         planner.chooseShape(.roundTrip)
         await planner.generate(toward: aim)
@@ -247,12 +234,12 @@ final class RoutePlannerModelTests: XCTestCase {
             .init(status: 200, body: #"{"explorationId":"e2","proposal":\#(proposal("p2"))}"#)
         ])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport), rerouteDelay: .milliseconds(50))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
-        XCTAssertFalse(planner.mapSelected(.flowline(flowline("f9"))), "no editing before a route exists")
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
+        XCTAssertFalse(planner.mapTapped(GeoPoint(lat: 48.3, lon: 11.3)), "no editing before a route exists")
         planner.chooseSport(.cycling)
         planner.chooseShape(.roundTrip)
         await planner.generate(toward: aim)
-        XCTAssertTrue(planner.mapSelected(.flowline(flowline("f9"))))
+        XCTAssertTrue(planner.mapTapped(GeoPoint(lat: 48.3, lon: 11.3)))
         for _ in 0..<40 where planner.proposal?.id != "p2" { try await Task.sleep(for: .milliseconds(25)) }
         XCTAssertEqual(planner.proposal?.id, "p2")
         XCTAssertEqual(transport.requests.last?.url?.path, "/api/explorations/plan")
@@ -262,7 +249,7 @@ final class RoutePlannerModelTests: XCTestCase {
     func testPointToPointEndsAtTheAim() async throws {
         let transport = StubTransport([.init(status: 200, body: generated())])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
         planner.chooseSport(.cycling)
         planner.chooseShape(.pointToPoint)
         XCTAssertNil(planner.mapMode, "no extra map tap for the end")
@@ -280,6 +267,23 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertNil(planner.end, "a new A→B route aims again")
     }
 
+    func testPointToPointToAPOIEndsThereAndClearingItAimsAgain() async throws {
+        let transport = StubTransport([.init(status: 200, body: generated())])
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
+        planner.chooseSport(.cycling)
+        planner.chooseShape(.pointToPoint)
+        planner.setDestination(collectible("a"))
+        await planner.generate(toward: aim)
+        XCTAssertEqual(planner.end, GeoPoint(lat: 48.05, lon: 11.05), "an A→B route ends at the chosen POI")
+
+        let requests = planner.generateRequest
+        planner.clearDestination()
+        XCTAssertNil(planner.destinationId)
+        XCTAssertNil(planner.end)
+        XCTAssertEqual(planner.generateRequest, requests + 1, "the route aims at the map again")
+    }
+
     func testSaveStoresAPlannedExplorationAndClosesPlanner() async throws {
         let saved = #"{"instance":{"id":"q","title":"Ride","description":"","status":"planned","difficulty":"easy","rewardXp":10,"objectives":[]},"plannedRoute":{"questInstanceId":"q","distanceM":1,"durationS":1,"geometry":{"type":"LineString","coordinates":[[11,48],[11.1,48.1]]},"start":{"lat":48,"lon":11}}}"#
         let transport = StubTransport([
@@ -287,14 +291,13 @@ final class RoutePlannerModelTests: XCTestCase {
             .init(status: 200, body: saved)
         ])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
         planner.toggle(.collectible(collectible("a")))
         await planner.route()
         let didSave = await planner.save()
         XCTAssertTrue(didSave)
         XCTAssertEqual(transport.requests.last?.url?.path, "/api/explorations/save")
         XCTAssertEqual(try json(transport.requests.last)["proposalId"] as? String, "p1")
-        XCTAssertFalse(planner.isActive)
         XCTAssertTrue(planner.stops.isEmpty)
         XCTAssertTrue(planner.displayedRoute.isEmpty, "a saved route is drawn with the saved routes, not as the planner's route")
         XCTAssertEqual(planner.status, .idle)
@@ -306,19 +309,18 @@ final class RoutePlannerModelTests: XCTestCase {
             .init(status: 500, body: #"{"error":"Boom"}"#)
         ])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
         planner.toggle(.collectible(collectible("a")))
         await planner.route()
         let didSave = await planner.save()
         XCTAssertFalse(didSave)
-        XCTAssertTrue(planner.isActive)
         XCTAssertEqual(planner.proposal?.id, "p1")
         XCTAssertNotNil(planner.failure)
     }
 
     func testUnprocessableSuggestionReportsNoSuggestionInsteadOfUnconnectedStops() async {
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([.init(status: 422, body: #"{"error":"x"}"#)])))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
         await planner.generate(toward: aim)
         XCTAssertEqual(planner.failure, .noSuggestion)
         XCTAssertFalse(planner.generated)
@@ -327,7 +329,7 @@ final class RoutePlannerModelTests: XCTestCase {
 
     func testUnprocessableRouteReportsNoRoute() async {
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([.init(status: 422, body: #"{"error":"x"}"#)])))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
         planner.toggle(.collectible(collectible("a")))
         await planner.route()
         XCTAssertEqual(planner.failure, .noRoute)

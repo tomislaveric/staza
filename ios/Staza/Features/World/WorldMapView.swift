@@ -35,25 +35,35 @@ enum WorldTracking: Equatable, Sendable {
     }
 }
 
+/// What the World map draws; refreshed only when it changes.
+struct MapData: Equatable {
+    var collectibles: [WorldCollectible] = []
+    var stopIds: Set<String> = []
+    var selectedCollectibleId: String?
+    var flowlines: [WorldFlowline] = []
+    var selectedFlowlineIds: Set<String> = []
+    var explorationRoutes: [ExplorationRoute] = []
+}
+
 struct WorldMapView: UIViewRepresentable {
     let styleURL: URL
     let collectibles: [WorldCollectible]
-    let flowlines: [WorldFlowline]
+    /// POIs that are stops of the planned route; they get a highlight ring.
+    var stopIds: Set<String> = []
+    /// The tapped or focused POI; it gets the selection halo.
+    var selectedCollectibleId: String? = nil
+    /// Nearby Flowlines offered as optional enhancements of the generated route.
+    var flowlines: [WorldFlowline] = []
+    /// Enhancement Flowlines the player included; they get the selection halo.
+    var selectedFlowlineIds: Set<String> = []
     /// Saved Exploration routes: dotted and low in prominence, beneath every other layer.
     var explorationRoutes: [ExplorationRoute] = []
-    /// The explored area (circle or clamped frame), outlined while its session is open.
-    var exploreOutline: [CLLocationCoordinate2D] = []
-    let questTargets: QuestTargets
     var route: [CLLocationCoordinate2D] = []
-    /// The planner's generated routes not shown as `route`: subdued, so the chosen one stands out.
-    /// The tapped collectible or Flowline; it gets the selection halo.
-    var selection: WorldSelection? = nil
     let onViewportChange: (WorldBounds) -> Void
-    /// The circle the next Explore covers: the largest one fitting the visible map above the sheet.
-    var onExploreCircleChange: (ExploreCircle?) -> Void = { _ in }
     /// The part of the map not covered by the sheet; `nil` when too little of it is visible.
     var onVisibleAreaChange: (WorldBounds?) -> Void = { _ in }
-    let onSelect: (WorldSelectionKind, String) -> Void
+    let onSelectCollectible: (String) -> Void
+    var onSelectFlowline: (String) -> Void = { _ in }
     /// A tap on the map that hit no collectible or Flowline.
     var onMapTap: (GeoPoint) -> Void = { _ in }
     /// When set, every tap reports its coordinate through `onMapTap`, even over a collectible or Flowline.
@@ -62,7 +72,7 @@ struct WorldMapView: UIViewRepresentable {
     @Binding var tracking: WorldTracking
     /// Height covered by the bottom sheet; the map keeps its focus above it.
     var bottomInset: CGFloat = 0
-    /// Coordinates to fit into view, e.g. a highlighted exploration's targets.
+    /// Coordinates to fit into view, e.g. a focused stop.
     var focus: [CLLocationCoordinate2D] = []
     /// Bumped to fit `focus` again even when it is unchanged, e.g. re-selecting the same item.
     var focusRequest = 0
@@ -96,22 +106,20 @@ struct WorldMapView: UIViewRepresentable {
     func updateUIView(_ map: MLNMapView, context: Context) {
         let coordinator = context.coordinator
         coordinator.onViewportChange = onViewportChange
-        coordinator.onExploreCircleChange = onExploreCircleChange
         coordinator.onVisibleAreaChange = onVisibleAreaChange
-        coordinator.onSelect = onSelect
+        coordinator.onSelectCollectible = onSelectCollectible
+        coordinator.onSelectFlowline = onSelectFlowline
         coordinator.onMapTap = onMapTap
         coordinator.picksPoint = picksPoint
         coordinator.onUserLocation = onUserLocation
         coordinator.onTrackingChange = { tracking = $0 }
         coordinator.onLocationDenied = onLocationDenied
-        coordinator.data = (collectibles, flowlines, questTargets, selection)
-        coordinator.explorationRoutes = explorationRoutes
-        coordinator.exploreOutline = exploreOutline
+        coordinator.data = MapData(collectibles: collectibles, stopIds: stopIds, selectedCollectibleId: selectedCollectibleId,
+                                   flowlines: flowlines, selectedFlowlineIds: selectedFlowlineIds, explorationRoutes: explorationRoutes)
         if abs(coordinator.appliedInset - bottomInset) > 0.5 {
             coordinator.appliedInset = bottomInset
             map.setContentInset(UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0), animated: true) { [weak coordinator, weak map] in
                 guard let coordinator, let map else { return }
-                coordinator.reportExploreCircle(map)
                 coordinator.reportVisibleArea(map)
             }
         }
@@ -125,7 +133,6 @@ struct WorldMapView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MLNMapViewDelegate, CLLocationManagerDelegate {
         var onViewportChange: (WorldBounds) -> Void = { _ in }
-        var onExploreCircleChange: (ExploreCircle?) -> Void = { _ in }
         var onVisibleAreaChange: (WorldBounds?) -> Void = { _ in }
         var onTrackingChange: (WorldTracking) -> Void = { _ in }
         var onLocationDenied: (Bool) -> Void = { _ in }
@@ -135,20 +142,19 @@ struct WorldMapView: UIViewRepresentable {
         init(palette: MapPalette) { self.palette = palette }
         private var focus: [CLLocationCoordinate2D] = []
         private var focusRequest = 0
-        var onSelect: (WorldSelectionKind, String) -> Void = { _, _ in }
+        var onSelectCollectible: (String) -> Void = { _ in }
+        var onSelectFlowline: (String) -> Void = { _ in }
         var onMapTap: (GeoPoint) -> Void = { _ in }
         var picksPoint = false
         var onUserLocation: (GeoPoint?) -> Void = { _ in }
-        var data: (collectibles: [WorldCollectible], flowlines: [WorldFlowline], quest: QuestTargets, selection: WorldSelection?) = ([], [], .empty, nil)
-        var explorationRoutes: [ExplorationRoute] = []
-        var exploreOutline: [CLLocationCoordinate2D] = []
-    
+        var data = MapData()
+        /// The data last written to the map sources; `nil` until the style loaded.
+        private var applied: MapData?
+
         private let locationManager = CLLocationManager()
         private var explorationRouteSource: MLNShapeSource?
-        private var exploreFrameSource: MLNShapeSource?
         private var collectibleSource: MLNShapeSource?
         private var flowlineSource: MLNShapeSource?
-        private var questFlowlineSource: MLNShapeSource?
         private var selectedFlowlineSource: MLNShapeSource?
         private var routeSource: MLNShapeSource?
         private var route: [CLLocationCoordinate2D] = []
@@ -182,27 +188,11 @@ struct WorldMapView: UIViewRepresentable {
             style.addLayer(dotted)
             explorationRouteSource = explorationRoutes
 
-            let frame = MLNShapeSource(identifier: "world-explore-frame", shape: nil, options: nil)
-            style.addSource(frame)
-            let outline = StazaMapLayers.line(id: "world-explore-frame-line", source: frame, color: accent, opacity: 0.8,
-                                              width: NSExpression(forConstantValue: 2))
-            outline.lineDashPattern = NSExpression(forConstantValue: [2, 2])
-            style.addLayer(outline)
-            exploreFrameSource = frame
-
             let flowlines = MLNShapeSource(identifier: "world-flowlines", shape: nil, options: nil)
             style.addSource(flowlines)
             StazaMapLayers.addFlowlines(to: style, source: flowlines, id: "world-flowlines", palette: palette)
 
-            // Quest target segments get the web's highlight emphasis on top of their regular line.
-            let questFlowlines = MLNShapeSource(identifier: "world-quest-flowlines", shape: nil, options: nil)
-            style.addSource(questFlowlines)
-            StazaMapLayers.addFlowlines(to: style, source: questFlowlines, id: "world-quest-flowlines", palette: palette)
-            let questHighlight = StazaMapLayers.line(id: "world-quest-flowlines-highlight", source: questFlowlines, color: accent, opacity: 0.22,
-                                                     width: CollectibleMapIcons.zoomStops([9: 6, 12: 8, 15: 10, 17: 12]))
-            style.addLayer(questHighlight)
-
-            // The selected Flowline: a bright halo under its own line, above every other Flowline.
+            // Included enhancement Flowlines: a bright halo under their own line, above the other candidates.
             let selectedFlowline = MLNShapeSource(identifier: "world-selected-flowline", shape: nil, options: nil)
             style.addSource(selectedFlowline)
             let selectedColor = palette.color(\.highlightSelected)
@@ -234,7 +224,7 @@ struct WorldMapView: UIViewRepresentable {
             style.addLayer(circle)
 
             let highlights: [(id: String, predicate: String, color: UIColor, scale: Double, emphasis: Double)] = [
-                ("quest", "questTarget == YES AND selected == NO", accent, 1, 0),
+                ("stop", "stop == YES AND selected == NO", accent, 1, 0),
                 ("selected", "selected == YES", palette.color(\.highlightSelected), 1.15, 1)
             ]
             for highlight in highlights {
@@ -269,7 +259,6 @@ struct WorldMapView: UIViewRepresentable {
 
             collectibleSource = collectibles
             flowlineSource = flowlines
-            questFlowlineSource = questFlowlines
             refresh()
             applyRoute(on: map)
             reportViewport(map)
@@ -279,17 +268,12 @@ struct WorldMapView: UIViewRepresentable {
             guard gesture.state == .ended, let map = gesture.view as? MLNMapView else { return }
             let point = gesture.location(in: map)
             let hitArea = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
-            let groups: [(WorldSelectionKind, Set<String>)] = [
-                (.collectible, [Self.iconLayer, Self.circleLayer]),
-                (.flowline, ["world-selected-flowline-line", "world-quest-flowlines-line", "world-flowlines-line"])
-            ]
-            for (kind, layers) in groups where !picksPoint {
-                let hit = map.visibleFeatures(in: hitArea, styleLayerIdentifiers: layers)
-                    .compactMap { $0.attribute(forKey: "id") as? String }.first
-                if let hit {
-                    onSelect(kind, hit)
-                    return
-                }
+            func hit(_ layers: Set<String>) -> String? {
+                map.visibleFeatures(in: hitArea, styleLayerIdentifiers: layers).compactMap { $0.attribute(forKey: "id") as? String }.first
+            }
+            if !picksPoint {
+                if let id = hit([Self.iconLayer, Self.circleLayer]) { return onSelectCollectible(id) }
+                if let id = hit(["world-selected-flowline-line", "world-flowlines-line"]) { return onSelectFlowline(id) }
             }
             let coordinate = map.convert(point, toCoordinateFrom: map)
             onMapTap(GeoPoint(lat: coordinate.latitude, lon: coordinate.longitude))
@@ -300,21 +284,12 @@ struct WorldMapView: UIViewRepresentable {
         }
 
         func refresh() {
-            guard let collectibleSource, let flowlineSource, let questFlowlineSource else { return }
-            var selectedCollectibleId: String?
-            var selectedFlowline: [WorldFlowline] = []
-            switch data.selection {
-            case .collectible(let item)?: selectedCollectibleId = item.id
-            case .flowline(let flowline)?: selectedFlowline = [flowline]
-            case nil: break
-            }
-            collectibleSource.shape = Self.points(data.collectibles, quest: data.quest.collectibles, selectedId: selectedCollectibleId)
-            selectedFlowlineSource?.shape = Self.lines(selectedFlowline)
+            guard data != applied, let collectibleSource, let flowlineSource else { return }
+            applied = data
+            collectibleSource.shape = Self.points(data.collectibles, stopIds: data.stopIds, selectedId: data.selectedCollectibleId)
+            selectedFlowlineSource?.shape = Self.lines(data.flowlines.filter { data.selectedFlowlineIds.contains($0.id) })
             flowlineSource.shape = Self.lines(data.flowlines)
-            explorationRouteSource?.shape = Self.routes(explorationRoutes)
-            var outline = exploreOutline
-            exploreFrameSource?.shape = outline.isEmpty ? nil : MLNPolylineFeature(coordinates: &outline, count: UInt(outline.count))
-            questFlowlineSource.shape = Self.lines(data.quest.flowlines)
+            explorationRouteSource?.shape = Self.routes(data.explorationRoutes)
         }
 
         func setRoute(_ coordinates: [CLLocationCoordinate2D], on map: MLNMapView) {
@@ -378,7 +353,6 @@ struct WorldMapView: UIViewRepresentable {
             DispatchQueue.main.async { [onUserLocation] in onUserLocation(point) }
             let bounds = map.visibleCoordinateBounds
             onViewportChange(WorldBounds(west: bounds.sw.longitude, south: bounds.sw.latitude, east: bounds.ne.longitude, north: bounds.ne.latitude))
-            reportExploreCircle(map)
             reportVisibleArea(map)
         }
 
@@ -395,42 +369,19 @@ struct WorldMapView: UIViewRepresentable {
                                             east: southEast.longitude, north: northWest.latitude))
         }
 
-        /// Space kept clear around the Explore circle: map edges, the sheet, and the locate button row.
-        private static let circleSidePadding: CGFloat = 20
-        private static let circleTopClearance: CGFloat = 64
-
-        /// The largest circle fitting the visible map above the sheet, aligned to its top.
-        func reportExploreCircle(_ map: MLNMapView) {
-            let top = map.safeAreaInsets.top + Self.circleTopClearance
-            let width = map.bounds.width - 2 * Self.circleSidePadding
-            let height = map.bounds.height - top - map.contentInset.bottom - Self.circleSidePadding
-            let radius = min(width, height) / 2
-            guard radius > 40 else { return onExploreCircleChange(nil) }
-            let centerPoint = CGPoint(x: map.bounds.midX, y: top + radius)
-            let center = map.convert(centerPoint, toCoordinateFrom: map)
-            let edge = map.convert(CGPoint(x: centerPoint.x + radius, y: centerPoint.y), toCoordinateFrom: map)
-            let meters = CLLocation(latitude: center.latitude, longitude: center.longitude)
-                .distance(from: CLLocation(latitude: edge.latitude, longitude: edge.longitude))
-            guard CLLocationCoordinate2DIsValid(center), meters > 0 else { return onExploreCircleChange(nil) }
-            onExploreCircleChange(ExploreCircle(center: GeoPoint(lat: center.latitude, lon: center.longitude), radiusMeters: meters))
-        }
-
         private static let circleLayer = "world-collectibles-circle"
         private static let iconLayer = "world-collectibles-icon"
 
-        /// One feature per collectible; quest targets missing from the viewport list are appended.
-        private static func points(_ items: [WorldCollectible], quest: [WorldCollectible], selectedId: String?) -> MLNShape? {
-            let questIds = Set(quest.map(\.id))
-            let itemIds = Set(items.map(\.id))
-            let all = items + quest.filter { !itemIds.contains($0.id) }
-            guard !all.isEmpty else { return nil }
-            return MLNShapeCollectionFeature(shapes: all.map { item in
+        /// One feature per POI.
+        private static func points(_ items: [WorldCollectible], stopIds: Set<String>, selectedId: String?) -> MLNShape? {
+            guard !items.isEmpty else { return nil }
+            return MLNShapeCollectionFeature(shapes: items.map { item in
                 let point = MLNPointFeature()
                 point.coordinate = CLLocationCoordinate2D(latitude: item.latitude, longitude: item.longitude)
                 point.attributes = [
                     "id": item.id,
                     "found": item.found,
-                    "questTarget": questIds.contains(item.id),
+                    "stop": stopIds.contains(item.id),
                     "selected": item.id == selectedId,
                     "icon": CollectibleMapIcons.imageName(category: WorldCategory.of(item), found: item.found) ?? ""
                 ]
@@ -454,7 +405,7 @@ struct WorldMapView: UIViewRepresentable {
                 let coords = item.coordinates
                 guard coords.count >= 2 else { return nil }
                 let line = MLNPolylineFeature(coordinates: coords, count: UInt(coords.count))
-                line.attributes = ["id": item.id, "completed": item.completed]
+                line.attributes = ["id": item.id, "completed": false]
                 return line
             }
             return features.isEmpty ? nil : MLNShapeCollectionFeature(shapes: features)
