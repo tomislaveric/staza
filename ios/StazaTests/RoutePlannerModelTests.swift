@@ -118,7 +118,8 @@ final class RoutePlannerModelTests: XCTestCase {
         planner.remove(.waypoint(GeoPoint(lat: 48.3, lon: 11.3)))
         XCTAssertEqual(planner.stops.map(\.key), [PlannerStop.waypointKey(waypoint)])
         planner.chooseShape(.pointToPoint)
-        XCTAssertEqual(planner.mapMode, .pickEnd)
+        XCTAssertNil(planner.mapMode, "an A→B route ends at the aim unless the player picks an end")
+        planner.toggleMapMode(.pickEnd)
         XCTAssertTrue(planner.mapTapped(end))
         XCTAssertEqual(planner.end, end)
         XCTAssertEqual(planner.stops.map(\.key), [PlannerStop.waypointKey(waypoint)])
@@ -140,7 +141,7 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertTrue(planner.mapSelected(target))
         XCTAssertTrue(planner.contains(target))
 
-        planner.chooseShape(.pointToPoint)
+        planner.toggleMapMode(.pickEnd)
         XCTAssertFalse(planner.mapSelected(stop))
         planner.toggleMapMode(.pickStart)
         XCTAssertFalse(planner.mapSelected(target))
@@ -197,7 +198,6 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertTrue(planner.generated)
         XCTAssertEqual(planner.proposal?.id, "pc", "the one route is shown right away")
         XCTAssertEqual(planner.stops.map(\.key), ["b", "a", "flowline:f1"], "its collectibles and ridden opportunities")
-        XCTAssertEqual(planner.generatedTarget, aim)
         XCTAssertTrue(planner.canEditStops)
         XCTAssertFalse(planner.suggestReplacesOwnStops, "regenerating untouched stops needs no confirmation")
         planner.remove(planner.stops[0])
@@ -235,35 +235,25 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertTrue(planner.generated, "the edited route stays the generated one")
     }
 
-    func testPointToPointWaitsForTheEndAndSendsIt() async throws {
+    func testPointToPointEndsAtTheAim() async throws {
         let transport = StubTransport([.init(status: 200, body: generated())])
         let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
         planner.open(start: GeoPoint(lat: 48, lon: 11))
         planner.chooseSport(.cycling)
         planner.chooseShape(.pointToPoint)
-        XCTAssertEqual(planner.mapMode, .pickEnd)
-        XCTAssertEqual(planner.generateRequest, 0, "the end is missing")
-        let end = GeoPoint(lat: 48.7, lon: 11.2)
-        XCTAssertTrue(planner.mapTapped(end))
-        XCTAssertEqual(planner.generateRequest, 1)
+        XCTAssertNil(planner.mapMode, "no extra map tap for the end")
+        XCTAssertEqual(planner.generateRequest, 1, "the aim is the end")
         await planner.generate(toward: aim)
         let body = try json(transport.requests.first)
         XCTAssertEqual(body["routeType"] as? String, "point_to_point")
-        XCTAssertEqual((body["target"] as? [String: Double])?["lat"], 48.7, "an A→B route aims at its end")
-    }
+        XCTAssertEqual((body["target"] as? [String: Double])?["lat"], aim.lat, "an A→B route ends at the aim")
+        XCTAssertEqual(planner.end, aim)
 
-    func testTargetMovedOnlyWhenTheMapAimsElsewhere() async {
-        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: StubTransport([.init(status: 200, body: generated())])))
-        planner.open(start: GeoPoint(lat: 48, lon: 11))
-        let area = WorldBounds(west: 11, south: 48, east: 11.5, north: 48.5)
-        XCTAssertFalse(planner.targetMoved(to: area), "nothing generated yet")
-        planner.chooseSport(.cycling)
+        planner.reopenSteps()
         planner.chooseShape(.roundTrip)
-        await planner.generate(toward: aim)
-        XCTAssertFalse(planner.targetMoved(to: area))
-        XCTAssertFalse(planner.targetMoved(to: WorldBounds(west: 11.2, south: 48.2, east: 11.3, north: 48.3)), "zoomed in")
-        XCTAssertFalse(planner.targetMoved(to: WorldBounds(west: 11.005, south: 48.005, east: 11.505, north: 48.505)), "within the aim radius")
-        XCTAssertTrue(planner.targetMoved(to: WorldBounds(west: 11.6, south: 48, east: 12.1, north: 48.5)), "panned away")
+        planner.reopenSteps()
+        planner.chooseShape(.pointToPoint)
+        XCTAssertNil(planner.end, "a new A→B route aims again")
     }
 
     func testSaveStoresAPlannedExplorationAndClosesPlanner() async throws {

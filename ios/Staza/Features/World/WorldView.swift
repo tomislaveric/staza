@@ -15,7 +15,6 @@ struct WorldView: View {
     /// Coordinates the map frames on request, e.g. a Flowline shown from the discoveries.
     @State private var framed: [CLLocationCoordinate2D] = []
     @State private var focusRequest = 0
-    @State private var confirmRegenerate = false
     @State private var centering: Task<Void, Never>?
     /// Share of the visible map a focus fit may fill; a selected item gets room around it.
     @State private var focusFill: CGFloat = 1
@@ -78,7 +77,7 @@ struct WorldView: View {
                     palette: basemap.mapPalette
                 )
                 .ignoresSafeArea(edges: .top)
-                .overlay { if planner.isActive { planningAreaOverlay(model, planner) } }
+                .overlay { if planner.isActive { aimOverlay(planner) } }
                 .overlay(alignment: .topTrailing) { locateButton.padding(StazaSpacing.md) }
                 .accessibilityIdentifier("worldMap")
 
@@ -105,12 +104,6 @@ struct WorldView: View {
                 }
             }
             .onChange(of: planner.generateRequest) { _, _ in generate(model, planner) }
-            .confirmationDialog("planner.suggest.replace.title", isPresented: $confirmRegenerate, titleVisibility: .visible) {
-                Button("planner.suggest.replace.confirm", role: .destructive) { planner.requestGeneration() }
-                Button("action.cancel", role: .cancel) {}
-            } message: {
-                Text("planner.suggest.replace.message")
-            }
             .onChange(of: planner.focusRequest) { _, _ in
                 guard let stop = planner.focusedStop else { return }
                 withAnimation(.snappy) { sheet.revealMap() }
@@ -252,15 +245,13 @@ struct WorldView: View {
         Task { await planner.generate(toward: aim) }
     }
 
-    /// The aim icon marks the target in the middle of the uncovered map before generating and while the map
-    /// aims elsewhere ("Generate here"). An A→B route aims at its picked end instead.
+    /// The aim icon marks the target in the middle of the uncovered map until a route exists: the turning
+    /// point of a round trip or the end of an A→B route. Generating again starts by closing the planner.
     @ViewBuilder
-    private func planningAreaOverlay(_ model: WorldModel, _ planner: RoutePlannerModel) -> some View {
-        let aims = planner.routeType == .roundTrip
-        let before = aims && planner.generatedTarget == nil && !planner.generated && planner.proposal == nil
-        let moved = aims && planner.isIdle && planner.canGenerate && planner.targetMoved(to: model.visibleArea)
-        ZStack(alignment: .top) {
-            if before || moved {
+    private func aimOverlay(_ planner: RoutePlannerModel) -> some View {
+        let aims = planner.routeType == .roundTrip || planner.end == nil
+        if aims && !planner.generated && planner.proposal == nil {
+            ZStack(alignment: .top) {
                 // Full map height like the map's own frame, so the target sits in the middle of the uncovered map.
                 GeometryReader { geometry in
                     Image(systemName: "scope")
@@ -272,16 +263,6 @@ struct WorldView: View {
                 .ignoresSafeArea(edges: .top)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
-            }
-            if moved {
-                Button("planner.area.regenerate", systemImage: "arrow.clockwise") {
-                    if planner.suggestReplacesOwnStops { confirmRegenerate = true } else { planner.requestGeneration() }
-                }
-                    .buttonStyle(.stazaPrimaryWide)
-                    .fixedSize()
-                    .padding(.top, StazaSpacing.md)
-                    .accessibilityIdentifier("plannerRegenerate")
-            } else if before {
                 Label("planner.area.caption", systemImage: "scope")
                     .font(StazaFont.footnote.weight(.semibold))
                     .foregroundStyle(StazaColor.textPrimary)
@@ -292,8 +273,8 @@ struct WorldView: View {
                     .allowsHitTesting(false)
                     .accessibilityIdentifier("plannerAreaCaption")
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     /// The planner's stops, emphasised on the map like quest targets.

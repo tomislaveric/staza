@@ -254,7 +254,6 @@
 .route-planner-chosen-title strong { color: var(--text-primary); font-size: 13px; }
 .route-planner-chosen-title { margin: 0; }
 .route-planner-chosen-title small { color: var(--text-muted); font-size: 11px; margin-left: 6px; }
-.route-planner .route-planner-regenerate { border-color: var(--accent-yellow); color: var(--text-primary); justify-self: start; }
 
 .world-map-status {
   backdrop-filter: blur(10px);

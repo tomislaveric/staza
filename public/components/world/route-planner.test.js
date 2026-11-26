@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPlanRequest, buildSuggestRequest, canGenerate, collectibleStop, createPlannerState, flowlineStop, moveStop,
-  orderStops, planArea, RoutePlannerPanel, suggestedStops, showsAim, targetMoved, toggleStop, waypointStop
+  orderStops, planArea, RoutePlannerPanel, suggestedStops, showsAim, toggleStop, waypointStop
 } from "./route-planner.js";
 
 const flowline = flowlineStop({ id: "f1", name: "Rheintal", geometry: { coordinates: [[9, 47], [9.1, 47.2]] } });
@@ -64,7 +64,7 @@ describe("planner wizard", () => {
     expect(html).not.toContain("data-planner-add");
     const ready = { ...state, sportChosen: true, shapeChosen: true, stepsOpen: false };
     expect(canGenerate(ready)).toBe(true);
-    expect(canGenerate({ ...ready, routeType: "point_to_point" })).toBe(false);
+    expect(canGenerate({ ...ready, routeType: "point_to_point" })).toBe(true);
     expect(RoutePlannerPanel(ready)).toContain("data-planner-steps");
     expect(RoutePlannerPanel(ready)).not.toContain("data-planner-sport");
   });
@@ -76,6 +76,8 @@ describe("planner wizard", () => {
     const end = { lat: 47.5, lon: 9.1 };
     expect(buildSuggestRequest({ ...state, routeType: "point_to_point", end }, aim).body)
       .toMatchObject({ routeType: "point_to_point", target: end });
+    expect(buildSuggestRequest({ ...state, routeType: "point_to_point" }, aim).body)
+      .toMatchObject({ routeType: "point_to_point", target: aim });
     expect(buildSuggestRequest(createPlannerState(), aim).error).toBe("Choose a start on the map.");
   });
 
@@ -99,20 +101,11 @@ describe("planner wizard", () => {
     expect(stops.map((stop) => stop.id)).toEqual(["peak-1", "f1"]);
   });
 
-  it("flags a map aiming more than the aim radius away, but not zooming", () => {
-    const target = { lat: 47.5, lon: 9.5 };
-    expect(targetMoved(target, { west: 9.2, south: 47.2, east: 9.8, north: 47.8 })).toBe(false);
-    expect(targetMoved(target, { west: 8, south: 46, east: 11, north: 49 })).toBe(false);
-    expect(targetMoved(target, { west: 9.205, south: 47.205, east: 9.805, north: 47.805 })).toBe(false);
-    expect(targetMoved(target, { west: 9.3, south: 47.2, east: 9.9, north: 47.8 })).toBe(true);
-  });
-
-  it("shows the aim for round trips until routes exist and again once the map aims elsewhere", () => {
+  it("shows the aim until a route exists, for A to B routes only without a picked end", () => {
     const state = createPlannerState({ start, sport: "cycling", routeType: "round_trip" });
     expect(showsAim(state)).toBe(true);
-    expect(showsAim({ ...state, routeType: "point_to_point" })).toBe(false);
-    const generated = { ...state, generated: true, proposal: route() };
-    expect(showsAim(generated)).toBe(false);
-    expect(showsAim({ ...generated, targetMoved: true })).toBe(true);
+    expect(showsAim({ ...state, routeType: "point_to_point" })).toBe(true);
+    expect(showsAim({ ...state, routeType: "point_to_point", end: { lat: 47.5, lon: 9.1 } })).toBe(false);
+    expect(showsAim({ ...state, generated: true, proposal: route() })).toBe(false);
   });
 });

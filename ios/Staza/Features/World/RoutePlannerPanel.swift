@@ -36,7 +36,7 @@ struct RoutePlannerPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.md) {
             if planner.showsSteps { steps } else { summary }
-            if planner.shapeChosen, planner.routeType == .pointToPoint {
+            if planner.shapeChosen, planner.routeType == .pointToPoint, planner.end != nil {
                 pointRow("planner.end", point: planner.end, mode: .pickEnd)
             }
             if planner.start == nil || planner.mapMode == .pickStart { startSection }

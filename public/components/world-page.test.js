@@ -830,8 +830,21 @@ describe("mounted World page interactions", () => {
     expect(page.map.setRoute).toHaveBeenLastCalledWith({ geometry: routeGeometry }, { planned: true });
 
     page.callbacks.onViewportChange({ west: 20, south: 49, east: 23, north: 52 });
-    expect(page.detail.innerHTML).toContain("data-planner-regenerate");
-    expect(page.mountPoint.querySelector("[data-world-aim]").hidden).toBe(false);
+    expect(page.mountPoint.querySelector("[data-world-aim]").hidden).toBe(true);
+  });
+
+  it("ends an A to B route at the crosshair without asking for an end", async () => {
+    const page = await mount({ savedHome: { latitude: 50, longitude: 9 } });
+    page.openPlanner();
+    page.setDataset("[data-planner-sport]", { plannerSport: "cycling" });
+    page.bound("[data-planner-sport]:click")();
+    page.setDataset("[data-planner-shape]", { plannerShape: "point_to_point" });
+    page.bound("[data-planner-shape]:click")();
+    expect(page.detail.innerHTML).not.toContain("Click the map to set your end point.");
+    await vi.waitFor(() => expect(page.detail.innerHTML).toContain("data-planner-save"));
+    const body = JSON.parse(page.calls("/api/explorations/generate", "POST")[0][1].body);
+    expect(body).toMatchObject({ routeType: "point_to_point" });
+    expect(body.target).toBeDefined();
   });
 
   it("reroutes a generated route once after quick stop edits", async () => {

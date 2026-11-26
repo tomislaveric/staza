@@ -2326,22 +2326,6 @@
         }
       }
     },
-    "planner.area.regenerate" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hier neu erzeugen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Generate here"
-          }
-        }
-      }
-    },
     "planner.disclaimer" : {
       "localizations" : {
         "de" : {
@@ -3042,54 +3026,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pick a sport and shape, Staza finds a route"
-          }
-        }
-      }
-    },
-    "planner.suggest.replace.confirm" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ersetzen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Replace"
-          }
-        }
-      }
-    },
-    "planner.suggest.replace.message" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die neue Route ersetzt deine gewählten Stopps."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The new route replaces the stops you chose."
-          }
-        }
-      }
-    },
-    "planner.suggest.replace.title" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Stopps ersetzen?"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Replace your stops?"
           }
         }
       }

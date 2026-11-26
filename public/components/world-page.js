@@ -14,7 +14,6 @@ import { DiscoveriesPanel, exploreCta, ExploreResultCard, revealSequence } from 
 import { flowlineCharacter } from "./world/flowline-character.js";
 import {
   showsAim,
-  targetMoved,
   buildPlanRequest,
   buildSuggestRequest,
   canGenerate,
@@ -847,7 +846,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     if (!planner?.picking) return;
     if (planner.picking === "end") planner.end = point;
     else planner.start = point;
-    planner.picking = planner.routeType === "point_to_point" && !planner.end ? "end" : undefined;
+    planner.picking = undefined;
     planner.error = undefined;
     endpointChanged();
   }
@@ -880,7 +879,7 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     if (planner.stopsAreSuggested) planner.stops = [];
     Object.assign(planner, {
       status: "idle", generated: false, proposal: undefined, catalog: undefined,
-      generatedTarget: undefined, targetMoved: false, rerouteQueued: false, stopsAreSuggested: false, error: undefined
+      rerouteQueued: false, stopsAreSuggested: false, error: undefined
     });
     renderAll();
     if (canGenerate(planner) && !planner.picking) void generatePlannerRoute();
@@ -983,8 +982,9 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
     if (planner.stopsAreSuggested) planner.stops = [];
     Object.assign(planner, {
       status: "generating", adding: undefined, picking: undefined, error: undefined, generated: false,
-      proposal: undefined, stopsAreSuggested: false, rerouteQueued: false, targetMoved: false
+      proposal: undefined, stopsAreSuggested: false, rerouteQueued: false
     });
+    if (planner.routeType === "point_to_point" && !planner.end) planner.end = body.target;
     renderAll();
     try {
       const result = await jsonRequest("POST", "/api/explorations/generate", body);
@@ -996,7 +996,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
         generated: true,
         proposal: route,
         catalog: result.catalog,
-        generatedTarget: body.target,
         stops: suggestedStops(route, result.catalog),
         stopsAreSuggested: true,
         keepOrder: false
@@ -1007,15 +1006,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       Object.assign(planner, { status: "idle", error: explorationErrorMessage(generateError) });
     }
     renderAll();
-  }
-
-  /** Map moves after generation offer "Generate here" instead of regenerating on every pan. */
-  function plannerViewportChanged(bounds) {
-    if (!planner?.generatedTarget) return;
-    const moved = targetMoved(planner.generatedTarget, bounds);
-    if (moved === planner.targetMoved) return;
-    planner.targetMoved = moved;
-    renderDetail();
   }
 
   const reloadQuestInstances = async () => {
@@ -1082,20 +1072,14 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       const changed = !planner.shapeChosen || planner.routeType !== routeType;
       Object.assign(planner, { routeType, shapeChosen: true, adding: undefined });
       planner.stepsOpen = !planner.sportChosen;
-      if (routeType === "point_to_point" && planner.start && !planner.end) planner.picking = "end";
-      else if (routeType === "round_trip" && planner.picking === "end") planner.picking = undefined;
+      if (changed && !(planner.stops.length && !planner.stopsAreSuggested)) planner.end = undefined;
+      if (planner.picking === "end") planner.picking = undefined;
       if (changed) restartGeneration();
       else renderAll();
     });
     on("[data-planner-steps]", () => edit(() => {
       planner.stepsOpen = true;
     }));
-    on("[data-planner-regenerate]", () => {
-      if (planner.stops.length && !planner.stopsAreSuggested && !globalThis.confirm(
-        "Generate a new route here? Your own stops will be replaced."
-      )) return;
-      void generatePlannerRoute();
-    });
     on("[data-planner-retry]", () => {
       if (planner.status !== "idle") return;
       planner.error = undefined;
@@ -1247,7 +1231,6 @@ export const mountWorldPage = async (mountPoint, onNavigate) => {
       attribution: basemap.attribution,
       homePosition,
       onViewportChange: (bounds) => {
-        plannerViewportChanged(bounds);
         scheduleViewportLoad(bounds);
       },
       onCollectibleSelect: (id) => selectCollectible(id),

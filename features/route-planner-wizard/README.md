@@ -18,21 +18,20 @@ Glide / Chill / Explore alternatives were removed.)
 
 - **Wizard steps**:
   - Sport uses icon buttons (bicycle, running, hiking).
-  - Route shape uses icon buttons (Round trip, A→B); A→B then asks for the end point on the map.
+  - Route shape uses icon buttons (Round trip, A→B). A→B ends at the crosshair; there is no extra map tap for the end. The player can pick another end on the map afterwards (the route is then rerouted).
   - Completed steps collapse into one summary row (for example "🚲 Cycling · ⟳ Round trip"). Its **Change** action reopens the steps, and changing a choice generates again.
-- **Automatic generation**: once sport, shape, start (and the end for A→B) are known, one request generates the route. There is no Generate button.
+- **Automatic generation**: once sport, shape and start are known, one request generates the route. There is no Generate button.
 - **One route, no intents**: there is no route feel (Glide / Chill / Explore) any more, neither in the planner nor on the Explore card. The server uses one fixed generation policy and ignores `intent`/`intents` sent by older clients.
 - **Aimed target** (replaces the earlier planning-area frame): the player must see where the route goes.
-  - Round trips ride from the start to the aimed target and back. The target does not need to be exact; the route passes within 1 km of it.
+  - Round trips ride from the start to the aimed target and back; A→B routes end there. The target does not need to be exact; the route passes within 1 km of it.
   - iOS: the aim (crosshair) sits in the middle of the map above the sheet, with the caption "Target: crosshair". Web: the crosshair sits in the middle of the map viewport, and the panel says that routes ride to it and back.
   - No frame is drawn around a planning area. An Explore session keeps its own outline.
-  - The crosshair shows before generating and again when the map center is more than 1 km away from the generated target. In that case a "Generate here" action also appears. Pans never regenerate automatically.
-  - A→B routes aim at the picked end, so they show no crosshair.
+  - The crosshair shows only until a route exists. There is no "Generate here" action and pans never regenerate: to start over, the player closes the planner and opens it again.
 - **Result**: the generated route is shown right away as the card (title "Suggested route", metrics and Save) **above its stops**. Its collectibles and ridden opportunity Flowlines become the stops.
 - **Editing**:
   - Stops can be edited once a route exists, or when the player already has own stops ("Add to route" picks): map taps add or remove stops, and the list allows reordering and removing.
   - Once a route exists, every edit reroutes automatically after a short debounce (about 0.8 s on web), so several quick moves route once. A new start or end reroutes an existing route and generates otherwise.
-  - The player's own (or edited) stops are never replaced silently: a new sport, shape or endpoint reroutes them instead, and "Generate here" asks for confirmation first.
+  - The player's own (or edited) stops are never replaced silently: a new sport, shape or endpoint reroutes them instead.
   - Own stops without a route keep one "Route my stops" action; a retry action appears only after a failure.
 - **Explore card**: its "Generate route" opens the planner with cycling and Round trip already chosen and generates the route towards the map center.
 - **Route styling**: the route uses the `plannedRoute` palette color (blue, dashed).
@@ -49,10 +48,10 @@ Glide / Chill / Explore alternatives were removed.)
    - Reroute after adding, removing or moving stops.
 3. **iOS sheet and map** (`RoutePlannerPanel.swift`, `WorldView.swift`, `WorldMapView.swift`, `ExploreRevealViews.swift`, `Localizable.xcstrings`):
    - Icon steps, summary row, route card above the stops.
-   - The aim crosshair, its caption and the "Generate here" chip (with confirmation over own stops).
+   - The aim crosshair and its caption, shown only before a route exists.
    - No intent picker and no alternative routes layer.
 4. **Web** (`route-planner.js`, `world-page.js`, `world-map.js`, `explore-reveal.js`, `world.css`; planner strings stay inline in English like the rest of the planner):
-   - The same steps, summary row, automatic generation, route card above the stops and "Generate here".
+   - The same steps, summary row, automatic generation (A→B ends at the crosshair) and route card above the stops.
    - No intent picker and no alternative routes layer.
 5. **Docs**: keep `route-planning-v2` and `route-generation-v2` consistent with this feature.
 
@@ -68,6 +67,6 @@ Glide / Chill / Explore alternatives were removed.)
 ## Validation
 
 - Server vitest: request parsing ignores legacy intents; generation returns exactly one saveable proposal; aimed routes pass the target.
-- iOS `RoutePlannerModelTests`: automatic generation after the steps, the adopted route and its stops, rerouting after edits, own stops kept on a sport change, and the 1 km target check.
-- Web `route-planner.test.js` and `world-page.test.js`: the steps, the request body without intents, the route card above the stops, and "Generate here".
+- iOS `RoutePlannerModelTests`: automatic generation after the steps, the adopted route and its stops, rerouting after edits, own stops kept on a sport change, and A→B ending at the aim.
+- Web `route-planner.test.js` and `world-page.test.js`: the steps, the request body without intents, the route card above the stops, and A→B ending at the crosshair.
 - Full iOS planner tests and the affected vitest suites.

@@ -13,7 +13,6 @@ import { formatRouteDistance, formatRouteDuration, SPORT_OPTIONS } from "./route
  * - `picking`: "start" | "end" while the map sets that endpoint.
  * - `status`: "idle" | "routing" | "generating" | "saving".
  * - `proposal`: the routed result for the current stops; cleared by every edit.
- * - `generatedTarget`: the target the route was generated for; `targetMoved` once the map aims elsewhere.
  */
 export const createPlannerState = ({ start, stops = [], sport, routeType } = {}) => ({
   start,
@@ -32,8 +31,6 @@ export const createPlannerState = ({ start, stops = [], sport, routeType } = {})
   proposal: undefined,
   generated: false,
   catalog: undefined,
-  generatedTarget: undefined,
-  targetMoved: false,
   rerouteQueued: false,
   dropped: [],
   error: undefined
@@ -42,7 +39,8 @@ export const createPlannerState = ({ start, stops = [], sport, routeType } = {})
 export const stepsDone = (state) => state.sportChosen && state.shapeChosen;
 
 /** Sport, shape, start (and end for A to B) are known, so a route can be generated. */
-export const canGenerate = (state) => Boolean(stepsDone(state) && state.start && (state.routeType !== "point_to_point" || state.end));
+/** An A to B route without a picked end ends at the crosshair. */
+export const canGenerate = (state) => Boolean(stepsDone(state) && state.start);
 
 /** Stops are editable once a route exists or the player already has stops of their own. */
 export const canEditStops = (state) => Boolean(state.generated || state.proposal || state.stops.length);
@@ -138,15 +136,14 @@ export const buildPlanRequest = (state) => {
 
 /**
  * Generates one route towards the aimed target: a round trip rides
- * to `aim` and back, an A to B route ends at the picked end.
+ * to `aim` and back, an A to B route ends at the picked end, else at `aim`.
  */
 export const buildSuggestRequest = (state, aim) => {
   if (!state.start) return { error: "Choose a start on the map." };
   const pointToPoint = state.routeType === "point_to_point";
-  if (pointToPoint && !state.end) return { error: "Choose an end point on the map." };
   return {
     body: {
-      target: pointToPoint ? state.end : aim,
+      target: pointToPoint ? state.end ?? aim : aim,
       sport: state.sport,
       start: state.start,
       routeType: state.routeType
@@ -165,27 +162,9 @@ export const suggestedStops = (proposal, catalog = {}) => {
   ];
 };
 
-/** How close generated routes come to the aimed target; a map center within it aims at the same target. */
-export const AIM_RADIUS_M = 1000;
-
-const metersBetween = (a, b) => {
-  const radians = Math.PI / 180;
-  const dLat = (b.lat - a.lat) * radians;
-  const dLon = (b.lon - a.lon) * radians;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * radians) * Math.cos(b.lat * radians) * Math.sin(dLon / 2) ** 2;
-  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
-};
-
-/** Whether the map center (the aim) is now clearly away from the target the routes were generated for. */
-export const targetMoved = (generatedTarget, bounds) => {
-  if (!generatedTarget || !bounds) return false;
-  const center = { lat: (bounds.south + bounds.north) / 2, lon: (bounds.west + bounds.east) / 2 };
-  return metersBetween(center, generatedTarget) > AIM_RADIUS_M;
-};
-
-/** Round trips aim at the map center before generating and once the map aims elsewhere. */
-export const showsAim = (state) => state.routeType === "round_trip"
-  && ((!state.generated && !state.proposal) || state.targetMoved);
+/** The crosshair marks the target until a route exists: a round trip's turning point or an A to B route's end. */
+export const showsAim = (state) => (state.routeType === "round_trip" || !state.end)
+  && !state.generated && !state.proposal;
 
 /** Names of stops the routed proposal had to leave out. */
 export const droppedStops = (stops, proposal) => {
@@ -321,9 +300,8 @@ export const RoutePlannerPanel = (state) => {
       </header>
       ${wizardSteps(state, idle)}
       ${pointRow("start", "Start", state, idle)}
-      ${state.routeType === "point_to_point" ? pointRow("end", "End", state, idle) : ""}
-      ${state.routeType === "round_trip" && !routed && idle ? '<p class="route-planner-note" data-planner-area>Routes ride to the crosshair in the map center and back.</p>' : ""}
-      ${state.targetMoved && idle ? '<button type="button" class="route-planner-regenerate" data-planner-regenerate>Generate here</button>' : ""}
+      ${state.routeType === "point_to_point" && (state.end || state.picking === "end") ? pointRow("end", "End", state, idle) : ""}
+      ${showsAim(state) && idle ? `<p class="route-planner-note" data-planner-area>${state.routeType === "round_trip" ? "Routes ride to the crosshair in the map center and back." : "The route ends at the crosshair in the map center."}</p>` : ""}
       ${statusLine(state)}
       ${state.error && (state.stops.length || canGenerate(state)) ? `<button type="button" data-planner-retry${idle ? "" : " disabled"}>Try again</button>` : ""}
       ${routed ? routeCard(state, dropped, idle) : ""}

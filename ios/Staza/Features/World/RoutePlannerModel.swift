@@ -81,15 +81,13 @@ final class RoutePlannerModel {
     private(set) var end: GeoPoint?
     private(set) var routeType = RouteType.roundTrip
     private(set) var sport = Sport.cycling
-    /// Wizard steps: generation starts once both are chosen (and the end for A→B).
+    /// Wizard steps: generation starts once both are chosen.
     private(set) var sportChosen = false
     private(set) var shapeChosen = false
     /// The player reopened the collapsed steps to change a choice.
     private(set) var stepsOpen = false
     /// Staza generated the current route (possibly edited since); its route is `proposal`.
     private(set) var generated = false
-    /// The aimed target the route was generated for.
-    private(set) var generatedTarget: GeoPoint?
     /// Bumped whenever the wizard is ready to generate; the view answers with `generate(toward:)`.
     private(set) var generateRequest = 0
     private var catalog: ExplorationCatalog?
@@ -155,26 +153,11 @@ final class RoutePlannerModel {
     /// The step pickers show until both are chosen or while reopened; else a summary row replaces them.
     var showsSteps: Bool { !stepsDone || stepsOpen }
 
-    /// Everything generation needs is known.
-    var canGenerate: Bool {
-        isActive && stepsDone && start != nil && (routeType == .roundTrip || end != nil)
-    }
+    /// Everything generation needs is known; an A→B route without a picked end ends at the aim.
+    var canGenerate: Bool { isActive && stepsDone && start != nil }
 
     /// Map taps edit stops only once a route is chosen (or the player builds one from own stops).
     var canEditStops: Bool { generated || proposal != nil || !stops.isEmpty }
-
-    /// How close the routes come to an aimed target; a map center within it aims at the same target.
-    static let aimRadiusMeters: Double = 1000
-
-    /// Whether the map center (the aim) is now clearly away from the target the routes were generated for.
-    func targetMoved(to visible: WorldBounds?) -> Bool {
-        guard let generatedTarget, let visible else { return false }
-        return Self.meters(visible.center, generatedTarget) > Self.aimRadiusMeters
-    }
-
-    private static func meters(_ a: GeoPoint, _ b: GeoPoint) -> Double {
-        CLLocation(latitude: a.lat, longitude: a.lon).distance(from: CLLocation(latitude: b.lat, longitude: b.lon))
-    }
 
     /// Opens the planner. Stops chosen with "Add to route" before are kept as route constraints.
     func open(start: GeoPoint?) {
@@ -225,14 +208,15 @@ final class RoutePlannerModel {
         if changed { restartGeneration() }
     }
 
-    /// Wizard step 2. A→B first asks for the end on the map; generation waits for it.
+    /// Wizard step 2. An A→B route ends at the aim unless the player picks another end later.
     func chooseShape(_ type: RouteType) {
         guard isIdle else { return }
         let changed = !shapeChosen || type != routeType
         routeType = type
         shapeChosen = true
         stepsOpen = false
-        mapMode = type == .pointToPoint && end == nil ? .pickEnd : nil
+        mapMode = nil
+        if changed, !suggestReplacesOwnStops { end = nil }
         if changed { restartGeneration() }
     }
 
@@ -243,7 +227,7 @@ final class RoutePlannerModel {
         mapMode = nil
     }
 
-    /// Regenerates for a new area, e.g. after the player moved the map.
+    /// Asks the view to generate towards the current aim, e.g. after a retry.
     func requestGeneration() {
         guard canGenerate, isIdle else { return }
         generateRequest += 1
@@ -267,7 +251,6 @@ final class RoutePlannerModel {
     /// Drops the generated route; suggested stops go with it, the player's own stops stay.
     private func clearGenerated() {
         generated = false
-        generatedTarget = nil
         catalog = nil
         if stopsAreSuggested {
             stops = []
@@ -396,14 +379,13 @@ final class RoutePlannerModel {
     }
 
     /// Generates one route towards the aimed target: round trips ride there and back, A→B routes end at
-    /// the picked end. Its collectibles and Flowlines become the editable stops.
+    /// the picked end, else at the aim. Its collectibles and Flowlines become the editable stops.
     func generate(toward aim: GeoPoint) async {
         guard isIdle else { return }
         cancelReroute()
         guard let start else { return fail(.missingStart) }
-        let end = routeType == .pointToPoint ? self.end : nil
-        if routeType == .pointToPoint, end == nil { return fail(.missingEnd) }
-        let target = end ?? aim
+        if routeType == .pointToPoint, end == nil { end = aim }
+        let target = routeType == .pointToPoint ? end ?? aim : aim
         let request = SuggestRequest(target: target, sport: sport.rawValue, start: start,
                                      routeType: routeType.rawValue)
         clearGenerated()
@@ -415,7 +397,6 @@ final class RoutePlannerModel {
                 return
             }
             catalog = result.catalog
-            generatedTarget = target
             adopt(result.proposals[0])
         }
     }
