@@ -48,9 +48,10 @@ extension View {
 
 // MARK: - Buttons
 
-/// Capsule buttons matching the Figma `Button` component (Primary / Secondary / Plain).
+/// Capsule buttons matching the Figma `Button` component (Primary / Secondary / Plain); `accentOutline` is a
+/// transparent button with a staza-yellow border and text.
 struct StazaButtonStyle: ButtonStyle {
-    enum Kind { case primary, secondary, plain, destructive }
+    enum Kind { case primary, secondary, plain, destructive, accentOutline }
     var kind: Kind = .primary
     var fullWidth = false
     @Environment(\.isEnabled) private var isEnabled
@@ -66,6 +67,7 @@ struct StazaButtonStyle: ButtonStyle {
             .background(background(pressed: configuration.isPressed), in: Capsule())
             .overlay {
                 if kind == .secondary { Capsule().strokeBorder(StazaColor.border, lineWidth: 1) }
+                if kind == .accentOutline { Capsule().strokeBorder(StazaColor.accent, lineWidth: 1.5) }
             }
             .contentShape(Capsule())
             .opacity(isEnabled ? 1 : 0.4)
@@ -77,7 +79,7 @@ struct StazaButtonStyle: ButtonStyle {
         switch kind {
         case .primary: StazaColor.onAccent
         case .secondary: StazaColor.textPrimary
-        case .plain: StazaColor.accent
+        case .plain, .accentOutline: StazaColor.accent
         case .destructive: StazaColor.danger
         }
     }
@@ -87,6 +89,7 @@ struct StazaButtonStyle: ButtonStyle {
         case .primary: pressed ? StazaColor.accentPressed : StazaColor.accent
         case .secondary, .destructive: pressed ? StazaColor.track : StazaColor.surfaceRaised
         case .plain: .clear
+        case .accentOutline: pressed ? StazaColor.accent.opacity(0.15) : .clear
         }
     }
 }
@@ -96,6 +99,7 @@ extension ButtonStyle where Self == StazaButtonStyle {
     static var stazaPrimaryWide: StazaButtonStyle { StazaButtonStyle(kind: .primary, fullWidth: true) }
     static var stazaSecondary: StazaButtonStyle { StazaButtonStyle(kind: .secondary) }
     static var stazaSecondaryWide: StazaButtonStyle { StazaButtonStyle(kind: .secondary, fullWidth: true) }
+    static var stazaAccentOutlineWide: StazaButtonStyle { StazaButtonStyle(kind: .accentOutline, fullWidth: true) }
     static var stazaPlain: StazaButtonStyle { StazaButtonStyle(kind: .plain) }
     static var stazaDestructive: StazaButtonStyle { StazaButtonStyle(kind: .destructive, fullWidth: true) }
 }

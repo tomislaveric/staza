@@ -328,6 +328,21 @@ describe("ExplorationService", () => {
     await expect(service.generate("p1", { ...generateBody, destinationId: "nope" })).rejects.toThrow();
   });
 
+  it("offers unvisited POIs near the baseline route as optional stops, never the destination", async () => {
+    const { service } = setup({
+      collectibles: [...worldCollectibles, collectible("c-visited", 0.5, 0.5, { found: true })]
+    });
+    const result = await service.generate("p1", { ...generateBody, destinationId: "c-mid" });
+    expect(result.nearbyCollectibles.map(({ collectible: item }) => item.id)).toEqual(["c-near"]);
+    expect(result.nearbyCollectibles[0].distanceM).toBeLessThanOrEqual(1_500);
+    expect(result.proposals[0].includedTargetIds).toEqual(["c-mid"]);
+
+    const rerouted = await service.reroute("p1", result.explorationId, { proposalId: result.proposals[0].id, targetIds: ["c-mid", "c-near"] });
+    expect(rerouted.nearbyCollectibles.map(({ collectible: item }) => item.id), "chosen stops leave the nearby list")
+      .not.toContain("c-near");
+    expect(rerouted.nearbyCollectibles.map(({ collectible: item }) => item.id)).not.toContain("c-visited");
+  });
+
   describe("Flowline opportunities", () => {
     const filler = (id: string, northKm: number) => flowline(id, [northKm, -8], [northKm, -7], { flowScore: 50 });
     // The area loader offers only plannable Flowlines (opportunities and completed ones); f-east is not.
@@ -386,6 +401,23 @@ describe("ExplorationService", () => {
       expect(created[0].exploration.objectives.some((objective) => objective.type === "flowline_rule")).toBe(false);
     });
 
+    it("reports Flowlines the baseline already rides as part of the route, not as optional", async () => {
+      const probe = setup({ flowlines: [] });
+      const baseline = (await probe.service.generate("p1", { ...generateBody, target: at(1, 0) })).proposals[0];
+      const coordinates = baseline.geometry.coordinates.slice(0, Math.ceil(baseline.geometry.coordinates.length / 3));
+      const onRoute: WorldFartlek = { ...flowline("f-on", [0, 0], [1, 0]), geometry: { type: "LineString", coordinates } };
+      const { service } = setup({ flowlines: [onRoute, flowline("f-near", [0.2, 0.1], [1, 0.2])] });
+      const result = await service.generate("p1", { ...generateBody, target: at(1, 0) });
+      expect(result.proposals[0].traversedFlowlines.map((item) => item.id)).toEqual(["f-on"]);
+      expect(result.flowlineEnhancements.map(({ flowline: item }) => item.id)).not.toContain("f-on");
+      const enhanced = await service.enhance("p1", result.explorationId, {
+        proposalId: result.proposals[0].id, flowlineIds: ["f-near"]
+      });
+      expect(enhanced.proposal.traversedFlowlines.map((item) => item.id)).toContain("f-near");
+      expect(enhanced.proposal.traversedFlowlines.map((item) => item.id), "an added Flowline keeps the ridden one").toContain("f-on");
+      expect(enhanced.flowlineIds).toEqual(["f-near"]);
+    });
+
     it("rejects Flowlines the area does not offer and combined destinations", async () => {
       const { service } = setup({ flowlines: plannable });
       await expect(service.generate("p1", { ...generateBody, destinationFlowlineId: "f-east" })).rejects.toBeInstanceOf(UserInputError);
@@ -422,6 +454,21 @@ describe("ExplorationService", () => {
       const stops = [{ kind: "collectible", id: "c-east" }, { kind: "flowline", id: "f-near" }, { kind: "collectible", id: "c-near" }];
       const result = await service.plan("p1", planBody(stops, { keepOrder: true }));
       expect(result.proposal.stopOrder).toEqual(["c-east", "flowline:f-near", "c-near"]);
+    });
+
+    it("keeps a road route that leaves the request area between the chosen stops", async () => {
+      const detour = at(15, 0);
+      const { service } = setup({
+        routing: {
+          route: async (request) => {
+            const result = straightLineRoute(request);
+            const [first, ...rest] = result.geometry.coordinates;
+            return { ...result, geometry: { ...result.geometry, coordinates: [first, [detour.lon, detour.lat], ...rest] } };
+          }
+        }
+      });
+      const result = await service.plan("p1", planBody([{ kind: "collectible", id: "c-near" }]));
+      expect(result.proposal.includedTargetIds).toContain("c-near");
     });
 
     it("rejects Flowlines the area does not offer, unknown collectibles and empty plans", async () => {

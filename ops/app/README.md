@@ -83,11 +83,6 @@ first four are all set:
 | `STRAVA_TOKEN_ENCRYPTION_KEY` | Base64 32-byte key that encrypts Strava tokens at rest. Generate with `openssl rand -base64 32`; use a different key per environment and keep it stable, because changing it requires users to reconnect. |
 | `STRAVA_RECENT_ACTIVITY_LIMIT` | Optional number of recent GPS activities shown (default `3`, maximum `30`). |
 
-Testing aid: `WORLD_SHOW_ALL_FLOWLINES=true` makes the World map show every
-Flowline route planning may use (opportunities and ridden ones), not only
-ridden ones. DEV Compose defaults it to `true`; PROD does not pass it, so it
-stays off there.
-
 Compose sets `NODE_ENV=production`, `PORT=3000`, `DATA_DIR=/data/jobs`, and
 `MEDIA_DIR=/data/media`. The app container uses an environment-specific named
 volume for `/data`; PostgreSQL uses a different named volume for its data

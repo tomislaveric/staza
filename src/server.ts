@@ -24,11 +24,9 @@ import { ActivityRepository } from "./persistence/activityRepository.js";
 import { CollectibleRepository } from "./persistence/collectibleRepository.js";
 import { FartlekRepository } from "./persistence/fartlekRepository.js";
 import { FartlekCompletionRepository } from "./persistence/fartlekCompletionRepository.js";
-import { FlowlineRevealRepository } from "./persistence/flowlineRevealRepository.js";
 import {
   QuestInstanceRepository,
-  QuestInstanceNotFoundError,
-  QuestInstanceStateError
+  QuestInstanceNotFoundError
 } from "./persistence/questInstanceRepository.js";
 import { AuthoredQuestRepository } from "./persistence/authoredQuestRepository.js";
 import { SkillTreeRepository, SkillTreeUnlockError } from "./persistence/skillTreeRepository.js";
@@ -38,7 +36,6 @@ import { capabilitiesFromGrants, lockedWorldFilters } from "./skillTree/capabili
 import { createDatabasePool } from "./persistence/database.js";
 import { migrate } from "./persistence/migrate.js";
 import { buildClipIntervals, gpmfStreamIndex, probeDuration, renderSelectedClips } from "./video.js";
-import { flowlinePolicyForBounds } from "./flowlinePolicy.js";
 import { parseBoundsParameter, type GeoBounds } from "./worldQuery.js";
 import { StravaConnectionRepository, type StravaReturnLocale } from "./persistence/stravaConnectionRepository.js";
 import { StravaClient } from "./strava/client.js";
@@ -46,8 +43,7 @@ import { StravaError } from "./strava/errors.js";
 import { StravaService } from "./strava/service.js";
 import { TokenCipher } from "./strava/tokenCipher.js";
 import { toWorldFartlek } from "./fartlek.js";
-import { exploreAllowed, isPlannableFlowline } from "./flowlineReveal.js";
-import { exploreArea } from "./worldExplore.js";
+import { isPlannableFlowline } from "./flowlineReveal.js";
 import { createWorldSnapshot } from "./world.js";
 import { THEMED_STYLE_PATH, createThemedStyleLoader, getBasemapConfig, getBasemapOrigins } from "./basemap.js";
 import { ProposalStore } from "./routePlanning/proposalStore.js";
@@ -77,7 +73,6 @@ const activityRepository = new ActivityRepository(databasePool, config.devTools)
 const collectibleRepository = new CollectibleRepository(databasePool);
 const fartlekRepository = new FartlekRepository(databasePool);
 const fartlekCompletionRepository = new FartlekCompletionRepository(databasePool);
-const flowlineRevealRepository = new FlowlineRevealRepository(databasePool);
 const questInstanceRepository = new QuestInstanceRepository(databasePool);
 const skillTreeRepository = new SkillTreeRepository(databasePool);
 const authoredQuestRepository = new AuthoredQuestRepository(databasePool);
@@ -1059,72 +1054,26 @@ app.get("/api/world", requirePlayer, async (request: UploadRequest, response, ne
     const discoveredSourceIds = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
     if (!bounds) {
       const stats = await collectibleRepository.worldStats(discoveredSourceIds);
-      response.json({ collectibles: [], stats, truncated: false, fartleks: [], explorationRoutes: [], exploreAllowed: false });
+      response.json({ collectibles: [], stats, truncated: false, explorationRoutes: [] });
       return;
     }
-    const flowlinePolicy = flowlinePolicyForBounds(bounds, config.worldFlowlineLimit);
     // The client caches collectibles for a wider area; it asks for them only when leaving that area.
     const areaBounds = parseBoundsParameter(request.query.collectibleBbox);
     const skipCollectibles = request.query.skipCollectibles === "1";
-    const [viewport, fartlekResult] = await Promise.all([
+    const [viewport, explorationRoutes] = await Promise.all([
       skipCollectibles
         ? undefined
         : areaBounds
           ? collectibleRepository.listWithinBounds(areaBounds, config.worldAreaLimit)
           : collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit),
-      // Only ridden Flowlines are on the map by default; opportunities come from Explore.
-      // WORLD_SHOW_ALL_FLOWLINES (testing) shows every Flowline route planning may use.
-      config.worldShowAllFlowlines
-        ? fartlekRepository.listWithinBoundsLimited(bounds, flowlinePolicy)
-        : flowlineRevealRepository.listCompletedWithinBoundsLimited(playerId, bounds, flowlinePolicy)
+      questInstanceRepository.listRoutesWithinBounds(playerId, bounds)
     ]);
-    const explorationRoutes = await questInstanceRepository.listRoutesWithinBounds(playerId, bounds);
-    const fartleks = config.worldShowAllFlowlines
-      ? await plannableFlowlinesForPlayer(playerId, fartlekResult.fartleks)
-      : await worldFartleksForPlayer(playerId, fartlekResult.fartleks);
     const world = viewport ? createWorldSnapshot(viewport.collectibles, discoveredSourceIds) : undefined;
+    // Flowlines are not part of the World map: they are offered near a planned route or shown after a ride.
     response.json({
       ...(world ? { collectibles: world.collectibles } : {}),
       ...(viewport ? { truncated: viewport.truncated } : { collectiblesSkipped: true }),
-      fartlekTruncated: fartlekResult.truncated,
-      fartleks,
-      explorationRoutes,
-      exploreAllowed: exploreAllowed(bounds)
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/world/quest-targets", requirePlayer, async (request: UploadRequest, response, next) => {
-  try {
-    const readIds = (value: unknown, label: string): string[] => {
-      if (value === undefined) return [];
-      const values = typeof value === "string" ? [value] : value;
-      if (!Array.isArray(values) || values.some((id) => typeof id !== "string" || id.trim() === "")) {
-        throw new UserInputError(`${label} must be a list of nonblank ids.`);
-      }
-      return [...new Set(values)];
-    };
-    const collectibleIds = readIds(request.query.collectibleId, "Collectible ids");
-    const flowlineIds = readIds(request.query.flowlineId, "Flowline ids");
-    if (collectibleIds.length + flowlineIds.length === 0) {
-      throw new UserInputError("At least one quest target id is required.");
-    }
-    if (collectibleIds.length + flowlineIds.length > 100) {
-      throw new UserInputError("A maximum of 100 quest target ids can be loaded at once.");
-    }
-    const [collectibles, flowlines, discoveredSourceIds] = await Promise.all([
-      collectibleRepository.listByIds(collectibleIds),
-      fartlekRepository.listByIds(flowlineIds),
-      activityRepository.listDiscoveredCollectibleSourceIds(request.user!.playerId)
-    ]);
-    if (collectibles.length !== collectibleIds.length || flowlines.length !== flowlineIds.length) {
-      throw new UserInputError("One or more quest targets are no longer available.");
-    }
-    response.json({
-      collectibles: createWorldSnapshot(collectibles, discoveredSourceIds).collectibles,
-      flowlines: await worldFartleksForPlayer(request.user!.playerId, flowlines)
+      explorationRoutes
     });
   } catch (error) {
     next(error);
@@ -1201,25 +1150,6 @@ const loadQuestInstance = async (playerId: string, instanceId: string) => {
   return instance;
 };
 
-app.post("/api/world/explore", requirePlayer, requireCsrf, routeEditLimiter, async (request: UploadRequest, response, next) => {
-  try {
-    response.json(await exploreArea(request.user!.playerId, request.body, {
-      flowlines: {
-        listOpportunityCandidates: (playerId, bounds) => flowlineRevealRepository.listOpportunityCandidatesWithinBounds(playerId, bounds),
-        listByIds: (ids) => flowlineRevealRepository.listByIds(ids)
-      },
-      listUncollectedCollectibles: async (playerId, bounds) => {
-        const discovered = await activityRepository.listDiscoveredCollectibleSourceIds(playerId);
-        const area = await collectibleRepository.listWithinBounds(bounds, config.worldViewportLimit, { exceptIds: discovered });
-        return { collectibles: createWorldSnapshot(area.collectibles, discovered).collectibles, truncated: area.truncated };
-      },
-      toWorld: worldFartleksForPlayer
-    }));
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.post("/api/explorations/generate", requirePlayer, requireCsrf, routePlanningLimiter, async (request: UploadRequest, response, next) => {
   try {
     response.json(await explorationService.generate(request.user!.playerId, request.body));
@@ -1254,32 +1184,11 @@ app.post("/api/explorations/:explorationId/reroute", requirePlayer, requireCsrf,
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
-/** "Save Exploration": persists the planned route as a planned (not started) Exploration. */
+/** "Save Exploration": persists the planned route as an active Exploration; later activities count. */
 app.post("/api/explorations/save", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
   try {
     const playerId = request.user!.playerId;
     const instanceId = await explorationService.save(playerId, request.body);
-    const [instance, plannedRoute] = await Promise.all([
-      loadQuestInstance(playerId, instanceId),
-      questInstanceRepository.getPlannedRoute(playerId, instanceId)
-    ]);
-    response.json({ instance, plannedRoute });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/** Older clients' "Start Exploration" from the planner: save, then start right away. */
-app.post("/api/explorations/confirm", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const instanceId = await explorationService.save(playerId, request.body);
-    try {
-      await questInstanceRepository.start(playerId, instanceId);
-    } catch (error) {
-      // Repeating a confirmation returns the already started Exploration.
-      if (!(error instanceof QuestInstanceStateError)) throw error;
-    }
     const [instance, plannedRoute] = await Promise.all([
       loadQuestInstance(playerId, instanceId),
       questInstanceRepository.getPlannedRoute(playerId, instanceId)
@@ -1342,31 +1251,6 @@ app.delete("/api/quest-instances/:instanceId", requirePlayer, requireCsrf, async
   } catch (error) {
     if (error instanceof QuestInstanceNotFoundError) {
       response.status(404).json({ error: error.message });
-      return;
-    }
-    if (error instanceof QuestInstanceStateError) {
-      response.status(409).json({ error: error.message });
-      return;
-    }
-    next(error);
-  }
-});
-
-/** "Start Exploration": a saved (planned) Exploration starts counting activities from now. */
-app.post("/api/quest-instances/:instanceId/start", requirePlayer, requireCsrf, async (request: UploadRequest, response, next) => {
-  try {
-    const playerId = request.user!.playerId;
-    const instanceId = String(request.params.instanceId);
-    if (!isUuid(instanceId)) throw new QuestInstanceNotFoundError();
-    await questInstanceRepository.start(playerId, instanceId);
-    response.json({ instance: await loadQuestInstance(playerId, instanceId) });
-  } catch (error) {
-    if (error instanceof QuestInstanceNotFoundError) {
-      response.status(404).json({ error: error.message });
-      return;
-    }
-    if (error instanceof QuestInstanceStateError) {
-      response.status(409).json({ error: error.message });
       return;
     }
     next(error);

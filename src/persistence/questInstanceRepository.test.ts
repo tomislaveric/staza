@@ -69,9 +69,7 @@ const rideWith = async (id: string, sourceIds: string[], activityStartedAt = "20
 const totalXp = async () => (await pool!.query("SELECT total_xp FROM players WHERE id = $1", [playerId])).rows[0].total_xp;
 const confirmExploration = async (): Promise<string> => {
   const proposalId = randomUUID();
-  const id = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
-  await repository!.start(playerId, id, startedBefore);
-  return id;
+  return repository!.createExploration(playerId, exploration(proposalId), route(proposalId), startedBefore);
 };
 
 describePersistence("QuestInstanceRepository", () => {
@@ -85,9 +83,9 @@ describePersistence("QuestInstanceRepository", () => {
     await pool?.end();
   });
 
-  it("saves an exploration as planned with its route atomically", async () => {
+  it("saves an exploration as active with its route atomically", async () => {
     const proposalId = randomUUID();
-    const instanceId = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
+    const instanceId = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId), startedBefore);
 
     const [instance] = await repository!.listForPlayer(playerId);
     expect(instance).toMatchObject({
@@ -95,7 +93,8 @@ describePersistence("QuestInstanceRepository", () => {
       templateId: EXPLORATION_TEMPLATE.id,
       suggestionId: proposalId,
       title: "Exploration: Peak A, Peak B +1",
-      status: "planned",
+      status: "active",
+      startedAt: startedBefore.toISOString(),
       difficulty: "medium",
       rewardXp: 250,
       attemptCount: 1,
@@ -109,23 +108,22 @@ describePersistence("QuestInstanceRepository", () => {
       includedTargetIds: ["peak-a", "peak-b", "peak-c"]
     });
     expect(await repository!.getPlannedRoute("00000000-0000-4000-8000-0000000000e2", instanceId)).toBeUndefined();
-    expect(instance.startedAt).toBeUndefined();
   });
 
-  it("ignores activities while planned and lists saved routes overlapping a viewport", async () => {
+  it("ignores activities started before saving and lists saved routes overlapping a viewport", async () => {
     const proposalId = randomUUID();
-    const instanceId = await repository!.createExploration(playerId, exploration(proposalId), route(proposalId));
-    await rideWith("planned-ride", ["peak-a"]);
-    expect((await repository!.listForPlayer(playerId))[0].status).toBe("planned");
+    const instanceId = await repository!.createExploration(
+      playerId, exploration(proposalId), route(proposalId), new Date("2026-06-02T00:00:00Z")
+    );
+    await rideWith("earlier-ride", ["peak-a"]);
+    expect((await repository!.listForPlayer(playerId))[0]).toMatchObject({
+      status: "active", objectives: [{ progress: { completed: 0 } }]
+    });
 
     const inside = { minLongitude: 8.15, minLatitude: 49.15, maxLongitude: 8.3, maxLatitude: 49.3 };
     const outside = { minLongitude: 9, minLatitude: 50, maxLongitude: 9.1, maxLatitude: 50.1 };
-    expect(await repository!.listRoutesWithinBounds(playerId, inside)).toMatchObject([{ id: instanceId, status: "planned" }]);
+    expect(await repository!.listRoutesWithinBounds(playerId, inside)).toMatchObject([{ id: instanceId, status: "active" }]);
     expect(await repository!.listRoutesWithinBounds(playerId, outside)).toEqual([]);
-
-    await repository!.start(playerId, instanceId, startedBefore);
-    await expect(repository!.start(playerId, instanceId)).rejects.toThrow("planned explorations");
-    expect((await repository!.listForPlayer(playerId))[0]).toMatchObject({ status: "active", startedAt: startedBefore.toISOString() });
   });
 
   it("completes in one activity, granting the reward exactly once", async () => {

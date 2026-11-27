@@ -68,7 +68,7 @@ final class RoutePlannerModelTests: XCTestCase {
         planner.move(from: IndexSet(integer: planner.stops.count - 1), to: 0)
         planner.move(from: IndexSet(integer: 1), to: 0)
         planner.remove(c)
-        XCTAssertNil(planner.focusedStopKey, "removing the focused stop clears the highlight")
+        XCTAssertNil(planner.focusedKey, "removing the focused stop clears the highlight")
         XCTAssertNil(planner.proposal)
         for _ in 0..<40 where planner.proposal == nil { try await Task.sleep(for: .milliseconds(25)) }
         XCTAssertEqual(planner.proposal?.id, "p2")
@@ -228,22 +228,146 @@ final class RoutePlannerModelTests: XCTestCase {
         XCTAssertEqual(body["flowlineIds"] as? [String], ["f1"])
     }
 
-    func testAddingAStopToTheGeneratedRouteReroutes() async throws {
+    func testRiddenFlowlinesAreListedAsPartOfTheRouteExceptSelectedEnhancements() async throws {
+        let ridden = #","traversedFlowlines":[{"id":"f-on","name":"On","lengthMeters":900},{"id":"f1","name":"F1","lengthMeters":500}]"#
         let transport = StubTransport([
             .init(status: 200, body: generated()),
-            .init(status: 200, body: #"{"explorationId":"e2","proposal":\#(proposal("p2"))}"#)
+            .init(status: 200, body: #"{"proposal":\#(proposal("p2", extra: ridden)),"metrics":{"distanceDeltaM":0,"durationDeltaS":0},"flowlineIds":["f1"]}"#)
         ])
-        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport), rerouteDelay: .milliseconds(50))
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport))
         planner.reset(start: GeoPoint(lat: 48, lon: 11))
-        XCTAssertFalse(planner.mapTapped(GeoPoint(lat: 48.3, lon: 11.3)), "no editing before a route exists")
         planner.chooseSport(.cycling)
         planner.chooseShape(.roundTrip)
         await planner.generate(toward: aim)
+        XCTAssertTrue(planner.riddenFlowlines.isEmpty)
+        await planner.setFlowlineEnhancement("f1", enabled: true)
+
+        XCTAssertEqual(planner.riddenFlowlines.map(\.id), ["f-on"], "a selected optional Flowline is listed with the enhancements")
+    }
+
+    private func nearby(_ ids: [String]) -> String {
+        let items = ids.map { #"{"collectible":{"id":"\#($0)","name":"\#($0.uppercased())","latitude":48.1,"longitude":11.1,"found":false},"distanceM":420}"# }
+        return #""nearbyCollectibles":[\#(items.joined(separator: ","))]"#
+    }
+
+    /// A generated planner whose baseline `pc` lists `n1` and `n2` nearby; edits only route on `route()`.
+    private func generatedPlanner(_ responses: [StubTransport.Stub]) async -> (RoutePlannerModel, StubTransport) {
+        let transport = StubTransport([.init(status: 200, body: String(generated().dropLast()) + "," + nearby(["n1", "n2"]) + "}")] + responses)
+        let planner = RoutePlannerModel(api: APIClient(baseURL: baseURL, transport: transport), rerouteDelay: .seconds(60))
+        planner.reset(start: GeoPoint(lat: 48, lon: 11))
+        planner.chooseSport(.cycling)
+        planner.chooseShape(.roundTrip)
+        await planner.generate(toward: aim)
+        return (planner, transport)
+    }
+
+    func testAddedStopsDetourTheBaselineWithReroute() async throws {
+        let order = #","stopOrder":["waypoint:48.300000,11.300000","n1"]"#
+        let (planner, transport) = await generatedPlanner([
+            .init(status: 200, body: #"{"proposal":\#(proposal("p2", targets: ["n1"], extra: order)),\#(nearby(["n1", "n3"]))}"#)
+        ])
         XCTAssertTrue(planner.mapTapped(GeoPoint(lat: 48.3, lon: 11.3)))
-        for _ in 0..<40 where planner.proposal?.id != "p2" { try await Task.sleep(for: .milliseconds(25)) }
+        planner.toggle(.collectible(try XCTUnwrap(planner.nearbyChoices.first).collectible))
+        XCTAssertEqual(planner.nearbyChoices.map(\.id), ["n2"], "an added place leaves the nearby list")
+        await planner.route()
+
+        XCTAssertEqual(transport.requests.last?.url?.path, "/api/explorations/e1/reroute")
+        let body = try json(transport.requests.last)
+        XCTAssertEqual(body["proposalId"] as? String, "pc", "edits bend the baseline")
+        XCTAssertEqual(body["targetIds"] as? [String], ["n1"])
+        XCTAssertEqual((body["waypoints"] as? [[String: Double]])?.first?["lat"], 48.3)
         XCTAssertEqual(planner.proposal?.id, "p2")
+        XCTAssertEqual(planner.stops.map(\.key), ["waypoint:48.300000,11.300000", "n1"], "stops follow the route order")
+        XCTAssertEqual(planner.nearbyChoices.map(\.id), ["n3"], "nearby places are recalculated for the new route")
+        XCTAssertTrue(planner.generated)
+    }
+
+    func testRemovingEveryAddedStopRestoresTheBaselineWithoutARequest() async throws {
+        let (planner, transport) = await generatedPlanner([
+            .init(status: 200, body: #"{"proposal":\#(proposal("p2")),\#(nearby(["n3"]))}"#)
+        ])
+        let stop = PlannerStop.collectible(try XCTUnwrap(planner.nearbyChoices.first).collectible)
+        planner.toggle(stop)
+        await planner.route()
+        XCTAssertEqual(planner.proposal?.id, "p2")
+        XCTAssertFalse(planner.stopsAreSuggested)
+        let requests = transport.requests.count
+
+        planner.remove(stop)
+        XCTAssertEqual(transport.requests.count, requests, "no request")
+        XCTAssertEqual(planner.proposal?.id, "pc", "the exact baseline is back")
+        XCTAssertTrue(planner.stopsAreSuggested, "so the optional Flowlines show again")
+        XCTAssertTrue(planner.stops.isEmpty)
+        XCTAssertEqual(planner.nearbyChoices.map(\.id), ["n1", "n2"], "the baseline's nearby places are back")
+        XCTAssertEqual(planner.routeEdit, .baseline)
+    }
+
+    func testReorderedStopsArePlannedFromScratch() async throws {
+        let (planner, transport) = await generatedPlanner([
+            .init(status: 200, body: #"{"explorationId":"e2","proposal":\#(proposal("p2")),\#(nearby([]))}"#)
+        ])
+        planner.toggle(.collectible(collectible("n1")))
+        planner.toggle(.collectible(collectible("n2")))
+        planner.move(from: IndexSet(integer: 1), to: 0)
+        await planner.route()
         XCTAssertEqual(transport.requests.last?.url?.path, "/api/explorations/plan")
-        XCTAssertTrue(planner.generated, "the edited route stays the generated one")
+        XCTAssertEqual(try json(transport.requests.last)["keepOrder"] as? Bool, true)
+        XCTAssertEqual(planner.stops.map(\.key), ["n2", "n1"])
+        XCTAssertTrue(planner.nearbyChoices.isEmpty, "the plan response's nearby list replaces the old one")
+    }
+
+    func testFailedRerouteFallsBackToPlanOnce() async throws {
+        let (planner, transport) = await generatedPlanner([
+            .init(status: 410, body: #"{"error":"Gone","code":"exploration_expired"}"#),
+            .init(status: 200, body: #"{"explorationId":"e2","proposal":\#(proposal("p2"))}"#)
+        ])
+        planner.toggle(.collectible(collectible("n1")))
+        await planner.route()
+        XCTAssertEqual(transport.requests.suffix(2).map { $0.url?.path }, ["/api/explorations/e1/reroute", "/api/explorations/plan"])
+        XCTAssertEqual(planner.proposal?.id, "p2")
+        XCTAssertNil(planner.failure)
+        XCTAssertEqual(planner.nearbyCollectibles.map(\.id), ["n1", "n2"], "a response without nearby places keeps the list")
+    }
+
+    func testFailedEditKeepsTheLastWorkingRoute() async throws {
+        let (planner, transport) = await generatedPlanner([
+            .init(status: 200, body: #"{"proposal":\#(proposal("p2"))}"#),
+            .init(status: 422, body: #"{"error":"x","code":"no_route"}"#),
+            .init(status: 422, body: #"{"error":"x","code":"no_route"}"#)
+        ])
+        planner.toggle(.collectible(collectible("n1")))
+        await planner.route()
+        XCTAssertEqual(planner.proposal?.id, "p2")
+
+        planner.toggle(.collectible(collectible("n2")))
+        XCTAssertNil(planner.proposal, "an edit clears the route while it is recalculated")
+        await planner.route()
+        XCTAssertEqual(transport.requests.suffix(2).map { $0.url?.path }, ["/api/explorations/e1/reroute", "/api/explorations/plan"])
+        XCTAssertEqual(planner.failure, .noRoute)
+        XCTAssertEqual(planner.proposal?.id, "p2", "the last working route stays")
+        XCTAssertEqual(planner.stops.map(\.key), ["n1"], "and so do its stops")
+    }
+
+    func testEnhancingUpdatesNearbyPlacesAndFocusHighlightsItems() async throws {
+        let metrics = #"{"distanceDeltaM":1,"durationDeltaS":1}"#
+        let (planner, _) = await generatedPlanner([
+            .init(status: 200, body: #"{"proposal":\#(proposal("p2")),"metrics":\#(metrics),"flowlineIds":["f1"],\#(nearby(["n4"]))}"#)
+        ])
+        planner.focus(nearby: try XCTUnwrap(planner.nearbyChoices.first))
+        XCTAssertEqual(planner.focusedCollectibleId, "n1")
+        XCTAssertEqual(planner.focusRequest, 1)
+        planner.focus(flowline: "f1")
+        XCTAssertEqual(planner.focusedFlowlineId, "f1")
+        XCTAssertNil(planner.focusedCollectibleId)
+        XCTAssertEqual(planner.focusedPoints.count, 2)
+        planner.mapSelected(collectibleId: "n2")
+        XCTAssertEqual(planner.focusedKey, "n2", "a POI tapped on the map highlights its row")
+        XCTAssertEqual(planner.focusRequest, 2, "the map is already there")
+        planner.mapSelected(collectibleId: "elsewhere")
+        XCTAssertNil(planner.focusedKey)
+
+        await planner.setFlowlineEnhancement("f1", enabled: true)
+        XCTAssertEqual(planner.nearbyChoices.map(\.id), ["n4"])
     }
 
     func testPointToPointEndsAtTheAim() async throws {
@@ -285,7 +409,7 @@ final class RoutePlannerModelTests: XCTestCase {
     }
 
     func testSaveStoresAPlannedExplorationAndClosesPlanner() async throws {
-        let saved = #"{"instance":{"id":"q","title":"Ride","description":"","status":"planned","difficulty":"easy","rewardXp":10,"objectives":[]},"plannedRoute":{"questInstanceId":"q","distanceM":1,"durationS":1,"geometry":{"type":"LineString","coordinates":[[11,48],[11.1,48.1]]},"start":{"lat":48,"lon":11}}}"#
+        let saved = #"{"instance":{"id":"q","title":"Ride","description":"","status":"active","difficulty":"easy","rewardXp":10,"objectives":[]},"plannedRoute":{"questInstanceId":"q","distanceM":1,"durationS":1,"geometry":{"type":"LineString","coordinates":[[11,48],[11.1,48.1]]},"start":{"lat":48,"lon":11}}}"#
         let transport = StubTransport([
             .init(status: 200, body: #"{"explorationId":"e1","proposal":\#(proposal("p1"))}"#),
             .init(status: 200, body: saved)

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { areaAnchors, customizedStops, flowlineRidePoints, rerouteTargets, type RouteProvider } from "./planner.js";
+import { areaAnchors, flowlineRidePoints, MAX_FLOWLINE_RIDE_POINTS, MAX_TRACE_ANCHORS, tracedStops, rerouteTargets, type RouteProvider } from "./planner.js";
 import { constraintFitFlag, proposalHint } from "./proposals.js";
 import { backtrackRatio, detourLengthM, routeKnots } from "./roundTrip.js";
 import { RoutingError } from "./routingClient.js";
+import { distanceBetween, toLatLon } from "./geo.js";
 import { at, flowlineGeometry, objectivesFor, pointTarget, straightLineRoute } from "./testFixtures.js";
 import type { QuestRouteTarget, RoutePlanningInput, RoutingRequest, ScoredRoute } from "./types.js";
 import { traversedFlowlines, validateRoute } from "./validation.js";
@@ -46,14 +47,16 @@ describe("rerouteTargets", () => {
   const a = pointTarget("a", "", 4, 0);
   const b = pointTarget("b", "", 0, 4);
   const c = pointTarget("c", "", -4, 0);
+  const lonLat = (point: { lat: number; lon: number }): [number, number] => [point.lon, point.lat];
+  // A 16 km square loop the base route rode: north, east, south, back west.
+  const loop = [at(0, 0), at(4, 0), at(4, 4), at(0, 4), at(0, 0)].map(lonLat);
   const reroute = (targets: QuestRouteTarget[], routing: RouteProvider = straightRouter()) => {
     const objectives = objectivesFor(targets.map((target) => ({ ...target, objectiveIds: ["places"] })), { places: targets.length });
     return rerouteTargets({
       requestId: "req",
       playerId: "player",
       scopeId: "exploration",
-      base: { id: "base", label: "balanced", recommended: true },
-      baseStops: [{ targetId: "a" }, { targetId: "b" }],
+      base: { id: "base", label: "balanced", recommended: true, geometry: { type: "LineString", coordinates: loop } },
       targets: targets.map((target) => ({ ...target, objectiveIds: ["places"] })),
       objectives,
       flowlines: [],
@@ -61,11 +64,23 @@ describe("rerouteTargets", () => {
     }, { routing, log: () => undefined });
   };
 
-  it("keeps the base order when removing and inserts added targets cheaply", () => {
-    expect(customizedStops(roundTrip(30), [{ targetId: "a" }, { targetId: "b" }], [b]).map((stop) => stop.target.id)).toEqual(["b"]);
-    const order = customizedStops(roundTrip(30), [{ targetId: "a" }, { targetId: "b" }], [a, b, c]).map((stop) => stop.target.id);
-    expect(order).toHaveLength(3);
-    expect(new Set(order)).toEqual(new Set(["a", "b", "c"]));
+  it("follows the base road and opens it only around an added stop", () => {
+    const side = pointTarget("side", "", 2, 4.2);
+    const stops = tracedStops(loop, [side]);
+    const ids = stops.map((stop) => stop.target.id);
+    expect(ids.filter((id) => !id.startsWith("waypoint:"))).toEqual(["side"]);
+    const anchors = stops.filter((stop) => stop.target.id.startsWith("waypoint:"));
+    expect(anchors.length).toBeGreaterThan(10);
+    expect(anchors.length).toBeLessThanOrEqual(MAX_TRACE_ANCHORS);
+    // Every anchor lies on the base road, and none sits right next to the detour.
+    for (const { target } of anchors) {
+      expect(Math.min(...loop.map((point) => distanceBetween(toLatLon(point), target.coordinate)))).toBeLessThan(4_100);
+      expect(distanceBetween(target.coordinate, at(2, 4))).toBeGreaterThan(700);
+    }
+    // The stop is inserted where it lies along the loop: after anchors on the first two sides.
+    const index = ids.indexOf("side");
+    expect(stops.slice(0, index).some((stop) => distanceBetween(stop.target.coordinate, at(4, 2)) < 900)).toBe(true);
+    expect(stops.slice(index + 1).some((stop) => distanceBetween(stop.target.coordinate, at(0, 2)) < 900)).toBe(true);
   });
 
   it("re-plans exactly the edited set as a customized version of the base proposal", async () => {
@@ -158,15 +173,34 @@ describe("areaAnchors Flowline direction", () => {
 });
 
 describe("flowlineRidePoints", () => {
-  it("rides a Flowline from the end nearer the start through its middle to the far end", () => {
+  it("rides a Flowline from the end nearer the start to the far end", () => {
     const flowline = flowlineGeometry("f", [5, 0], [1, 0]);
     const points = flowlineRidePoints(at(0, 0), flowline);
-    const [lon, lat] = flowline.coordinates[3];
-    expect(points).toEqual([
-      { lat: flowline.coordinates[5][1], lon: flowline.coordinates[5][0] },
-      { lat, lon },
-      { lat: flowline.coordinates[0][1], lon: flowline.coordinates[0][0] }
-    ]);
+    const reversed = [...flowline.coordinates].reverse().map(([lon, lat]) => ({ lat, lon }));
+    expect(points[0]).toEqual(reversed[0]);
+    expect(points.at(-1)).toEqual(reversed.at(-1));
+  });
+
+  it("keeps a short bend the router would otherwise cut", () => {
+    const coordinates = [at(0, 0), at(0.3, 0.1), at(0.6, 0), at(1.2, 0)].map(({ lat, lon }) => [lon, lat] as [number, number]);
+    const points = flowlineRidePoints(at(0, 0), { id: "b", name: "b", coordinates, lengthMeters: 1_300 });
+    expect(points).toContainEqual({ lat: coordinates[1][1], lon: coordinates[1][0] });
+  });
+
+  it("pins a long, bending Flowline densely enough that the router cannot cut the bend", () => {
+    const coordinates = Array.from({ length: 81 }, (_value, index) => {
+      const point = index <= 40 ? at(index * 0.1, 0) : at(4, (index - 40) * 0.1);
+      return [point.lon, point.lat] as [number, number];
+    });
+    const flowline = { id: "bend", name: "bend", coordinates, lengthMeters: 8_000 };
+    const points = flowlineRidePoints(at(0, 0), flowline);
+    expect(points[0]).toEqual({ lat: coordinates[0][1], lon: coordinates[0][0] });
+    expect(points[points.length - 1]).toEqual({ lat: coordinates[80][1], lon: coordinates[80][0] });
+    expect(points, "the corner").toContainEqual({ lat: coordinates[40][1], lon: coordinates[40][0] });
+    expect(points.length).toBeLessThanOrEqual(MAX_FLOWLINE_RIDE_POINTS);
+    expect(points.length).toBeGreaterThan(3);
+    const gaps = points.slice(1).map((point, index) => distanceBetween(points[index], point));
+    expect(Math.max(...gaps)).toBeLessThan(1_000);
   });
 });
 

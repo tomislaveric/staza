@@ -153,9 +153,6 @@ export const config = {
   worldQueryPaddingMeters: decimalEnv("WORLD_QUERY_PADDING_METERS", 500),
   worldViewportLimit: integerEnv("WORLD_VIEWPORT_LIMIT", 300),
   worldAreaLimit: integerEnv("WORLD_AREA_LIMIT", 3000),
-  worldFlowlineLimit: integerEnv("WORLD_FLOWLINE_LIMIT", 2000),
-  /** Testing aid: the World map shows every Flowline route planning may use, not only ridden ones. */
-  worldShowAllFlowlines: booleanEnv("WORLD_SHOW_ALL_FLOWLINES", false),
   basemapStyleUrl: httpsUrlEnv("BASEMAP_STYLE_URL", "https://tiles.openfreemap.org/styles/liberty"),
   basemapAttribution: process.env.BASEMAP_ATTRIBUTION?.trim()
     || "\u00a9 OpenFreeMap \u00b7 \u00a9 OpenMapTiles \u00b7 \u00a9 OpenStreetMap contributors",

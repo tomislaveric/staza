@@ -91,12 +91,11 @@ listed in `WEBAUTHN_EXTRA_ORIGINS`.
 | --- | --- | --- | --- | --- |
 | GET | `/api/world/basemap` | bearer | – | `{ styleUrl, attribution, palette }` (see MapLibre) |
 | GET | `/api/world/basemap/style.json` | public | – | Staza-themed MapLibre style JSON |
-| GET | `/api/world?bbox=west,south,east,north` | bearer | Optional `bbox`, `collectibleBbox`, `skipCollectibles=1` | Viewport collectibles, stats, and Fartleks |
-| GET | `/api/world/quest-targets` | bearer | Repeated `collectibleId` and/or `flowlineId` query fields | `{ collectibles, flowlines }` |
+| GET | `/api/world?bbox=west,south,east,north` | bearer | Optional `bbox`, `collectibleBbox`, `skipCollectibles=1` | Viewport collectibles and saved Exploration routes |
 | GET | `/api/quest-instances` | bearer | – | `{ instances: QuestInstance[] }` |
 | POST | `/api/quest-instances/:id/retry` | bearer | No body | `204` |
 | DELETE | `/api/quest-instances/:id` | bearer | No body | `204` |
-| POST | `/api/explorations/generate` | bearer | `{ area: { bbox: "west,south,east,north", center: { lat, lon }, zoom }, start: { lat, lon }, sport? (cycling/running/hiking), routeType? (round_trip/point_to_point), constraint? ({ type: distance, meters } or { type: duration, seconds }), destinationId? }` | Generated exploration: `{ explorationId, proposals, catalog, truncated, limits, warnings }` |
+| POST | `/api/explorations/generate` | bearer | `{ area: { bbox: "west,south,east,north", center: { lat, lon }, zoom }, start: { lat, lon }, sport? (cycling/running/hiking), routeType? (round_trip/point_to_point), constraint? ({ type: distance, meters } or { type: duration, seconds }), destinationId? }` | Generated exploration: `{ explorationId, proposals, catalog, flowlineEnhancements, nearbyCollectibles, truncated, limits, warnings }` |
 | POST | `/api/explorations/:explorationId/reroute` | bearer | `{ proposalId, targetIds, waypoints? }` | `{ proposal }` |
 | POST | `/api/explorations/confirm` | bearer | `{ proposalId }` | `{ instance, plannedRoute }` |
 | GET | `/api/quest-instances/:id/planned-route` | bearer | – | `PlannedRoute` |
@@ -188,19 +187,14 @@ fields are omitted when not available; nested object fields are listed below.
 
 ### World, quests, and route planning
 
-- `GET /api/world` returns `collectibles`, `stats`, optional `truncated` or
-  `collectiblesSkipped`, `fartlekTruncated`, and `fartleks`. `stats` has
-  `totalCollectibles`, `discoveredCount`, and `remainingCount`. Each collectible
-  includes its catalog fields (`id`, `name`, `type`, `latitude`, `longitude`,
-  `radiusMeters`, `value`, and optional descriptive/source/category metadata)
-  plus `found` and `visibility`. Each Fartlek has `id`, `name`, `geometry`,
-  `lengthMeters`, `status`, `source`, `completed`, `completionCount`, and
-  optional `flowScore`, `bestElapsedTimeS`, and `latestCompletion`.
-  Fartlek geometry is `{ type: "LineString", coordinates: [longitude, latitude][] }`;
-  source has `sourceType`, `sourceExternalId`, and optional `sourceAttribution`.
-- `GET /api/world/quest-targets` accepts repeated `collectibleId` and
-  `flowlineId` query fields (at least one id; at most 100 total) and returns
-  `{ collectibles, flowlines }` in the same shapes.
+- `GET /api/world` with a `bbox` returns `collectibles` (or `collectiblesSkipped:
+  true`), `truncated`, and `explorationRoutes`; without a `bbox` it returns
+  `stats` (`totalCollectibles`, `discoveredCount`, `remainingCount`). Each
+  collectible includes its catalog fields (`id`, `name`, `type`, `latitude`,
+  `longitude`, `radiusMeters`, `value`, and optional descriptive/source/category
+  metadata) plus `found` and `visibility`. Flowlines are not part of the World
+  map: nearby ones are returned by `POST /api/explorations/generate` as optional
+  `flowlineEnhancements`.
 - `GET /api/quest-instances` returns `{ instances }`. Each instance has `id`,
   `suggestionId`, `templateId`, `templateVersion`, `title`, `description`,
   `recommendedLevel`, `status`, `difficulty`, `rewardXp`, `attemptCount`,
@@ -216,7 +210,11 @@ fields are omitted when not available; nested object fields are listed below.
   `catalog` has `collectibles` and `flowlines`; each warning has `code`,
   `requestedType`, `requested`, `longest`, and `message`.
 - `POST /api/explorations/:explorationId/reroute` returns `{ proposal }` with
-  the proposal fields above. `POST /api/explorations/confirm` returns
+  the proposal fields above plus `stopOrder` (the chosen target ids and
+  `waypoint:` ids in route order). It follows the base proposal's road and
+  detours only to the added stops. `plan`, `reroute` and `enhance` responses
+  also include `nearbyCollectibles` (same shape as in `generate`) for the
+  returned route, excluding chosen stops. `POST /api/explorations/confirm` returns
   `{ instance, plannedRoute }`. Confirmation accepts only `proposalId`; route
   geometry, targets, and objectives are loaded from server state.
 - `GET /api/quest-instances/:id/planned-route` returns `id`, `questInstanceId`,

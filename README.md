@@ -37,8 +37,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   — Explore this area reveals the area's Flowlines as a game moment, and a separate
   manual planner connects the chosen Flowlines and collectibles into a route.
 - [Explore sessions and saved Explorations](features/explore-sessions-and-saved-explorations/README.md)
-  — Explore shows temporary opportunities only, Save Exploration persists a planned route
-  (dotted on World), Start is separate, and activities accumulate progress.
+  — Explore shows temporary opportunities only, Save Exploration persists an active route
+  (dotted on World) that can only be deleted, and later activities accumulate progress.
 - [Explore this Area](features/explore-this-area/README.md) — route-first exploration:
   choose start and ride length, pick one of several generated routes from the frozen map
   area, tweak its targets, and confirm it as a single exploration.
@@ -70,6 +70,7 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   Actions while keeping PostgreSQL private on the VPS.
 - [iOS app foundations and shell](features/ios-app-foundations-shell/README.md) — establish the SwiftUI app, native networking and session foundations, design tokens, localization, and OS-native navigation shell.
 - [iOS collectible category icons](features/ios-collectible-category-icons/README.md) — show category icons (SF Symbols) instead of plain circles for collectibles on the iOS World and replay maps, with web-style quest/selection highlights.
+- [iOS Explore planner web parity](features/ios-explore-planner-web-parity/README.md) — iOS Explore edits bend the baseline route locally via reroute, restore it instantly, list nearby places that are not already stops, and match the web planner UI.
 - [iOS Figma redesign](features/ios-figma-redesign/README.md) — design a dark, brand-aligned iOS UX in Figma with one frame per SwiftUI view, then restyle the SwiftUI app to match.
 - [iOS World improvements](features/ios-world-improvements/README.md) — native iOS World tab with a locate control, web-parity filters, and a persistent bottom sheet for stats, Explore, explorations, and item details.
 - [HUD](features/hud/README.md) — replace physical-scene Coin visuals with a
@@ -257,8 +258,8 @@ Single-container POC for turning a FIT ride into collectible game events and an 
   canonical event relationships and shared replay/HUD presentation metadata.
 - [World destination route enhancements](features/world-destination-route-enhancements/README.md)
   — make World destination-first with a Flowline-free baseline route, optional
-  cycling Flowline enhancements, and visible selectable POIs; the iOS World tab is
-  simplified to the Explore route planner.
+  cycling Flowline enhancements, and visible selectable POIs; web and iOS World are
+  simplified to one Explore route planner with optional nearby POIs.
 - [World Filter](features/world-filter/README.md)
   — combine multi-select, marker-keyed World map filters and remove the
   redundant map-overlay legend.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRouteDistance, formatRouteDuration, plannedRouteGpxUrl, plannedRouteSummary } from "./route-format.js";
+import { formatElapsed, formatRouteDistance, formatRouteDuration, formatSpeed, plannedRouteGpxUrl, plannedRouteSummary } from "./route-format.js";
 import { endpointsToGeoJson } from "./world-map.js";
 
 describe("route formatting", () => {
@@ -26,5 +26,22 @@ describe("endpointsToGeoJson", () => {
         { type: "Feature", properties: { kind: "start" }, geometry: { type: "Point", coordinates: [9, 50] } },
         { type: "Feature", properties: { kind: "end" }, geometry: { type: "Point", coordinates: [10, 51] } }
       ]);
+  });
+});
+
+describe("formatElapsed", () => {
+  it("formats under-an-hour durations as mm:ss", () => {
+    expect(formatElapsed(65)).toBe("1:05");
+    expect(formatElapsed(600)).toBe("10:00");
+  });
+
+  it("formats hour-or-longer durations as h:mm:ss", () => {
+    expect(formatElapsed(3_725)).toBe("1:02:05");
+  });
+});
+
+describe("formatSpeed", () => {
+  it("converts m/s to km/h with one decimal", () => {
+    expect(formatSpeed(5)).toBe("18.0 km/h");
   });
 });

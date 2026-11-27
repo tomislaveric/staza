@@ -1,6 +1,8 @@
 import { EMPTY_FEATURE_COLLECTION } from "../shared/map/staza-collectible-features.js";
 import {
   bindCollectibleInteractions,
+  COLLECTIBLE_CATEGORY_ICON_LAYER,
+  COLLECTIBLE_LAYER,
   ensureCollectibleLayers,
   loadCollectibleCategoryIcons,
   setCollectibleData
@@ -8,12 +10,21 @@ import {
 import {
   bindFartlekInteractions,
   ensureFartlekLayers,
+  FARTLEK_HIT_LAYER,
   setFartlekData
 } from "../shared/map/staza-fartlek-layers.js";
 import { createStazaMap, DEFAULT_CENTER, DEFAULT_ZOOM } from "../shared/map/staza-map.js";
 import { stazaRouteLayers } from "../shared/map/staza-route-layers.js";
 import { boundsToParameter, pointsToBounds, readBounds, routeToGeoJson } from "../shared/map/staza-map-utils.js";
 import { STAZA_MAP_PALETTE } from "../shared/map/staza-map-palette.js";
+
+const SELECTABLE_LAYERS = [COLLECTIBLE_LAYER, COLLECTIBLE_CATEGORY_ICON_LAYER, FARTLEK_HIT_LAYER];
+
+/** Whether a map click landed on a POI or Flowline, which their own layer handlers select. */
+export const clickHitsFeature = (map, point) => {
+  const layers = SELECTABLE_LAYERS.filter((id) => map.getLayer(id));
+  return layers.length > 0 && map.queryRenderedFeatures(point, { layers }).length > 0;
+};
 
 /** Width reserved on the right for the detail panel so framing never hides the subject. */
 const DETAIL_PANEL_INSET = 368;
@@ -90,32 +101,6 @@ export const savedRoutesToGeoJson = (routes = []) => ({
     .map((route) => ({ type: "Feature", properties: { explorationId: route.id }, geometry: route.geometry }))
 });
 
-const EXPLORE_FRAME_SOURCE = "staza-explore-frame";
-export const EXPLORE_FRAME_SOURCE_ID = EXPLORE_FRAME_SOURCE;
-
-/** The explored frame when a wide viewport was clamped to the max Explore size: a thin dashed outline. */
-export const exploreFrameLayers = () => [{
-  id: `${EXPLORE_FRAME_SOURCE}-line`,
-  type: "line",
-  source: EXPLORE_FRAME_SOURCE,
-  layout: { "line-join": "miter" },
-  paint: { "line-color": STAZA_MAP_PALETTE.questRoute, "line-opacity": 0.8, "line-width": 2, "line-dasharray": [3, 2] }
-}];
-
-/** A closed outline of a "west,south,east,north" bbox; empty without one. */
-export const exploreFrameToGeoJson = (bbox) => {
-  const [west, south, east, north] = typeof bbox === "string" ? bbox.split(",").map(Number) : [];
-  if (![west, south, east, north].every(Number.isFinite)) return EMPTY_FEATURE_COLLECTION;
-  return {
-    type: "FeatureCollection",
-    features: [{
-      type: "Feature",
-      properties: {},
-      geometry: { type: "LineString", coordinates: [[west, south], [east, south], [east, north], [west, north], [west, south]] }
-    }]
-  };
-};
-
 export {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -161,7 +146,7 @@ const documentRefOf = (container) => container.ownerDocument ?? document;
  * shared Staza map foundation; Staza gameplay rules stay in the World page.
  */
 export const createWorldMap = async (container, {
-  styleUrl, attribution, homePosition, onViewportChange, onCollectibleSelect, onCollectibleHover, onFartlekSelect
+  styleUrl, attribution, homePosition, onViewportChange, onCollectibleSelect, onCollectibleHover, onFartlekSelect, onFartlekHover
 }) => {
   const staza = await createStazaMap(container, { styleUrl, attribution, ...worldMapInitialView(homePosition) });
   const { map } = staza;
@@ -170,7 +155,6 @@ export const createWorldMap = async (container, {
   let pendingCollectibles = EMPTY_FEATURE_COLLECTION;
   let pendingFartleks = EMPTY_FEATURE_COLLECTION;
   let pendingSavedRoutes = [];
-  let pendingExploreFrame;
   const setSavedRouteData = () => map.getSource(SAVED_ROUTES_SOURCE)?.setData(savedRoutesToGeoJson(pendingSavedRoutes));
   let panelInset = 0;
   let pickHandler;
@@ -191,11 +175,6 @@ export const createWorldMap = async (container, {
     map.addSource(SAVED_ROUTES_SOURCE, { type: "geojson", data: savedRoutesToGeoJson() });
     for (const layer of savedRouteLayers()) map.addLayer(layer);
   };
-  const ensureExploreFrameLayers = () => {
-    if (map.getSource(EXPLORE_FRAME_SOURCE)) return;
-    map.addSource(EXPLORE_FRAME_SOURCE, { type: "geojson", data: exploreFrameToGeoJson(pendingExploreFrame) });
-    for (const layer of exploreFrameLayers()) map.addLayer(layer);
-  };
   const ensureRouteLayers = () => {
     if (map.getSource(ROUTE_SOURCE)) return;
     map.addSource(ROUTE_SOURCE, { type: "geojson", data: routeToGeoJson() });
@@ -215,7 +194,6 @@ export const createWorldMap = async (container, {
   // Saved Exploration routes are added first, so they stay beneath every other overlay.
   ensureSavedRouteLayers();
   setSavedRouteData();
-  ensureExploreFrameLayers();
   ensureRouteLayers();
   ensureEndpointLayers();
   // Fartlek segment layers draw above routes/activity layers but under point collectibles.
@@ -241,13 +219,13 @@ export const createWorldMap = async (container, {
   setHomePosition(homePosition);
 
   if (onCollectibleSelect) bindCollectibleInteractions(map, { onSelect: onCollectibleSelect, onHover: onCollectibleHover });
-  if (onFartlekSelect) bindFartlekInteractions(map, { onSelect: onFartlekSelect });
+  if (onFartlekSelect) bindFartlekInteractions(map, { onSelect: onFartlekSelect, onHover: onFartlekHover });
 
   map.on("moveend", () => onViewportChange(readBounds(map)));
   map.on("click", (event) => {
     const point = { lat: event.lngLat.lat, lon: event.lngLat.lng };
     if (pickHandler) pickHandler(point);
-    else clickHandler?.(point);
+    else if (!clickHitsFeature(map, event.point)) clickHandler?.(point);
   });
 
   const closePointTooltip = () => {
@@ -280,13 +258,6 @@ export const createWorldMap = async (container, {
       pendingSavedRoutes = routes ?? [];
       if (!styleReady) return;
       setSavedRouteData();
-    },
-    /** Outlines the clamped Explore frame ("west,south,east,north") during a session; undefined clears it. */
-    setExploreFrame(bbox) {
-      pendingExploreFrame = bbox;
-      if (!styleReady) return;
-      ensureExploreFrameLayers();
-      map.getSource(EXPLORE_FRAME_SOURCE).setData(exploreFrameToGeoJson(bbox));
     },
     /** The quest route; `planned` draws a not-yet-ridden planner route in blue dashes instead. */
     setRoute(route, { planned = false } = {}) {

@@ -1,10 +1,19 @@
 # explore-sessions-and-saved-explorations
 
+> **Update: Start Exploration is removed.** Saving an Exploration makes it `active` right away
+> (`started_at` = save time), so activities from then on count. A saved Exploration can only be
+> deleted. Web, iOS and the server drop the Start button, `POST /api/quest-instances/:id/start`
+> and the legacy `POST /api/explorations/confirm`. The `planned` status no longer exists:
+> migration `043_saved_explorations_active` activates existing planned rows from the migration
+> time and restricts the status CHECK to `active | partially_completed | completed`. The list shows
+> no label for `active` Explorations; only Partially completed and Completed are labelled. Sections below that describe Start or `planned` are
+> historical.
+
 > **Amended by [world-destination-route-enhancements](../world-destination-route-enhancements/README.md):**
 > curated POIs are visible in the default World viewport, and Explore is the only route-planning
 > entry point. Generate first returns a destination-focused baseline without Flowlines or
 > unselected POI stops; nearby cycling Flowlines can then be added as optional enhancements.
-> Saving and starting remain separate, and optional Flowlines create no progression objectives.
+> Optional Flowlines create no progression objectives.
 
 > **Amended by [route-generation-v2](../route-generation-v2/README.md).** Generate route builds
 > one route instead of picking the

@@ -9,7 +9,6 @@ const playerId = "00000000-0000-4000-8000-000000000098";
 const otherPlayerId = "00000000-0000-4000-8000-000000000097";
 const pool = databaseUrl ? createDatabasePool(databaseUrl) : undefined;
 const repository = pool ? new FlowlineRevealRepository(pool) : undefined;
-const bounds = { minLatitude: 55, maxLatitude: 56, minLongitude: 12, maxLongitude: 13 };
 
 const insertFlowline = (id: string, longitude: number, flowScore: number) => pool!.query(
   `INSERT INTO fartleks (
@@ -46,38 +45,5 @@ describePersistence("FlowlineRevealRepository", () => {
       "INSERT INTO player_flowline_reveals (player_id, fartlek_id, source) VALUES ($1, 'flow-outside', 'explore')",
       [playerId]
     )).rejects.toThrow();
-  });
-
-  it("lists opportunity candidates the player has not completed, without geometry", async () => {
-    expect((await repository!.listOpportunityCandidatesWithinBounds(playerId, bounds)).map((row) => row.id).sort()).toEqual(["flow-a", "flow-b"]);
-    await pool!.query(
-      "INSERT INTO activities (id, player_id, source_type, started_at, xp_earned, collected_count) VALUES ('ride-0', $1, 'fit', now(), 0, 0)",
-      [playerId]
-    );
-    await pool!.query(
-      `INSERT INTO fartlek_completions (id, fartlek_id, player_id, activity_id, completed_at, elapsed_time_s, average_speed_mps,
-         fartlek_length_m_snapshot, fartlek_geometry_version_snapshot)
-       VALUES ('00000000-0000-4000-8000-0000000000c0', 'flow-b', $1, 'ride-0', now(), 300, 5, 1500, 1)`,
-      [playerId]
-    );
-    expect(await repository!.listOpportunityCandidatesWithinBounds(playerId, bounds)).toEqual([{ id: "flow-a", lengthMeters: 1500, flowScore: 80 }]);
-    expect(await repository!.listOpportunityCandidatesWithinBounds(otherPlayerId, bounds)).toHaveLength(2);
-    expect((await repository!.listByIds(["flow-b", "missing"])).map((row) => row.id)).toEqual(["flow-b"]);
-  });
-
-  it("lists only the player's completed Flowlines for the default map", async () => {
-    await pool!.query(
-      "INSERT INTO activities (id, player_id, source_type, started_at, xp_earned, collected_count) VALUES ('ride-1', $1, 'fit', now(), 0, 0)",
-      [playerId]
-    );
-    await pool!.query(
-      `INSERT INTO fartlek_completions (id, fartlek_id, player_id, activity_id, completed_at, elapsed_time_s, average_speed_mps,
-         fartlek_length_m_snapshot, fartlek_geometry_version_snapshot)
-       VALUES ('00000000-0000-4000-8000-0000000000c1', 'flow-a', $1, 'ride-1', now(), 300, 5, 1500, 1)`,
-      [playerId]
-    );
-    await repository!.reveal(playerId, ["flow-b"], "ride");
-    expect(await repository!.listCompletedWithinBoundsLimited(playerId, bounds)).toMatchObject({ truncated: false, fartleks: [{ id: "flow-a" }] });
-    expect((await repository!.listCompletedWithinBoundsLimited(otherPlayerId, bounds)).fartleks).toEqual([]);
   });
 });

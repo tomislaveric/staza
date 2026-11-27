@@ -3,22 +3,23 @@ import { CollectibleSwatch } from "./collectible-swatch.js";
 import { formatRouteDistance, formatRouteDuration, SPORT_OPTIONS } from "./route-format.js";
 
 /**
- * The route planner as a short wizard: pick a sport, pick a shape, and Staza generates one route
- * towards the aimed target (the map center). Its stops become the editable stop list; every later
- * edit reroutes. Saving is the only persistence step.
+ * Explore: pick a sport and a shape, and Staza generates one Flowline-free route towards the aimed
+ * target (the map center) or a chosen POI. Every later stop edit reroutes. Cycling routes offer a few
+ * nearby Flowlines as optional enhancements; nearby POIs can be added as stops. Saving is the only
+ * persistence step.
  * - `sportChosen` / `shapeChosen`: the wizard steps the player completed; `stepsOpen` shows them again.
  * - `generated`: Staza generated the current route (possibly edited since).
  * - `stopsAreSuggested`: the stops are exactly the generated route's; own edits clear it.
- * - `adding`: "flowline" | "collectible" | "waypoint" while the map adds that kind of stop.
  * - `picking`: "start" | "end" while the map sets that endpoint.
  * - `status`: "idle" | "routing" | "generating" | "saving".
  * - `proposal`: the routed result for the current stops; cleared by every edit.
  */
-export const createPlannerState = ({ start, stops = [], sport, routeType, destination, destinationId } = {}) => ({
+export const createPlannerState = ({ start, stops = [], sport, routeType, destination, destinationId, destinationName } = {}) => ({
   start,
   end: undefined,
   destination,
   destinationId,
+  destinationName,
   routeType: routeType ?? "round_trip",
   sport: sport ?? "cycling",
   sportChosen: Boolean(sport),
@@ -27,7 +28,6 @@ export const createPlannerState = ({ start, stops = [], sport, routeType, destin
   picking: start ? undefined : "start",
   stops: [...stops],
   stopsAreSuggested: false,
-  adding: undefined,
   keepOrder: false,
   status: "idle",
   proposal: undefined,
@@ -38,6 +38,8 @@ export const createPlannerState = ({ start, stops = [], sport, routeType, destin
   flowlineEnhancements: [],
   selectedEnhancementIds: [],
   enhancementMetrics: undefined,
+  nearbyCollectibles: [],
+  baselineNearbyCollectibles: [],
   rerouteQueued: false,
   dropped: [],
   error: undefined
@@ -55,12 +57,7 @@ export const canEditStops = (state) => Boolean(state.generated || state.proposal
 export const waypointKey = (point) => `waypoint:${point.lat.toFixed(6)},${point.lon.toFixed(6)}`;
 
 /** The id the server uses for a stop in `stopOrder` and the dropped lists. */
-export const stopKey = (stop) => stop.kind === "flowline" ? `flowline:${stop.id}`
-  : stop.kind === "waypoint" ? waypointKey(stop) : stop.id;
-
-export const flowlineStop = (flowline) => ({
-  kind: "flowline", id: flowline.id, name: flowline.name, coordinates: flowline.geometry?.coordinates ?? []
-});
+export const stopKey = (stop) => stop.kind === "waypoint" ? waypointKey(stop) : stop.id;
 
 export const collectibleStop = (collectible) => ({
   kind: "collectible",
@@ -94,7 +91,7 @@ export const orderStops = (stops, stopOrder = []) => {
   return [...stops].sort((left, right) => (rank.get(stopKey(left)) ?? Infinity) - (rank.get(stopKey(right)) ?? Infinity));
 };
 
-const stopPoints = (stop) => stop.kind === "flowline" ? stop.coordinates.map(([lon, lat]) => ({ lat, lon })) : [{ lat: stop.lat, lon: stop.lon }];
+const stopPoints = (stop) => [{ lat: stop.lat, lon: stop.lon }];
 
 /** A planning area that contains the start, end and every stop, padded so routing has room. */
 export const planArea = (state) => {
@@ -128,7 +125,7 @@ const rideBody = (state) => ({
 export const buildPlanRequest = (state) => {
   if (!state.start) return { error: "Choose a start on the map." };
   if (state.routeType === "point_to_point" && !state.end) return { error: "Choose an end point on the map." };
-  if (!state.stops.length) return { error: "Add a Flowline, collectible or map point first." };
+  if (!state.stops.length) return { error: "Add a place or map point first." };
   return {
     body: {
       area: planArea(state),
@@ -137,6 +134,28 @@ export const buildPlanRequest = (state) => {
       stops: state.stops.map((stop) => stop.kind === "waypoint"
         ? { kind: "waypoint", lat: stop.lat, lon: stop.lon }
         : { kind: stop.kind, id: stop.id })
+    }
+  };
+};
+
+/**
+ * How a stop edit on a generated route is routed. Removing every added stop restores the baseline;
+ * adding stops while the suggested ones stay detours along the baseline (`POST .../reroute`);
+ * anything else, such as a reordered list or a removed destination, is planned from scratch.
+ */
+export const routeEdit = (state) => {
+  if (!state.generated || !state.baselineProposal || !state.explorationId) return { kind: "plan" };
+  const suggested = suggestedStops(state.baselineProposal, state.catalog, state.destinationId).map(stopKey);
+  const keys = state.stops.map(stopKey);
+  if (!suggested.every((key) => keys.includes(key))) return { kind: "plan" };
+  if (keys.length === suggested.length) return { kind: "baseline" };
+  if (state.keepOrder) return { kind: "plan" };
+  return {
+    kind: "reroute",
+    body: {
+      proposalId: state.baselineProposal.id,
+      targetIds: state.stops.filter((stop) => stop.kind !== "waypoint").map((stop) => stop.id),
+      waypoints: state.stops.filter((stop) => stop.kind === "waypoint").map(({ lat, lon }) => ({ lat, lon }))
     }
   };
 };
@@ -160,21 +179,24 @@ export const buildSuggestRequest = (state, aim) => {
   };
 };
 
-/** A generated route's stops: its included collectibles and the unridden Flowlines it rides. */
-export const suggestedStops = (proposal, catalog = {}) => {
+/** A generated route's stops: only the explicitly chosen destination POI. */
+export const suggestedStops = (proposal, catalog = {}, destinationId) => {
   const collectibles = new Map((catalog.collectibles ?? []).map((collectible) => [collectible.id, collectible]));
-  return (proposal.includedTargetIds ?? []).map((id) => collectibles.get(id)).filter(Boolean).map(collectibleStop);
+  return (proposal.includedTargetIds ?? []).filter((id) => id === destinationId)
+    .map((id) => collectibles.get(id)).filter(Boolean).map(collectibleStop);
 };
 
-/** The crosshair marks the target until a route exists: a round trip's turning point or an A to B route's end. */
-export const showsAim = (state) => (state.routeType === "round_trip" || !state.end)
+/** The crosshair marks the target until a route or POI destination exists: a round trip's turning point or an A to B route's end. */
+export const showsAim = (state) => !state.destinationId && (state.routeType === "round_trip" || !state.end)
   && !state.generated && !state.proposal;
+
+/** Nothing planned yet: the saved Explorations are listed below the planner. */
+export const isFresh = (state) => !state.generated && !state.proposal && !state.stops.length && state.status === "idle";
 
 /** Names of stops the routed proposal had to leave out. */
 export const droppedStops = (stops, proposal) => {
   if (!proposal) return [];
   const dropped = new Set([
-    ...(proposal.droppedFlowlineIds ?? []).map((id) => `flowline:${id}`),
     ...(proposal.droppedTargetIds ?? []),
     ...(proposal.droppedWaypoints ?? []).map(waypointKey)
   ]);
@@ -183,11 +205,9 @@ export const droppedStops = (stops, proposal) => {
 
 const stopName = (stop) => stop.kind === "waypoint" ? `Map point ${stop.lat.toFixed(4)}, ${stop.lon.toFixed(4)}` : stop.name;
 
-const stopIcon = (stop) => stop.kind === "flowline" ? '<b class="fartlek-swatch" aria-hidden="true"></b>'
-  : stop.kind === "collectible" ? CollectibleSwatch({ category: stop.category, visited: stop.visited })
-    : '<b class="route-planner-waypoint" aria-hidden="true"></b>';
+const stopIcon = (stop) => stop.kind === "collectible" ? CollectibleSwatch({ category: stop.category, visited: stop.visited })
+  : '<b class="route-planner-waypoint" aria-hidden="true"></b>';
 
-const formatPoint = (point) => point ? `${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}` : "Not set";
 
 const statusLine = (state) => {
   if (state.error) return `<p class="route-planner-error" role="alert">${escapeHtml(state.error)}</p>`;
@@ -196,23 +216,18 @@ const statusLine = (state) => {
   if (state.status === "saving") return '<p class="route-planner-status" role="status">Saving exploration\u2026</p>';
   if (state.picking === "start") return '<p class="route-planner-status" role="status">Click the map to set your start.</p>';
   if (state.picking === "end") return '<p class="route-planner-status" role="status">Click the map to set your end point.</p>';
-  if (state.adding === "flowline") return '<p class="route-planner-status" role="status">Select a Flowline on the map.</p>';
-  if (state.adding === "collectible") return '<p class="route-planner-status" role="status">Select a collectible on the map.</p>';
-  if (state.adding === "waypoint") return '<p class="route-planner-status" role="status">Click the map to add a waypoint.</p>';
   return "";
 };
 
 const pointRow = (kind, label, state, idle) => `
   <div class="route-planner-point${state.picking === kind ? " is-picking" : ""}">
-    <span><small>${label}</small> <strong>${escapeHtml(formatPoint(state[kind]))}</strong></span>
+    <span><small>${label}</small>${state[kind] ? "" : " <strong>Not set</strong>"}</span>
     <span class="route-planner-point-actions">
       <button type="button" data-planner-pick="${kind}" aria-pressed="${state.picking === kind}"${idle ? "" : " disabled"}>${state.picking === kind ? "Click the map" : "Select on map"}</button>
-      ${kind === "start" ? `<button type="button" data-planner-locate${idle ? "" : " disabled"}>Locate me</button>` : ""}
+      ${kind === "start" ? `<button type="button" data-planner-locate${state.start ? ' class="is-set"' : ""}${idle ? "" : " disabled"}>Locate me</button>` : ""}
     </span>
   </div>
 `;
-
-const addLabels = { flowline: "Add Flowline", collectible: "Add Collectible", waypoint: "Add waypoint" };
 
 const SPORT_ICONS = { cycling: "\u{1F6B2}", running: "\u{1F3C3}", hiking: "\u{1F97E}" };
 export const ROUTE_SHAPES = [
@@ -270,27 +285,72 @@ const routeCard = (state, dropped, idle) => {
       ${delta && state.selectedEnhancementIds.length ? `<p class="route-planner-note" data-enhancement-delta>Compared with baseline: ${escapeHtml(signed(delta.distanceDeltaM, formatRouteDistance))} \u00b7 ${escapeHtml(signed(delta.durationDeltaS, formatRouteDuration))}${Number.isFinite(delta.elevationGainDeltaM) ? ` \u00b7 \u2191 ${delta.elevationGainDeltaM > 0 ? "+" : ""}${Math.round(delta.elevationGainDeltaM)} m` : ""}</p>` : ""}
       ${proposal && dropped.length ? `<p class="route-planner-note">Couldn't route ${escapeHtml(dropped.map(stopName).join(", "))}, so ${dropped.length === 1 ? "it was" : "they were"} left out.</p>` : ""}
       ${proposal ? `
-        <p class="route-planner-note">Saving keeps this route on your World. Start it whenever you go; progress only counts from activities after you start.</p>
         <button type="button" class="route-planner-confirm" data-planner-save${idle && !state.rerouteQueued ? "" : " disabled"}>Save Exploration</button>` : ""}
     </div>`;
 };
 
-const flowlineEnhancements = (state, idle) => state.generated && state.flowlineEnhancements.length ? `
+/** Optional Flowlines apply to the untouched baseline only; own stop edits route without them. */
+export const showsFlowlineEnhancements = (state) => Boolean(state.generated && state.stopsAreSuggested
+  && state.sport === "cycling" && state.flowlineEnhancements.length);
+
+const flowlineEnhancements = (state, idle) => showsFlowlineEnhancements(state) ? `
   <section class="route-planner-enhancements" aria-label="Optional Flowline enhancements">
     <h3>Optional Flowlines</h3>
     <p class="route-planner-note">Your baseline route works without these. Add one or combine several.</p>
     ${state.flowlineEnhancements.map(({ flowline, rationale }) => `
-      <label class="route-planner-enhancement">
+      <label class="route-planner-enhancement" data-planner-hover="flowline:${escapeHtml(flowline.id)}">
         <input type="checkbox" data-planner-enhancement="${escapeHtml(flowline.id)}"
           ${state.selectedEnhancementIds.includes(flowline.id) ? "checked" : ""}${idle ? "" : " disabled"}>
-        <span><strong>${escapeHtml(flowline.name)}</strong><small>${escapeHtml(rationale)}</small></span>
+        <span><span>${escapeHtml(flowline.name)}</span><small>${escapeHtml(rationale)}</small></span>
       </label>`).join("")}
   </section>` : "";
+
+/** Flowlines the route already rides; they are part of the route, so never optional. */
+export const riddenFlowlines = (state) => state.generated
+  ? (state.proposal?.traversedFlowlines ?? []).filter(({ id }) => !state.selectedEnhancementIds.includes(id))
+  : [];
+
+const onRouteFlowlines = (state) => riddenFlowlines(state).length ? `
+  <section class="route-planner-enhancements route-planner-ridden" aria-label="Flowlines on this route">
+    <h3>Flowlines on this route</h3>
+    <ol class="exploration-selected">
+      ${riddenFlowlines(state).map((flowline) => `
+      <li data-planner-hover="flowline:${escapeHtml(flowline.id)}">
+        <span class="exploration-target-name"><b class="fartlek-swatch" aria-hidden="true"></b><span data-user-content>${escapeHtml(flowline.name)}</span></span>
+      </li>`).join("")}
+    </ol>
+  </section>` : "";
+
+/** Nearby POIs not already chosen as stops; a chosen one moves to the stop list. */
+export const nearbyChoices = (state) => state.generated
+  ? state.nearbyCollectibles.filter(({ collectible }) => !hasStop(state.stops, collectibleStop(collectible)))
+  : [];
+
+const nearbyCollectibles = (state, idle) => nearbyChoices(state).length ? `
+  <section class="route-planner-enhancements route-planner-nearby" aria-label="Nearby places">
+    <h3>Nearby places</h3>
+    ${nearbyChoices(state).map(({ collectible }) => {
+      const stop = collectibleStop(collectible);
+      return `
+      <label class="route-planner-enhancement" data-planner-hover="collectible:${escapeHtml(collectible.id)}">
+        <input type="checkbox" data-planner-nearby="${escapeHtml(collectible.id)}"${idle ? "" : " disabled"}>
+        <span class="exploration-target-name">${stopIcon(stop)}<span data-user-content>${escapeHtml(collectible.name)}</span></span>
+      </label>`;
+    }).join("")}
+  </section>` : "";
+
+const destinationRow = (state, idle) => state.destinationId ? `
+  <div class="route-planner-point">
+    <span><small>Destination</small> <strong data-user-content>${escapeHtml(state.destinationName ?? "Selected place")}</strong></span>
+    <span class="route-planner-point-actions">
+      <button type="button" data-planner-destination-clear${idle ? "" : " disabled"}>Remove</button>
+    </span>
+  </div>` : "";
 
 const stopList = (state, dropped, idle) => state.stops.length ? `
   <ol class="exploration-selected route-planner-stops" aria-label="Route stops" data-planner-stops>
     ${state.stops.map((stop, index) => `
-      <li data-planner-stop="${escapeHtml(stopKey(stop))}"${dropped.includes(stop) ? ' class="is-dropped"' : ""}>
+      <li data-planner-stop="${escapeHtml(stopKey(stop))}"${stop.kind === "collectible" ? ` data-planner-hover="collectible:${escapeHtml(stop.id)}"` : ""}${dropped.includes(stop) ? ' class="is-dropped"' : ""}>
         <span class="exploration-target-name">${stopIcon(stop)}<span data-user-content>${escapeHtml(stopName(stop))}</span></span>
         <span class="route-planner-stop-actions">
           <button type="button" data-planner-move="${index}:-1" aria-label="Move ${escapeHtml(stopName(stop))} up"${idle && index > 0 ? "" : " disabled"}>\u2191</button>
@@ -298,38 +358,37 @@ const stopList = (state, dropped, idle) => state.stops.length ? `
           <button type="button" data-planner-remove="${index}" aria-label="Remove ${escapeHtml(stopName(stop))}"${idle ? "" : " disabled"}>\u2715</button>
         </span>
       </li>`).join("")}
-  </ol>
-  <p class="route-planner-note">${state.keepOrder ? "Your order is kept." : "Staza orders the stops; move one to keep your own order."}</p>`
-  : '<p class="route-planner-note">Add Flowlines, collectibles or waypoints. Staza only connects what you choose.</p>';
+  </ol>`
+  : "";
 
-/** The wizard planner panel. Pure render. */
+/** The Explore panel. Pure render. */
 export const RoutePlannerPanel = (state) => {
   const idle = state.status === "idle";
   const dropped = droppedStops(state.stops, state.proposal);
   const routed = Boolean(state.generated || state.proposal);
   const ownStopsUnrouted = !routed && state.stops.length > 0;
   return `
-    <section class="world-detail exploration-panel route-planner" aria-label="Plan a route">
+    <section class="world-detail exploration-panel route-planner" aria-label="Explore">
       <header>
         <div>
-          <p class="world-detail-meta"><small>Sport, shape, done: Staza suggests a route</small></p>
-          <h2>Plan a route</h2>
+          <h2>Explore</h2>
         </div>
-        <button type="button" class="world-detail-close" data-planner-close aria-label="Close route planner">\u2715</button>
+        ${isFresh(state) && !state.sportChosen && !state.destinationId ? "" : `<button type="button" class="world-detail-close" data-planner-reset aria-label="Start over">\u21BA</button>`}
       </header>
       ${wizardSteps(state, idle)}
+      ${destinationRow(state, idle)}
       ${pointRow("start", "Start", state, idle)}
       ${state.routeType === "point_to_point" && (state.end || state.picking === "end") ? pointRow("end", "End", state, idle) : ""}
-      ${showsAim(state) && idle ? `<p class="route-planner-note" data-planner-area>${state.routeType === "round_trip" ? "Routes ride to the crosshair in the map center and back." : "The route ends at the crosshair in the map center."}</p>` : ""}
+      ${showsAim(state) && idle ? `<p class="route-planner-note" data-planner-area>${state.routeType === "round_trip" ? "Routes ride to the crosshair in the map center and back, or select a place on the map." : "The route ends at the crosshair in the map center, or select a place on the map."}</p>` : ""}
       ${statusLine(state)}
       ${state.error && (state.stops.length || canGenerate(state)) ? `<button type="button" data-planner-retry${idle ? "" : " disabled"}>Try again</button>` : ""}
       ${routed ? routeCard(state, dropped, idle) : ""}
+      ${onRouteFlowlines(state)}
       ${flowlineEnhancements(state, idle)}
+      ${nearbyCollectibles(state, idle)}
       ${canEditStops(state) ? `
         ${stopList(state, dropped, idle)}
-        <div class="exploration-route-actions route-planner-add" role="group" aria-label="Add stops">
-          ${Object.entries(addLabels).map(([kind, label]) => `<button type="button" data-planner-add="${kind}" aria-pressed="${state.adding === kind}"${idle ? "" : " disabled"}>${label}</button>`).join("")}
-        </div>` : ""}
+        <p class="route-planner-note">Click the map to add a waypoint, or select a place to add or remove it.</p>` : ""}
       ${ownStopsUnrouted && !state.error ? `
         <div class="route-planner-commands">
           <button type="button" class="route-planner-submit" data-planner-route${idle && state.start ? "" : " disabled"}>Route my stops</button>

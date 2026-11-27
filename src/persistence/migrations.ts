@@ -995,6 +995,24 @@ export const migrations: Migration[] = [{
         ALTER COLUMN max_lon SET NOT NULL;
     `);
   }
+}, {
+  id: "043_saved_explorations_active",
+  async up(client) {
+    // Saving an Exploration activates it; there is no separate start. Saved ones count from now.
+    await client.query(`
+      ALTER TABLE quest_instances
+        DROP CONSTRAINT IF EXISTS quest_instances_status_check,
+        DROP CONSTRAINT IF EXISTS quest_instances_resolution_check;
+      UPDATE quest_instances SET status = 'active', started_at = now() WHERE status = 'planned';
+      ALTER TABLE quest_instances
+        ALTER COLUMN started_at SET DEFAULT now(),
+        ADD CONSTRAINT quest_instances_status_check
+          CHECK (status IN ('active', 'partially_completed', 'completed')),
+        ADD CONSTRAINT quest_instances_resolution_check
+          CHECK ((status IN ('active', 'partially_completed') AND started_at IS NOT NULL AND completed_at IS NULL)
+            OR (status = 'completed' AND completed_at IS NOT NULL));
+    `);
+  }
 }];
 
 /** Derives fingerprints for already accepted activities from their persisted replay snapshots. */

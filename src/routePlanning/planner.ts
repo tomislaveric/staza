@@ -22,7 +22,7 @@ import type {
 } from "./types.js";
 import { staysWithinBounds, validateRoute } from "./validation.js";
 import { insideBounds } from "./validation.js";
-import { axisAngleDegrees, bearing, distanceBetween, lineAxis } from "./geo.js";
+import { axisAngleDegrees, bearing, distanceBetween, lineAxis, LocalProjection, pointAlong, toLatLon } from "./geo.js";
 import type { GeoBounds } from "../worldQuery.js";
 
 export type PlanningErrorCode = "no_reachable_targets" | "no_route" | "routing_unavailable";
@@ -189,9 +189,8 @@ export interface RerouteTargetsInput {
   requestId: string;
   playerId: string;
   scopeId: string;
-  /** Proposal being customized: its label, recommendation and stop order are kept. */
-  base: Pick<RouteProposal, "id" | "label" | "recommended">;
-  baseStops: ProposalStop[];
+  /** Proposal being customized: its label and recommendation are kept, and its road is followed. */
+  base: Pick<RouteProposal, "id" | "label" | "recommended" | "geometry">;
   /** The exact edited target set, with objective ids assigned. */
   targets: QuestRouteTarget[];
   objectives: QuestObjective[];
@@ -216,24 +215,51 @@ export const waypointTarget = (point: LatLon): QuestRouteTarget => ({
   routeOnly: true
 });
 
-/** Stop order for an edited target set: keep the base order, insert new targets cheaply, then 2-opt. */
-export const customizedStops = (
-  input: RoutePlanningInput,
-  baseStops: ProposalStop[],
-  targets: QuestRouteTarget[],
-  policy: PlannerPolicy = DEFAULT_PLANNER_POLICY
-): CandidateStop[] => {
-  const byId = new Map(targets.map((target) => [target.id, target]));
-  let stops: CandidateStop[] = baseStops.flatMap((stop) => {
-    const target = byId.get(stop.targetId);
-    if (!target) return [];
-    return [{ target }];
-  });
-  const kept = new Set(stops.map((stop) => stop.target.id));
-  for (const target of targets) {
-    if (!kept.has(target.id)) stops = cheapestInsertion(input, stops, target, policy.roadFactor).stops;
+/** Most anchors a traced route uses; the routing service accepts 48 waypoints in total. */
+export const MAX_TRACE_ANCHORS = 36;
+/** Anchors are at least this far apart, so short routes are traced with few points. */
+const MIN_ANCHOR_SPACING_M = 800;
+/** Road left free on each side of an added stop, plus twice its distance from the route. */
+const STOP_CLEARANCE_M = 400;
+
+const projectOnto = (projected: Array<[number, number]>, along: number[], [x, y]: [number, number]) => {
+  let best = { distance: Infinity, along: 0 };
+  for (let index = 1; index < projected.length; index += 1) {
+    const [ax, ay] = projected[index - 1];
+    const [bx, by] = projected[index];
+    const length = Math.hypot(bx - ax, by - ay);
+    const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / (length * length)));
+    const distance = Math.hypot(x - (ax + t * (bx - ax)), y - (ay + t * (by - ay)));
+    if (distance < best.distance) best = { distance, along: along[index - 1] + t * length };
   }
-  return improveOrder(input, stops, policy.roadFactor);
+  return best;
+};
+
+/**
+ * Stops that follow the base route's road: route-only anchors sampled along its geometry, with
+ * every added stop inserted where it lies along the route. Anchors near an added stop are left
+ * out so the router finds the detour; elsewhere the route keeps its roads.
+ */
+export const tracedStops = (geometry: [number, number][], added: QuestRouteTarget[]): CandidateStop[] => {
+  if (geometry.length < 2) return added.map((target) => ({ target }));
+  const projection = new LocalProjection(toLatLon(geometry[0]));
+  const projected = geometry.map((point) => projection.project(point));
+  const along = [0];
+  for (let index = 1; index < projected.length; index += 1) {
+    along.push(along[index - 1] + Math.hypot(projected[index][0] - projected[index - 1][0], projected[index][1] - projected[index - 1][1]));
+  }
+  const length = along[along.length - 1];
+  const placed = added.map((target) => {
+    const hit = projectOnto(projected, along, projection.project([target.coordinate.lon, target.coordinate.lat]));
+    return { target, along: hit.along, clearance: STOP_CLEARANCE_M + 2 * hit.distance };
+  });
+  const spacing = Math.max(MIN_ANCHOR_SPACING_M, length / (MAX_TRACE_ANCHORS + 1));
+  const anchors: Array<{ target: QuestRouteTarget; along: number }> = [];
+  for (let distance = spacing; distance < length - spacing / 2; distance += spacing) {
+    if (placed.some((stop) => Math.abs(stop.along - distance) < stop.clearance)) continue;
+    anchors.push({ target: waypointTarget(toLatLon(pointAlong(geometry, distance))), along: distance });
+  }
+  return [...anchors, ...placed].sort((a, b) => a.along - b.along).map(({ target }) => ({ target }));
 };
 
 /**
@@ -242,13 +268,13 @@ export const customizedStops = (
  * reported. Only the edited targets count, so removed targets the road passes are not re-added.
  */
 export const rerouteTargets = async (
-  { requestId, playerId, scopeId, base, baseStops, targets, objectives, flowlines, input, bounds, waypoints = [] }: RerouteTargetsInput,
+  { requestId, playerId, scopeId, base, targets, objectives, flowlines, input, bounds, waypoints = [] }: RerouteTargetsInput,
   { routing, policy: basePolicy = DEFAULT_PLANNER_POLICY, now = Date.now, log = (entry) => console.log(JSON.stringify(entry)) }: PlannerDependencies
 ): Promise<PlannedProposal> => {
   const policy = policyForSport(basePolicy, input.sport);
   const startedAt = now();
   const waypointTargets = waypoints.map(waypointTarget);
-  const stops = customizedStops(input, baseStops, [...targets, ...waypointTargets], policy);
+  const stops = tracedStops(base.geometry.coordinates, [...targets, ...waypointTargets]);
   const candidate = makeCandidate(input, objectives, stops, "custom", policy);
   const run = await routeCandidates([{ candidate, objectives }], {
     requestId, input, bounds, eligibleTargets: targets, maxRequests: PLANNING_LIMITS.maxRerouteRequests, routing, policy
@@ -275,8 +301,10 @@ export const rerouteTargets = async (
   const droppedWaypoints = waypoints.filter((point) => !servedStops.has(waypointId(point)));
   const proposal = toRouteProposal({ label: base.label, route: best, recommended: base.recommended }, input,
     new Map(targets.map((target) => [target.id, target])), flowlines, policy);
+  const chosen = new Set([...targets.map((target) => target.id), ...waypoints.map(waypointId)]);
+  const stopOrder = best.candidate.stops.map((stop) => stop.target.id).filter((id) => chosen.has(id));
   return {
-    proposal: { ...proposal, customized: true, basedOn: base.id, ...(droppedTargetIds.length > 0 ? { droppedTargetIds } : {}),
+    proposal: { ...proposal, customized: true, basedOn: base.id, stopOrder, ...(droppedTargetIds.length > 0 ? { droppedTargetIds } : {}),
       ...(servedWaypoints.length > 0 ? { waypoints: servedWaypoints } : {}),
       ...(droppedWaypoints.length > 0 ? { droppedWaypoints } : {}) },
     stops: proposalStops(best)
@@ -422,18 +450,62 @@ export const destinationStops = (
     .map((stop) => ({ target: stop }));
 };
 
+/** Longest straight gap between the points that pin a route onto a Flowline, when the cap allows. */
+export const FLOWLINE_RIDE_SPACING_M = 300;
+/** Upper bound on pinning points per Flowline. */
+export const MAX_FLOWLINE_RIDE_POINTS = 10;
+/** Bends farther than this from the straight line between two ride points get their own point. */
+export const FLOWLINE_RIDE_TOLERANCE_M = 20;
+
 /**
  * Points that make the router ride a Flowline from end to end, entering at the end nearer the
- * start: both ends and the middle vertex.
+ * start. Bends and then long gaps get their own point, so the router can neither cut a bend nor
+ * take a parallel shortcut between distant points of the Flowline.
  */
 export const flowlineRidePoints = (start: LatLon, flowline: FlowlineGeometry): LatLon[] => {
   const points = flowline.coordinates.map(([lon, lat]) => ({ lat, lon }));
-  const first = points[0];
-  const last = points[points.length - 1];
-  const middle = points[Math.floor(points.length / 2)];
-  const forward = distanceBetween(start, first) <= distanceBetween(start, last);
-  const ordered = forward ? [first, middle, last] : [last, middle, first];
-  return ordered.filter((point, index) => ordered.findIndex((other) => waypointId(other) === waypointId(point)) === index);
+  const forward = distanceBetween(start, points[0]) <= distanceBetween(start, points[points.length - 1]);
+  const ordered = forward ? points : [...points].reverse();
+  const projection = new LocalProjection(ordered[0]);
+  const xy = ordered.map((point) => projection.project([point.lon, point.lat]));
+  const along = [0];
+  for (let index = 1; index < ordered.length; index++) along.push(along[index - 1] + Math.hypot(xy[index][0] - xy[index - 1][0], xy[index][1] - xy[index - 1][1]));
+  const farthest = (from: number, to: number) => {
+    const [ax, ay] = xy[from];
+    const [dx, dy] = [xy[to][0] - ax, xy[to][1] - ay];
+    const span = dx * dx + dy * dy;
+    let best = { index: -1, distance: 0 };
+    for (let index = from + 1; index < to; index++) {
+      const share = span ? Math.max(0, Math.min(1, ((xy[index][0] - ax) * dx + (xy[index][1] - ay) * dy) / span)) : 0;
+      const distance = Math.hypot(xy[index][0] - ax - share * dx, xy[index][1] - ay - share * dy);
+      if (distance > best.distance) best = { index, distance };
+    }
+    return best;
+  };
+  // Keep the bends first (the router would cut them), then split long straight gaps.
+  const kept = [0, ordered.length - 1].filter((index, position, all) => all.indexOf(index) === position);
+  while (kept.length < MAX_FLOWLINE_RIDE_POINTS) {
+    let best: { position: number; index: number; priority: number } | undefined;
+    for (let position = 1; position < kept.length; position++) {
+      const [from, to] = [kept[position - 1], kept[position]];
+      if (to - from < 2) continue;
+      const bend = farthest(from, to);
+      const gap = along[to] - along[from];
+      let candidate: { index: number; priority: number } | undefined;
+      if (bend.distance > FLOWLINE_RIDE_TOLERANCE_M) candidate = { index: bend.index, priority: 1e9 + bend.distance };
+      else if (gap > FLOWLINE_RIDE_SPACING_M) {
+        const middle = (along[from] + along[to]) / 2;
+        let index = from + 1;
+        for (let other = from + 2; other < to; other++) if (Math.abs(along[other] - middle) < Math.abs(along[index] - middle)) index = other;
+        candidate = { index, priority: gap };
+      }
+      if (candidate && (!best || candidate.priority > best.priority)) best = { position, ...candidate };
+    }
+    if (!best) break;
+    kept.splice(best.position, 0, best.index);
+  }
+  return kept.map((index) => ordered[index])
+    .filter((point, index, all) => all.findIndex((other) => waypointId(other) === waypointId(point)) === index);
 };
 
 /**

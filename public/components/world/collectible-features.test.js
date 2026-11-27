@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { collectibleFeature, collectiblesToFeatureCollection } from "./collectible-features.js";
-import { filteredWorldCollectibles, mappedWorldCollectibles } from "../world-page.js";
 
 const collectible = (overrides = {}) => ({
   id: "viewpoint-1",
@@ -95,33 +94,7 @@ describe("collectible GeoJSON conversion", () => {
   });
 });
 
-describe("collectible source data respects World filters", () => {
-  const collectibles = [
-    { id: "viewpoint-found", name: "Viewpoint", found: true, primaryCategory: "viewpoint", latitude: 49, longitude: 8 },
-    { id: "peak-unfound", name: "Peak", found: false, primaryCategory: "peak", latitude: 50, longitude: 9 },
-    { id: "castle-found", name: "Castle", found: true, primaryCategory: "castle", latitude: 51, longitude: 10 }
-  ];
-
-  const featureIds = (selectedFilters, questCollectibles) =>
-    collectiblesToFeatureCollection(mappedWorldCollectibles(collectibles, selectedFilters, questCollectibles))
-      .features.map((feature) => feature.properties.id);
-
-  it("renders exactly the filtered collectibles", () => {
-    expect(featureIds([])).toEqual(["viewpoint-found", "peak-unfound", "castle-found"]);
-    expect(featureIds(["found"])).toEqual(["viewpoint-found", "castle-found"]);
-    expect(featureIds(["unfound"])).toEqual(["peak-unfound"]);
-    expect(featureIds(["peak"])).toEqual(["peak-unfound"]);
-    expect(featureIds(["castle"])).toEqual(["castle-found"]);
-    expect(featureIds(["unfound", "castle", "fartleks"])).toEqual(["peak-unfound", "castle-found"]);
-  });
-
-  it("keeps the selected quest collectibles on the map without duplicating them", () => {
-    const questCollectible = { id: "quest-only", name: "Quest", found: false, latitude: 52, longitude: 11 };
-
-    expect(featureIds(["found"], [questCollectible, collectibles[0]]))
-      .toEqual(["viewpoint-found", "castle-found", "quest-only"]);
-  });
-
+describe("collectible route emphasis", () => {
   it("marks quest collectibles as quest related while a quest is active", () => {
     const featureCollection = collectiblesToFeatureCollection(
       [collectible({ id: "in-quest" }), collectible({ id: "elsewhere" })],
@@ -138,9 +111,5 @@ describe("collectible source data respects World filters", () => {
     const featureCollection = collectiblesToFeatureCollection([collectible(), collectible({ id: "coin-1" })]);
 
     expect(featureCollection.features.every((feature) => feature.properties.questRelated)).toBe(true);
-  });
-
-  it("does not duplicate business filtering outside filteredWorldCollectibles", () => {
-    expect(mappedWorldCollectibles(collectibles, ["peak"])).toEqual(filteredWorldCollectibles(collectibles, ["peak"]));
   });
 });

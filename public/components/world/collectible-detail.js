@@ -43,7 +43,8 @@ export const formatCollectibleDistance = (meters, locale) => {
     : `${new Intl.NumberFormat(locale, { maximumFractionDigits: km < 10 ? 1 : 0 }).format(km)} km`;
 };
 
-export const CollectibleDetail = (collectible, relatedQuests = [], { distanceMeters, locale } = {}) => {
+/** `routeLabel` names the route action: "Route here" before a route exists, then add or remove the stop. */
+export const CollectibleDetail = (collectible, relatedQuests = [], { distanceMeters, locale, routeLabel = "Route here" } = {}) => {
   const hasPosition = Number.isFinite(collectible.latitude) && Number.isFinite(collectible.longitude);
   return `
     <section class="world-detail collectible-detail" aria-label="Collectible detail">
@@ -77,7 +78,7 @@ export const CollectibleDetail = (collectible, relatedQuests = [], { distanceMet
         </div>
       ` : ""}
       ${hasPosition ? `
-        <button type="button" class="collectible-detail-route" data-collectible-route="${escapeHtml(collectible.id)}">Add to route</button>
+        <button type="button" class="collectible-detail-route" data-collectible-route="${escapeHtml(collectible.id)}">${escapeHtml(routeLabel)}</button>
       ` : ""}
     </section>
   `;

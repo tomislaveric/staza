@@ -2429,18 +2429,34 @@
         }
       }
     },
-    "planner.error.noRoute" : {
+    "planner.error.noReachableTargets" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diese Stopps konnten nicht verbunden werden. Entferne oder verschiebe einen Stopp."
+            "value" : "Von diesem Start aus ist kein Ort erreichbar. Versuche einen anderen Start oder ein anderes Ziel."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No route could connect these stops. Remove or move a stop."
+            "value" : "No places can be reached from this start. Try another start or destination."
+          }
+        }
+      }
+    },
+    "planner.error.noRoute" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es wurde keine Route gefunden. Versuche einen anderen Start oder ein anderes Ziel."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No route was found. Try another start or destination."
           }
         }
       }
@@ -2466,13 +2482,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In diesem Kartenausschnitt wurde keine Route gefunden. Verschiebe die Karte oder zoome heraus."
+            "value" : "Es wurde keine Route gefunden. Versuche einen anderen Start oder ein anderes Ziel."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No route found in this map area. Move or zoom out the map and try again."
+            "value" : "No route was found. Try another start or destination."
           }
         }
       }
@@ -2521,6 +2537,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your baseline route works without these. Add one or combine several."
+          }
+        }
+      }
+    },
+    "planner.flowlines.ridden" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowlines auf dieser Route"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowlines on this route"
           }
         }
       }
@@ -2589,6 +2621,22 @@
         }
       }
     },
+    "planner.item.showOnMap" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt es auf der Karte."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows it on the map."
+          }
+        }
+      }
+    },
     "planner.locate" : {
       "localizations" : {
         "de" : {
@@ -2601,6 +2649,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Locate me"
+          }
+        }
+      }
+    },
+    "planner.nearby.add %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hinzufügen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add %@"
+          }
+        }
+      }
+    },
+    "planner.nearby.distance %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ von deiner Route"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ from your route"
+          }
+        }
+      }
+    },
+    "planner.nearby.title" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orte in der Nähe"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nearby places"
           }
         }
       }
@@ -2633,54 +2729,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "End point"
-          }
-        }
-      }
-    },
-    "planner.order.auto" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Staza ordnet die Stopps; verschiebe einen, um deine eigene Reihenfolge zu behalten."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Staza orders the stops; move one to keep your own order."
-          }
-        }
-      }
-    },
-    "planner.order.kept" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Reihenfolge bleibt erhalten."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your order is kept."
-          }
-        }
-      }
-    },
-    "planner.order.reset" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Staza ordnen lassen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Let Staza order"
           }
         }
       }
@@ -3114,22 +3162,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tap Flowlines or collectibles, or empty map for a waypoint."
-          }
-        }
-      }
-    },
-    "planner.subtitle" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ziel wählen oder Karte ausrichten, dann Sportart und Form"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pick a destination or aim the map, then a sport and shape"
           }
         }
       }
@@ -5034,38 +5066,6 @@
         }
       }
     },
-    "world.explorations.start" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Starten"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start"
-          }
-        }
-      }
-    },
-    "world.explorations.status.active" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gestartet"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Started"
-          }
-        }
-      }
-    },
     "world.explorations.status.completed" : {
       "localizations" : {
         "de" : {
@@ -5094,22 +5094,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Partially completed"
-          }
-        }
-      }
-    },
-    "world.explorations.status.planned" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Geplant"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Planned"
           }
         }
       }

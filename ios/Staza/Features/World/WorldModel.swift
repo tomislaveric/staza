@@ -117,14 +117,6 @@ final class WorldModel {
         }
     }
 
-    /// Starts a planned Exploration. Returns whether it succeeded.
-    @discardableResult
-    func start(_ instanceId: String) async -> Bool {
-        await mutate(instanceId) {
-            let _: EmptyResponse = try await self.api.post("/api/quest-instances/\(instanceId)/start")
-        }
-    }
-
     private func mutate(_ instanceId: String, _ action: () async throws -> Void) async -> Bool {
         guard pendingInstanceId == nil else { return false }
         pendingInstanceId = instanceId

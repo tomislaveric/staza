@@ -1,7 +1,7 @@
 import { mountReplayMap, mountReplayStill } from "./activity-replay-map.js";
 import { CollectionPanel, collectionStateLabel } from "./shared/collection-panel.js";
 import { escapeHtml } from "./collected-list.js";
-import { formatDistance, formatElapsed, formatSpeed } from "./world/fartlek-detail.js";
+import { formatDistance, formatElapsed, formatSpeed } from "./world/route-format.js";
 import { getAppLocale } from "../app-locales.js";
 import { replayDurationSeconds } from "../replay.js";
 import { levelStateAt } from "./activity-outcome.js";

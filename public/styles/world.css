@@ -12,31 +12,6 @@
 .world-header h1 { color: var(--text-primary); font-family: var(--font-display); font-size: 48px; font-weight: 700; letter-spacing: -.025em; line-height: 1; margin: 0; }
 .world-header > div > p { color: var(--text-muted); font-family: var(--font-display); font-size: 14px; margin: 4px 0 0; }
 
-.world-filter-controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 20px 0 4px; }
-.world-filter-locked { align-items: baseline; border: 1px dashed var(--border-faint); border-radius: 999px; color: var(--text-subtle); display: inline-flex; font-family: var(--font-display); font-size: 12px; gap: 8px; opacity: .75; padding: 6px 12px; }
-.world-filter-locked:hover { border-color: var(--accent-yellow); opacity: 1; }
-.world-filter-locked small { color: var(--accent-yellow); font-size: 11px; }
-.world-filter-controls button[hidden] { display: none; }
-.world-filter-controls button {
-  align-items: center;
-  background: transparent;
-  border: 1px solid var(--border-faint);
-  border-radius: 999px;
-  color: #6e7279;
-  cursor: pointer;
-  display: inline-flex;
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 600;
-  gap: 6px;
-  height: 30px;
-  letter-spacing: .05em;
-  padding: 0 12px;
-  text-transform: uppercase;
-}
-.world-filter-controls button.is-active { background: var(--surface-raised-background); border-color: var(--accent-yellow); color: var(--text-primary); }
-.world-filter-controls button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
-
 .world-map-shell {
   height: 520px;
   margin-top: 16px;
@@ -127,9 +102,7 @@
   top: 14px;
   z-index: 3;
 }
-.world-explore-cta { align-items: center; bottom: 16px; display: flex; gap: 6px; left: 50%; position: absolute; transform: translateX(-50%); z-index: 3; }
-.world-explore-cta[hidden] { display: none; }
-.world-locate, .world-explore, .world-plan-route {
+.world-locate {
   background: rgb(11 12 15 / 90%);
   border: 1px solid var(--border-faint);
   border-radius: 8px;
@@ -141,38 +114,9 @@
   letter-spacing: .1em;
   padding: 8px 10px;
 }
-.world-explore { border-color: rgb(232 184 10 / 45%); color: var(--accent-yellow); }
-.world-explore[hidden] { display: none; }
-.world-explore, .world-plan-route { white-space: nowrap; }
-.world-plan-route { font-size: 9px; padding: 6px 8px; }
-.world-explore:disabled { cursor: default; opacity: .6; }
-.world-locate:hover, .world-explore:hover:not(:disabled), .world-plan-route:hover { color: var(--text-primary); }
-.world-locate:focus-visible, .world-explore:focus-visible, .world-plan-route:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
-
-/* Explore this area: a short reveal moment above the CTA, never a route. */
-.world-explore-card-host { bottom: 60px; left: 50%; position: absolute; transform: translateX(-50%); width: min(340px, calc(100% - 28px)); z-index: 4; }
-.world-explore-card-host[hidden] { display: none; }
-.world-explore-card {
-  backdrop-filter: blur(10px);
-  background: rgb(11 12 15 / 92%);
-  border: 1px solid var(--border-faint);
-  border-radius: 10px;
-  color: var(--text-muted);
-  display: grid;
-  font-size: 13px;
-  gap: 10px;
-  padding: 14px;
-}
-.world-explore-card.is-reveal { animation: world-reveal-in .35s ease-out; border-color: rgb(232 184 10 / 45%); }
-.world-explore-card.is-exploring { color: var(--accent-yellow); font-family: var(--font-display); font-size: 12px; letter-spacing: .1em; text-align: center; }
-.world-explore-card header { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
-.world-explore-card h2 { color: var(--text-primary); font-family: var(--font-display); font-size: 17px; margin: 0; }
-.world-explore-card p { margin: 0; }
-.world-explore-breakdown { display: flex; flex-wrap: wrap; gap: 6px 14px; list-style: none; margin: 0; padding: 0; }
-.world-explore-breakdown li { align-items: baseline; display: flex; gap: 6px; }
-.world-explore-breakdown strong { color: var(--text-primary); font-family: var(--font-mono); font-size: 15px; }
-.world-explore-card-actions, .discovery-card-actions, .fartlek-detail-actions, .route-planner-commands, .route-planner-stop-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.world-explore-card-actions button, .discoveries-sorts button, .discovery-card-actions button, .fartlek-detail-actions button,
+.world-locate:hover { color: var(--text-primary); }
+.world-locate:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+.route-planner-commands, .route-planner-stop-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .route-planner button:not(.world-detail-close), .collectible-detail-route {
   background: transparent;
   border: 1px solid var(--border-faint);
@@ -185,57 +129,17 @@
   min-height: 32px;
   padding: 4px 10px;
 }
-.world-explore-card-actions button.is-primary, .route-planner .route-planner-submit, .route-planner .route-planner-confirm,
-.discovery-card-actions button[aria-pressed="true"], .fartlek-detail-actions button[aria-pressed="true"], .collectible-detail-route {
+.route-planner .route-planner-submit, .route-planner .route-planner-confirm, .collectible-detail-route {
   border-color: rgb(232 184 10 / 45%);
   color: var(--accent-yellow);
 }
-.discoveries-sorts button[aria-pressed="true"], .route-planner button[aria-pressed="true"] { border-color: var(--accent-yellow); color: var(--text-primary); }
-.world-explore-card-actions button:hover, .discoveries-sorts button:hover, .discovery-card-actions button:hover,
-.fartlek-detail-actions button:hover, .route-planner button:hover:not(:disabled), .collectible-detail-route:hover { color: var(--text-primary); }
-.world-explore-card-actions button:focus-visible, .discoveries-sorts button:focus-visible, .discovery-card-actions button:focus-visible,
-.fartlek-detail-actions button:focus-visible, .route-planner button:focus-visible, .collectible-detail-route:focus-visible {
+.route-planner button[aria-pressed="true"] { border-color: var(--accent-yellow); color: var(--text-primary); }
+.route-planner button:hover:not(:disabled), .collectible-detail-route:hover { color: var(--text-primary); }
+.route-planner button:focus-visible, .collectible-detail-route:focus-visible {
   outline: 2px solid var(--accent-yellow);
   outline-offset: 2px;
 }
 .route-planner button:disabled { cursor: default; opacity: .55; }
-@keyframes world-reveal-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) {
-  .world-explore-card.is-reveal { animation: none; }
-}
-
-/* Flowline character: one primary badge, at most two scores. */
-.flowline-character {
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  display: inline-block;
-  font-family: var(--font-display);
-  font-size: 10px;
-  justify-self: start;
-  letter-spacing: .1em;
-  padding: 2px 8px;
-  text-transform: uppercase;
-}
-.flowline-character.is-flow, .world-explore-breakdown .is-flow span { color: var(--accent-yellow); }
-.flowline-character.is-endurance, .world-explore-breakdown .is-endurance span { color: #7cc4ff; }
-.flowline-character.is-explore, .world-explore-breakdown .is-explore span { color: #8fd694; }
-.flowline-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
-.flowline-facts div { display: grid; gap: 2px; }
-.flowline-facts dt, .flowline-best-for small, .discoveries-counts dt { color: var(--text-muted); font-family: var(--font-display); font-size: 9px; letter-spacing: .12em; margin: 0; text-transform: uppercase; }
-.flowline-facts dd, .discoveries-counts dd { color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; margin: 0; }
-.flowline-best-for { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
-.fartlek-detail-more summary { color: var(--text-muted); cursor: pointer; font-family: var(--font-display); font-size: 12px; }
-.fartlek-detail-more[open] { display: grid; gap: 8px; }
-
-/* View discoveries. */
-.discoveries-counts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
-.discoveries-counts div { display: grid; gap: 2px; }
-.discoveries-sorts { display: flex; flex-wrap: wrap; gap: 6px; }
-.discoveries-list { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
-.discovery-card { border: 1px solid var(--border-faint); border-radius: 8px; display: grid; gap: 8px; padding: 10px; }
-.discovery-card-title { align-items: center; display: flex; gap: 8px; margin: 0; }
-.discovery-card-title strong { color: var(--text-primary); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
-.discovery-card-title small { color: var(--text-muted); font-size: 10px; letter-spacing: .1em; margin-left: auto; text-transform: uppercase; }
 
 /* Manual planner stops. */
 .route-planner-stops li.is-dropped { opacity: .55; }
@@ -243,9 +147,11 @@
 .route-planner-result { border-top: 1px solid var(--border-faint); display: grid; gap: 8px; padding-top: 10px; }
 .route-planner-enhancements { display: grid; gap: 8px; }
 .route-planner-enhancements h3 { font-size: 13px; margin: 0; }
-.route-planner-enhancement { align-items: flex-start; background: var(--surface-raised); border: 1px solid var(--border-faint); border-radius: 10px; display: flex; gap: 8px; padding: 10px; }
-.route-planner-enhancement span { display: grid; gap: 3px; }
+.route-planner-enhancement { align-items: center; background: var(--surface-raised); border: 1px solid var(--border-faint); border-radius: 10px; color: var(--text-primary); display: flex; font-size: 12px; gap: 8px; padding: 10px; }
+.route-planner-enhancement > span:not(.exploration-target-name) { display: grid; gap: 3px; }
 .route-planner-enhancement small { color: var(--text-muted); }
+.route-planner-enhancement:hover, .route-planner-enhancement.is-hovered,
+.route-planner-stops li[data-planner-hover]:hover, .route-planner-stops li.is-hovered { border-color: var(--accent-yellow); }
 .route-planner-waypoint { color: var(--text-muted); font-family: var(--font-mono); }
 
 /* Planner wizard: sport and shape as icon choices, then three generated routes. */
@@ -365,11 +271,7 @@
 .world-detail-close { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; font-size: 20px; line-height: 1; padding: 0 2px; }
 .world-detail-close:hover { color: var(--text-primary); }
 .world-detail-empty { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin: 0; }
-.route-planner-form, .route-planner-constraint { display: grid; gap: 10px; }
-.route-planner-constraint { border: 0; margin: 0; min-width: 0; padding: 0; }
-.route-planner-constraint legend { color: var(--text-muted); font-family: var(--font-display); font-size: 10px; letter-spacing: .14em; margin-bottom: 6px; padding: 0; text-transform: uppercase; }
-.route-planner-toggle, .route-planner-presets { display: flex; flex-wrap: wrap; gap: 6px; }
-.route-planner-form button, .route-planner-confirm {
+.route-planner-confirm {
   background: transparent;
   border: 1px solid var(--border-faint);
   border-radius: 6px;
@@ -381,18 +283,16 @@
   min-height: 34px;
   padding: 6px 10px;
 }
-.route-planner-form button[aria-pressed="true"] { border-color: var(--accent-yellow); color: var(--text-primary); }
-.route-planner-form button:hover:not(:disabled) { color: var(--text-primary); }
-.route-planner-form button:focus-visible, .route-proposal:focus-visible, .route-planner-confirm:focus-visible, .route-planner-custom input:focus-visible {
+.route-proposal:focus-visible, .route-planner-confirm:focus-visible {
   outline: 2px solid var(--accent-yellow);
   outline-offset: 2px;
 }
-.route-planner-point { display: flex; }
-.route-planner-point-actions button.is-picking, .route-planner-point.is-picking button[data-exploration-pick] { border-color: var(--accent-yellow); }
+.route-planner-point { display: grid; gap: 6px; }
+.route-planner-point-actions button.is-set, .route-planner-point-actions button.is-picking, .route-planner-point.is-picking button[data-exploration-pick] { border-color: var(--accent-yellow); }
 .route-planner-point > span:first-child { display: grid; gap: 2px; min-width: 0; }
 .route-planner-point small { color: var(--text-muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 .route-planner-point strong { color: var(--text-primary); font-family: var(--font-mono); font-size: 12px; }
-.route-planner-point-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.route-planner-point-actions { display: flex; gap: 6px; }
 .staza-map .maplibregl-popup-content {
   background: rgb(11 12 15 / 94%);
   border: 1px solid var(--border-faint);
@@ -417,27 +317,12 @@
   padding: 6px 10px;
 }
 .world-point-tooltip button:hover { background: var(--surface-raised-background); }
-.route-planner-custom { align-items: center; color: var(--text-muted); display: flex; font-size: 12px; gap: 8px; }
-.route-planner-custom input {
-  background: transparent;
-  border: 1px solid var(--border-faint);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  min-height: 32px;
-  padding: 4px 8px;
-  width: 96px;
-}
-.route-planner-form .route-planner-submit, .route-planner-confirm { border-color: rgb(232 184 10 / 45%); color: var(--accent-yellow); }
-.route-planner-form button:disabled, .route-planner-confirm:disabled { cursor: default; opacity: .55; }
+.route-planner button.route-planner-confirm { border: 1px solid var(--accent-yellow); color: var(--accent-yellow); }
+.route-planner-confirm:disabled { cursor: default; opacity: .55; }
 .route-planner-status, .route-planner-error, .route-planner-note { font-size: 12px; margin: 0; }
 .route-planner-status, .route-planner-note { color: var(--text-muted); }
 .route-planner-error { color: #f2735f; }
-.exploration-targets { display: grid; gap: 8px; }
-.exploration-target-count { color: var(--text-primary); font-size: 12px; margin: 0; }
-.exploration-target-count small { color: var(--text-muted); font-family: var(--font-mono); }
-.exploration-selected button, .exploration-route-actions button, .exploration-ride button {
+.exploration-selected button {
   background: transparent;
   border: 1px solid var(--border-faint);
   border-radius: 6px;
@@ -450,19 +335,15 @@
   min-height: 32px;
   padding: 4px 10px;
 }
-.exploration-route-actions button[aria-pressed="true"] { border-color: var(--accent-yellow); color: var(--text-primary); }
-.exploration-selected button:disabled, .exploration-route-actions button:disabled, .exploration-ride button:disabled { cursor: default; opacity: .55; }
-.exploration-selected button:focus-visible, .exploration-route-actions button:focus-visible, .exploration-ride button:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
+.exploration-selected button:disabled { cursor: default; opacity: .55; }
+.exploration-selected button:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
 .exploration-selected { display: grid; gap: 4px; list-style: none; margin: 0; padding: 0; }
-.exploration-selected li, .exploration-along li { align-items: center; color: var(--text-primary); display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
+.exploration-selected li { align-items: center; color: var(--text-primary); display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
 .exploration-selected li > span { min-width: 0; overflow-wrap: anywhere; }
 .exploration-target-name { align-items: center; display: inline-flex; gap: 8px; }
 .exploration-target-name > .collectible-swatch, .exploration-target-name > .fartlek-swatch { flex: none; }
 .exploration-selected li small { color: var(--text-muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 .exploration-selected button { min-width: 32px; padding: 0; }
-.exploration-route-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.exploration-ride { align-items: center; color: var(--text-primary); display: flex; font-family: var(--font-mono); font-size: 12px; gap: 8px; justify-content: space-between; }
-.route-proposals { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
 .route-proposal {
   background: transparent;
   border: 1px solid var(--border-faint);
@@ -479,14 +360,7 @@
 .route-proposal.is-selected { border-color: var(--accent-yellow); }
 .route-proposal.is-updating { border-style: dashed; }
 .route-proposal:disabled { cursor: default; }
-.route-proposal-head { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; }
-.route-proposal-head strong { color: var(--text-primary); font-size: 14px; }
-.route-proposal-head small { color: var(--accent-yellow); font-size: 11px; }
 .route-proposal-metrics { color: var(--text-primary); display: flex; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12px; gap: 10px; }
-.route-proposal-targets, .route-proposal-hint { font-size: 11px; }
-.route-proposal-targets { display: grid; gap: 2px; }
-.route-proposal-along { opacity: 0.75; }
-.exploration-along { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
 .quest-card-reward, .quest-card-route { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
 .quest-card-reward small, .quest-card-route small { color: var(--text-subtle); font-family: var(--font-body); letter-spacing: .08em; margin-right: 4px; text-transform: uppercase; }
 .quest-card-gpx { color: var(--text-muted); font-size: 12px; text-decoration: underline; }
@@ -514,17 +388,6 @@
 .collectible-detail-quests h3 { color: var(--text-muted); font-family: var(--font-display); font-size: 10px; letter-spacing: .2em; margin: 0 0 6px; text-transform: uppercase; }
 .collectible-detail-quests ul { display: grid; gap: 4px; list-style: none; margin: 0; padding: 0; }
 .collectible-detail-quests button { background: transparent; border: 0; color: var(--accent-yellow); cursor: pointer; font-family: var(--font-display); font-size: 13px; padding: 0; text-align: left; }
-
-/* Fartlek: a linear road/path segment challenge, distinct from point collectibles. */
-.world-fartlek-marker { color: var(--text-primary); }
-.fartlek-detail-state { font-family: var(--font-display); font-size: 12px; letter-spacing: .1em; margin: 0; text-transform: uppercase; }
-.fartlek-detail-state.is-completed { color: var(--accent-yellow); }
-.fartlek-detail-state.is-uncompleted { color: var(--text-muted); }
-.fartlek-detail-hint { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0; }
-.fartlek-detail-stats { display: grid; gap: 6px; grid-template-columns: repeat(2, 1fr); margin: 0; }
-.fartlek-detail-stats div { display: grid; gap: 2px; }
-.fartlek-detail-stats dt { color: var(--text-muted); font-family: var(--font-display); font-size: 9px; letter-spacing: .12em; margin: 0; text-transform: uppercase; }
-.fartlek-detail-stats dd { color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; margin: 0; }
 
 .quest-progress-track { background: rgb(255 255 255 / 10%); border-radius: 999px; display: block; height: 4px; overflow: hidden; width: 100%; }
 .quest-progress-track i { background: var(--accent-yellow); display: block; height: 100%; }
@@ -566,7 +429,6 @@
 .world-stats i { color: var(--text-subtle); font-family: var(--font-body); font-size: 16px; font-style: normal; }
 .world-stats strong { font-weight: 600; }
 .world-stats-truncated { color: var(--text-subtle); font-size: 12px; }
-.exploration-revealed li.is-new .exploration-target-name small { color: var(--accent-yellow); font-family: var(--font-display); letter-spacing: .1em; text-transform: uppercase; }
 .activity-replay-fartlek-found { color: var(--accent-yellow); font-family: var(--font-display); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 
 .quest-list { padding-top: 16px; }
@@ -668,24 +530,8 @@
   padding: 2px 7px;
   text-transform: uppercase;
 }
-.quest-status-chip.is-active, .quest-status-chip.is-partially_completed { border-color: rgb(232 184 10 / 45%); color: var(--accent-yellow); }
+.quest-status-chip.is-partially_completed { border-color: rgb(232 184 10 / 45%); color: var(--accent-yellow); }
 .quest-status-chip.is-completed { background: rgb(232 184 10 / 14%); border-color: var(--accent-yellow); color: var(--accent-yellow); }
-.quest-instance-start {
-  background: transparent;
-  border: 1px solid rgb(232 184 10 / 45%);
-  border-radius: 6px;
-  color: var(--accent-yellow);
-  cursor: pointer;
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 600;
-  justify-self: start;
-  min-height: 32px;
-  padding: 0 12px;
-}
-.quest-instance-start:hover:not(:disabled) { color: var(--text-primary); }
-.quest-instance-start:focus-visible { outline: 2px solid var(--accent-yellow); outline-offset: 2px; }
-.quest-instance-start:disabled { cursor: default; opacity: .55; }
 .quest-card-progress { border-top: 1px solid var(--border-faint); padding-top: 7px; }
 .default-quest-empty { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; margin: 0; }
 .quest-card-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
@@ -712,17 +558,6 @@
   .world-page { padding: 20px 16px 28px; }
   .world-header { align-items: flex-end; flex-wrap: nowrap; gap: 12px; }
   .world-header h1 { font-size: 38px; }
-    /* One horizontally scrolling filter row keeps the map near the top of the screen. */
-  .world-filter-controls {
-    flex-wrap: nowrap;
-    margin-inline: -16px;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    padding: 16px 16px 4px;
-    scrollbar-width: none;
-  }
-  .world-filter-controls::-webkit-scrollbar { display: none; }
-  .world-filter-controls button { flex: none; min-height: 38px; white-space: nowrap; }
   /* Leave room above/below the map so the page can still be scrolled past it by touch. */
   .world-map-shell {
     height: auto;
@@ -731,8 +566,6 @@
   .world-map-frame {
     height: clamp(320px, calc(100dvh - var(--mobile-header-height, 0px) - var(--mobile-nav-clearance, 0px) - 190px), 600px);
   }
-  .world-explore-cta { bottom: 58px; }
-  .world-explore-card-host { bottom: 102px; }
   .world-map-status { left: 70px; max-width: calc(100% - 150px); overflow-wrap: anywhere; transform: none; }
   .world-detail-host {
     backdrop-filter: none;
@@ -751,5 +584,5 @@
 
 @media (pointer: coarse) {
   .staza-map .maplibregl-ctrl-group button { height: 36px; width: 36px; }
-  .world-locate, .world-explore, .world-plan-route { min-height: 36px; }
+  .world-locate { min-height: 36px; }
 }

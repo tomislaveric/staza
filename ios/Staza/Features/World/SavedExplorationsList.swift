@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The player's saved Explorations below a fresh plan: show a route on the map, start or delete it.
+/// The player's saved Explorations below a fresh plan: show a route on the map or delete it.
 struct SavedExplorationsList: View {
     let model: WorldModel
     let onChanged: () -> Void
@@ -30,7 +30,7 @@ struct SavedExplorationsList: View {
     }
 
     private var sortedInstances: [QuestInstance] {
-        let rank = ["active": 0, "partially_completed": 0, "planned": 1, "completed": 2]
+        let rank = ["active": 0, "partially_completed": 0, "completed": 1]
         return model.instances.enumerated()
             .sorted { (rank[$0.element.status] ?? 3, $0.offset) < (rank[$1.element.status] ?? 3, $1.offset) }
             .map(\.element)
@@ -72,15 +72,6 @@ struct SavedExplorationsList: View {
                 .accessibilityHint(Text("world.explorations.show.hint"))
 
                 HStack {
-                    if instance.isPlanned {
-                        Button {
-                            Task { if await model.start(instance.id) { onChanged() } }
-                        } label: {
-                            Label("world.explorations.start", systemImage: "flag.fill")
-                        }
-                        .buttonStyle(.stazaPrimary)
-                        .accessibilityIdentifier("worldExplorationStart.\(instance.id)")
-                    }
                     Button("world.explorations.delete", role: .destructive) { deleting = instance }
                         .buttonStyle(.stazaSecondary)
                         .accessibilityIdentifier("worldExplorationDelete.\(instance.id)")
@@ -93,13 +84,13 @@ struct SavedExplorationsList: View {
         .accessibilityIdentifier("worldExploration.\(instance.id)")
     }
 
+    /// Only progress is labelled; an Exploration in progress has no status chip.
+    @ViewBuilder
     private func statusChip(_ status: String) -> some View {
         switch status {
-        case "planned": StazaChip("world.explorations.status.planned", systemImage: "calendar", tint: StazaColor.textMuted)
-        case "active": StazaChip("world.explorations.status.active", systemImage: "flag.fill", tint: StazaColor.accent)
         case "partially_completed": StazaChip("world.explorations.status.partiallyCompleted", systemImage: "circle.lefthalf.filled", tint: StazaColor.accent)
         case "completed": StazaChip("world.explorations.status.completed", systemImage: "checkmark.seal.fill", tint: StazaColor.success)
-        default: StazaChip(verbatim: status.capitalized)
+        default: EmptyView()
         }
     }
 }

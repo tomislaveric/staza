@@ -49,15 +49,21 @@ struct WorldView: View {
                     styleURL: url,
                     collectibles: model.collectibles,
                     stopIds: Set(planner.stops.map(\.key)),
-                    selectedCollectibleId: model.selection?.id ?? focusedCollectibleId(planner),
+                    selectedCollectibleId: model.selection?.id ?? planner.focusedCollectibleId,
                     flowlines: planner.flowlineEnhancements.map(\.flowline),
-                    selectedFlowlineIds: planner.selectedEnhancementIds,
+                    selectedFlowlineIds: planner.selectedEnhancementIds.union(planner.focusedFlowlineId.map { [$0] } ?? []),
                     explorationRoutes: model.explorationRoutes,
                     route: planner.displayedRoute,
                     onViewportChange: { model.viewportChanged($0) },
                     onVisibleAreaChange: { model.visibleArea = $0 },
-                    onSelectCollectible: { id in model.selection = model.collectible(id: id) },
-                    onSelectFlowline: { id in toggleEnhancement(id, planner) },
+                    onSelectCollectible: { id in
+                        planner.mapSelected(collectibleId: id)
+                        model.selection = model.collectible(id: id)
+                    },
+                    onSelectFlowline: { id in
+                        planner.mapSelected(flowlineId: id)
+                        toggleEnhancement(id, planner)
+                    },
                     onMapTap: { point in
                         if model.selection != nil { model.selection = nil } else { planner.mapTapped(point) }
                     },
@@ -92,9 +98,10 @@ struct WorldView: View {
             }
             .onChange(of: planner.generateRequest) { _, _ in generate(model, planner) }
             .onChange(of: planner.focusRequest) { _, _ in
-                guard let stop = planner.focusedStop else { return }
+                let points = planner.focusedPoints
+                guard !points.isEmpty else { return }
                 revealMap()
-                center(on: stop.points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
+                center(on: points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
             }
             .onChange(of: planner.proposal?.id) { _, proposal in if proposal != nil { revealMap() } }
             .onChange(of: model.highlightedInstanceId) { _, _ in planner.showPlannedRoute(model.highlightedRoute) }
@@ -154,11 +161,6 @@ struct WorldView: View {
         case .toggleStop: planner.toggle(.collectible(item))
         }
         model.selection = nil
-    }
-
-    private func focusedCollectibleId(_ planner: RoutePlannerModel) -> String? {
-        if case .collectible(let item)? = planner.focusedStop { return item.id }
-        return nil
     }
 
     /// Nothing planned yet: the saved routes are listed below the planner.

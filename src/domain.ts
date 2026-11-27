@@ -567,7 +567,7 @@ export interface QuestObjectiveState {
  * `planned`: saved, not started; activities ignore it. `active`: started, no progress yet.
  * `partially_completed`: started, some objectives progressed. `completed`: every objective done.
  */
-export type QuestInstanceStatus = "planned" | "active" | "partially_completed" | "completed";
+export type QuestInstanceStatus = "active" | "partially_completed" | "completed";
 
 export interface QuestInstance {
   id: string;
@@ -631,14 +631,6 @@ export interface QuestInput {
   description?: string;
   sourceActivityId?: string;
   collectibleIds: string[];
-}
-
-export interface WorldViewportResponse extends Omit<WorldSnapshot, "stats"> {
-  truncated: boolean;
-  /** Only the player's completed Flowlines; revealed ones are loaded by Explore. */
-  fartleks: WorldFartlek[];
-  /** The viewport is narrow enough to explore. */
-  exploreAllowed: boolean;
 }
 
 export type JobState = "processing" | "awaiting_selection" | "rendering" | "succeeded" | "failed";

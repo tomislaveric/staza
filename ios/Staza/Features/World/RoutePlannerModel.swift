@@ -52,9 +52,10 @@ enum PlannerStop: Equatable, Identifiable, Sendable, Encodable {
 }
 
 /// Explore: the player picks a sport and a route shape, then Staza generates one Flowline-free route
-/// towards the aim or a chosen POI. The player can edit its stops and Staza reroutes, ordering them
-/// unless the player reordered them. Cycling routes then offer a few nearby Flowlines as optional
-/// enhancements. "Save Exploration" persists the route as a planned Exploration; it never starts it.
+/// towards the aim or a chosen POI. Added stops bend that baseline locally (`/reroute`); removing them
+/// all restores it without a request. Cycling routes also offer a few nearby Flowlines as optional
+/// enhancements, and every route lists nearby places to add. "Save Exploration" persists the route as a
+/// planned Exploration; it never starts it.
 @MainActor
 @Observable
 final class RoutePlannerModel {
@@ -67,8 +68,28 @@ final class RoutePlannerModel {
     /// What the next empty-map tap does. With no active pick, it adds a waypoint.
     enum MapMode: Equatable { case pickStart, pickEnd }
     enum Failure: Equatable {
-        case missingStart, missingEnd, noStops, noRoute, noSuggestion
+        case missingStart, missingEnd, noStops, noRoute, noSuggestion, noReachableTargets
         case server(String?)
+    }
+    /// How a stop edit is routed, mirroring the web planner's `routeEdit`.
+    enum RouteEdit: Equatable {
+        /// Connects exactly the stops from scratch (`/plan`).
+        case plan
+        /// Only the baseline's own stops remain: the generated route comes back without a request.
+        case baseline
+        /// Detours the baseline to the added stops (`/reroute`).
+        case reroute(RerouteRequest)
+    }
+
+    /// The last routed state, restored when an edit cannot be routed.
+    private struct RouteSnapshot {
+        let stops: [PlannerStop]
+        let proposal: RouteProposal
+        let stopsAreSuggested: Bool
+        let selectedEnhancementIds: Set<String>
+        let enhancementMetrics: FlowlineEnhancementMetrics?
+        let keepOrder: Bool
+        let nearbyCollectibles: [NearbyCollectible]
     }
 
     private(set) var status = Status.idle
@@ -95,9 +116,10 @@ final class RoutePlannerModel {
     /// Whether the stops are exactly what "Generate route" proposed, so replacing them loses no player choice.
     private(set) var stopsAreSuggested = false
     private(set) var mapMode: MapMode?
-    /// The stop the player tapped in the list; the map highlights and centers it.
-    private(set) var focusedStopKey: String?
-    /// Bumped on every focus tap so re-tapping the focused stop centers it again.
+    /// The stop, nearby place or optional Flowline (`flowline:<id>`) the player tapped in the planner or
+    /// on the map; the map highlights it and its planner row gets a border.
+    private(set) var focusedKey: String?
+    /// Bumped on every planner row tap so re-tapping the focused item centers it again.
     private(set) var focusRequest = 0
     /// The route for the current stops; every edit clears it.
     private(set) var proposal: RouteProposal?
@@ -106,6 +128,10 @@ final class RoutePlannerModel {
     private(set) var flowlineEnhancements: [FlowlineEnhancementOption] = []
     private(set) var selectedEnhancementIds: Set<String> = []
     private(set) var enhancementMetrics: FlowlineEnhancementMetrics?
+    /// POIs near the current route the player may add as stops.
+    private(set) var nearbyCollectibles: [NearbyCollectible] = []
+    /// The baseline's nearby places, shown again when the baseline is restored.
+    private(set) var baselineNearbyCollectibles: [NearbyCollectible] = []
     private(set) var failure: Failure?
     private(set) var plannedRoute: PlannedRoute?
 
@@ -114,6 +140,7 @@ final class RoutePlannerModel {
     /// How long reordering or removing stops may pause before the shown route is recalculated.
     private let rerouteDelay: Duration
     private var reroute: Task<Void, Never>?
+    private var lastRoute: RouteSnapshot?
 
     init(api: APIClient, rerouteDelay: Duration = .milliseconds(800)) {
         self.api = api
@@ -137,12 +164,74 @@ final class RoutePlannerModel {
 
     func contains(_ stop: PlannerStop) -> Bool { stops.contains { $0.key == stop.key } }
 
-    var focusedStop: PlannerStop? { stops.first { $0.key == focusedStopKey } }
+    /// Nearby places that are not stops yet; an added one moves to the stop list.
+    var nearbyChoices: [NearbyCollectible] {
+        generated ? nearbyCollectibles.filter { !contains(.collectible($0.collectible)) } : []
+    }
+
+    /// Flowlines the route already rides, except selected optional ones listed with the enhancements.
+    var riddenFlowlines: [TraversedFlowline] {
+        guard generated else { return [] }
+        return (proposal?.traversedFlowlines ?? []).filter { !selectedEnhancementIds.contains($0.id) }
+    }
+
+    static func flowlineKey(_ id: String) -> String { "flowline:\(id)" }
+
+    var focusedStop: PlannerStop? { stops.first { $0.key == focusedKey } }
+
+    /// The focused stop or nearby place, if it is a POI.
+    var focusedCollectibleId: String? {
+        if case .collectible(let item)? = focusedStop { return item.id }
+        return nearbyCollectibles.first { $0.id == focusedKey }?.id
+    }
+
+    /// The focused optional Flowline.
+    var focusedFlowlineId: String? {
+        flowlineEnhancements.first { Self.flowlineKey($0.id) == focusedKey }?.id
+    }
+
+    /// Where the focused item is, for centering the map.
+    var focusedPoints: [GeoPoint] {
+        if let stop = focusedStop { return stop.points }
+        if let item = nearbyCollectibles.first(where: { $0.id == focusedKey })?.collectible {
+            return [GeoPoint(lat: item.latitude, lon: item.longitude)]
+        }
+        if let flowline = flowlineEnhancements.first(where: { Self.flowlineKey($0.id) == focusedKey })?.flowline {
+            return flowline.coordinates.map { GeoPoint(lat: $0.latitude, lon: $0.longitude) }
+        }
+        return []
+    }
 
     /// Highlights a stop on the map and asks the map to center it.
     func focus(_ stop: PlannerStop) {
         guard contains(stop) else { return }
-        focusedStopKey = stop.key
+        focus(key: stop.key)
+    }
+
+    /// Highlights a nearby place on the map and asks the map to center it.
+    func focus(nearby item: NearbyCollectible) {
+        guard nearbyCollectibles.contains(where: { $0.id == item.id }) else { return }
+        focus(key: item.id)
+    }
+
+    /// Highlights an optional Flowline on the map and asks the map to center it.
+    func focus(flowline id: String) {
+        guard flowlineEnhancements.contains(where: { $0.id == id }) else { return }
+        focus(key: Self.flowlineKey(id))
+    }
+
+    /// A POI or Flowline tapped on the map highlights its planner row; the map is already there.
+    func mapSelected(collectibleId id: String) {
+        let planned = stops.contains { $0.key == id } || nearbyCollectibles.contains { $0.id == id }
+        focusedKey = planned ? id : nil
+    }
+
+    func mapSelected(flowlineId id: String) {
+        focusedKey = flowlineEnhancements.contains { $0.id == id } ? Self.flowlineKey(id) : nil
+    }
+
+    private func focus(key: String) {
+        focusedKey = key
         focusRequest += 1
     }
 
@@ -175,8 +264,9 @@ final class RoutePlannerModel {
         keepOrder = false
         stopsAreSuggested = false
         mapMode = nil
-        focusedStopKey = nil
+        focusedKey = nil
         cancelReroute()
+        lastRoute = nil
         proposal = nil
         failure = nil
         sportChosen = false
@@ -251,19 +341,68 @@ final class RoutePlannerModel {
         generateRequest += 1
     }
 
-    /// Only the explicitly selected curated destination becomes a baseline stop.
-    private func adopt(_ suggestion: RouteProposal) {
+    /// A generated route's stops: only the explicitly selected curated destination.
+    private func suggestedStops(_ suggestion: RouteProposal) -> [PlannerStop] {
         let byId = Dictionary((catalog?.collectibles ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        stops = suggestion.includedTargetIds
+        return suggestion.includedTargetIds
             .filter { $0 == destinationId }
             .compactMap { byId[$0] }
             .map(PlannerStop.collectible)
+    }
+
+    private func adopt(_ suggestion: RouteProposal) {
+        stops = suggestedStops(suggestion)
         keepOrder = false
         stopsAreSuggested = true
-        focusedStopKey = nil
+        focusedKey = nil
         failure = nil
         generated = true
         proposal = suggestion
+    }
+
+    /// How the current stops are routed: removing every added stop restores the baseline, adding stops while
+    /// the suggested ones stay detours along the baseline, anything else (a reordered list, a removed
+    /// destination) is planned from scratch.
+    var routeEdit: RouteEdit {
+        guard generated, let baselineProposal, explorationId != nil else { return .plan }
+        let suggested = Set(suggestedStops(baselineProposal).map(\.key))
+        let keys = stops.map(\.key)
+        guard suggested.isSubset(of: keys) else { return .plan }
+        if keys.count == suggested.count { return .baseline }
+        if keepOrder { return .plan }
+        var targetIds: [String] = [], waypoints: [GeoPoint] = []
+        for stop in stops {
+            switch stop {
+            case .collectible(let item): targetIds.append(item.id)
+            case .waypoint(let point): waypoints.append(point)
+            }
+        }
+        return .reroute(RerouteRequest(proposalId: baselineProposal.id, targetIds: targetIds, waypoints: waypoints))
+    }
+
+    /// Removing every added stop brings back the generated route, its nearby places and optional Flowlines.
+    private func restoreBaseline() {
+        guard let baselineProposal else { return }
+        cancelReroute()
+        lastRoute = nil
+        proposal = baselineProposal
+        stops = suggestedStops(baselineProposal)
+        stopsAreSuggested = true
+        keepOrder = false
+        selectedEnhancementIds = []
+        enhancementMetrics = nil
+        nearbyCollectibles = baselineNearbyCollectibles
+        failure = nil
+    }
+
+    /// A new start, end, sport or shape: the generated baseline no longer fits, so the player's stops are
+    /// planned from scratch and nothing restores the old baseline.
+    private func dropBaseline() {
+        baselineProposal = nil
+        baselineNearbyCollectibles = []
+        flowlineEnhancements = []
+        stopsAreSuggested = false
+        lastRoute = nil
     }
 
     /// Drops the generated route; suggested stops go with it, the player's own stops stay.
@@ -275,11 +414,14 @@ final class RoutePlannerModel {
         flowlineEnhancements = []
         selectedEnhancementIds = []
         enhancementMetrics = nil
+        nearbyCollectibles = []
+        baselineNearbyCollectibles = []
+        lastRoute = nil
         if stopsAreSuggested {
             stops = []
             stopsAreSuggested = false
-            focusedStopKey = nil
         }
+        if focusedStop == nil { focusedKey = nil }
     }
 
     /// A new sport, shape or endpoint: generates again, but never replaces the player's own stops; those
@@ -287,7 +429,10 @@ final class RoutePlannerModel {
     private func restartGeneration() {
         cancelReroute()
         if suggestReplacesOwnStops {
-            if proposal != nil || generated { rerouting {} }
+            if proposal != nil || generated {
+                dropBaseline()
+                rerouting {}
+            }
             return
         }
         clearGenerated()
@@ -324,6 +469,7 @@ final class RoutePlannerModel {
     /// A new start or end reroutes a route's stops; a route without stops is generated again.
     private func endpointChanged() {
         if !stops.isEmpty, generated || proposal != nil {
+            dropBaseline()
             rerouting {}
         } else {
             restartGeneration()
@@ -361,7 +507,7 @@ final class RoutePlannerModel {
         rerouting {
             stops.removeAll { $0.key == stop.key }
             stopsAreSuggested = false
-            if focusedStopKey == stop.key { focusedStopKey = nil }
+            if focusedKey == stop.key { focusedKey = nil }
         }
     }
 
@@ -373,9 +519,6 @@ final class RoutePlannerModel {
         }
     }
 
-    /// Lets Staza order the stops again.
-    func autoOrder() { edit { keepOrder = false } }
-
     /// Connects the stops into one route; Staza's stop order is adopted unless the player set one.
     func route() async {
         cancelReroute()
@@ -384,16 +527,49 @@ final class RoutePlannerModel {
 
     private func performRoute() async {
         guard isIdle else { return }
+        let edit = routeEdit
+        if edit == .baseline { return restoreBaseline() }
         guard let start else { return fail(.missingStart) }
         guard routeType == .roundTrip || end != nil else { return fail(.missingEnd) }
         guard !stops.isEmpty, let area = Self.area(start: start, end: routeType == .pointToPoint ? end : nil, stops: stops) else { return fail(.noStops) }
         let request = PlanRequest(area: area, sport: sport.rawValue, start: start, routeType: routeType.rawValue,
                                   end: routeType == .pointToPoint ? end : nil, keepOrder: keepOrder, stops: stops)
-        await run(.routing) { [self] in
-            let result: PlannedExploration = try await api.post("/api/explorations/plan", body: request)
-            proposal = result.proposal
-            if let order = result.proposal.stopOrder, !keepOrder { stops = Self.ordered(stops, by: order) }
+        let succeeded = await run(.routing) { [self] in
+            var routed: (proposal: RouteProposal, nearby: [NearbyCollectible]?)?
+            if case .reroute(let body) = edit, let explorationId {
+                do {
+                    let result: ReroutedExploration = try await api.post("/api/explorations/\(explorationId)/reroute", body: body)
+                    routed = (result.proposal, result.nearbyCollectibles)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // An expired exploration or a stop the detour cannot reach still gets a fresh route.
+                }
+            }
+            if routed == nil {
+                let result: PlannedExploration = try await api.post("/api/explorations/plan", body: request)
+                routed = (result.proposal, result.nearbyCollectibles)
+            }
+            guard let routed else { return }
+            lastRoute = nil
+            proposal = routed.proposal
+            nearbyCollectibles = routed.nearby ?? nearbyCollectibles
+            if let order = routed.proposal.stopOrder, !keepOrder { stops = Self.ordered(stops, by: order) }
         }
+        // Keep the last working route: a stop that cannot be routed must not wipe it.
+        if !succeeded, let lastRoute { restore(lastRoute) }
+    }
+
+    private func restore(_ snapshot: RouteSnapshot) {
+        stops = snapshot.stops
+        proposal = snapshot.proposal
+        stopsAreSuggested = snapshot.stopsAreSuggested
+        selectedEnhancementIds = snapshot.selectedEnhancementIds
+        enhancementMetrics = snapshot.enhancementMetrics
+        keepOrder = snapshot.keepOrder
+        nearbyCollectibles = snapshot.nearbyCollectibles
+        if focusedStop == nil, focusedCollectibleId == nil, focusedFlowlineId == nil { focusedKey = nil }
+        lastRoute = nil
     }
 
     /// Generates one route towards the aimed target: round trips ride there and back, A→B routes end at
@@ -418,6 +594,8 @@ final class RoutePlannerModel {
             catalog = result.catalog
             explorationId = result.explorationId
             flowlineEnhancements = result.flowlineEnhancements ?? []
+            nearbyCollectibles = result.nearbyCollectibles ?? []
+            baselineNearbyCollectibles = nearbyCollectibles
             baselineProposal = result.proposals[0]
             adopt(result.proposals[0])
         }
@@ -437,6 +615,7 @@ final class RoutePlannerModel {
             )
             proposal = result.proposal
             enhancementMetrics = selected.isEmpty ? nil : result.metrics
+            nearbyCollectibles = result.nearbyCollectibles ?? nearbyCollectibles
         }
         if failure != nil { selectedEnhancementIds = previous }
     }
@@ -493,8 +672,14 @@ final class RoutePlannerModel {
     private func rerouting(_ change: () -> Void) {
         guard isIdle else { return }
         let wasRouted = proposal != nil || reroute != nil || generated
+        if let proposal {
+            lastRoute = RouteSnapshot(stops: stops, proposal: proposal, stopsAreSuggested: stopsAreSuggested,
+                                      selectedEnhancementIds: selectedEnhancementIds, enhancementMetrics: enhancementMetrics,
+                                      keepOrder: keepOrder, nearbyCollectibles: nearbyCollectibles)
+        }
         edit(change)
         cancelReroute()
+        if wasRouted, routeEdit == .baseline { return restoreBaseline() }
         guard wasRouted, !stops.isEmpty else { return }
         reroute = Task { [weak self, rerouteDelay] in
             try? await Task.sleep(for: rerouteDelay)
@@ -511,8 +696,10 @@ final class RoutePlannerModel {
 
     private func fail(_ failure: Failure) { self.failure = failure }
 
-    /// `unroutable` is the failure shown when the server finds no route (422).
-    private func run(_ running: Status, unroutable: Failure = .noRoute, _ work: () async throws -> Void) async {
+    /// `unroutable` is the failure shown when the server finds no route (422). Returns `false` when this
+    /// request failed and is still the current one.
+    @discardableResult
+    private func run(_ running: Status, unroutable: Failure = .noRoute, _ work: () async throws -> Void) async -> Bool {
         token += 1
         let current = token
         status = running
@@ -524,15 +711,18 @@ final class RoutePlannerModel {
         } catch is CancellationError {
             if current == token { status = .idle }
         } catch {
-            guard current == token else { return }
+            guard current == token else { return true }
             status = .idle
             failure = Self.failure(for: error, unroutable: unroutable)
             if Self.isExpired(error) { proposal = nil }
+            return false
         }
+        return true
     }
 
     private static func failure(for error: Error, unroutable: Failure) -> Failure {
-        guard case APIError.server(let status, let message, _) = error else { return .server(nil) }
+        guard case APIError.server(let status, let message, let code) = error else { return .server(nil) }
+        if code == "no_reachable_targets" { return .noReachableTargets }
         return status == 422 ? unroutable : .server(message)
     }
 

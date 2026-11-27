@@ -144,7 +144,7 @@ test.describe("World map", () => {
     const zoomIn = shell.getByRole("button", { name: "Zoom in", exact: true });
     await expect(zoomIn).toBeVisible({ timeout: 15_000 });
 
-    const controls = [zoomIn, shell.getByRole("button", { name: "Zoom out", exact: true }), shell.locator("[data-world-locate]"), shell.locator("[data-world-explore]")];
+    const controls = [zoomIn, shell.getByRole("button", { name: "Zoom out", exact: true }), shell.locator("[data-world-locate]")];
     // Bring the whole map into view, then confirm no fixed UI or map chrome covers the controls.
     await shell.evaluate((element) => element.scrollIntoView({ block: "end" }));
     await page.waitForTimeout(300);
@@ -154,9 +154,6 @@ test.describe("World map", () => {
     }
 
     if (isMobile(page)) {
-      const filters = page.locator("[data-world-filter-controls] > button:visible");
-      const tops = await filters.evaluateAll((buttons) => new Set(buttons.map((button) => Math.round(button.getBoundingClientRect().top))).size);
-      expect(tops).toBe(1);
       const shellBox = (await shell.boundingBox())!;
       expect(shellBox.height).toBeGreaterThanOrEqual(320);
     }

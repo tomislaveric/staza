@@ -71,9 +71,10 @@ describe("CollectibleDetail", () => {
 });
 
 describe("CollectibleDetail route action", () => {
-  it("offers an in-app Add to route button instead of an external link", () => {
+  it("offers an in-app route action instead of an external link", () => {
     const html = CollectibleDetail(pass({ latitude: 44.6, longitude: 6.9 }));
-    expect(html).toContain('data-collectible-route="quaeldich:col-agnel"');
+    expect(html).toContain('data-collectible-route="quaeldich:col-agnel">Route here<');
+    expect(CollectibleDetail(pass({ latitude: 44.6, longitude: 6.9 }), [], { routeLabel: "Remove from route" })).toContain(">Remove from route<");
     expect(html).not.toContain("openstreetmap.org");
   });
 });

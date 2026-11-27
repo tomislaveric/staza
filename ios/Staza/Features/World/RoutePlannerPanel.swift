@@ -8,15 +8,10 @@ struct RoutePlannerHeader: View {
     var body: some View {
         HStack(spacing: StazaSpacing.md) {
             IconBadge(systemImage: "point.topleft.down.to.point.bottomright.curvepath", tint: StazaColor.accent, size: 40)
-            VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
-                Text("planner.title")
-                    .font(StazaFont.title3)
-                    .foregroundStyle(StazaColor.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                Text("planner.subtitle")
-                    .font(StazaFont.footnote)
-                    .foregroundStyle(StazaColor.textMuted)
-            }
+            Text("planner.title")
+                .font(StazaFont.title3)
+                .foregroundStyle(StazaColor.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             Spacer(minLength: StazaSpacing.sm)
             if planner.sportChosen || planner.proposal != nil || planner.destinationId != nil {
                 Button(action: onReset) {
@@ -209,15 +204,17 @@ struct RoutePlannerPanel: View {
                             signed(delta.durationDeltaS, ActivityStyle.duration(seconds: abs(delta.durationDeltaS), locale: locale))
                         ] + (delta.elevationGainDeltaM.map { [signedElevation($0)] } ?? []))
                     }
+                    if !planner.riddenFlowlines.isEmpty { riddenFlowlines }
                     if showsFlowlineEnhancements { enhancements }
+                    if !planner.nearbyChoices.isEmpty { nearby }
                     Button(action: onSave) {
                         if planner.status == .saving {
-                            SwiftUI.ProgressView().tint(StazaColor.onAccent)
+                            SwiftUI.ProgressView().tint(StazaColor.accent)
                         } else {
                             Label("planner.save", systemImage: "square.and.arrow.down")
                         }
                     }
-                    .buttonStyle(.stazaPrimaryWide)
+                    .buttonStyle(.stazaAccentOutlineWide)
                     .disabled(!planner.isIdle || planner.proposal == nil)
                     .accessibilityIdentifier("plannerSave")
                 }
@@ -226,41 +223,137 @@ struct RoutePlannerPanel: View {
         }
     }
 
+    /// Optional Flowline and nearby place titles look like the route card's title.
+    private func cardTitle(_ key: LocalizedStringKey) -> some View {
+        Text(key)
+            .font(StazaFont.headline)
+            .foregroundStyle(StazaColor.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// A choice row: the leading control performs the action, the body highlights the item on the map.
+    private func choiceRow<Control: View, Content: View>(
+        focused: Bool,
+        onFocus: @escaping () -> Void,
+        @ViewBuilder control: () -> Control,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .center, spacing: StazaSpacing.xs) {
+            control()
+            Button(action: onFocus) {
+                HStack(spacing: StazaSpacing.sm) {
+                    content()
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(Text("planner.item.showOnMap"))
+            .accessibilityAddTraits(focused ? .isSelected : [])
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, StazaSpacing.xs)
+        .padding(.horizontal, StazaSpacing.sm)
+        .background(StazaColor.surfaceRaised, in: RoundedRectangle(cornerRadius: StazaRadius.chip))
+        .overlay {
+            RoundedRectangle(cornerRadius: StazaRadius.chip)
+                .strokeBorder(focused ? StazaColor.accent : .clear, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func controlIcon(_ systemImage: String, tint: Color) -> some View {
+        Image(systemName: systemImage)
+            .font(.title3)
+            .foregroundStyle(tint)
+            .frame(minWidth: 36, minHeight: 36)
+            .contentShape(Rectangle())
+    }
+
+    /// Flowlines the route already rides: part of the route, so listed without a toggle.
+    private var riddenFlowlines: some View {
+        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            cardTitle("planner.flowlines.ridden")
+            ForEach(planner.riddenFlowlines) { flowline in
+                HStack(spacing: StazaSpacing.sm) {
+                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                        .foregroundStyle(StazaColor.accent)
+                        .accessibilityHidden(true)
+                    Text(verbatim: flowline.name)
+                        .font(StazaFont.subheadline.weight(.semibold))
+                        .foregroundStyle(StazaColor.textPrimary)
+                }
+                .accessibilityIdentifier("plannerRiddenFlowline-\(flowline.id)")
+            }
+        }
+        .accessibilityIdentifier("plannerRiddenFlowlines")
+    }
+
     private var enhancements: some View {
         VStack(alignment: .leading, spacing: StazaSpacing.sm) {
-            SectionHeader("planner.flowlines.title")
+            cardTitle("planner.flowlines.title")
             Text("planner.flowlines.note")
                 .font(StazaFont.footnote)
                 .foregroundStyle(StazaColor.textMuted)
             ForEach(planner.flowlineEnhancements) { option in
                 let selected = planner.selectedEnhancementIds.contains(option.id)
-                Button {
-                    Task { await planner.setFlowlineEnhancement(option.id, enabled: !selected) }
-                } label: {
-                    HStack(alignment: .top, spacing: StazaSpacing.sm) {
-                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(selected ? StazaColor.accent : StazaColor.textSubtle)
-                        VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
-                            Text(verbatim: option.flowline.name)
-                                .font(StazaFont.subheadline.weight(.semibold))
-                                .foregroundStyle(StazaColor.textPrimary)
-                            Text(verbatim: option.rationale)
-                                .font(StazaFont.footnote)
-                                .foregroundStyle(StazaColor.textMuted)
-                        }
-                        Spacer(minLength: 0)
+                choiceRow(focused: planner.focusedFlowlineId == option.id, onFocus: { planner.focus(flowline: option.id) }) {
+                    Button {
+                        Task { await planner.setFlowlineEnhancement(option.id, enabled: !selected) }
+                    } label: {
+                        controlIcon(selected ? "checkmark.circle.fill" : "circle",
+                                    tint: selected ? StazaColor.accent : StazaColor.textSubtle)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(StazaSpacing.sm)
-                    .background(StazaColor.surfaceRaised, in: RoundedRectangle(cornerRadius: StazaRadius.chip))
+                    .buttonStyle(.plain)
+                    .disabled(!planner.isIdle)
+                    .accessibilityLabel(Text(verbatim: option.flowline.name))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .accessibilityIdentifier("plannerEnhancement-\(option.id)")
+                } content: {
+                    VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                        Text(verbatim: option.flowline.name)
+                            .font(StazaFont.subheadline.weight(.semibold))
+                            .foregroundStyle(StazaColor.textPrimary)
+                        Text(verbatim: option.rationale)
+                            .font(StazaFont.footnote)
+                            .foregroundStyle(StazaColor.textMuted)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(!planner.isIdle)
-                .accessibilityAddTraits(selected ? .isSelected : [])
-                .accessibilityIdentifier("plannerEnhancement-\(option.id)")
             }
         }
         .accessibilityIdentifier("plannerEnhancements")
+    }
+
+    /// Nearby places that are not stops yet; adding one moves it to the stop list.
+    private var nearby: some View {
+        VStack(alignment: .leading, spacing: StazaSpacing.sm) {
+            cardTitle("planner.nearby.title")
+            ForEach(planner.nearbyChoices) { option in
+                let stop = PlannerStop.collectible(option.collectible)
+                choiceRow(focused: planner.focusedKey == option.id, onFocus: { planner.focus(nearby: option) }) {
+                    Button { planner.toggle(stop) } label: {
+                        controlIcon("plus.circle", tint: StazaColor.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!planner.isIdle)
+                    .accessibilityLabel(Text("planner.nearby.add \(option.collectible.name)"))
+                    .accessibilityIdentifier("plannerNearby-\(option.id)")
+                } content: {
+                    Image(systemName: icon(stop))
+                        .foregroundStyle(tint(stop))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
+                        Text(verbatim: option.collectible.name)
+                            .font(StazaFont.subheadline.weight(.semibold))
+                            .foregroundStyle(StazaColor.textPrimary)
+                        Text("planner.nearby.distance \(StazaFormat.distance(meters: option.distanceM, locale: locale))")
+                            .font(StazaFont.footnote)
+                            .foregroundStyle(StazaColor.textMuted)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("plannerNearby")
     }
 
     private func signed(_ value: Double, _ formatted: String) -> String {
@@ -305,9 +398,7 @@ struct RoutePlannerPanel: View {
         return HStack(spacing: StazaSpacing.sm) {
             VStack(alignment: .leading, spacing: StazaSpacing.xxs) {
                 OverlineText(title)
-                if let point {
-                    Text(verbatim: format(point)).font(StazaFont.footnote.monospacedDigit()).foregroundStyle(StazaColor.textPrimary)
-                } else {
+                if point == nil {
                     Text("planner.notSet").font(StazaFont.footnote).foregroundStyle(StazaColor.textMuted)
                 }
             }
@@ -423,22 +514,13 @@ struct RoutePlannerPanel: View {
                     .disabled(!planner.isIdle || planner.start == nil)
                     .accessibilityIdentifier("plannerRoute")
                 }
-                HStack(spacing: StazaSpacing.sm) {
-                    Text(planner.keepOrder ? "planner.order.kept" : "planner.order.auto")
-                        .font(StazaFont.caption).foregroundStyle(StazaColor.textMuted)
-                    if planner.keepOrder {
-                        Button("planner.order.reset") { planner.autoOrder() }
-                            .font(StazaFont.caption.weight(.semibold))
-                            .foregroundStyle(StazaColor.accent)
-                    }
-                }
             }
         }
         .accessibilityIdentifier("plannerStops")
     }
 
     private func stopRow(_ stop: PlannerStop, index: Int, dropped: Bool) -> some View {
-        let focused = planner.focusedStopKey == stop.key
+        let focused = planner.focusedKey == stop.key
         return HStack(spacing: StazaSpacing.sm) {
             Button { planner.focus(stop) } label: {
                 HStack(spacing: StazaSpacing.sm) {
@@ -555,6 +637,7 @@ struct RoutePlannerPanel: View {
         case .noStops: Text("planner.error.noStops")
         case .noRoute: Text("planner.error.noRoute")
         case .noSuggestion: Text("planner.error.noSuggestion")
+        case .noReachableTargets: Text("planner.error.noReachableTargets")
         case .server(let message?): Text(verbatim: message)
         case .server(nil): Text("planner.error.generic")
         }

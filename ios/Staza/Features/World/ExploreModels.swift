@@ -29,6 +29,13 @@ struct RouteProposal: Decodable, Equatable, Identifiable, Sendable {
     var droppedWaypoints: [GeoPoint]? = nil
     /// Manual route stop order: collectible ids and `waypoint:<lat>,<lon>`.
     var stopOrder: [String]? = nil
+    /// Flowlines the route already rides; part of the route, never optional.
+    var traversedFlowlines: [TraversedFlowline]? = nil
+}
+
+struct TraversedFlowline: Decodable, Equatable, Identifiable, Sendable {
+    let id: String
+    let name: String
 }
 
 struct ExplorationCatalog: Decodable, Equatable, Sendable {
@@ -40,6 +47,14 @@ struct GeneratedExploration: Decodable, Equatable, Sendable {
     let proposals: [RouteProposal]
     let catalog: ExplorationCatalog
     var flowlineEnhancements: [FlowlineEnhancementOption]? = nil
+    var nearbyCollectibles: [NearbyCollectible]? = nil
+}
+
+/// An unvisited curated POI close to the baseline route; the player may add it as a stop.
+struct NearbyCollectible: Decodable, Equatable, Sendable, Identifiable {
+    let collectible: WorldCollectible
+    let distanceM: Double
+    var id: String { collectible.id }
 }
 
 struct FlowlineEnhancementOption: Decodable, Equatable, Sendable, Identifiable {
@@ -58,12 +73,20 @@ struct FlowlineEnhancementResponse: Decodable, Sendable {
     let proposal: RouteProposal
     let metrics: FlowlineEnhancementMetrics
     let flowlineIds: [String]
+    var nearbyCollectibles: [NearbyCollectible]? = nil
 }
 
 /// `POST /api/explorations/plan`: the one route connecting the player's stops.
 struct PlannedExploration: Decodable, Sendable {
     let explorationId: String
     let proposal: RouteProposal
+    var nearbyCollectibles: [NearbyCollectible]? = nil
+}
+
+/// `POST /api/explorations/:id/reroute`: the baseline bent locally through added stops.
+struct ReroutedExploration: Decodable, Sendable {
+    let proposal: RouteProposal
+    var nearbyCollectibles: [NearbyCollectible]? = nil
 }
 
 struct PlannedRoute: Decodable, Equatable, Sendable {
@@ -115,6 +138,13 @@ struct PlanRequest: Encodable, Sendable {
     let end: GeoPoint?
     let keepOrder: Bool
     let stops: [PlannerStop]
+}
+
+/// Detours the baseline `proposalId` through every collectible stop (`targetIds`) and map point (`waypoints`).
+struct RerouteRequest: Encodable, Equatable, Sendable {
+    let proposalId: String
+    let targetIds: [String]
+    let waypoints: [GeoPoint]
 }
 
 struct SaveRequest: Encodable, Sendable {

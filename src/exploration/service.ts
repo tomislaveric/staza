@@ -7,7 +7,7 @@ import { PLANNING_LIMITS } from "../routePlanning/policy.js";
 import type { ProposalStore } from "../routePlanning/proposalStore.js";
 import { routeTargetIds } from "../routePlanning/proposals.js";
 import { distanceBetween } from "../routePlanning/geo.js";
-import { insideBounds } from "../routePlanning/validation.js";
+import { insideBounds, traversedFlowlines } from "../routePlanning/validation.js";
 import { assertNearTargets, parseProposalId } from "../routePlanning/request.js";
 import { constraintActual, constraintRequested } from "../routePlanning/scoring.js";
 import { profileForSport } from "../routePlanning/sport.js";
@@ -42,7 +42,7 @@ export interface ExplorationDependencies {
   sessions: ExplorationSessionStore;
   proposals: ProposalStore;
   explorations: {
-    /** Saves a planned (not started) Exploration; idempotent per proposal id. */
+    /** Saves an active Exploration; idempotent per proposal id. */
     createExploration(playerId: string, exploration: NewExploration, route: NewPlannedRoute): Promise<string>;
   };
   log?: (entry: Record<string, unknown>) => void;
@@ -70,8 +70,8 @@ const messageByCode: Record<ExplorationErrorCode, string> = {
   exploration_expired: "This exploration has expired. Generate routes again.",
   proposal_expired: "This route has expired. Generate routes again.",
   no_targets: "No exploration targets found in this area. Move the map and try again.",
-  no_reachable_targets: "No exploration targets can be reached with this start and ride length. Try a longer ride or another start.",
-  no_route: "No suitable route was found. Try another start, destination or ride length."
+  no_reachable_targets: "No places can be reached from this start. Try another start or destination.",
+  no_route: "No route was found. Try another start or destination."
 };
 
 /** User-safe exploration failure with a stable code and HTTP status. */
@@ -124,6 +124,8 @@ export interface GeneratedExploration {
   catalog: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[] };
   /** Small set of nearby optional cycling enhancements, separate from the baseline route. */
   flowlineEnhancements: { flowline: WorldFartlek; rationale: string }[];
+  /** Unvisited curated POIs close to the baseline route, closest first; the player may add them as stops. */
+  nearbyCollectibles: NearbyCollectible[];
   truncated: boolean;
   warnings: ExplorationWarning[];
 }
@@ -132,6 +134,7 @@ export interface PlannedExploration {
   explorationId: string;
   proposal: PublicRouteProposal;
   catalog: { collectibles: WorldCollectible[]; flowlines: WorldFartlek[] };
+  nearbyCollectibles: NearbyCollectible[];
   truncated: boolean;
 }
 
@@ -147,8 +150,26 @@ const planningFailure = (error: unknown): unknown => error instanceof PlanningEr
 
 const ENHANCEMENT_MAX_DISTANCE_M = 2_500;
 const ENHANCEMENT_SAMPLES = 400;
+const NEARBY_COLLECTIBLE_MAX_DISTANCE_M = 1_500;
+const NEARBY_COLLECTIBLE_LIMIT = 5;
 
 type LonLat = readonly [number, number] | number[];
+type NearbyCollectible = { collectible: WorldCollectible; distanceM: number };
+
+/** Up to 5 unvisited POIs close to a route, nearest first, other than the excluded ones. */
+const nearbyCollectibles = (collectibles: WorldCollectible[], geometry: LonLat[], excludedIds: Iterable<string | undefined>): NearbyCollectible[] => {
+  const excluded = new Set(excludedIds);
+  const routePoints = sampledPoints(geometry, ENHANCEMENT_SAMPLES);
+  return collectibles
+    .filter((collectible) => !collectible.found && !excluded.has(collectible.id))
+    .map((collectible) => ({
+      collectible,
+      distanceM: Math.round(minimumDistanceM(routePoints, [{ lat: collectible.latitude, lon: collectible.longitude }], NEARBY_COLLECTIBLE_MAX_DISTANCE_M))
+    }))
+    .filter(({ distanceM }) => distanceM <= NEARBY_COLLECTIBLE_MAX_DISTANCE_M)
+    .sort((a, b) => a.distanceM - b.distanceM || a.collectible.id.localeCompare(b.collectible.id))
+    .slice(0, NEARBY_COLLECTIBLE_LIMIT);
+};
 
 /** At most `limit` evenly spaced points of a line (plus its last point), as lat/lon. */
 const sampledPoints = (coordinates: LonLat[], limit: number): { lat: number; lon: number }[] => {
@@ -203,7 +224,7 @@ const sharedRoutes = (routing: RouteProvider): RouteProvider => {
 /**
  * Route-first "Explore this Area": the player describes the ride, the planner chooses target
  * combinations and returns a few route proposals, the player may customize one route's targets,
- * and only a saved route is persisted (as a planned Exploration). Planning never changes gameplay state.
+ * and only a saved route is persisted (as an active Exploration). Planning never changes gameplay state.
  */
 export class ExplorationService {
   constructor(private readonly dependencies: ExplorationDependencies) {}
@@ -339,10 +360,18 @@ export class ExplorationService {
     if (!this.dependencies.sessions.get(playerId, session.id)) throw new ExplorationError("exploration_expired");
     session.flowlines = candidateFlowlines;
     session.flowlineGeometries = buildFlowlineGeometries(candidateFlowlines);
+    // The route already rides these Flowlines, so they are part of it rather than optional.
+    for (const entry of planned) {
+      entry.proposal.traversedFlowlines = traversedFlowlines({ geometry: entry.proposal.geometry }, [
+        ...session.flowlineGeometries,
+        ...(requiredFlowline && !session.flowlineGeometries.some((flowline) => flowline.id === requiredFlowline.id) ? [requiredFlowline] : [])
+      ]);
+    }
+    const ridden = new Set(route.traversedFlowlines.map((flowline) => flowline.id));
     const routePoints = sampledPoints(route.geometry.coordinates, ENHANCEMENT_SAMPLES);
     const candidates = input.sport === "cycling" && !requiredFlowline
       ? session.flowlines.filter((flowline) => !flowline.completed && flowline.status === "published"
-        && flowline.geometry.coordinates.length >= 2).map((flowline) => ({
+        && !ridden.has(flowline.id) && flowline.geometry.coordinates.length >= 2).map((flowline) => ({
           flowline,
           distanceM: minimumDistanceM(routePoints, sampledPoints(flowline.geometry.coordinates, ENHANCEMENT_SAMPLES), ENHANCEMENT_MAX_DISTANCE_M)
         })).filter(({ distanceM }) => distanceM <= ENHANCEMENT_MAX_DISTANCE_M)
@@ -350,6 +379,7 @@ export class ExplorationService {
         .slice(0, 3)
       : [];
     session.flowlineEnhancementIds = candidates.map(({ flowline }) => flowline.id);
+    session.riddenFlowlineIds = [...ridden];
     const flowlineEnhancements = candidates.map(({ flowline, distanceM }) => ({
       flowline,
       rationale: distanceM <= 750
@@ -360,6 +390,8 @@ export class ExplorationService {
           ? `A ${flowline.character.primary} detour that stays close to your route.`
           : "A nearby detour for a more varied ride."
     }));
+    const nearby = nearbyCollectibles(session.collectibles, route.geometry.coordinates,
+      [session.destinationId, ...route.includedTargetIds]);
     this.dependencies.proposals.replaceForPlayer(
       playerId,
       planned.map((entry) => this.store(session.id, entry, available, entry.input,
@@ -370,6 +402,7 @@ export class ExplorationService {
       proposals: planned.map((entry) => toPublic(entry.proposal)),
       catalog: { collectibles: session.collectibles, flowlines: session.flowlines },
       flowlineEnhancements,
+      nearbyCollectibles: nearby,
       truncated: session.truncated,
       warnings
     };
@@ -391,11 +424,15 @@ export class ExplorationService {
       return {
         proposal: toPublic(base.proposal),
         metrics: { distanceDeltaM: 0, durationDeltaS: 0 },
-        flowlineIds: []
+        flowlineIds: [],
+        nearbyCollectibles: nearbyCollectibles(session.collectibles, base.proposal.geometry.coordinates,
+          [session.destinationId, ...base.proposal.includedTargetIds])
       };
     }
     const byId = new Map(session.flowlineGeometries.map((flowline) => [flowline.id, flowline]));
-    const selected = flowlineIds.map((id) => byId.get(id)).filter((flowline): flowline is NonNullable<typeof flowline> => Boolean(flowline));
+    // Flowlines the baseline rides are part of the route, so an enhanced route keeps riding them.
+    const selected = [...new Set([...(session.riddenFlowlineIds ?? []), ...flowlineIds])]
+      .map((id) => byId.get(id)).filter((flowline): flowline is NonNullable<typeof flowline> => Boolean(flowline));
     const destination = session.destinationId
       ? session.availableTargets.find((target) => target.id === session.destinationId)
       : session.destination ? waypointTarget(session.destination) : undefined;
@@ -412,7 +449,7 @@ export class ExplorationService {
     try {
       planned = await planManualRoute({
         requestId, playerId, scopeId: session.id, stops, keepOrder: false,
-        objectives: destinationObjectives, flowlines: selected, input: session.input, bounds: session.area.bounds
+        objectives: destinationObjectives, flowlines: session.flowlineGeometries, input: session.input
       }, { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) });
     } catch (error) {
       throw planningFailure(error);
@@ -431,7 +468,9 @@ export class ExplorationService {
           ? { elevationGainDeltaM: proposal.elevationGainM - base.proposal.elevationGainM }
           : {})
       },
-      flowlineIds: proposal.flowlineIds ?? []
+      flowlineIds: (proposal.flowlineIds ?? []).filter((id) => flowlineIds.includes(id)),
+      nearbyCollectibles: nearbyCollectibles(session.collectibles, proposal.geometry.coordinates,
+        [session.destinationId, ...proposal.includedTargetIds])
     };
   }
 
@@ -475,6 +514,16 @@ export class ExplorationService {
     if (startToNearestStopM(input, stops) > PLANNING_LIMITS.maxStartToTargetMeters) {
       throw new UserInputError("The start must be near the route's stops.");
     }
+    let planned;
+    try {
+      planned = await planManualRoute({
+        requestId, playerId, scopeId: requestId, stops, keepOrder: request.keepOrder, objectives,
+        flowlines: geometries, input
+      }, { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) });
+    } catch (error) {
+      throw planningFailure(error);
+    }
+    // Created only once routed, so a stop that cannot be routed keeps the player's current route usable.
     const session = this.dependencies.sessions.create({
       playerId,
       area,
@@ -485,15 +534,6 @@ export class ExplorationService {
       flowlineGeometries: geometries,
       truncated: world.truncated
     });
-    let planned;
-    try {
-      planned = await planManualRoute({
-        requestId, playerId, scopeId: session.id, stops, keepOrder: request.keepOrder, objectives,
-        flowlines: geometries, input, bounds: area.bounds
-      }, { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) });
-    } catch (error) {
-      throw planningFailure(error);
-    }
     const ridden = new Set(planned.proposal.flowlineIds ?? []);
     const flowlines = stops.flatMap((stop) => (stop.kind === "flowline" && ridden.has(stop.flowline.id)
       ? [{ id: stop.flowline.id, name: stop.flowline.name }]
@@ -504,15 +544,17 @@ export class ExplorationService {
       explorationId: session.id,
       proposal: toPublic(proposal),
       catalog: { collectibles: world.collectibles, flowlines: world.flowlines },
+      nearbyCollectibles: nearbyCollectibles(world.collectibles, proposal.geometry.coordinates,
+        [...request.collectibleIds, ...proposal.includedTargetIds]),
       truncated: world.truncated
     };
   }
 
   /**
-   * Re-plans one proposal for an edited target set from the frozen area. Other proposals are not
-   * touched, and the base proposal stays savable (the player may reset to it).
+   * Re-plans one proposal for an edited target set by following its road and detouring only to the
+   * added stops. Other proposals are not touched, and the base proposal stays savable.
    */
-  async reroute(playerId: string, explorationIdValue: unknown, body: unknown, requestId: string = randomUUID()): Promise<{ proposal: PublicRouteProposal }> {
+  async reroute(playerId: string, explorationIdValue: unknown, body: unknown, requestId: string = randomUUID()): Promise<{ proposal: PublicRouteProposal; nearbyCollectibles: NearbyCollectible[] }> {
     const routing = this.requireRouting();
     const explorationId = parseExplorationId(explorationIdValue);
     const { proposalId, targetIds, waypoints } = parseRerouteRequest(body);
@@ -536,12 +578,10 @@ export class ExplorationService {
         playerId,
         scopeId: session.id,
         base: base.proposal,
-        baseStops: base.stops,
         targets: withObjectiveIds(chosen, objectives),
         objectives,
         flowlines: session.flowlineGeometries,
         input: session.input,
-        bounds: session.area.bounds,
         waypoints
       }, { routing, ...(this.dependencies.log ? { log: this.dependencies.log } : {}) });
     } catch (error) {
@@ -551,11 +591,15 @@ export class ExplorationService {
     const ridden = new Set(planned.proposal.traversedFlowlines.map((flowline) => flowline.id));
     const keptFlowlines = (base.flowlines ?? []).filter((flowline) => ridden.has(flowline.id));
     this.dependencies.proposals.addForPlayer(playerId, this.store(session.id, planned, available, session.input, keptFlowlines));
-    return { proposal: toPublic(planned.proposal) };
+    return {
+      proposal: toPublic(planned.proposal),
+      nearbyCollectibles: nearbyCollectibles(session.collectibles, planned.proposal.geometry.coordinates,
+        [session.destinationId, ...targetIds, ...planned.proposal.includedTargetIds])
+    };
   }
 
   /**
-   * "Save Exploration": persists a planned (not started) Exploration and its route. The client
+   * "Save Exploration": persists an active Exploration and its route. The client
    * sends only the proposal id; targets, geometry and objectives come from server memory, so they
    * cannot be tampered with. Saving the same proposal again returns the same Exploration.
    */

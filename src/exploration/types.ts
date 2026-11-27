@@ -24,6 +24,8 @@ export interface ExplorationSession {
   destinationId?: string;
   /** Nearby optional Flowlines offered with the baseline proposal. */
   flowlineEnhancementIds?: string[];
+  /** Flowlines the baseline already rides; enhanced routes keep riding them. */
+  riddenFlowlineIds?: string[];
   /** Eligible destinations; Flowlines are never targets. */
   availableTargets: QuestRouteTarget[];
   /** World objects behind the available targets, returned to the client for rendering. */

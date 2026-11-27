@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  clickHitsFeature,
   ROUTE_SOURCE_ID,
   SAVED_ROUTES_SOURCE_ID,
   createHomeMarkerElement,
-  exploreFrameToGeoJson,
   homeScaleZoom,
   routeLayers,
   routeToGeoJson,
@@ -95,15 +95,25 @@ describe("saved Exploration routes", () => {
   it("maps routes with geometry to features", () => {
     const geometry = { type: "LineString", coordinates: [[9, 47], [9.1, 47.1]] };
     expect(savedRoutesToGeoJson([
-      { id: "a", status: "planned", geometry },
+      { id: "a", status: "active", geometry },
       { id: "b", status: "completed", geometry: { type: "LineString", coordinates: [] } }
     ]).features).toEqual([{ type: "Feature", properties: { explorationId: "a" }, geometry }]);
   });
 });
 
-describe("explore frame", () => {
-  it("outlines a clamped bbox as one closed line and clears without one", () => {
-    expect(exploreFrameToGeoJson("9,47,10,48").features[0].geometry.coordinates).toEqual([[9, 47], [10, 47], [10, 48], [9, 48], [9, 47]]);
-    expect(exploreFrameToGeoJson(undefined).features).toEqual([]);
+describe("map clicks", () => {
+  const fakeMap = (layers, hits) => ({
+    getLayer: (id) => (layers.includes(id) ? { id } : undefined),
+    queryRenderedFeatures: (_point, options) => hits.filter((hit) => options.layers.includes(hit.layer))
+  });
+
+  it("treats a click on a POI or Flowline as a selection, not a map point", () => {
+    expect(clickHitsFeature(fakeMap(["staza-collectibles"], [{ layer: "staza-collectibles" }]), { x: 1, y: 1 })).toBe(true);
+    expect(clickHitsFeature(fakeMap(["staza-fartleks-hit"], [{ layer: "staza-fartleks-hit" }]), { x: 1, y: 1 })).toBe(true);
+  });
+
+  it("reports empty map clicks and maps without selectable layers", () => {
+    expect(clickHitsFeature(fakeMap(["staza-collectibles"], []), { x: 1, y: 1 })).toBe(false);
+    expect(clickHitsFeature(fakeMap([], [{ layer: "staza-collectibles" }]), { x: 1, y: 1 })).toBe(false);
   });
 });

@@ -21,7 +21,7 @@ final class WorldModelTests: XCTestCase {
     }
 
     func testLoadsSavedExplorationRoutesAndToleratesTheirAbsence() async {
-        let route = #"{"id":"q1","title":"Ride","status":"planned","geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]}}"#
+        let route = #"{"id":"q1","title":"Ride","status":"active","geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]}}"#
         let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"explorationRoutes":[\#(route)]"#)
         let transport = StubTransport([.init(status: 200, body: body), .init(status: 200, body: world)])
         let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
@@ -69,7 +69,7 @@ final class WorldModelTests: XCTestCase {
         XCTAssertNil(model.collectible(id: "missing"))
     }
 
-    private let instances = #"{"instances":[{"id":"q1","title":"Ride","description":"","status":"active","difficulty":"easy","rewardXp":10,"objectives":[{"progress":{"completed":1,"required":2,"complete":false},"objective":{"type":"collectible_targets","targets":[{"id":"c1"},{"id":"c2"}]}}]},{"id":"q2","title":"Saved","description":"","status":"planned","difficulty":"easy","rewardXp":10,"objectives":[]}]}"#
+    private let instances = #"{"instances":[{"id":"q1","title":"Ride","description":"","status":"active","difficulty":"easy","rewardXp":10,"objectives":[{"progress":{"completed":1,"required":2,"complete":false},"objective":{"type":"collectible_targets","targets":[{"id":"c1"},{"id":"c2"}]}}]},{"id":"q2","title":"Saved","description":"","status":"active","difficulty":"easy","rewardXp":10,"objectives":[]}]}"#
     private let plannedRoute = #"{"questInstanceId":"q2","distanceM":1000,"durationS":300,"geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]},"start":{"lat":47,"lon":8}}"#
 
     func testLoadsExplorationsAndTogglesTheShownRoute() async {
@@ -79,7 +79,6 @@ final class WorldModelTests: XCTestCase {
         ])))
         await model.loadExplorations()
         XCTAssertEqual(model.instances.map(\.id), ["q1", "q2"])
-        XCTAssertTrue(model.instances[1].isPlanned)
         XCTAssertEqual(model.instances.first?.targetProgress.total, 2)
         XCTAssertEqual(Set(model.plannedRoutes.keys), ["q2"], "missing planned routes are skipped")
 
@@ -89,29 +88,22 @@ final class WorldModelTests: XCTestCase {
         XCTAssertNil(model.highlightedRoute)
     }
 
-    func testStartAndDeleteCallEndpointsThenReload() async {
-        let route = #"{"id":"q2","title":"Saved","status":"planned","geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]}}"#
+    func testDeleteCallsEndpointThenReloads() async {
+        let route = #"{"id":"q2","title":"Saved","status":"active","geometry":{"type":"LineString","coordinates":[[8.0,47.0],[8.1,47.1]]}}"#
         let body = world.replacingOccurrences(of: #""truncated":false"#, with: #""truncated":false,"explorationRoutes":[\#(route)]"#)
-        let started = #"{"instance":{"id":"q2","title":"Saved","description":"","status":"active","startedAt":"2026-11-20T10:00:00.000Z","difficulty":"easy","rewardXp":10,"objectives":[]}}"#
         let transport = StubTransport([
             .init(status: 200, body: body),
-            .init(status: 200, body: started), .init(status: 200, body: instances),
-            .init(status: 404, body: "{}"), .init(status: 404, body: "{}"),
             .init(status: 204, body: ""), .init(status: 200, body: instances),
             .init(status: 404, body: "{}"), .init(status: 404, body: "{}")
         ])
         let model = WorldModel(api: APIClient(baseURL: baseURL, transport: transport))
         await model.loadViewport(WorldBounds(west: 7, south: 46, east: 9, north: 48))
-        let didStart = await model.start("q2")
-        XCTAssertTrue(didStart)
-        XCTAssertEqual(transport.requests[1].httpMethod, "POST")
-        XCTAssertEqual(transport.requests[1].url?.path, "/api/quest-instances/q2/start")
         XCTAssertEqual(model.explorationRoutes.map(\.id), ["q2"])
 
         let deleted = await model.delete("q2")
         XCTAssertTrue(deleted)
-        XCTAssertEqual(transport.requests[5].httpMethod, "DELETE")
-        XCTAssertEqual(transport.requests[5].url?.path, "/api/quest-instances/q2")
+        XCTAssertEqual(transport.requests[1].httpMethod, "DELETE")
+        XCTAssertEqual(transport.requests[1].url?.path, "/api/quest-instances/q2")
         XCTAssertTrue(model.explorationRoutes.isEmpty, "a deleted exploration leaves the map")
         XCTAssertEqual(model.instances.count, 2)
         XCTAssertNil(model.pendingInstanceId)

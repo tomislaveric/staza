@@ -188,21 +188,17 @@ export class QuestInstanceNotFoundError extends Error {
   }
 }
 
-export class QuestInstanceStateError extends Error {
-  constructor(message: string) {
-    super(message);
-  }
-}
-
 export class QuestInstanceRepository {
   constructor(private readonly pool: Pool) {}
 
   /**
-   * Saves an exploration as `planned` with its PlannedRoute in one transaction. It makes no
-   * progress until started. The proposal id is the idempotency key: saving the same proposal
+   * Saves an exploration as `active` with its PlannedRoute in one transaction: activities started
+   * after saving add progress. The proposal id is the idempotency key: saving the same proposal
    * again returns the existing exploration without changing it.
    */
-  async createExploration(playerId: string, exploration: NewExploration, route: NewPlannedRoute): Promise<string> {
+  async createExploration(
+    playerId: string, exploration: NewExploration, route: NewPlannedRoute, startedAt: Date = new Date()
+  ): Promise<string> {
     const difficulty = explorationDifficulty(exploration.objectives);
     return this.inTransaction(async (client) => {
       const inserted = await client.query<{ id: string }>(
@@ -210,7 +206,7 @@ export class QuestInstanceRepository {
           id, player_id, template_id, template_version, scope_hash,
           title, description, recommended_level, objectives, fresh_progress, difficulty, reward_xp,
           status, started_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, true, $9, $10, 'planned', NULL)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, true, $9, $10, 'active', $11)
         ON CONFLICT (player_id, template_id, template_version, scope_hash) DO NOTHING
         RETURNING id`,
         [
@@ -224,7 +220,8 @@ export class QuestInstanceRepository {
           JSON.stringify(exploration.objectives),
           difficulty,
           // A route-only exploration has no objectives to complete, so it never pays XP.
-          exploration.objectives.length === 0 ? 0 : QUEST_XP_BY_DIFFICULTY[difficulty]
+          exploration.objectives.length === 0 ? 0 : QUEST_XP_BY_DIFFICULTY[difficulty],
+          startedAt
         ]
       );
       if (inserted.rowCount !== 1) {
@@ -328,19 +325,6 @@ export class QuestInstanceRepository {
     } finally {
       client.release();
     }
-  }
-
-  /** Starts a saved exploration: activities from now on add progress. */
-  async start(playerId: string, instanceId: string, startedAt: Date = new Date()): Promise<void> {
-    const updated = await this.pool.query(
-      `UPDATE quest_instances SET status = 'active', started_at = $3
-       WHERE id = $1 AND player_id = $2 AND status = 'planned'`,
-      [instanceId, playerId, startedAt]
-    );
-    if (updated.rowCount === 1) return;
-    const current = await this.pool.query("SELECT 1 FROM quest_instances WHERE id = $1 AND player_id = $2", [instanceId, playerId]);
-    if (current.rowCount !== 1) throw new QuestInstanceNotFoundError();
-    throw new QuestInstanceStateError("Only planned explorations can be started.");
   }
 
   /** Saved exploration routes whose bounds overlap the viewport, newest first. */

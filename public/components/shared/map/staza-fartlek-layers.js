@@ -154,17 +154,19 @@ export const fartleksToFeatureCollection = (fartleks, { selectedId, questTargetI
 const featureFartlekId = (event) => event?.features?.[0]?.properties?.id;
 
 /** Routes native hit-layer events into the caller's selection flow, via the wide click target. */
-export const bindFartlekInteractions = (map, { onSelect }) => {
+export const bindFartlekInteractions = (map, { onSelect, onHover }) => {
   map.on("click", FARTLEK_HIT_LAYER, (event) => {
     const id = featureFartlekId(event);
     if (id === undefined) return;
     if (event.originalEvent?.stopPropagation) event.originalEvent.stopPropagation();
     onSelect(id);
   });
-  map.on("mouseenter", FARTLEK_HIT_LAYER, () => {
+  map.on("mouseenter", FARTLEK_HIT_LAYER, (event) => {
     map.getCanvas().style.cursor = "pointer";
+    if (onHover) onHover(featureFartlekId(event));
   });
   map.on("mouseleave", FARTLEK_HIT_LAYER, () => {
     map.getCanvas().style.cursor = "";
+    if (onHover) onHover(undefined);
   });
 };
